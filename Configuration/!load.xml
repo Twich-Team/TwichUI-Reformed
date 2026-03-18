@@ -1,0 +1,15 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='Module.lua' />
+    <Include file='Widgets.lua' />
+    <Include file='Options\!load.xml' />
+
+    <Include file='Media.lua' />
+    <Include file='ChatEnhancements.lua' />
+    <Include file='SmartMount.lua' />
+    <Include file='Datatexts.lua' />
+    <Include file='QualityOfLife.lua' />
+    <Include file='BestInSlot.lua' />
+    <Include file='NotificationPanel.lua' />
+
+    <Include file='About.lua' />
+</Ui>

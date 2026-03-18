@@ -1,0 +1,10 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='BestInSlotModule.lua' />
+    <Include file='ItemScanner.lua' />
+    <Include file='Monitor_LootedItems.lua' />
+    <Include file='Monitor_GreatVault.lua' />
+    <Include file='Monitor_DroppedItems.lua' />
+    <Include file='GreatVaultEnhancement.lua' />
+    <Include file='Frame.lua' />
+    <Include file='Frame\!load.xml' />
+</Ui>

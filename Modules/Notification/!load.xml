@@ -1,0 +1,4 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='NotificationModule.lua' />
+    <Include file='Frame\!load.xml' />
+</Ui>

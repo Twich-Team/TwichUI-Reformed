@@ -1,0 +1,12 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='ChatEnhancementOptions.lua' />
+    <Include file='MediaOptions.lua' />
+    <Include file='SmartMountOptions.lua' />
+    <Include file='DatatextOptions.lua' />
+    <Include file='QuestAutomationOptions.lua' />
+    <Include file='QuestLogCleanerOptions.lua' />
+    <Include file='GossipHotkeysOptions.lua' />
+    <Include file='BestInSlotOptions.lua' />
+    <Include file='NotificationPanelOptions.lua' />
+    <Include file='SatchelWatchOptions.lua' />
+</Ui>

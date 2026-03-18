@@ -1,0 +1,10 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='Tools.lua' />
+    <Include file='Text.lua' />
+    <Include file='Colors.lua' />
+    <Include file='Skinning.lua' />
+    <Include file='Quest.lua' />
+    <Include file='Game.lua' />
+    <Include file='UI\!load.xml' />
+    <Include file='func\!load.xml' />
+</Ui>

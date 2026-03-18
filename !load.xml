@@ -1,0 +1,10 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='Libraries\!load.xml' />
+    <Include file='Core.lua' />
+    <Include file='Tools\!load.xml' />
+    <Include file='Configuration\!load.xml' />
+    <Include file='SlashCommands.lua' />
+    <Include file='Modules\!load.xml' />
+    <Include file='AceWidgets\!load.xml' />
+
+</Ui>

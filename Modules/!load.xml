@@ -1,0 +1,12 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='Media\!load.xml' />
+    <Include file='Data\!load.xml' />
+    <Include file='Notification\!load.xml' />
+    <Include file='MountUtility\!load.xml' />
+    <Include file='ChatEnhancements\!load.xml' />
+    <Include file='Datatexts\!load.xml' />
+    <Include file='SmartMount\!load.xml' />
+    <Include file='QualityOfLife\!load.xml' />
+    <Include file='BestInSlot\!load.xml' />
+    <Include file='ThirdPartyAPI\!load.xml' />
+</Ui>

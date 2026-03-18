@@ -1,0 +1,6 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='AceSlotWidget.lua' />
+    <Include file='AceItemWidget.lua' />
+    <Include file='AceEmptyPanelWidget.lua' />
+    <Include file='AceNotificationWidgetWrapper.lua' />
+</Ui>

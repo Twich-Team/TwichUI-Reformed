@@ -1,0 +1,6 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='DatatextModule.lua' />
+    <Include file='Mounts.lua' />
+    <Include file='Portals.lua' />
+    <Include file='Goblin.lua' />
+</Ui>
