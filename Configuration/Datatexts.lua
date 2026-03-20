@@ -361,6 +361,96 @@ local function BuildMythicPlusConfiguration()
     return mythicPlus
 end
 
+local function BuildChoresConfiguration()
+    local W = ConfigurationModule.Widgets
+
+    return {
+        type = "group",
+        name = "Chores",
+        order = 25,
+        args = {
+            title = W.TitleWidget(0, "Chores"),
+            desc = W.Description(1,
+                "Provides a DataText that summarizes your remaining weekly chores and shows the outstanding items in the tooltip."),
+            helper = W.Description(2,
+                T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                    "This DataText reads from the Quality of Life > Chores tracker. Disable categories there if you do not want them counted.")),
+            color = W.IGroup(10, "Colors", {
+                customColor = {
+                    type = "toggle",
+                    name = "Custom Text Color",
+                    desc = "Use a custom color for the chore count.",
+                    order = 1,
+                    handler = Options,
+                    get = "GetChoresUseCustomColor",
+                    set = "SetChoresUseCustomColor",
+                },
+                textColor = {
+                    type = "color",
+                    name = "Text Color",
+                    desc = "Color of the chore count.",
+                    order = 2,
+                    hasAlpha = true,
+                    disabled = function()
+                        return not Options:GetDatatextDB("chores").customColor
+                    end,
+                    handler = Options,
+                    get = "GetChoresTextColor",
+                    set = "SetChoresTextColor",
+                },
+            }),
+            tooltipFonts = W.IGroup(20, "Tooltip Fonts", {
+                headerFont = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Header Font",
+                    desc = "Font used for chore section headers in the tooltip.",
+                    order = 1,
+                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("font") or {} end,
+                    handler = Options,
+                    get = "GetChoresTooltipHeaderFont",
+                    set = "SetChoresTooltipHeaderFont",
+                },
+                headerFontSize = {
+                    type = "range",
+                    name = "Header Font Size",
+                    desc = "Font size used for chore section headers in the tooltip.",
+                    order = 2,
+                    min = 8,
+                    max = 24,
+                    step = 1,
+                    handler = Options,
+                    get = "GetChoresTooltipHeaderFontSize",
+                    set = "SetChoresTooltipHeaderFontSize",
+                },
+                entryFont = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Entry Font",
+                    desc = "Font used for chore entries and objective lines in the tooltip.",
+                    order = 3,
+                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("font") or {} end,
+                    handler = Options,
+                    get = "GetChoresTooltipEntryFont",
+                    set = "SetChoresTooltipEntryFont",
+                },
+                entryFontSize = {
+                    type = "range",
+                    name = "Entry Font Size",
+                    desc = "Font size used for chore entries and objective lines in the tooltip.",
+                    order = 4,
+                    min = 8,
+                    max = 24,
+                    step = 1,
+                    handler = Options,
+                    get = "GetChoresTooltipEntryFontSize",
+                    set = "SetChoresTooltipEntryFontSize",
+                },
+            }),
+        },
+    }
+end
+
 local function BuildDatatextConfiguration()
     local AW = ConfigurationModule.Widgets
     local function TooltipForMountSpell(spellID)
@@ -590,6 +680,7 @@ local function BuildDatatextConfiguration()
                 }),
             }
         },
+        chores = BuildChoresConfiguration(),
         portals = BuildPortalsConfiguration(),
         mythicPlus = BuildMythicPlusConfiguration(),
         goldGoblin = BuildGoldGoblinConfiguration(),

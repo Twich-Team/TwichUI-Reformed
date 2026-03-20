@@ -1,0 +1,181 @@
+local _, Addon = ...
+local L = Addon.L
+
+
+Addon.data.chores.professionSkinning = {
+    key = 'professions',
+    order = 109,
+    skillLineId = 393,
+    texture = C_Spell.GetSpellTexture(8613),
+    categories = {
+        {
+            key = 'midnight',
+            name = EXPANSION_NAME11,
+            skillLineId = 2917,
+            drops = {
+                {
+                    key = 'gather',
+                    groupSameItem = true,
+                    entries = {
+                        { quest=88534, item=238625 }, -- Fine Void-Tempered Hide
+                        { quest=88549, item=238625 },
+                        { quest=88537, item=238625 },
+                        { quest=88536, item=238625 },
+                        { quest=88530, item=238625 },
+                        { quest=88529, item=238626 }, -- Mana-Infused Bone
+                    },
+                },
+                {
+                    key = 'catchup',
+                    entries = {
+                        { quest=5003191, item=238627, currency=3191 }, -- Manafused Sample
+                    }
+                },
+            },
+            quests = {
+                {
+                    key = 'task',
+                    skill = 25,
+                    entries = {
+                        { quest=93710 }, -- Tempered in Darkness
+                        { quest=93711 }, -- The Chill of the Void
+                        { quest=93712 }, -- ??
+                        { quest=93713 }, -- ??
+                        { quest=93714 }, -- Minor Scales
+                    },
+                },
+                {
+                    key = 'treatise',
+                    entries = {
+                        { quest=95136, item=245828 }, -- Thalassian Treatise on Skinning
+                    },
+                },
+            }
+        },
+        {
+            key = 'warWithin',
+            name = EXPANSION_NAME10,
+            skillLineId = 2882,
+            drops = {
+                {
+                    key = 'gather',
+                    groupSameItem = true,
+                    entries = {
+                        { quest=81459, item=224780 }, -- Toughened Tempest Pelt
+                        { quest=81460, item=224780 }, -- Toughened Tempest Pelt
+                        { quest=81461, item=224780 }, -- Toughened Tempest Pelt
+                        { quest=81462, item=224780 }, -- Toughened Tempest Pelt
+                        { quest=81463, item=224780 }, -- Toughened Tempest Pelt
+                        { quest=81464, item=224781 }, -- Abyssal Fur
+                    },
+                },
+            },
+            quests = {
+                {
+                    key = 'task',
+                    skill = 25,
+                    entries = {
+                        { quest=83097 }, -- Cinder and Storm 
+                        { quest=83100 }, -- Cracking the Shell 
+                        { quest=82993 }, -- From Shadows 
+                        { quest=83098 }, -- Snap and Crackle 
+                        { quest=82992 }, -- Stormcharged Goods
+                    },
+                },
+                {
+                    key = 'treatise',
+                    entries = {
+                        { quest=83734, item=222649 }, -- Algari Treatise on Skinning
+                    },
+                },
+                {
+                    key = 'skinSlatefang',
+                    minimumLevel = 72,
+                    skill = 1,
+                    defaultEnabled = true,
+                    entries = {
+                        { quest=84259, item=219013 }, -- Superb Beast Fang
+                    }
+                },
+            },
+        },
+        {
+            key = 'dragonflight',
+            name = EXPANSION_NAME9,
+            skillLineId = 2834,
+            drops = {
+                {
+                    key = 'gather',
+                    defaultEnabled = false,
+                    groupSameItem = true,
+                    entries = {
+                        { quest=70381, item=198837 }, -- Curious Hide Scraps
+                        { quest=70383, item=198837 }, -- Curious Hide Scraps
+                        { quest=70384, item=198837 }, -- Curious Hide Scraps
+                        { quest=70385, item=198837 }, -- Curious Hide Scraps
+                        { quest=70386, item=198837 }, -- Curious Hide Scraps
+                        { quest=70389, item=198841 }, -- Large Sample of Curious Hide
+                    },
+                },
+                {
+                    key = 'forbiddenReach',
+                    defaultEnabled = false,
+                    entries = {
+                        { quest=74930, item=204231, level=70, desc='Faunos' }, -- Kingly Sheepskin Pelt
+                    },
+                },
+            },
+            quests = {
+                {
+                    key = 'provide',
+                    skill = 45,
+                    defaultEnabled = false,
+                    entries = {
+                        { quest=70619 }, -- A Study of Leather
+                        { quest=70620 }, -- Scaling Up
+                        { quest=72158 }, -- A Dense Delivery
+                        { quest=72159 }, -- Scaling Down
+                    },
+                },
+                {
+                    key = 'treatise',
+                    defaultEnabled = false,
+                    entries = {
+                        { quest=74114, item=201023 }, -- Draconic Treatise on Skinning
+                    },
+                },
+                {
+                    key = 'skinMagmaCobra',
+                    skill = 1,
+                    defaultEnabled = false,
+                    entries = {
+                        { quest=74235, item=205413 }, -- Obsidian Cobraskin
+                    }
+                },
+                {
+                    key = 'skinVerdantGladewarden',
+                    skill = 1,
+                    defaultEnabled = false,
+                    entries = {
+                        { quest=78397, item=210456 }, -- Dreaming Antler Fragment
+                    }
+                },
+            },
+        },
+        {
+            key = 'event',
+            name = L['category:event'],
+            quests = {
+                {
+                    key = 'darkmoonFaire',
+                    requiredEventIds = { 479 }, -- Darkmoon Faire
+                    entries = {
+                        {
+                            quest = 29519, -- Tan My Hide
+                        },
+                    },
+                },
+            },
+        },
+    },
+}

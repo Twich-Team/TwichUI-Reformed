@@ -1,0 +1,84 @@
+## Interface: 120000, 120001
+## Title: ChoreTracker
+## Notes: Keep track of your chores
+## Version: 12.0.0.13
+## Author: Freddie
+## IconTexture: Interface\AddOns\ChoreTracker\Assets\icon.blp
+## SavedVariables: ChoreTrackerDB
+## AddonCompartmentFunc: ChoreTracker_OnAddonCompartmentClick
+
+## Category-enUS: Quests
+## Category-deDE: Quests
+## Category-esES: Misiones
+## Category-esMX: Misiones
+## Category-frFR: Quêtes
+## Category-itIT: Missioni
+## Category-koKR: 퀘스트
+## Category-ptBR: Missões
+## Category-ruRU: Задания
+## Category-zhCN: 任务
+## Category-zhTW: 任務
+
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.xml
+
+Libs\AceAddon-3.0\AceAddon-3.0.xml
+Libs\AceGUI-3.0\AceGUI-3.0.xml
+Libs\AceBucket-3.0\AceBucket-3.0.xml
+Libs\AceConfig-3.0\AceConfig-3.0.xml
+Libs\AceConsole-3.0\AceConsole-3.0.xml
+Libs\AceDB-3.0\AceDB-3.0.xml
+Libs\AceDBOptions-3.0\AceDBOptions-3.0.xml
+Libs\AceEvent-3.0\AceEvent-3.0.xml
+Libs\AceHook-3.0\AceHook-3.0.xml
+Libs\AceLocale-3.0\AceLocale-3.0.xml
+Libs\AceTimer-3.0\AceTimer-3.0.xml
+Libs\LibSharedMedia-3.0\lib.xml
+Libs\AceGUI-3.0-SharedMediaWidgets\widget.xml
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+
+AceGUI\ChoreFrame.lua
+AceGUI\FancyList.lua
+
+Locales\enUS.lua
+Locales\frFR.lua
+Locales\koKR.lua
+Locales\ruRU.lua
+Locales\zhTW.lua
+Locales\zhCN.lua
+
+ChoreTracker.lua
+
+Data\Professions.lua
+Data\Chores\Dragonflight.lua
+Data\Chores\HallowfallFishingDerby.lua
+Data\Chores\Midnight.lua
+Data\Chores\PvP.lua
+Data\Chores\The_War_Within.lua
+Data\Chores\Events\Anniversary.lua
+Data\Chores\Events\Events.lua
+Data\Chores\Professions\Alchemy.lua
+Data\Chores\Professions\Archaeology.lua
+Data\Chores\Professions\Blacksmithing.lua
+Data\Chores\Professions\Cooking.lua
+Data\Chores\Professions\Enchanting.lua
+Data\Chores\Professions\Engineering.lua
+Data\Chores\Professions\Fishing.lua
+Data\Chores\Professions\Herbalism.lua
+Data\Chores\Professions\Inscription.lua
+Data\Chores\Professions\Jewelcrafting.lua
+Data\Chores\Professions\Leatherworking.lua
+Data\Chores\Professions\Mining.lua
+Data\Chores\Professions\Skinning.lua
+Data\Chores\Professions\Tailoring.lua
+Data\Delves\Midnight.lua
+Data\Delves\The_War_Within.lua
+Data\Timers\Dragonflight.lua
+Data\Timers\The_War_Within.lua
+
+Modules\AutoAccept.lua
+Modules\Display.lua
+Modules\Options.lua
+Modules\Scanner.lua
+Modules\Timers.lua

@@ -1,0 +1,676 @@
+v12.0.0.13
+----------
+- Added key shards to bountiful delve section.
+- Added bountiful delve tracking quests.
+- Fixed bountiful delve level check.
+- Fixed A Call to Battle quest.
+
+v12.0.0.12
+----------
+- Fixed some leftover debug spam.
+
+v12.0.0.11
+----------
+- Added frFR localization (thanks Machou).
+- Added profession knowledge catchup chores.
+
+v12.0.0.10
+----------
+- Fixed random secret value error (GH72).
+- Fixed error opening settings via button/slash command, again (GH73).
+
+v12.0.0.9
+---------
+- Added Abundance chore.
+- Added Saltheril's Soiree chore.
+- Added Stormarion Assault chore.
+
+v12.0.0.8
+---------
+- Fixed missing localization strings.
+
+v12.0.0.7
+---------
+- Added Midnight Hope chore (leveling only weekly).
+- Added Midnight leveling chore (delve quests).
+- Added Midnight crafting drop chores.
+- Added Midnight herbalism/mining/skinning gather chores.
+- Added Midnight enchanting/herbalism/mining/skinning task chores.
+
+v12.0.0.6
+---------
+- Added Midnight Unity chore.
+- Fixed Midnight engineering treatise quest ID.
+
+v12.0.0.5
+---------
+- Added Midnight special assignment chore.
+- Added Midnight delve data.
+- Added "Disable ALL TWW chores" and "Enable ALL TWW chores" buttons.
+
+v12.0.0.4
+---------
+- Added Midnight dungeon chore.
+- Added Midnight profession chores for orders/treatises.
+
+v12.0.0.3
+---------
+- Added prepatch event weeklies.
+
+v12.0.0.2
+---------
+- Fixed error opening settings via button/slash command.
+
+v12.0.0.1
+---------
+- Updated ToC for 12.0.0.
+
+v11.2.0.6
+---------
+- Fixed CHETT List chore weirdness. Probably.
+
+v11.2.0.5
+---------
+- Added Delver's Bounty chore.
+- Added the 4th Restored Coffer Key quest (again).
+- Changed More Than Just a Phase back to per-character, it gives a key now.
+- Updated koKR locale (thanks Crazyyoungs).
+- Updated zhCN locale (thanks Sefank).
+
+v11.2.0.4
+---------
+- Added 11.2 world boss account loot (Reshanor).
+- Added 11.1 world boss account loot (The Gobfather).
+- Changed CHETT List chores to handle get list/do tasks/turn in list states properly.
+- Removed the 4th Restored Coffer Key quest, it exists but nothing gives a 4th key :|
+- Updated koKR locale (thanks Crazyyoungs).
+- Updated ruRU locale (thanks Hubbotu).
+
+v11.2.0.3
+---------
+- Added K'aresh > Devourer weekly quests.
+- Added K'aresh > Warrant weekly quest.
+- Added the 4th Restored Coffer Key quest.
+- Changed More Than a Phase to account wide, rewards suck.
+- Fixed Restored Coffer Key item ID.
+- Updated koKR locale (thanks Crazyyoungs).
+- Updated ruRU locale (thanks Hubbotu).
+
+v11.2.0.2
+---------
+- Added K'aresh > More Than Just a Phase weekly quest.
+- Added Archival Assault delve.
+- Fixed quest auto-accept.
+
+v11.2.0.1
+---------
+- Added K'aresh > Ecological Succession weekly quest.
+- Added K'aresh > Special Assignment weekly quests.
+- Added Sparks of War: K'aresh weekly quest.
+- Fixed delve key quest IDs.
+- Fixed missing Worldsoul quests.
+- Updated ToC for 11.2.0.
+
+v11.1.7.4
+---------
+- Added ruRU locale (thanks ZamestoTV).
+- Changed Undermine weeklies to be separate chores (thanks gizzmo).
+
+v11.1.7.3
+---------
+- Added a lightning bolt icon for overcharged delves.
+
+v11.1.7.2
+---------
+- Fixed koKR locale.
+
+v11.1.7.1
+---------
+- Added Battle for Azeroth Timewalking support (thanks OldGromm).
+- Added koKR locale (thanks Crazyyoungs).
+- Updated zhCN locale (thanks Sefank).
+- Updated ToC for 11.1.7.
+
+v11.1.5.2
+---------
+- Added Turbo Boost event weekly.
+- Fixed BRD showing as available during Classic Timewalking.
+- Fixed C.H.E.T.T. showing "Get List!" when you have one already.
+- Updated zhCN locale (thanks Sefank).
+
+v11.1.5.1
+---------
+- Added Nightfall Scenario timer.
+- Added Nightfall Scenario and Incursion chores.
+- Updated ToC for 11.1.5.
+
+v11.1.0.7
+---------
+- Remove some debug spam.
+
+v11.1.0.6
+---------
+- Added Delve Archaic Cipher Key chore.
+- Added Delve Gilded Stash chore.
+- Fixed Restored Coffer Key item ID.
+
+v11.1.0.5
+---------
+- Added auto-accept for Archives weeklies.
+- Added mostly working C.H.E.T.T. task display.
+
+v11.1.0.4
+---------
+- Add Operation: Floodgate quest.
+
+v11.1.0.3
+---------
+- Added Side Gig chore.
+- Added Sparks of War: Undermine quest.
+- Ignore the "sign a cartel contract for the week" objective.
+- Updated how calendar times are calculated for active events (thanks jonespm).
+- Updated zhCN locale (thanks Sefank).
+
+v11.1.0.2
+---------
+- Added Undermine delves (thanks jonespm).
+- Added LibDataBroker support (thanks viruscamp).
+- Added addon category to ToC (thanks Zazou89).
+- Updated zhCN locale (thanks Sefank).
+
+v11.1.0.1
+---------
+- Added Undermine chores.
+- Added Surge Pricing timer.
+- Updated ToC for 11.1.0.
+
+v11.0.7.4
+---------
+- Fixed auto-accept spam for Timewalking dungeon quests.
+
+v11.0.7.3
+---------
+- Added Timewalking Journey quests (sub-80).
+- Added new Classic Timewalking quest.
+- Fixed (maybe) auto-accept not triggering sometimes.
+
+v11.0.7.2
+---------
+- Added Naga/Pirate quests to Siren Isle chores.
+
+v11.0.7.1
+---------
+- Added Siren Isle chores.
+- Added Horde ID for "You're a Mean One..." quest.
+- Added Feast of Winter Veil garrison daily quests.
+- Updated ToC for 11.0.7.
+
+v11.0.5.6
+---------
+- Added auto-accept for Comp Stomp brawl and Battlegrounds weekly.
+
+v11.0.5.5
+---------
+- Added The Originals to anniversary world boss.
+- Fixed minimum levels on Archives/Delves.
+
+v11.0.5.4
+---------
+- Fixed Celebrate chore showing when you already have the buff (GH37).
+- Fixed Reflect chore only working for Horde (thanks hitboxr).
+
+v11.0.5.3
+---------
+- Added "Show Anniversary account completed" option.
+- Added Classic Timewalking item turn-in quest.
+
+v11.0.5.2
+---------
+- Added Archavon/Sha of Anger tracking quests.
+- Moved Anniversary chores to its own section.
+- Various Anniversary tweaks.
+
+v11.0.5.1
+---------
+- Fixed Anniversary event IDs.
+- Updated ToC for 11.0.5.
+
+v11.0.2.28
+----------
+- Added Anniversary chores.
+- Added Classic Timewalking dungeon/raid quests.
+- Added Delves "Only if you have keys" option.
+- Changed TWW dungeon weekly to once per account, the rewards suck after that.
+- Changed "Mythic Dungeons" to "Dungeons" as it now includes heroics.
+
+v11.0.2.27
+----------
+- Fixed trying to start quests with buttons other than "Accept Quest" or "Start Quest".
+- Fixed showing objectives for completed chores.
+- Updated zhCN/zhTW locale.
+
+v11.0.2.26
+----------
+- Added auto-accept for pet battles/timewalking weekly quests.
+- Fixed Mining "Rush-order Requisition" quest ID.
+- Fixed big blank area in window when all Bountiful Delves are completed for the day.
+- Updated zhCN locale (thanks Sefank).
+
+v11.0.2.25
+----------
+- Fixed window being blank in some cases.
+
+v11.0.2.24
+----------
+- Added Hallowfall Fishing Derby chores (not enabled by default).
+- Always show completed final objective if quest is in progress.
+- Fixed Delve Keys minimum level.
+
+v11.0.2.23
+----------
+- Added auto-accept for Delves weekly quests.
+- Changed "Emissary" to be 3 separate groups (Archives/Delves/Worldsoul).
+
+v11.0.2.22
+----------
+- Added a one-time message letting you know that auto accept is an option.
+- Changed which chores are enabled by default, no more Dragonflight/PvP/Darkmoon Faire.
+- Changed auto-accepted quests to be off by default again, it starts way too many quests.
+- Fixed Delves bonus event minimum level.
+
+v11.0.2.21
+----------
+- Added Delves bonus event to auto-accept list.
+- Added zhCN/zhTW matchers for auto-accept. I have no idea if they work.
+- Changed auto-accepting quests to be on by default.
+- Fixed Delves bonus event not actually tracking the quest.
+
+v11.0.2.20
+----------
+- Added an EARLY VERSION of auto-accepting some quests from the Adventure Journal.
+  Enable it in Options>General>Automation.
+
+v11.0.2.19b
+----------
+- Fixed leftover duplicate chore entries.
+
+v11.0.2.19
+----------
+- Added options to control section order.
+- Added "Preserving" PvP weekly chores.
+- Changed Dragonflight chores to sort after The War Within.
+- Moved PvP chores to a new PvP section.
+- Fixed event IDs for Events chores (GH32).
+- Fixed minimum levels for Events chores.
+
+v11.0.2.18
+----------
+- Added Bountiful Delves display.
+- Added new TWE Enchanting Task (thanks Sluimerstand).
+- Updated zhCN locale (thanks Sefank).
+
+v11.0.2.17
+----------
+- Added Skin Slatefang profession chore.
+- Changed progress bar objectives (eg Spider Weekly) to show % at the start of the
+  objective text.
+- Changed Spider Weekly chore to always show objectives.
+- Updated timer for Theater Troupe, it starts at xx:01.
+- Updated minimum level for Theater Troupe chore.
+- Updated minimum level for Timewalking event chores.
+
+v11.0.2.16
+----------
+- Updated quest ID for A Burning Path Through Time.
+
+v11.0.2.15
+----------
+- Added TWW Enchanting Tasks.
+- Reduced the minimum frame height from 150 to 100 (GH26).
+
+v11.0.2.14
+----------
+- Fixed TWW World Boss quest name.
+- Fixed Special Assignment: Titanic Resurgence not always showing up correctly.
+
+v11.0.2.13
+----------
+- Added TWW World Boss chore.
+- Updated zhCN locale (thanks Sefank).
+
+v11.0.2.12
+----------
+- Added cleaning up of old data on login, the saved file should stop growing
+  quite so large.
+- Fixed some chores showing as in progress without a related quest.
+- Updated event quest IDs.
+
+v11.0.2.11
+----------
+- Fixed zhCN locale error.
+
+v11.0.2.10
+----------
+- Added TWW Special Assignment chore.
+- Changed objectives to not show irrelevant optional ones.
+- Fixed being able to drag the frame off the screen.
+- Fixed lock button so that it actually disables/enables mouse events properly (GH6).
+- Fixed lock button not updating between locked/unlocked when minimized.
+- Updated zhCN/zhTW localizations (thanks Sefank).
+
+v11.0.2.9
+---------
+- Changed "Worldsoul" chore to "Emissary" and added the missing weekly quests.
+
+v11.0.2.8
+---------
+- Added more Darkmoon Faire event chores.
+- Added zhCN localization (thanks EKE00372).
+- Added zhTW localization (thanks EKE00372).
+
+v11.0.2.7
+---------
+- Added "Disable ALL DF chores" and "Enable ALL DF chores" buttons to options.
+- Changed Dragonflight profession chores to off by default.
+- Changed all options text to use locale strings for translations.
+
+v11.0.2.6
+---------
+- Added TWW gathering task chores.
+- Added TWW Rollin' Down in the Deeps chore.
+- Added TWW Sparks of War chore.
+- Added TWW Beledar's Shadow timer.
+- Changed profession scanning to be more robust and less forgetful.
+- Fixed level requirements on several TWW chores.
+- Removed unavailable DF chores (Aiding the Accord, Last Hurrah, Sparks of Life).
+- Removed Radiant Echoes chores.
+- Removed Remix: Pandaria chores.
+
+v11.0.2.5
+---------
+- Added TWW Delve Keys chore.
+- Changed quest scanning to be more robust.
+- Changed profession scanning to _only_ run when you open the professions window.
+- Fixed TWW profession order quests, they don't actually have a skill requirement.
+
+v11.0.2.4
+---------
+- Added TWW profession chores (gather, drops, orders, and treatise).
+- Changed how profession scanning works, you now need to open the professions window
+  at least once.
+
+v11.0.2.3
+---------
+- Added TWW Awakening the Machine chore.
+- Added TWW Spreading the Light chore.
+- Added TWW Theater Troupe chore.
+- Added TWW Severed Threads chores (pact + weekly).
+- Changed TWW Dungeon chore to always show the quest name instead of some random
+  objective.
+- Changed TWW Worldsoul chore to show "Choose a quest!" instead of a cached quest,
+  it's a per-character choice.
+
+v11.0.2.2
+---------
+- Added TWW Dungeon chore.
+- Added TWW Worldsoul chore.
+- Added TWW Theater Troupe timer.
+- Changed timer options to have one group per expansion.
+- Changed non-TWW timers to default off.
+- Removed awakened timers.
+- Removed Remix filter from Dragonflight chores.
+
+v11.0.2.1
+---------
+- Fixed GetSpellTexture errors.
+- Updated ToC for 11.0.2.
+
+v11.0.0.3
+---------
+- Change how modules are initialized to hopefully fix a weird error (GH9).
+
+v11.0.0.2
+---------
+- Added Radiant Echoes first boss kill.
+
+v11.0.0.1
+---------
+- Added Events/Limited Time category.
+- Added Radiant Echoes events.
+- Fixed settings button.
+- Fixed settings slash command.
+- Updated Ace3 libraries.
+- Updated ToC for 11.0.0.
+
+v10.2.7.2
+---------
+- Fixed Remix: Pandaria category's minimum level.
+
+v10.2.7.1
+---------
+- Added Remix: Pandaria chores.
+- Fixed showing non-remix chores for remix characters.
+- Fixed empty quest names, they now get "???" instead.
+
+v10.2.6.3
+---------
+- Added Big Dig timer.
+- Added "Only show awakened timers" option.
+
+v10.2.6.2
+---------
+- Added Last Hurrah to Chores > Events.
+- Removed Last Hurrah quests from Aiding the Accord.
+
+v10.2.6.1
+---------
+- Added Timewalking Raids to Chores > Events.
+- Added new Aiding the Accord (Last Hurrah) quests (thanks Sluimerstand).
+
+v10.2.5.1
+---------
+- Added The Big Dig: Traitor's Rest weekly chore.
+- Updated TOC for 10.2.5.
+
+v10.2.0.11
+----------
+- Fixed showing objectives for completed quests (GH3, thanks blindauer).
+
+v10.2.0.10
+----------
+- Added "Show chore objectives" option.
+- Fixed Bubbling Discoveries Alchemy quest ID.
+
+v10.2.0.9
+---------
+- Fixed "Show completed sections" option spamming your chat window.
+
+v10.2.0.8
+---------
+- Added Stolen Treats (You're a Mean One...) holiday chore.
+- Fixed Frost Lord Ahune event ID.
+
+v10.2.0.7
+---------
+- Added a missing Alchemy weekly chore.
+- Added Skinning Magma Cobra/Verdant Gladewarden chores.
+- Added "Show completed sections" option.
+- Added minimum levels for timers.
+
+v10.2.0.6
+---------
+- Added Shipments x1 (Great Cates!) chore.
+- Added Shipments x5 (Crate of the Art) chore.
+
+v10.2.0.5
+---------
+- Added Primalist Future chore.
+- Added Sniffenseeking chore.
+- Added Time Rift (Account) chore.
+- Added Dreamsurge timer.
+
+v10.2.0.4
+---------
+- Added Blooming Dreadseeds chore.
+
+v10.2.0.3
+---------
+- Added Superbloom timer.
+- Renamed crafting "Gather" quests to "Task", makes more sense with 10.2 options like
+  watering plants.
+
+v10.2.0.2
+---------
+- Added A Worthy Ally: Dream Wardens chore.
+- Added Sparks of Life: Emerald Dreams to Sparks of Life chore.
+
+v10.2.0.1
+----------
+- Added Superbloom to Dragonflight chores.
+- Added some Emerald Dream profession quests.
+- Renamed "Craft" quests to "Provide", makes more sense to me.
+- Removed some unused library files.
+- Updated TOC for 10.2.0.
+
+v10.1.7.11
+----------
+- Added more profession chore skill level requirements.
+- Changed Fighting is its Own Reward to level 70 required.
+- Changed Shaping the Dreamsurge to level 70 required.
+
+v10.1.7.10b
+-----------
+- Fixed a bad TOC change.
+
+v10.1.7.10
+----------
+- Fixed (maybe) the calendar time zone mess where events show as active way too
+  early on some realms. Blizzard is weird as hell.
+
+v10.1.7.9
+---------
+- Added holiday dungeon chores (Crown Chemical Co, Coren Direbrew, Headless Horseman,
+  and Frost Lord Ahune).
+- Changed Events to sort before Dragonflight.
+
+v10.1.7.8
+---------
+- Added Dragonflight>Catch and Release chores (Tuskarr fish turn-ins).
+- Added skill requirements for Enchanting chores.
+- Fixed learning/unlearning professions not updating the display.
+- Fixed increasing level in a profession not updating the display.
+- Fixed some intermittent nil errors.
+
+v10.1.7.7
+---------
+- Fixed completed quests not counting as completed.
+
+v10.1.7.6
+---------
+- Fixed Bartering quests so that they (hopefully) track both quests consistently.
+
+v10.1.7.5
+---------
+- Added background color to options.
+- Added border color to options.
+- Added font style to options.
+- Added frame strata to options.
+- Changed timer to round minutes instead of floor so that 59 seconds is 1 minute
+  instead of 0 minutes.
+
+v10.1.7.4
+---------
+- Added a lock/unlock button, prevents moving/resizing of frame when locked.
+- Added event timers, enable/disable on the "Timers" tab in options.
+- Changed various UI magic to make updates faster.
+- Fixed Dreamsurge chore always showing the reward item instead of progress.
+- Fixed right side of frame having no padding.
+- Fixed missing AceConsole library reference.
+
+v10.1.7.3
+---------
+- Added title bar with collapse/expand icon and settings icon.
+- Changed the frame to be scrollable.
+- Fixed crafted quality icons making text lines weirdly tall.
+
+v10.1.7.2
+---------
+- Added Arena Skirmishes, Battlegrounds, and PvP Pet Battles to Chores > Events.
+- Added PvP Brawls to Chores > Events.
+- Added hiding of _some_ profession weeklies if you don't meet the skill requirement.
+- Changed Events to show after Dragonflight.
+- Cleaned up Dragonflight/Events options layout.
+- Fixed Chores options being slightly too wide to fit 3 per row.
+- Fixed "Show completed chores" and "Use status icons" options not working.
+
+v10.1.7.1
+---------
+- Added support for minimum level on chores and added it to some Dragonflight ones.
+- Added support for required active events on chores.
+- Added Chores > Events with Mythic Dungeons, World Quests, and Timewalking.
+- Added Chores > Dragonblight > Patch 10.1.7 > Dreamsurge.
+- Added Aiding the Accord: Dreamsurge quest ID.
+- Fixed the first options under General not being in a group.
+- Fixed frame not always showing up on login. Again. For real this time.
+- Fixed slash command with no parameters not opening config.
+- Updated TOC for 10.1.7.
+
+v10.1.5.1
+---------
+- Added an addon icon.
+- Added status icons for quest state, can disable in options.
+- Changed "Show completed chores" to off by default.
+- Fixed event chores (eg Darkmoon Faire) not always showing up on login.
+- Fixed frame not always showing up on login.
+- Fixed profession checks.
+- Switched to using game version as base of addon version.
+
+v0.0.4b
+-------
+- Fixed "attempt to concatenate field ?" error.
+
+v0.0.4
+------
+- Added Archaeology profession chores.
+- Added Cooking profession chores.
+- Added Fishing profession chores.
+- Added Darkmoon Faire chore to all professions.
+- Fixed completion count display of grouped gathering chores.
+
+v0.0.3
+------
+- Fixed moving the frame potentially causing SetPoint UI errors.
+
+v0.0.2
+------
+- Added Heroic Dungeons chore ("Fighting is Its Own Reward" quest).
+- Added Show Your Mettle chore.
+- Added Sparks of Life chore.
+- Added a basic slash command (/chores or /choretracker) with "hide", "show", and
+  "toggle" sub-commands.
+- Added a "Toggle ChoreTracker window" keybinding under "AddOns".
+- Fixed Blacksmithing drops having the wrong mob type listed.
+
+v0.0.1
+------
+- Added Aiding the Accord chore.
+- Added A Worthy Ally: Loamm Niffen chore.
+- Added grouping of similar items for gathering "gather" chores.
+- Changed frame to always hide in instances.
+- Fixed quest name showing as "???" sometimes when we know the name.
+- Fixed frame moving up/down when the number of lines changed.
+- Removed "redraw" chat spam.
+- Various frame text improvements.
+
+v0.0.1-alpha2
+-------------
+- Added saving of window position after moving.
+- Added saving of quest data to re-use on other characters.
+- Added LibSharedMedia for fonts.
+- Added options for font and font size.
+- Added Dragonflight chores.
+- Rewrote config handling to support non-profession chores.
+
+v0.0.1-alpha1
+-------------
+- Initial public release.

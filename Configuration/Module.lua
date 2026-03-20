@@ -19,6 +19,7 @@ local ReloadUI = ReloadUI
 --- @field Media MediaConfigurationOptions
 --- @field SmartMount SmartMountConfigurationOptions
 --- @field Datatext DatatextConfigurationOptions
+--- @field Chores ChoresConfigurationOptions
 --- @field QuestAutomation QuestAutomationConfigurationOptions
 --- @field QuestLogCleaner QuestLogCleanerConfigurationOptions
 --- @field GossipHotkeys GossipHotkeysConfigurationOptions

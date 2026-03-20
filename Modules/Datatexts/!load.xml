@@ -1,5 +1,6 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Include file='DatatextModule.lua' />
+    <Include file='Chores.lua' />
     <Include file='Mounts.lua' />
     <Include file='MythicPlus.lua' />
     <Include file='Portals.lua' />

@@ -1,0 +1,208 @@
+local addonName, Addon = ...
+local L = Addon.L
+
+local MODE_IDLE = 0
+local MODE_SCAN = 1
+local MODE_ACCEPT = 2
+
+local Module = Addon:NewModule(
+    'AutoAccept',
+    {
+        mode = MODE_IDLE,
+        accepting = nil,
+        offset = 0,
+        scans = 0,
+        seenEntries = {},
+        seenFull = false,
+        tryAccepting = {},
+    },
+    'AceHook-3.0'
+)
+
+local ScannerModule
+
+local CAJ_GetSuggestions = C_AdventureJournal.GetSuggestions
+local CAJ_UpdateSuggestions = C_AdventureJournal.UpdateSuggestions
+
+
+function Module:OnEnable()
+    ScannerModule = Addon:GetModule('Scanner')
+
+    self:RegisterEvent('AJ_REFRESH_DISPLAY')
+    self:RegisterEvent('QUEST_ACCEPTED')
+    self:RegisterEvent('QUEST_DETAIL')
+    self:RegisterEvent('UI_ERROR_MESSAGE')
+end
+
+function Module:OnEnteringWorld()
+    C_Timer.After(0, function() self:ScanJournal() end)
+end
+
+function Module:AJ_REFRESH_DISPLAY()
+    -- print('AJ_REFRESH_DISPLAY ', self.mode)
+    if self.mode ~= MODE_SCAN then return end
+
+    local suggestions = CAJ_GetSuggestions()
+    if suggestions == nil then
+        -- print('no suggestions??')
+        return
+    end
+
+    local currentOffset = C_AdventureJournal.GetPrimaryOffset()
+    -- print('currentOffset = '..currentOffset)
+    if currentOffset ~= self.offset then
+        -- print('offset '..currentOffset..' != '..self.offset)
+        C_AdventureJournal.SetPrimaryOffset(self.offset)
+        return
+    end
+
+    for i = 1, #suggestions do
+        local suggestion = suggestions[i]
+        local seenKey = table.concat({
+            suggestion.title or '',
+            suggestion.description or '',
+            suggestion.buttonText or ''
+        }, '|')
+        -- if i == 3 then print(i..' - '..seenKey) end
+        if self.seenEntries[seenKey] == nil then
+            self.seenEntries[seenKey] = true
+
+            local shouldAccept = self:CheckSuggestion(suggestion, currentOffset, i)
+            -- print(shouldAccept)
+            if shouldAccept then
+                self.mode = MODE_ACCEPT
+                pcall(C_AdventureJournal.ActivateEntry, i)
+                -- print('Auto accept '..seenKey)
+                return
+            end
+        end
+    end
+
+    local numSuggestions = C_AdventureJournal.GetNumAvailableSuggestions()
+    -- print(numSuggestions)
+    if (currentOffset + 1) < numSuggestions then
+        self.offset = self.offset + 1
+        C_Timer.After(0, function() C_AdventureJournal.SetPrimaryOffset(self.offset) end)
+    else
+        self.mode = MODE_IDLE
+        self.scans = 0
+        C_Timer.After(0, function() C_AdventureJournal.SetPrimaryOffset(0) end)
+    end
+end
+
+function Module:QUEST_ACCEPTED(_, questId)
+    if questId == self.accepting then
+        self.accepting = nil
+        -- restart the scan
+        self.mode = MODE_SCAN
+
+        C_Timer.After(1, function() self:AJ_REFRESH_DISPLAY() end)
+    end
+end
+
+function Module:QUEST_DETAIL()
+    local questId = GetQuestID()
+    -- print('QUEST_DETAIL '..questId)
+    if self.tryAccepting[questId] == true then
+        self.tryAccepting[questId] = nil
+        self.accepting = questId
+
+        if QuestGetAutoAccept() then
+            CloseQuest()
+        else
+            AcceptQuest()
+        end
+
+        -- Give up after 1s waiting for the quest to accept
+        C_Timer.After(1, function()
+            if self.mode == MODE_ACCEPT and self.accepting == questId then
+                self:ScanJournal()
+            end
+        end)
+    end
+end
+
+function Module:UI_ERROR_MESSAGE(_, errorCode)
+    if errorCode == 205 then
+        self.mode = MODE_IDLE
+        if self.seenFull == false then
+            print("ChoreTracker: can't auto-accept, your quest log is full!")
+            self.seenFull = true
+        end
+    end
+end
+
+function Module:CheckSuggestion(suggestion, offset, index)
+    -- print(offset, index, suggestion.title)
+    local acceptQuest = L['autoAccept:acceptQuest']
+    local startQuest = L['autoAccept:startQuest']
+
+    -- if suggestion.title ~= 'Bonus Event: Timewalking' then return end
+    -- print('title: --'..suggestion.title..'--')
+    -- print('desc: --'..suggestion.description..'--')
+    -- print('button: --'..suggestion.buttonText..'--')
+
+    for choreKey, acceptData in pairs(ScannerModule.autoAccept) do
+        local parts = { strsplit('.', choreKey) }
+        local enabled = Addon.db.profile.chores[parts[1]][parts[2]][parts[3]][parts[4]]
+        if enabled == true then
+            -- print(choreKey)
+            local matchString, questIds = unpack(acceptData)
+            -- TODO: 12.0 broke this somehow with duplicate timewalking entries, cool
+            -- if (suggestion.buttonText == acceptQuest or
+            --     suggestion.buttonText == startQuest) and
+            if suggestion.buttonText == acceptQuest and
+                (strmatch(suggestion.title, matchString) or
+                strmatch(suggestion.description, matchString))
+            then
+                -- print('yey')
+                local start = true
+                for _, questId in ipairs(questIds) do
+                    local questStatus = ScannerModule.quests[questId]
+                    if questStatus ~= nil and questStatus.status > 0 then
+                        start = false
+                        break
+                    end
+                end
+
+                if start then
+                    -- print('accept '..offset..' '..index..' '..suggestion.title)
+                    for _, questId in ipairs(questIds) do
+                        self.tryAccepting[questId] = true
+                    end
+                    return true
+                end
+
+                return false
+            end
+        end
+    end
+
+    return false
+end
+
+function Module:ScanJournal()
+    if not Addon.db.profile.general.automation.acceptQuests then return end
+
+    self.scans = self.scans + 1
+
+    if self.scans > 20 then
+        print('ChoreTracker: more than 20 scans??')
+        self.scans = 0
+        return
+    end
+
+    self.mode = MODE_SCAN
+    self.accepting = nil
+    self.offset = 0
+    wipe(self.seenEntries)
+    wipe(self.tryAccepting)
+
+    CAJ_UpdateSuggestions(false)
+    -- The initial event isn't triggering sometimes, do it manually if we have suggestions
+    C_Timer.After(2, function()
+        if C_AdventureJournal.GetNumAvailableSuggestions() > 0 then
+            self:AJ_REFRESH_DISPLAY()
+        end
+    end)
+end

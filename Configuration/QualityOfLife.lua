@@ -20,6 +20,9 @@ local GHCOptions = ConfigurationModule.Options.GossipHotkeys
 ---@type SatchelWatchConfigurationOptions
 local SWOptions = ConfigurationModule.Options.SatchelWatch
 
+---@type ChoresConfigurationOptions
+local ChoresOptions = ConfigurationModule.Options.Chores
+
 local function BuildGossipHotkeysTab()
     local tab = {
         type = "group",
@@ -543,6 +546,187 @@ local function BuildQuestAutomationTab()
     return tab
 end
 
+local function BuildChoresTab()
+    local W = ConfigurationModule.Widgets
+
+    local pveFrameLoadUI = _G.PVEFrame_LoadUI
+    local legacyLoadAddOn = _G.LoadAddOn
+
+    local function EnsureGroupFinderLoaded()
+        if type(pveFrameLoadUI) == "function" then
+            pveFrameLoadUI()
+        end
+
+        if C_AddOns and type(C_AddOns.LoadAddOn) == "function" then
+            if type(C_AddOns.IsAddOnLoaded) == "function" then
+                if not C_AddOns.IsAddOnLoaded("Blizzard_GroupFinder") then
+                    C_AddOns.LoadAddOn("Blizzard_GroupFinder")
+                end
+                if not C_AddOns.IsAddOnLoaded("Blizzard_PVE") then
+                    C_AddOns.LoadAddOn("Blizzard_PVE")
+                end
+            else
+                C_AddOns.LoadAddOn("Blizzard_GroupFinder")
+                C_AddOns.LoadAddOn("Blizzard_PVE")
+            end
+        elseif type(legacyLoadAddOn) == "function" then
+            legacyLoadAddOn("Blizzard_GroupFinder")
+            legacyLoadAddOn("Blizzard_PVE")
+        end
+    end
+
+    local function GetCurrentExpansionRaidWings()
+        EnsureGroupFinderLoaded()
+
+        local raidWings = {}
+        local currentExpansionLevel = type(GetAccountExpansionLevel) == "function" and GetAccountExpansionLevel() or nil
+
+        if type(GetNumRFDungeons) ~= "function" or type(GetRFDungeonInfo) ~= "function" then
+            return raidWings
+        end
+
+        for index = 1, GetNumRFDungeons() do
+            local dungeonID = GetRFDungeonInfo(index)
+            local name
+            local expansionLevel
+
+            if type(dungeonID) == "number" then
+                name, _, _, _, _, _, _, _, expansionLevel = GetLFGDungeonInfo(dungeonID)
+            end
+
+            if type(dungeonID) == "number" and dungeonID > 0 and name and (not currentExpansionLevel or expansionLevel == currentExpansionLevel) then
+                table.insert(raidWings, {
+                    dungeonID = dungeonID,
+                    name = name,
+                })
+            end
+        end
+
+        table.sort(raidWings, function(left, right)
+            return left.name < right.name
+        end)
+
+        return raidWings
+    end
+
+    local function BuildCategoryToggle(order, key, icon, name, desc, iconAtlas)
+        local iconMarkup = iconAtlas and ("|A:%s:16:16|a"):format(iconAtlas) or T.Tools.Text.Icon(icon)
+        return {
+            type = "toggle",
+            name = iconMarkup .. " " .. name,
+            desc = desc,
+            order = order,
+            width = 1.5,
+            get = function()
+                return ChoresOptions:IsCategoryEnabled(key)
+            end,
+            set = function(_, value)
+                ChoresOptions:SetCategoryEnabled(key, value)
+            end,
+        }
+    end
+
+    local raidWingArgs = {
+        desc = W.Description(1,
+            T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                "Track current-expansion Raid Finder wings and count incomplete wings in the Chores datatext.")),
+    }
+
+    local raidWingOrder = 2
+    for _, raidWing in ipairs(GetCurrentExpansionRaidWings()) do
+        raidWingArgs[tostring(raidWing.dungeonID)] = {
+            type = "toggle",
+            name = ("|A:%s:16:16|a "):format("Raid") .. raidWing.name,
+            desc = ("Track Raid Finder wing: %s."):format(raidWing.name),
+            order = raidWingOrder,
+            width = 1.5,
+            get = function()
+                return ChoresOptions:IsRaidWingEnabled(raidWing.dungeonID)
+            end,
+            set = function(_, value)
+                ChoresOptions:SetRaidWingEnabled(raidWing.dungeonID, value)
+            end,
+        }
+        raidWingOrder = raidWingOrder + 1
+    end
+
+    if raidWingOrder == 2 then
+        raidWingArgs.unavailable = W.Description(2,
+            "Current-expansion Raid Finder wing data is not currently available. Open the Group Finder if you need to refresh the list.")
+    end
+
+    return {
+        type = "group",
+        name = "Chores",
+        order = 15,
+        args = {
+            desc = W.Description(1,
+                "Track a curated set of weekly chores and expose the remaining count to the Chores DataText."),
+            enable = {
+                type = "toggle",
+                name = "Enable",
+                desc = "Enable weekly chore tracking.",
+                order = 2,
+                width = "half",
+                handler = ChoresOptions,
+                get = "GetEnabled",
+                set = "SetEnabled",
+            },
+            showCompleted = {
+                type = "toggle",
+                name = "Show Completed Chores",
+                desc = "Show completed chores in the Chores datatext tooltip.",
+                order = 3,
+                width = 1.5,
+                handler = ChoresOptions,
+                get = "GetShowCompleted",
+                set = "SetShowCompleted",
+            },
+            additionalTracking = W.IGroup(5, "Additional Tracking", {
+                desc = W.Description(1,
+                    T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                        "Enable additional weekly tracking groups that contribute to the Chores datatext count.")),
+                bountifulDelves = {
+                    type = "toggle",
+                    name = T.Tools.Text.Icon("Interface\\Icons\\inv_misc_map08") .. " Bountiful Delves",
+                    desc = "Track current bountiful delves and show your current coffer keys in the datatext tooltip.",
+                    order = 2,
+                    width = 1.5,
+                    handler = ChoresOptions,
+                    get = "GetTrackBountifulDelves",
+                    set = "SetTrackBountifulDelves",
+                },
+            }),
+            summary = W.IGroup(10, "Tracked Chores", {
+                desc = W.Description(1,
+                    T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                        "Disable any category you do not want counted. The datatext tooltip will only show enabled chores.")),
+                delves = BuildCategoryToggle(2, "delves", "Interface\\Icons\\inv_misc_map08", "Delves",
+                    "Track the Midnight Delver's Call weekly set."),
+                abundance = BuildCategoryToggle(3, "abundance", 134569, "Abundance",
+                    "Track the Abundant Offerings weekly chore."),
+                unity = BuildCategoryToggle(4, "unity", "Interface\\Icons\\achievement_guildperk_everybodysfriend",
+                    "Unity",
+                    "Track the Unity weekly choice quest."),
+                hope = BuildCategoryToggle(5, "hope", "Interface\\Icons\\spell_holy_holynova", "Hope",
+                    "Track Hope in the Darkest Corners."),
+                soiree = BuildCategoryToggle(6, "soiree", "Interface\\Icons\\inv_misc_food_13", "Soiree",
+                    "Track Saltheril's Soiree progress."),
+                stormarion = BuildCategoryToggle(7, "stormarion", "Interface\\Icons\\spell_nature_lightning",
+                    "Stormarion",
+                    "Track the Stormarion Assault weekly."),
+                specialAssignment = BuildCategoryToggle(8, "specialAssignment", "Interface\\Icons\\inv_scroll_11",
+                    "Special Assignment",
+                    "Track the rotating Special Assignments."),
+                dungeon = BuildCategoryToggle(9, "dungeon", "Interface\\Icons\\achievement_dungeon_azjolkahet_dungeon",
+                    "Dungeon",
+                    "Track the weekly Midnight dungeon quest.", "Dungeon"),
+            }),
+            raidWings = W.IGroup(20, "Raid Finder Wings", raidWingArgs),
+        },
+    }
+end
+
 local function BuildConfiguration()
     local optionsTab = ConfigurationModule.Widgets.NewConfigurationSection(35, "Quality of Life")
 
@@ -554,6 +738,7 @@ local function BuildConfiguration()
             name = "Features to improve your overall user experience.",
         },
         questAutomationTab = BuildQuestAutomationTab(),
+        choresTab = BuildChoresTab(),
         questLogCleanerTab = BuildQuestLogCleanerTab(),
         gossipHotkeysTab = BuildGossipHotkeysTab(),
         satchelWatchTab = BuildSatchelWatchTab(),

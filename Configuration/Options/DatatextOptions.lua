@@ -249,6 +249,75 @@ function Options:SetFavoriteHearthstone(info, value)
     RefreshDatatext("TwichUI: Portals")
 end
 
+function Options:GetChoresUseCustomColor(info)
+    local db = self:GetDatatextDB("chores")
+    return db.customColor or false
+end
+
+function Options:SetChoresUseCustomColor(info, value)
+    local db = self:GetDatatextDB("chores")
+    db.customColor = value
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetChoresTextColor(info)
+    local db = self:GetDatatextDB("chores")
+    if not db.textColor then
+        db.textColor = { 1, 1, 1, 1 }
+    end
+    return unpack(db.textColor)
+end
+
+function Options:SetChoresTextColor(info, r, g, b, a)
+    local db = self:GetDatatextDB("chores")
+    db.textColor = { r, g, b, a }
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetChoresTooltipHeaderFont(info)
+    local db = self:GetDatatextDB("chores")
+    return db.tooltipHeaderFont or "Friz Quadrata TT"
+end
+
+function Options:SetChoresTooltipHeaderFont(info, value)
+    local db = self:GetDatatextDB("chores")
+    db.tooltipHeaderFont = value
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetChoresTooltipHeaderFontSize(info)
+    local db = self:GetDatatextDB("chores")
+    return db.tooltipHeaderFontSize or 12
+end
+
+function Options:SetChoresTooltipHeaderFontSize(info, value)
+    local db = self:GetDatatextDB("chores")
+    db.tooltipHeaderFontSize = value
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetChoresTooltipEntryFont(info)
+    local db = self:GetDatatextDB("chores")
+    return db.tooltipEntryFont or "Friz Quadrata TT"
+end
+
+function Options:SetChoresTooltipEntryFont(info, value)
+    local db = self:GetDatatextDB("chores")
+    db.tooltipEntryFont = value
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetChoresTooltipEntryFontSize(info)
+    local db = self:GetDatatextDB("chores")
+    return db.tooltipEntryFontSize or 11
+end
+
+function Options:SetChoresTooltipEntryFontSize(info, value)
+    local db = self:GetDatatextDB("chores")
+    db.tooltipEntryFontSize = value
+    RefreshDatatext("TwichUI: Chores")
+end
+
 --- GOBLIN DATATEXT OPTIONS ---
 function Options:GetGoblinGoldDisplayMode(info)
     local db = self:GetDatatextDB("goblin")
