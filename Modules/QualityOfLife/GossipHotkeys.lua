@@ -30,8 +30,6 @@ local GetOptions = C_GossipInfo.GetOptions     -- kept for potential future use
 --- Returns true if the key is a number row key (1-9).
 ---@param key string
 ---@return boolean
----@param key string
----@return boolean
 local function IsNumericKey(key)
 	return key == "1" or key == "2" or key == "3"
 		or key == "4" or key == "5" or key == "6"
@@ -112,8 +110,6 @@ function GH:OnEnable()
 
 	if not self.hotkeyFrame then
 		self.hotkeyFrame = CreateFrame("Frame", "TwichUI_GossipHotkeysFrame", UIParent)
-		self.hotkeyFrame:EnableKeyboard(false)
-		self.hotkeyFrame:SetPropagateKeyboardInput(true)
 	end
 
 	-- Create hidden buttons once, used for temporary override bindings
@@ -211,8 +207,6 @@ end
 function GH:UnregisterHotkeys()
 	self.activeButtons = nil
 	if self.hotkeyFrame then
-		self.hotkeyFrame:EnableKeyboard(false)
-		self.hotkeyFrame:SetPropagateKeyboardInput(true)
 		if ClearOverrideBindings then
 			-- ClearOverrideBindings is protected in combat. If we are in
 			-- combat lockdown, defer the clear until combat ends so we

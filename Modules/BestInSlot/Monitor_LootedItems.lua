@@ -4,7 +4,7 @@
         Responsibilities:
         - Listens for loot events, and checks if the looted item is in the players list of best in slot items
 ]]
-local TwichRx = _G.TwichRx
+local TwichRx = _G["TwichRx"]
 ---@type TwichUI
 local T = unpack(TwichRx)
 
@@ -15,9 +15,6 @@ local BIS = T:GetModule("BestInSlot")
 local Monitor = BIS:NewModule("MonitorLootedItems", "AceEvent-3.0")
 
 local AceGUI = LibStub("AceGUI-3.0")
-
---- pattern to match to find items the player looted
-local LOOT_SELF_PATTERN = string.gsub(LOOT_ITEM_SELF, "%%s", "(.+)")
 
 
 ---@return table<number, BisItem> items table of itemIDs that are best in slot
@@ -32,10 +29,12 @@ local function GetBISItemIDs()
 	return itemIDs
 end
 
-local function ItemHathBeenReceived(itemInfo)
+local function ItemHathBeenReceived(itemInfo, previousState, currentState)
 	-- T:Print("You have received a Best in Slot item!", itemInfo.link)
 
 	local function CreateMessage(text)
+		---@type TwichUI_ItemWidget
+		---@diagnostic disable-next-line: param-type-mismatch
 		local widget = AceGUI:Create("TwichUI_Item")
 		---@type NotificationOptions
 		local notifOptions = {}
@@ -55,32 +54,24 @@ local function ItemHathBeenReceived(itemInfo)
 			fontSize = 12,
 		}
 
+		---@diagnostic disable-next-line: undefined-field
 		widget:SetItem(itemInfo.link)
 		Monitor:SendMessage("TWICH_NOTIFICATION", widget, notifOptions)
 	end
 
-	-- check if player already has the item
-	local owned, equpped, ilvl, link, previousTrackRank = BIS.ItemScanner.PlayerOwnsItem(itemInfo.itemID)
-	if owned then
-		-- check if the newitem has a higher item track than the owned item
-		local newOwned, newEquipped, newItemLevel, newExactLink, newTrackRank =
-			BIS.ItemScanner.PlayerOwnsItem(itemInfo.itemID)
+	local previousTrackRank = previousState and previousState.bestTrackRank or nil
+	local newTrackRank = currentState and currentState.bestTrackRank or nil
 
-		if not newOwned then
-			-- dont think this will happen but log it incase so i can find it
-			T:Print("Error checking owned item for track comparison.")
-		end
+	if previousState and previousState.count > 0 and newTrackRank and previousTrackRank and newTrackRank > previousTrackRank then
+		local ownedTrackStr = BIS.ItemScanner.GetGearTrackByRank(previousTrackRank)
+		local newTrackStr = BIS.ItemScanner.GetGearTrackByRank(newTrackRank)
 
-		if newTrackRank and previousTrackRank and newTrackRank > previousTrackRank then
-			local ownedTrackStr = BIS.ItemScanner.GetGearTrackByRank(previousTrackRank)
-			local newTrackStr = BIS.ItemScanner.GetGearTrackByRank(newTrackRank)
-
-			CreateMessage("You have received an upgraded Best in Slot item! " ..
-			T.Tools.Text.ToTitleCase(ownedTrackStr) .. " → " .. T.Tools.Text.ToTitleCase(newTrackStr))
-		end
-	else
-		CreateMessage("You have received a Best in Slot item!")
+		CreateMessage("You have received an upgraded Best in Slot item! " ..
+		T.Tools.Text.ToTitleCase(ownedTrackStr) .. " → " .. T.Tools.Text.ToTitleCase(newTrackStr))
+		return
 	end
+
+	CreateMessage("You have received a Best in Slot item!")
 end
 
 function Monitor:CreateTest()
@@ -105,7 +96,7 @@ local function GetItemInfoAsync(item, callback)
 	-- Normalize to itemID
 	local itemID = item
 	if type(item) == "string" then
-		local idFromLink = item:match("item:(%d+)")
+		local idFromLink = string.match(item, "item:(%d+)")
 		if idFromLink then
 			itemID = tonumber(idFromLink)
 		end
@@ -148,6 +139,97 @@ local function GetItemInfoAsync(item, callback)
 	end)
 end
 
+local function GetBagMaxIndex()
+	if type(NUM_TOTAL_EQUIPPED_BAG_SLOTS) == "number" then
+		return NUM_TOTAL_EQUIPPED_BAG_SLOTS
+	end
+
+	if type(NUM_BAG_SLOTS) == "number" then
+		return NUM_BAG_SLOTS
+	end
+
+	return 4
+end
+
+local function BuildOwnedItemState(itemID)
+	local state = {
+		count = 0,
+		bestTrackRank = nil,
+		bestLink = nil,
+		bestItemLevel = nil,
+	}
+
+	local function ConsiderItem(link, trackRank, itemLevel)
+		state.count = state.count + 1
+
+		local currentBestTrack = state.bestTrackRank or -1
+		local candidateTrack = trackRank or -1
+		local currentBestLevel = state.bestItemLevel or -1
+		local candidateLevel = itemLevel or -1
+
+		if not state.bestLink or candidateTrack > currentBestTrack or (candidateTrack == currentBestTrack and candidateLevel > currentBestLevel) then
+			state.bestTrackRank = trackRank
+			state.bestLink = link
+			state.bestItemLevel = itemLevel
+		end
+	end
+
+	for slotIndex = 1, 19 do
+		if GetInventoryItemID("player", slotIndex) == itemID then
+			local link = GetInventoryItemLink("player", slotIndex)
+			local itemLevel = link and C_Item.GetDetailedItemLevelInfo(link) or nil
+			local track = BIS.ItemScanner.GetTrackFromEquippedItem(slotIndex)
+			local trackRank = BIS.ItemScanner.GetGearTrackRank(track)
+			ConsiderItem(link, trackRank, itemLevel)
+		end
+	end
+
+	for bagIndex = 0, GetBagMaxIndex() do
+		local numSlots = C_Container.GetContainerNumSlots(bagIndex)
+		for slotIndex = 1, numSlots do
+			if C_Container.GetContainerItemID(bagIndex, slotIndex) == itemID then
+				local link = C_Container.GetContainerItemLink(bagIndex, slotIndex)
+				local itemLevel = link and C_Item.GetDetailedItemLevelInfo(link) or nil
+				local track = BIS.ItemScanner.GetTrackFromBagItem(bagIndex, slotIndex)
+				local trackRank = BIS.ItemScanner.GetGearTrackRank(track)
+				ConsiderItem(link, trackRank, itemLevel)
+			end
+		end
+	end
+
+	return state
+end
+
+local function BuildInventorySnapshot()
+	local snapshot = {}
+	local bisItems = GetBISItemIDs()
+
+	for itemID in pairs(bisItems) do
+		snapshot[itemID] = BuildOwnedItemState(itemID)
+	end
+
+	return snapshot
+end
+
+function Monitor:RefreshInventorySnapshot()
+	self.inventorySnapshot = BuildInventorySnapshot()
+end
+
+function Monitor:HandleReceivedBestInSlotItem(itemID, previousState, currentState)
+	local itemRef = currentState and currentState.bestLink or itemID
+
+	GetItemInfoAsync(itemRef, function(itemInfo)
+		if not itemInfo or not itemInfo.link then
+			T:Print("Failed to retrieve item info for looted item:", tostring(itemID))
+			return
+		end
+
+		if Monitor.IsItemBestInSlot(itemInfo.itemID) then
+			ItemHathBeenReceived(itemInfo, previousState, currentState)
+		end
+	end)
+end
+
 function Monitor.IsItemBestInSlot(itemID)
 	local bisItems = GetBISItemIDs()
 	return bisItems[itemID] ~= nil
@@ -155,24 +237,20 @@ function Monitor.IsItemBestInSlot(itemID)
 end
 
 function Monitor:OnEnable()
-	self:RegisterEvent("CHAT_MSG_LOOT")
+	self:RefreshInventorySnapshot()
+	self:RegisterEvent("BAG_UPDATE_DELAYED")
 end
 
-function Monitor:CHAT_MSG_LOOT(_, message)
-	local raw = type(message) == "string" and message:match(LOOT_SELF_PATTERN)
-	if not raw then return end
+function Monitor:BAG_UPDATE_DELAYED()
+	local previousSnapshot = self.inventorySnapshot or {}
+	local currentSnapshot = BuildInventorySnapshot()
 
-	local itemLink = raw:match("(|c%x+|Hitem:[^|]+|h%[[^]]+%]|h|r)") or raw
-	if not itemLink then return end
+	for itemID, currentState in pairs(currentSnapshot) do
+		local previousState = previousSnapshot[itemID] or { count = 0, bestTrackRank = nil }
+		if currentState.count > previousState.count then
+			self:HandleReceivedBestInSlotItem(itemID, previousState, currentState)
+		end
+	end
 
-	GetItemInfoAsync(itemLink, function(itemInfo)
-		if not itemInfo or not itemInfo.link then
-			-- temp debug line to ensure functionality
-			T:Print("Failed to retrieve item info for looted item:", itemLink)
-			return
-		end
-		if Monitor.IsItemBestInSlot(itemInfo.link) then
-			ItemHathBeenReceived(itemInfo)
-		end
-	end)
+	self.inventorySnapshot = currentSnapshot
 end

@@ -60,6 +60,16 @@ function Options:SetKeepMetaQuests(info, value)
     db.keepMetaQuests = value
 end
 
+function Options:GetKeepRepeatableQuests(info)
+    local db = self:GetQuestLogCleanerDB()
+    return db.keepRepeatableQuests or false
+end
+
+function Options:SetKeepRepeatableQuests(info, value)
+    local db = self:GetQuestLogCleanerDB()
+    db.keepRepeatableQuests = value
+end
+
 function Options:GetKeepDungeonQuests(info)
     local db = self:GetQuestLogCleanerDB()
     return db.keepDungeonQuests or false

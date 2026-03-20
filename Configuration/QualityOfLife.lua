@@ -48,6 +48,31 @@ end
 
 local function BuildSatchelWatchTab()
     local W = ConfigurationModule.Widgets
+    local pveFrameLoadUI = _G.PVEFrame_LoadUI
+    local legacyLoadAddOn = _G.LoadAddOn
+
+    if type(pveFrameLoadUI) == "function" then
+        pveFrameLoadUI()
+    end
+
+    if C_AddOns and type(C_AddOns.LoadAddOn) == "function" then
+        if type(C_AddOns.IsAddOnLoaded) == "function" then
+            if not C_AddOns.IsAddOnLoaded("Blizzard_GroupFinder") then
+                C_AddOns.LoadAddOn("Blizzard_GroupFinder")
+            end
+            if not C_AddOns.IsAddOnLoaded("Blizzard_PVE") then
+                C_AddOns.LoadAddOn("Blizzard_PVE")
+            end
+        else
+            C_AddOns.LoadAddOn("Blizzard_GroupFinder")
+            C_AddOns.LoadAddOn("Blizzard_PVE")
+        end
+    elseif type(legacyLoadAddOn) == "function" then
+        legacyLoadAddOn("Blizzard_GroupFinder")
+        legacyLoadAddOn("Blizzard_PVE")
+    end
+
+    local currentExpansionLevel = type(GetAccountExpansionLevel) == "function" and GetAccountExpansionLevel() or nil
 
     local tab = {
         type = "group",
@@ -107,19 +132,29 @@ local function BuildSatchelWatchTab()
                         "Select the group types for which you wish to be notified of satchel availability."),
                     regular = {
                         type = "toggle",
-                        name = "Dungeon",
-                        desc = "Monitor regular dungeons for satchels.",
+                        name = "Normal Dungeon",
+                        desc = "Monitor normal random dungeons for satchels.",
                         order = 2,
                         width = 1.5,
                         handler = SWOptions,
                         get = "GetNotifyForRegularDungeon",
                         set = "SetNotifyForRegularDungeon",
                     },
+                    heroic = {
+                        type = "toggle",
+                        name = "Heroic Dungeon",
+                        desc = "Monitor heroic random dungeons for satchels.",
+                        order = 3,
+                        width = 1.5,
+                        handler = SWOptions,
+                        get = "GetNotifyForHeroicDungeon",
+                        set = "SetNotifyForHeroicDungeon",
+                    },
                     onlyForRaids = {
                         type = "toggle",
                         name = "Raids",
                         desc = "Monitor raids for satchels.",
-                        order = 3,
+                        order = 4,
                         width = 1.5,
                         handler = SWOptions,
                         get = "GetNotifyOnlyForRaids",
@@ -138,10 +173,103 @@ local function BuildSatchelWatchTab()
                     handler = SWOptions,
                     get = "GetNotifyOnlyWhenNotInGroup",
                     set = "SetNotifyOnlyWhenNotInGroup",
+                },
+                notCompleted = {
+                    type = "toggle",
+                    name = "Not Completed",
+                    desc =
+                    "Only monitor activities you have not fully completed for the current lockout. For raid wings, this skips wings you have already cleared that week.",
+                    order = 2,
+                    width = 1.5,
+                    handler = SWOptions,
+                    get = "GetNotifyOnlyWhenNotCompleted",
+                    set = "SetNotifyOnlyWhenNotCompleted",
+                },
+                resetIgnored = {
+                    type = "execute",
+                    name = "Reset Ignored Entries",
+                    desc = "Resume monitoring any dungeons you previously ignored from a SatchelWatch notification.",
+                    order = 3,
+                    width = 1.5,
+                    handler = SWOptions,
+                    func = "ResetIgnoredEntries",
                 }
+            }),
+            soundGroup = W.IGroup(40, "Sound", {
+                displayDuration = {
+                    type = "range",
+                    name = "Display Duration",
+                    desc = "How long SatchelWatch notifications remain visible before dismissing automatically.",
+                    order = 1,
+                    min = 2,
+                    max = 60,
+                    step = 1,
+                    width = 1.5,
+                    handler = SWOptions,
+                    get = "GetNotificationDisplayTime",
+                    set = "SetNotificationDisplayTime",
+                },
+                sound = {
+                    type = "select",
+                    dialogControl = "LSM30_Sound",
+                    name = "Notification Sound",
+                    desc = "Sound to play when a satchel is available.",
+                    order = 2,
+                    width = 2,
+                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("sound") or {} end,
+                    handler = SWOptions,
+                    get = "GetSound",
+                    set = "SetSound",
+                },
+                test = {
+                    type = "execute",
+                    name = "Test Notification",
+                    desc = "Play a test notification with the selected sound.",
+                    order = 3,
+                    handler = SWOptions,
+                    func = "TestNotification",
+                }
+            }),
+            raidWingsGroup = W.IGroup(50, "Raid Wings", {
+                desc = W.Description(1,
+                    "Select which current-expansion raid wings to monitor for satchel availability."),
             })
         }
     }
+
+    local raidWingArgs = tab.args.raidWingsGroup.args
+    local order = 2
+
+    if type(GetNumRFDungeons) == "function" and type(GetRFDungeonInfo) == "function" then
+        for index = 1, GetNumRFDungeons() do
+            local dungeonID = GetRFDungeonInfo(index)
+            local name
+            local expansionLevel
+
+            if type(dungeonID) == "number" then
+                name, _, _, _, _, _, _, _, expansionLevel = GetLFGDungeonInfo(dungeonID)
+            end
+
+            if dungeonID and name and (not currentExpansionLevel or expansionLevel == currentExpansionLevel) then
+                raidWingArgs[tostring(dungeonID)] = {
+                    type = "toggle",
+                    name = name,
+                    desc = ("Monitor %s for satchel availability."):format(name),
+                    order = order,
+                    handler = SWOptions,
+                    get = "GetRaidWingEnabled",
+                    set = "SetRaidWingEnabled",
+                }
+                order = order + 1
+            end
+        end
+    end
+
+    if order == 2 then
+        raidWingArgs.unavailable = W.Description(2,
+            "Current-expansion Raid Finder wing data is not currently available. Open the Group Finder if you need to refresh the list.")
+    end
+
     return tab
 end
 
@@ -233,6 +361,16 @@ local function BuildQuestLogCleanerTab()
                     handler = QLCOptions,
                     get = "GetKeepMetaQuests",
                     set = "SetKeepMetaQuests",
+                },
+                keepRepeatableQuests = {
+                    type = "toggle",
+                    name = ("|A:%s:24:24|a "):format(QT.QuestTypes.REPEATABLE.atlasIcon) .. " Repeatable",
+                    desc = "Keep repeatable quests.",
+                    order = 5,
+                    width = 1.5,
+                    handler = QLCOptions,
+                    get = "GetKeepRepeatableQuests",
+                    set = "SetKeepRepeatableQuests",
                 },
                 keepDelveQuests = {
                     type = "toggle",
@@ -392,7 +530,7 @@ local function BuildQuestAutomationTab()
     ---@type QuestAutomationModule
     local QAM = T:GetModule("QualityOfLife"):GetModule("QuestAutomation")
     local beginIdx = 1
-    for _, info in pairs(QAM.SupporttedQuestTypes) do
+    for _, info in pairs(QAM.SupportedQuestTypes) do
         local toggle = BuildQuestTypeToggle(
             beginIdx,
             info.name,

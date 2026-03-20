@@ -174,6 +174,70 @@ function Options:SetPortalsTextColor(info, r, g, b, a)
     RefreshDatatext("TwichUI: Portals")
 end
 
+function Options:GetMythicPlusUseCustomColor(info)
+    local db = self:GetDatatextDB("mythicplus")
+    return db.customColor or false
+end
+
+function Options:SetMythicPlusUseCustomColor(info, value)
+    local db = self:GetDatatextDB("mythicplus")
+    db.customColor = value
+    RefreshDatatext("TwichUI: Mythic+")
+end
+
+function Options:GetMythicPlusTextColor(info)
+    local db = self:GetDatatextDB("mythicplus")
+    if not db.textColor then
+        db.textColor = { 1, 1, 1, 1 }
+    end
+    return unpack(db.textColor)
+end
+
+function Options:SetMythicPlusTextColor(info, r, g, b, a)
+    local db = self:GetDatatextDB("mythicplus")
+    db.textColor = { r, g, b, a }
+    RefreshDatatext("TwichUI: Mythic+")
+end
+
+function Options:GetMythicPlusShowAffixes(info)
+    local db = self:GetDatatextDB("mythicplus")
+    if db.showAffixes == nil then
+        return true
+    end
+    return db.showAffixes
+end
+
+function Options:SetMythicPlusShowAffixes(info, value)
+    local db = self:GetDatatextDB("mythicplus")
+    db.showAffixes = value
+end
+
+function Options:GetMythicPlusShowDungeonBests(info)
+    local db = self:GetDatatextDB("mythicplus")
+    if db.showDungeonBests == nil then
+        return true
+    end
+    return db.showDungeonBests
+end
+
+function Options:SetMythicPlusShowDungeonBests(info, value)
+    local db = self:GetDatatextDB("mythicplus")
+    db.showDungeonBests = value
+end
+
+function Options:GetMythicPlusShowRewardProgress(info)
+    local db = self:GetDatatextDB("mythicplus")
+    if db.showRewardProgress == nil then
+        return true
+    end
+    return db.showRewardProgress
+end
+
+function Options:SetMythicPlusShowRewardProgress(info, value)
+    local db = self:GetDatatextDB("mythicplus")
+    db.showRewardProgress = value
+end
+
 function Options:GetFavoriteHearthstone(info)
     local db = self:GetDatatextDB("portals")
     return db.favoriteHearthstoneItemID or 0

@@ -50,6 +50,11 @@ MediaModule.Sounds = {
     { name = "TwichUI-Notification-10",      extension = "mp3" },
     { name = "TwichUI-Notification-11",      extension = "mp3" },
     { name = "TwichUI-Notification-12",      extension = "mp3" },
+    { name = "TwichUI-Notification-13",      extension = "mp3" },
+    { name = "TwichUI-Alert-1",              extension = "mp3" },
+    { name = "TwichUI-Alert-2",              extension = "mp3" },
+    { name = "TwichUI-Alert-3",              extension = "mp3" },
+    { name = "TwichUI-Alert-4",              extension = "mp3" },
 }
 
 MediaModule.Textures = {

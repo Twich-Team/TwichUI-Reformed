@@ -1,4 +1,5 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='ClassTextures.lua' />
     <Include file='SmartSelectorFrame.lua' />
     <Include file='SecureMenu.lua' />
 </Ui>

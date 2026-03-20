@@ -9,4 +9,5 @@
     <Include file='QualityOfLife\!load.xml' />
     <Include file='BestInSlot\!load.xml' />
     <Include file='ThirdPartyAPI\!load.xml' />
+    <Include file='Toasts\!load.xml' />
 </Ui>

@@ -292,6 +292,75 @@ local function BuildPortalsConfiguration()
     return portals
 end
 
+local function BuildMythicPlusConfiguration()
+    local W = ConfigurationModule.Widgets
+    local mythicPlus = {
+        type = "group",
+        name = "Mythic+",
+        order = 25,
+        args = {
+            title = W.TitleWidget(0, "Mythic+"),
+            desc = W.Description(1,
+                "Provides a DataText for your Mythic+ score, weekly affixes, seasonal dungeon bests, and reward progress."),
+            color = W.IGroup(10, "Colors", {
+                customColor = {
+                    type = "toggle",
+                    name = "Custom Text Color",
+                    desc = "Use a custom color for the Mythic+ datatext.",
+                    handler = Options,
+                    get = "GetMythicPlusUseCustomColor",
+                    set = "SetMythicPlusUseCustomColor",
+                    order = 1,
+                },
+                textColor = {
+                    type = "color",
+                    name = "Text Color",
+                    desc = "Color of the Mythic+ datatext.",
+                    order = 2,
+                    disabled = function()
+                        return not Options:GetDatatextDB("mythicplus").customColor
+                    end,
+                    hasAlpha = true,
+                    handler = Options,
+                    get = "GetMythicPlusTextColor",
+                    set = "SetMythicPlusTextColor",
+                },
+            }),
+            tooltip = W.IGroup(20, "Tooltip", {
+                showAffixes = {
+                    type = "toggle",
+                    name = "Show Weekly Affixes",
+                    desc = "Show the current week's affixes in the tooltip.",
+                    order = 1,
+                    handler = Options,
+                    get = "GetMythicPlusShowAffixes",
+                    set = "SetMythicPlusShowAffixes",
+                },
+                showDungeonBests = {
+                    type = "toggle",
+                    name = "Show Season Bests",
+                    desc = "Show your best score and best key level for each dungeon in the tooltip.",
+                    order = 2,
+                    handler = Options,
+                    get = "GetMythicPlusShowDungeonBests",
+                    set = "SetMythicPlusShowDungeonBests",
+                },
+                showRewardProgress = {
+                    type = "toggle",
+                    name = "Show Reward Progress",
+                    desc = "Show seasonal reward milestone progress bars in the tooltip.",
+                    order = 3,
+                    handler = Options,
+                    get = "GetMythicPlusShowRewardProgress",
+                    set = "SetMythicPlusShowRewardProgress",
+                },
+            }),
+        },
+    }
+
+    return mythicPlus
+end
+
 local function BuildDatatextConfiguration()
     local AW = ConfigurationModule.Widgets
     local function TooltipForMountSpell(spellID)
@@ -522,6 +591,7 @@ local function BuildDatatextConfiguration()
             }
         },
         portals = BuildPortalsConfiguration(),
+        mythicPlus = BuildMythicPlusConfiguration(),
         goldGoblin = BuildGoldGoblinConfiguration(),
 
     }

@@ -25,13 +25,14 @@ local QLC = QOL:NewModule("QuestLogCleaner")
 local QT = T.Tools.Quest
 
 QLC.FiltersByQuestType = {
-    CAMPAIGN  = QT.QuestTypes.CAMPAIGN,
-    IMPORTANT = QT.QuestTypes.IMPORTANT,
-    META      = QT.QuestTypes.META,
-    DUNGEON   = QT.QuestTypes.DUNGEON,
-    RAID      = QT.QuestTypes.RAID,
-    DELVE     = QT.QuestTypes.DELVE,
-    ARTIFACT  = QT.QuestTypes.ARTIFACT,
+    CAMPAIGN   = QT.QuestTypes.CAMPAIGN,
+    IMPORTANT  = QT.QuestTypes.IMPORTANT,
+    META       = QT.QuestTypes.META,
+    REPEATABLE = QT.QuestTypes.REPEATABLE,
+    DUNGEON    = QT.QuestTypes.DUNGEON,
+    RAID       = QT.QuestTypes.RAID,
+    DELVE      = QT.QuestTypes.DELVE,
+    ARTIFACT   = QT.QuestTypes.ARTIFACT,
 }
 
 --- Returns the Quest Log Cleaner configuration options.

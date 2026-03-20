@@ -1,0 +1,121 @@
+local AceGUI = LibStub("AceGUI-3.0")
+
+local WIDGET_TYPE = "TwichUI_GreatVaultNotification"
+local Type, Version = WIDGET_TYPE, 1
+
+local FRAME_WIDTH = 300
+local FRAME_HEIGHT = 80
+local ICON_SIZE = 36
+local TEXT_LEFT_OFFSET = 58
+local VAULT_ICON_ATLAS = "GreatVault-32x32"
+
+local function Constructor()
+    local frame = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
+    frame:Hide()
+    frame:SetSize(FRAME_WIDTH, FRAME_HEIGHT)
+    frame:EnableMouse(true)
+    frame:RegisterForClicks("AnyUp")
+
+    if frame.SetTemplate then
+        frame:SetTemplate("Transparent")
+    end
+
+    local accent = frame:CreateTexture(nil, "ARTWORK")
+    accent:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    accent:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+    accent:SetWidth(4)
+    accent:SetColorTexture(1, 0.82, 0.28, 1)
+
+    local iconBackdrop = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    iconBackdrop:SetPoint("LEFT", frame, "LEFT", 12, 0)
+    iconBackdrop:SetSize(ICON_SIZE + 4, ICON_SIZE + 4)
+    if iconBackdrop.SetTemplate then
+        iconBackdrop:SetTemplate("Default")
+    end
+
+    local icon = iconBackdrop:CreateTexture(nil, "ARTWORK")
+    icon:SetPoint("CENTER", iconBackdrop, "CENTER", 0, 0)
+    icon:SetSize(ICON_SIZE, ICON_SIZE)
+    icon:SetAtlas(VAULT_ICON_ATLAS)
+
+    local status = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    status:SetPoint("TOPLEFT", frame, "TOPLEFT", TEXT_LEFT_OFFSET, -10)
+    status:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -10)
+    status:SetJustifyH("LEFT")
+    status:SetTextColor(1, 0.82, 0.28)
+    status:SetText("GREAT VAULT")
+
+    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, -2)
+    title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -2)
+    title:SetJustifyH("LEFT")
+    title:SetWordWrap(false)
+    title:SetText("Rewards Available")
+
+    local detail = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    detail:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
+    detail:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, 0)
+    detail:SetJustifyH("LEFT")
+    detail:SetWordWrap(true)
+    detail:SetText("Open the Great Vault to review this week's rewards.")
+
+    ---@class TwichUI_GreatVaultNotificationWidget : AceGUIWidget
+    ---@field frame Button
+    ---@field accent Texture
+    ---@field icon Texture
+    ---@field iconBackdrop Frame
+    ---@field status FontString
+    ---@field title FontString
+    ---@field detail FontString
+    local widget = {
+        type = Type,
+        frame = frame,
+        accent = accent,
+        icon = icon,
+        iconBackdrop = iconBackdrop,
+        status = status,
+        title = title,
+        detail = detail,
+    }
+
+    local methods = {}
+
+    function methods:OnAcquire()
+        self:SetWidth(FRAME_WIDTH)
+        self:SetHeight(FRAME_HEIGHT)
+        if self.SetFullWidth then
+            self:SetFullWidth(true)
+        end
+
+        self:SetGreatVaultNotification(1)
+        self.frame:Show()
+    end
+
+    function methods:OnRelease()
+        self.frame:ClearAllPoints()
+        self.frame:Hide()
+        self.title:SetText("")
+        self.detail:SetText("")
+    end
+
+    ---@param rewardCount number|nil
+    function methods:SetGreatVaultNotification(rewardCount)
+        rewardCount = type(rewardCount) == "number" and rewardCount or 1
+
+        if rewardCount == 1 then
+            self.title:SetText("Reward Available")
+            self.detail:SetText("Open the Great Vault to claim your available reward.")
+        else
+            self.title:SetText(("%d Rewards Available"):format(rewardCount))
+            self.detail:SetText(("Open the Great Vault to review your %d available rewards."):format(rewardCount))
+        end
+    end
+
+    for method, func in pairs(methods) do
+        widget[method] = func
+    end
+
+    return AceGUI:RegisterAsWidget(widget)
+end
+
+AceGUI:RegisterWidgetType(Type, Constructor, Version)

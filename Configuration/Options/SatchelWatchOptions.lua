@@ -20,6 +20,16 @@ function Options:GetSatchelWatchDB()
     return ConfigurationModule:GetProfileDB().satchelWatch
 end
 
+function Options:GetIgnoredDungeonIDs()
+    local db = self:GetSatchelWatchDB()
+    db.ignoredDungeonIDs = db.ignoredDungeonIDs or {}
+    return db.ignoredDungeonIDs
+end
+
+local function GetModule()
+    return T:GetModule("QualityOfLife"):GetModule("SatchelWatch")
+end
+
 function Options:GetEnabled(info)
     local db = self:GetSatchelWatchDB()
     return db.enabled or false
@@ -28,6 +38,12 @@ end
 function Options:SetEnabled(info, value)
     local db = self:GetSatchelWatchDB()
     db.enabled = value
+
+    if value then
+        GetModule():Enable()
+    else
+        GetModule():Disable()
+    end
 end
 
 function Options:GetNotifyForDPS(info)
@@ -70,6 +86,16 @@ function Options:SetNotifyOnlyWhenNotInGroup(info, value)
     db.notifyOnlyWhenNotInGroup = value
 end
 
+function Options:GetNotifyOnlyWhenNotCompleted(info)
+    local db = self:GetSatchelWatchDB()
+    return db.notifyOnlyWhenNotCompleted or false
+end
+
+function Options:SetNotifyOnlyWhenNotCompleted(info, value)
+    local db = self:GetSatchelWatchDB()
+    db.notifyOnlyWhenNotCompleted = value
+end
+
 function Options:GetNotifyForRegularDungeon(info)
     local db = self:GetSatchelWatchDB()
     return db.notifyForRegularDungeon or false
@@ -80,6 +106,16 @@ function Options:SetNotifyForRegularDungeon(info, value)
     db.notifyForRegularDungeon = value
 end
 
+function Options:GetNotifyForHeroicDungeon(info)
+    local db = self:GetSatchelWatchDB()
+    return db.notifyForHeroicDungeon or false
+end
+
+function Options:SetNotifyForHeroicDungeon(info, value)
+    local db = self:GetSatchelWatchDB()
+    db.notifyForHeroicDungeon = value
+end
+
 function Options:GetNotifyOnlyForRaids(info)
     local db = self:GetSatchelWatchDB()
     return db.notifyOnlyForRaids or false
@@ -88,4 +124,45 @@ end
 function Options:SetNotifyOnlyForRaids(info, value)
     local db = self:GetSatchelWatchDB()
     db.notifyOnlyForRaids = value
+end
+
+function Options:GetSound(info)
+    local db = self:GetSatchelWatchDB()
+    return db.sound or "TwichUI Green Dude Gets Loot"
+end
+
+function Options:SetSound(info, value)
+    local db = self:GetSatchelWatchDB()
+    db.sound = value
+end
+
+function Options:GetNotificationDisplayTime(info)
+    local db = self:GetSatchelWatchDB()
+    return db.notificationDisplayTime or 10
+end
+
+function Options:SetNotificationDisplayTime(info, value)
+    local db = self:GetSatchelWatchDB()
+    db.notificationDisplayTime = value
+end
+
+function Options:GetRaidWingEnabled(info)
+    local db = self:GetSatchelWatchDB()
+    local dungeonID = tonumber(info[#info])
+    return db["raid_" .. dungeonID] or false
+end
+
+function Options:SetRaidWingEnabled(info, value)
+    local db = self:GetSatchelWatchDB()
+    local dungeonID = tonumber(info[#info])
+    db["raid_" .. dungeonID] = value
+end
+
+function Options:TestNotification()
+    GetModule():TestNotification()
+end
+
+function Options:ResetIgnoredEntries()
+    local db = self:GetSatchelWatchDB()
+    db.ignoredDungeonIDs = {}
 end
