@@ -23,6 +23,7 @@ local ReloadUI = ReloadUI
 --- @field Chores ChoresConfigurationOptions
 --- @field QuestAutomation QuestAutomationConfigurationOptions
 --- @field QuestLogCleaner QuestLogCleanerConfigurationOptions
+--- @field DungeonTracking DungeonTrackingConfigurationOptions
 --- @field GossipHotkeys GossipHotkeysConfigurationOptions
 --- @field BestInSlot BestInSlotConfigurationOptions
 --- @field NotificationPanel NotificationPanelConfigurationOptions

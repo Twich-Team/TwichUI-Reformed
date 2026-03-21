@@ -17,6 +17,9 @@ local QLCOptions = ConfigurationModule.Options.QuestLogCleaner
 ---@type GossipHotkeysConfigurationOptions
 local GHCOptions = ConfigurationModule.Options.GossipHotkeys
 
+---@type DungeonTrackingConfigurationOptions
+local DTOptions = ConfigurationModule.Options.DungeonTracking
+
 ---@type SatchelWatchConfigurationOptions
 local SWOptions = ConfigurationModule.Options.SatchelWatch
 
@@ -30,7 +33,7 @@ local function BuildGossipHotkeysTab()
     local tab = {
         type = "group",
         name = "Gossip Hotkeys",
-        order = 3,
+        order = 4,
         args = {
             desc = {
                 type = "description",
@@ -50,6 +53,91 @@ local function BuildGossipHotkeysTab()
         }
     }
     return tab
+end
+
+local function BuildDungeonTrackingTab()
+    local W = ConfigurationModule.Widgets
+
+    return {
+        type = "group",
+        name = "Dungeon Tracking",
+        order = 2,
+        args = {
+            desc = {
+                type = "description",
+                order = 1,
+                name =
+                "Monitor dungeon runs, track how long they take, and notify you when they finish or end early.",
+            },
+            enable = {
+                type = "toggle",
+                name = "Enable",
+                desc = "Enable dungeon run tracking.",
+                order = 2,
+                handler = DTOptions,
+                get = "GetEnabled",
+                set = "SetEnabled",
+            },
+            soundGroup = W.IGroup(10, "Notification", {
+                displayDuration = {
+                    type = "range",
+                    name = "Display Duration",
+                    desc = "How long dungeon tracking notifications remain visible before dismissing automatically.",
+                    order = 1,
+                    min = 2,
+                    max = 60,
+                    step = 1,
+                    width = 1.5,
+                    handler = DTOptions,
+                    get = "GetNotificationDisplayTime",
+                    set = "SetNotificationDisplayTime",
+                },
+                sound = {
+                    type = "select",
+                    dialogControl = "LSM30_Sound",
+                    name = "Notification Sound",
+                    desc = "Sound to play when a dungeon run ends.",
+                    order = 2,
+                    width = 2,
+                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("sound") or {} end,
+                    handler = DTOptions,
+                    get = "GetSound",
+                    set = "SetSound",
+                },
+                test = {
+                    type = "execute",
+                    name = "Test Notification",
+                    desc = "Play a test dungeon tracking notification.",
+                    order = 3,
+                    handler = DTOptions,
+                    func = "TestNotification",
+                },
+            }),
+            leaveGroupButton = W.IGroup(20, "Leave Group Button", {
+                showButton = {
+                    type = "toggle",
+                    name = "Show Leave Group Button",
+                    desc = "Show a Leave Group button on the dungeon completion notification.",
+                    order = 1,
+                    width = 1.75,
+                    handler = DTOptions,
+                    get = "GetShowLeaveGroupButton",
+                    set = "SetShowLeaveGroupButton",
+                },
+                leavePhrase = {
+                    type = "input",
+                    name = "Instance Chat Phrase",
+                    desc =
+                    "If set, this text is sent to instance chat before leaving the group.",
+                    order = 2,
+                    width = "full",
+                    handler = DTOptions,
+                    get = "GetLeavePhrase",
+                    set = "SetLeavePhrase",
+                },
+            }),
+        },
+    }
 end
 
 local function BuildSatchelWatchTab()
@@ -83,7 +171,7 @@ local function BuildSatchelWatchTab()
     local tab = {
         type = "group",
         name = "Satchel Watch",
-        order = 6,
+        order = 7,
         args = {
             desc = {
                 type = "description",
@@ -285,7 +373,7 @@ local function BuildEasyFishTab()
     return {
         type = "group",
         name = "Easy Fish",
-        order = 2,
+        order = 3,
         args = {
             desc = {
                 type = "description",
@@ -352,7 +440,7 @@ local function BuildQuestLogCleanerTab()
     local tab = {
         type = "group",
         name = "Quest Log Cleaner",
-        order = 5,
+        order = 6,
         args = {
             desc = {
                 type = "description",
@@ -506,7 +594,7 @@ local function BuildQuestAutomationTab()
     local tab = {
         type = "group",
         name = "Quest Automation",
-        order = 4,
+        order = 5,
         args = {
             desc = {
                 type = "description",
@@ -870,6 +958,7 @@ local function BuildConfiguration()
             name = "Features to improve your overall user experience.",
         },
         choresTab = BuildChoresTab(),
+        dungeonTrackingTab = BuildDungeonTrackingTab(),
         easyFishTab = BuildEasyFishTab(),
         gossipHotkeysTab = BuildGossipHotkeysTab(),
         questAutomationTab = BuildQuestAutomationTab(),

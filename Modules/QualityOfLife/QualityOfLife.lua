@@ -26,4 +26,8 @@ function QOL:OnEnable()
     if Options.SatchelWatch and Options.SatchelWatch:GetEnabled() then
         self:GetModule("SatchelWatch"):Enable()
     end
+
+    if Options.DungeonTracking and Options.DungeonTracking:GetEnabled() then
+        self:GetModule("DungeonTracking"):Enable()
+    end
 end

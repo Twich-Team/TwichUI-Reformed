@@ -7,6 +7,7 @@
     <Include file='DatatextOptions.lua' />
     <Include file='QuestAutomationOptions.lua' />
     <Include file='QuestLogCleanerOptions.lua' />
+    <Include file='DungeonTrackingOptions.lua' />
     <Include file='GossipHotkeysOptions.lua' />
     <Include file='BestInSlotOptions.lua' />
     <Include file='NotificationPanelOptions.lua' />

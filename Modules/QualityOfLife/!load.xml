@@ -3,5 +3,6 @@
     <Include file='QuestAutomation.lua' />
     <Include file='QuestLogCleaner.lua' />
     <Include file='GossipHotkeys.lua' />
+    <Include file='DungeonTracking.lua' />
     <Include file='SatchelWatch.lua' />
 </Ui>

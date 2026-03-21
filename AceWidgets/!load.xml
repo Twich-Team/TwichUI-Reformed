@@ -7,6 +7,7 @@
     <Include file='AceGroupFinderNotificationWidget.lua' />
     <Include file='AceGreatVaultNotificationWidget.lua' />
     <Include file='AceKeystoneNotificationWidget.lua' />
+    <Include file='AceDungeonTrackingNotificationWidget.lua' />
     <Include file='AceSatchelNotificationWidget.lua' />
     <Include file='AceEmptyPanelWidget.lua' />
     <Include file='AceNotificationWidgetWrapper.lua' />
