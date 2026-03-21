@@ -28,6 +28,8 @@ local SWOptions = ConfigurationModule.Options.SatchelWatch
 
 ---@type ChoresConfigurationOptions
 local ChoresOptions = ConfigurationModule.Options.Chores
+local PreyIcon =
+"Interface\\AddOns\\TwichUI_Redux\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
 
 ---@type EasyFishConfigurationOptions
 local EasyFishOptions = ConfigurationModule.Options.EasyFish
@@ -851,6 +853,39 @@ local function BuildChoresTab()
         }
     end
 
+    ---@type ChoresModule
+    local ChoresModule = T:GetModule("Chores")
+
+    local preyDifficultyArgs = {
+        desc = W.Description(1,
+            T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                "Choose which unlocked Prey difficulties are tracked. Each enabled difficulty contributes up to four hunts to the Prey section.")),
+    }
+
+    local preyDifficultyOrder = 2
+    local preyDifficulties = ChoresModule and ChoresModule.GetPreyDifficultyDefinitions and
+        ChoresModule:GetPreyDifficultyDefinitions() or {}
+
+    for _, difficulty in ipairs(preyDifficulties) do
+        preyDifficultyArgs[difficulty.key] = {
+            type = "toggle",
+            name = difficulty.name,
+            desc = ("Track %s Prey hunts in the Chores tooltip."):format(difficulty.name),
+            order = preyDifficultyOrder,
+            width = 1.5,
+            disabled = function()
+                return not ChoresOptions:GetTrackPrey()
+            end,
+            get = function()
+                return ChoresOptions:IsPreyDifficultyEnabled(difficulty.key)
+            end,
+            set = function(_, value)
+                ChoresOptions:SetPreyDifficultyEnabled(difficulty.key, value)
+            end,
+        }
+        preyDifficultyOrder = preyDifficultyOrder + 1
+    end
+
     local professionArgs = {
         desc = W.Description(1,
             T.Tools.Text.Color(T.Tools.Colors.GRAY,
@@ -859,8 +894,6 @@ local function BuildChoresTab()
 
     local professionOrder = 2
     do
-        ---@type ChoresModule
-        local ChoresModule = T:GetModule("Chores")
         local professionCategories = ChoresModule and ChoresModule.GetProfessionCategoryDefinitions and
             ChoresModule:GetProfessionCategoryDefinitions() or {}
 
@@ -947,11 +980,21 @@ local function BuildChoresTab()
                 desc = W.Description(1,
                     T.Tools.Text.Color(T.Tools.Colors.GRAY,
                         "Enable additional weekly tracking groups for the Chores tooltip and optional datatext counting.")),
+                prey = {
+                    type = "toggle",
+                    name = T.Tools.Text.Icon(PreyIcon) .. " Prey",
+                    desc = "Track Prey hunts by difficulty and show the total hunts remaining in the Chores tooltip.",
+                    order = 2,
+                    width = 1.5,
+                    handler = ChoresOptions,
+                    get = "GetTrackPrey",
+                    set = "SetTrackPrey",
+                },
                 bountifulDelves = {
                     type = "toggle",
                     name = "|A:delves-bountiful:16:16|a Bountiful Delves",
                     desc = "Track current bountiful delves and show your current coffer keys in the datatext tooltip.",
-                    order = 2,
+                    order = 3,
                     width = 1.5,
                     handler = ChoresOptions,
                     get = "GetTrackBountifulDelves",
@@ -972,17 +1015,31 @@ local function BuildChoresTab()
                     get = "GetCountProfessionsTowardTotal",
                     set = "SetCountProfessionsTowardTotal",
                 },
+                prey = {
+                    type = "toggle",
+                    name = T.Tools.Text.Icon(PreyIcon) .. " Prey",
+                    desc = "Count tracked Prey hunts toward the Chores total.",
+                    order = 3,
+                    width = 1.5,
+                    disabled = function()
+                        return not ChoresOptions:GetTrackPrey()
+                    end,
+                    handler = ChoresOptions,
+                    get = "GetCountPreyTowardTotal",
+                    set = "SetCountPreyTowardTotal",
+                },
                 bountifulDelves = {
                     type = "toggle",
                     name = "|A:delves-bountiful:16:16|a Bountiful Delves",
                     desc = "Count tracked bountiful delves toward the Chores total.",
-                    order = 3,
+                    order = 4,
                     width = 1.5,
                     handler = ChoresOptions,
                     get = "GetCountBountifulDelvesTowardTotal",
                     set = "SetCountBountifulDelvesTowardTotal",
                 },
             }),
+            preyDifficulties = W.IGroup(7, "Prey Difficulties", preyDifficultyArgs),
             summary = W.IGroup(10, "Tracked Chores", {
                 desc = W.Description(1,
                     T.Tools.Text.Color(T.Tools.Colors.GRAY,

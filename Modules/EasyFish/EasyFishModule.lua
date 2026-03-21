@@ -11,6 +11,7 @@ local T = unpack(TwichRx)
 ---@field currentBinding string|nil
 ---@field pendingClear boolean
 ---@field pendingBindingUpdate boolean
+---@field pendingSpellUpdate boolean
 ---@field activeSoundCVars table<string, string>|nil
 ---@field activeInteractCVars table<string, string>|nil
 local EasyFishModule = T:NewModule("EasyFish", "AceEvent-3.0")
@@ -116,8 +117,7 @@ end
 
 function EasyFishModule:EnsureSecureButton()
     if self.secureButton then
-        self.secureButton:SetAttribute("type", "spell")
-        self.secureButton:SetAttribute("spell", GetFishingSpellName())
+        self:RefreshSecureButtonSpell()
         return self.secureButton
     end
 
@@ -127,6 +127,22 @@ function EasyFishModule:EnsureSecureButton()
     button:SetAttribute("spell", GetFishingSpellName())
     self.secureButton = button
     return button
+end
+
+function EasyFishModule:RefreshSecureButtonSpell()
+    if not self.secureButton then
+        return
+    end
+
+    if InCombatLockdown() then
+        self.pendingSpellUpdate = true
+        self:RegisterEvent("PLAYER_REGEN_ENABLED")
+        return
+    end
+
+    self.pendingSpellUpdate = false
+    self.secureButton:SetAttribute("type", "spell")
+    self.secureButton:SetAttribute("spell", GetFishingSpellName())
 end
 
 function EasyFishModule:RestoreInteractCVars()
@@ -296,7 +312,11 @@ function EasyFishModule:PLAYER_REGEN_ENABLED()
         end
         if self.pendingBindingUpdate then
             self:SetKeybinding()
-        elseif not self.pendingClear then
+        end
+        if self.pendingSpellUpdate then
+            self:RefreshSecureButtonSpell()
+        end
+        if not self.pendingClear and not self.pendingBindingUpdate and not self.pendingSpellUpdate then
             self:UnregisterEvent("PLAYER_REGEN_ENABLED")
         end
     end
@@ -315,9 +335,7 @@ function EasyFishModule:UNIT_SPELLCAST_CHANNEL_STOP(_, unitToken, _, spellID)
 end
 
 function EasyFishModule:SPELLS_CHANGED()
-    if self.secureButton then
-        self.secureButton:SetAttribute("spell", GetFishingSpellName())
-    end
+    self:RefreshSecureButtonSpell()
 end
 
 function EasyFishModule:PLAYER_LOGOUT()

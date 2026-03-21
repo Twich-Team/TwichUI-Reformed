@@ -17,6 +17,8 @@ local LegacyLoadAddOn = _G.LoadAddOn
 local PVEFrameLoadUI = _G.PVEFrame_LoadUI
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
 local C_Item = _G.C_Item
+local PREY_ICON =
+"Interface\\AddOns\\TwichUI_Redux\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
 
 ---@class ChoresDataText : AceModule, AceEvent-3.0
 ---@field definition DatatextDefinition
@@ -43,6 +45,16 @@ local function GetProfessionMenuItems()
     end
 
     return choresModule:GetProfessionCategoryDefinitions() or {}
+end
+
+local function GetPreyDifficultyMenuItems()
+    ---@type ChoresModule
+    local choresModule = T:GetModule("Chores")
+    if not choresModule or not choresModule.GetPreyDifficultyDefinitions then
+        return {}
+    end
+
+    return choresModule:GetPreyDifficultyDefinitions() or {}
 end
 
 local function GetDatatextOptions()
@@ -415,6 +427,17 @@ function CDT:GetMenuList()
             end,
         },
         {
+            text = T.Tools.Text.Icon(PREY_ICON) .. " Prey",
+            checked = function()
+                return choresOptions:GetCountPreyTowardTotal()
+            end,
+            isNotRadio = true,
+            keepShownOnClick = true,
+            func = function()
+                choresOptions:SetCountPreyTowardTotal(nil, not choresOptions:GetCountPreyTowardTotal())
+            end,
+        },
+        {
             text = "",
             disabled = true,
             notCheckable = true,
@@ -491,6 +514,47 @@ function CDT:GetMenuList()
             choresOptions:SetTrackBountifulDelves(nil, not choresOptions:GetTrackBountifulDelves())
         end,
     })
+    table.insert(menuList, {
+        text = T.Tools.Text.Icon(PREY_ICON) .. " Prey",
+        checked = function()
+            return choresOptions:GetTrackPrey()
+        end,
+        isNotRadio = true,
+        keepShownOnClick = true,
+        func = function()
+            choresOptions:SetTrackPrey(nil, not choresOptions:GetTrackPrey())
+        end,
+    })
+
+    local preyDifficulties = GetPreyDifficultyMenuItems()
+    if #preyDifficulties > 0 then
+        table.insert(menuList, {
+            text = "",
+            disabled = true,
+            notCheckable = true,
+        })
+        table.insert(menuList, {
+            text = BuildMenuSectionTitle("Prey Difficulties"),
+            isTitle = true,
+            notCheckable = true,
+        })
+
+        for _, difficulty in ipairs(preyDifficulties) do
+            table.insert(menuList, {
+                text = difficulty.name,
+                checked = function()
+                    return choresOptions:IsPreyDifficultyEnabled(difficulty.key)
+                end,
+                isNotRadio = true,
+                keepShownOnClick = true,
+                func = function()
+                    choresOptions:SetPreyDifficultyEnabled(difficulty.key,
+                        not choresOptions:IsPreyDifficultyEnabled(difficulty.key))
+                end,
+            })
+        end
+    end
+
     local raidWings = GetCurrentExpansionRaidWings()
     if #raidWings > 0 then
         table.insert(menuList, {

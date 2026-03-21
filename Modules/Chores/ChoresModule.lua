@@ -15,6 +15,7 @@ Chores:SetEnabledState(false)
 local C_QuestLog = _G.C_QuestLog
 local C_AreaPoiInfo = _G.C_AreaPoiInfo
 local C_CurrencyInfo = _G.C_CurrencyInfo
+local C_MajorFactions = _G.C_MajorFactions
 local C_Map = _G.C_Map
 local C_SpellBook = _G.C_SpellBook
 local C_TaskQuest = _G.C_TaskQuest
@@ -40,10 +41,14 @@ local OPTIONAL_OBJECTIVE = _G.OPTIONAL_QUEST_OBJECTIVE_DESCRIPTION and
 local STATUS_NOT_STARTED = 0
 local STATUS_IN_PROGRESS = 1
 local STATUS_COMPLETED = 2
+local STATUS_UNKNOWN = -1
 local COFFER_KEY_CURRENCY_ID = 3028
 local COFFER_KEY_SHARD_CURRENCY_ID = 3310
 local EXPANSION_WAR_WITHIN = 10
 local EXPANSION_MIDNIGHT = 11
+local PREY_TARGETS_PER_DIFFICULTY = 4
+local PREY_ICON =
+"Interface\\AddOns\\TwichUI_Redux\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
 
 local PROFESSION_CATEGORY_DATA = {
     {
@@ -306,6 +311,75 @@ local CATEGORY_DATA = {
         },
     },
 }
+
+local function AddQuestsByPattern(tbl, fromID, step, times)
+    local questID = fromID - step
+
+    for _ = 1, times do
+        questID = questID + step
+        table.insert(tbl, questID)
+    end
+end
+
+local PREY_DIFFICULTY_DATA = {
+    {
+        key = "normal",
+        name = "Normal",
+        questIDs = {},
+    },
+    {
+        key = "hard",
+        name = "Hard",
+        questIDs = {},
+    },
+    {
+        key = "nightmare",
+        name = "Nightmare",
+        questIDs = {},
+    },
+}
+
+AddQuestsByPattern(PREY_DIFFICULTY_DATA[1].questIDs, 91095, 1, 30)
+AddQuestsByPattern(PREY_DIFFICULTY_DATA[2].questIDs, 91210, 2, 16)
+AddQuestsByPattern(PREY_DIFFICULTY_DATA[2].questIDs, 91242, 1, 14)
+AddQuestsByPattern(PREY_DIFFICULTY_DATA[3].questIDs, 91211, 2, 16)
+AddQuestsByPattern(PREY_DIFFICULTY_DATA[3].questIDs, 91256, 1, 14)
+
+local function GetUnlockedPreyDifficultyNames()
+    local renownLevel = C_MajorFactions and type(C_MajorFactions.GetCurrentRenownLevel) == "function" and
+        C_MajorFactions.GetCurrentRenownLevel(2764) or nil
+
+    if type(renownLevel) == "number" then
+        if renownLevel >= 4 then
+            return {
+                "Nightmare",
+                "Hard",
+                "Normal",
+            }
+        end
+
+        if renownLevel >= 1 then
+            return {
+                "Hard",
+                "Normal",
+            }
+        end
+    end
+
+    return {
+        "Normal",
+    }
+end
+
+local function GetPreyDifficultyDefinition(difficultyName)
+    for _, definition in ipairs(PREY_DIFFICULTY_DATA) do
+        if definition.name == difficultyName then
+            return definition
+        end
+    end
+
+    return nil
+end
 
 local BOUNTIFUL_DELVE_DATA = {
     warWithin = {
@@ -809,12 +883,14 @@ local function BuildNotificationChanges(previousSnapshot, currentSnapshot)
         local previousStatus = previousEntry and previousEntry.status or STATUS_COMPLETED
         local currentStatus = currentEntry.status or STATUS_NOT_STARTED
 
-        if currentStatus == STATUS_COMPLETED then
-            if previousEntry and previousStatus ~= STATUS_COMPLETED then
-                table.insert(changes.completed, currentEntry.lineText)
+        if previousStatus ~= STATUS_UNKNOWN and currentStatus ~= STATUS_UNKNOWN then
+            if currentStatus == STATUS_COMPLETED then
+                if previousEntry and previousStatus ~= STATUS_COMPLETED then
+                    table.insert(changes.completed, currentEntry.lineText)
+                end
+            elseif previousStatus == STATUS_COMPLETED then
+                table.insert(changes.available, currentEntry.lineText)
             end
-        elseif previousStatus == STATUS_COMPLETED then
-            table.insert(changes.available, currentEntry.lineText)
         end
     end
 
@@ -978,6 +1054,19 @@ function Chores:GetProfessionCategoryDefinitions()
     table.sort(definitions, function(left, right)
         return left.name < right.name
     end)
+
+    return definitions
+end
+
+function Chores:GetPreyDifficultyDefinitions()
+    local definitions = {}
+
+    for _, definition in ipairs(PREY_DIFFICULTY_DATA) do
+        table.insert(definitions, {
+            key = definition.key,
+            name = definition.name,
+        })
+    end
 
     return definitions
 end
@@ -1184,6 +1273,87 @@ function Chores:BuildBountifulDelvesSummary()
     return summary
 end
 
+function Chores:BuildPreySummary()
+    local options = GetOptions()
+    local summary = BuildSimpleSummary("prey", "Prey", PREY_ICON)
+    summary.showPendingEntries = true
+    summary.progressStyle = "remaining"
+
+    if not options:GetTrackPrey() then
+        summary.active = false
+        summary.visible = false
+        return summary
+    end
+
+    if not C_QuestLog or type(C_QuestLog.IsQuestFlaggedCompleted) ~= "function" then
+        summary.active = false
+        summary.visible = false
+        return summary
+    end
+
+    for _, difficultyName in ipairs(GetUnlockedPreyDifficultyNames()) do
+        local definition = GetPreyDifficultyDefinition(difficultyName)
+
+        if definition and options:IsPreyDifficultyEnabled(definition.key) then
+            local completedTargets = 0
+
+            for _, questID in ipairs(definition.questIDs) do
+                if C_QuestLog.IsQuestFlaggedCompleted(questID) then
+                    completedTargets = completedTargets + 1
+                end
+            end
+
+            completedTargets = math.min(completedTargets, PREY_TARGETS_PER_DIFFICULTY)
+
+            local remainingTargets = math.max(PREY_TARGETS_PER_DIFFICULTY - completedTargets, 0)
+            local difficultyState = {
+                title = ("%s (%d/%d available)"):format(definition.name, remainingTargets, PREY_TARGETS_PER_DIFFICULTY),
+                status = STATUS_NOT_STARTED,
+                objectives = {},
+            }
+
+            if remainingTargets == 0 then
+                difficultyState.status = STATUS_COMPLETED
+            elseif completedTargets > 0 then
+                difficultyState.status = STATUS_IN_PROGRESS
+            end
+
+            local entry = {
+                data = {
+                    key = ("prey-%s"):format(definition.key),
+                },
+                state = difficultyState,
+            }
+
+            summary.total = summary.total + PREY_TARGETS_PER_DIFFICULTY
+            summary.completed = summary.completed + completedTargets
+            table.insert(summary.entries, entry)
+
+            if difficultyState.status ~= STATUS_COMPLETED then
+                table.insert(summary.selectedEntries, entry)
+            end
+        end
+    end
+
+    if summary.total == 0 then
+        summary.active = false
+        summary.visible = false
+        return summary
+    end
+
+    summary.remaining = math.max(summary.total - summary.completed, 0)
+
+    if summary.remaining == 0 then
+        summary.status = STATUS_COMPLETED
+    elseif summary.completed > 0 then
+        summary.status = STATUS_IN_PROGRESS
+    end
+
+    table.sort(summary.entries, SortEntries)
+    table.sort(summary.selectedEntries, SortEntries)
+    return summary
+end
+
 function Chores:BuildRaidFinderSummary()
     local options = GetOptions()
     local summary = BuildSimpleSummary("raidFinder", "Raid Finder", nil, "Raid")
@@ -1202,7 +1372,7 @@ function Chores:BuildRaidFinderSummary()
 
             local wingState = {
                 title = raidWing.name,
-                status = STATUS_NOT_STARTED,
+                status = STATUS_UNKNOWN,
                 objectives = {},
             }
 
@@ -1215,6 +1385,8 @@ function Chores:BuildRaidFinderSummary()
                 elseif completedEncounters > 0 then
                     wingState.status = STATUS_IN_PROGRESS
                     wingState.title = ("%s (%d/%d)"):format(raidWing.name, completedEncounters, numEncounters)
+                else
+                    wingState.status = STATUS_NOT_STARTED
                 end
             end
 
@@ -1301,6 +1473,9 @@ function Chores:RefreshState()
             AddSummary(professionSummary, options:GetCountProfessionsTowardTotal())
         end
     end
+
+    local preySummary = self:BuildPreySummary()
+    AddSummary(preySummary, options:GetCountPreyTowardTotal())
 
     local bountifulDelvesSummary = self:BuildBountifulDelvesSummary()
     AddSummary(bountifulDelvesSummary, options:GetCountBountifulDelvesTowardTotal())

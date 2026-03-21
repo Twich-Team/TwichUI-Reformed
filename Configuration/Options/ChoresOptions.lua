@@ -50,6 +50,14 @@ function Options:GetRaidWingDB()
     return db.raidWings
 end
 
+function Options:GetPreyDifficultyDB()
+    local db = self:GetDB()
+    if not db.preyDifficulties then
+        db.preyDifficulties = {}
+    end
+    return db.preyDifficulties
+end
+
 function Options:GetEnabled(info)
     local enabled = self:GetDB().enabled
     if enabled == nil then
@@ -95,6 +103,19 @@ function Options:SetTrackBountifulDelves(info, value)
     RefreshChores()
 end
 
+function Options:GetTrackPrey(info)
+    local enabled = self:GetDB().trackPrey
+    if enabled == nil then
+        return true
+    end
+    return enabled
+end
+
+function Options:SetTrackPrey(info, value)
+    self:GetDB().trackPrey = value == true
+    RefreshChores()
+end
+
 function Options:GetCountProfessionsTowardTotal(info)
     local enabled = self:GetDB().countProfessionsTowardTotal
     if enabled == nil then
@@ -105,6 +126,19 @@ end
 
 function Options:SetCountProfessionsTowardTotal(info, value)
     self:GetDB().countProfessionsTowardTotal = value == true
+    RefreshChores()
+end
+
+function Options:GetCountPreyTowardTotal(info)
+    local enabled = self:GetDB().countPreyTowardTotal
+    if enabled == nil then
+        return true
+    end
+    return enabled
+end
+
+function Options:SetCountPreyTowardTotal(info, value)
+    self:GetDB().countPreyTowardTotal = value == true
     RefreshChores()
 end
 
@@ -131,6 +165,19 @@ end
 
 function Options:SetCategoryEnabled(categoryKey, value)
     self:GetCategoryDB()[categoryKey] = value
+    RefreshChores()
+end
+
+function Options:IsPreyDifficultyEnabled(difficultyKey)
+    local enabled = self:GetPreyDifficultyDB()[difficultyKey]
+    if enabled == nil then
+        return true
+    end
+    return enabled
+end
+
+function Options:SetPreyDifficultyEnabled(difficultyKey, value)
+    self:GetPreyDifficultyDB()[difficultyKey] = value == true
     RefreshChores()
 end
 
