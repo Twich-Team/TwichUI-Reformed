@@ -8,6 +8,9 @@ local T = unpack(TwichRx)
 ---@type ConfigurationModule
 local ConfigurationModule = T:GetModule("Configuration")
 
+---@type TexturesTool
+local Textures = T.Tools and T.Tools.Textures
+
 ---@type QuestAutomationConfigurationOptions
 local QAOptions = ConfigurationModule.Options.QuestAutomation
 
@@ -28,6 +31,15 @@ local ChoresOptions = ConfigurationModule.Options.Chores
 
 ---@type EasyFishConfigurationOptions
 local EasyFishOptions = ConfigurationModule.Options.EasyFish
+
+local function BuildIconStyleLabel(style, text)
+    local icon = Textures and Textures.GetPlayerClassTextureString and Textures:GetPlayerClassTextureString(14, style)
+    if icon then
+        return ("%s %s"):format(icon, text)
+    end
+
+    return text
+end
 
 local function BuildGossipHotkeysTab()
     local tab = {
@@ -104,14 +116,40 @@ local function BuildDungeonTrackingTab()
                     get = "GetSound",
                     set = "SetSound",
                 },
-                test = {
-                    type = "execute",
-                    name = "Test Notification",
-                    desc = "Play a test dungeon tracking notification.",
+                iconStyle = {
+                    type = "select",
+                    name = "Class Icon Style",
+                    desc = "Choose the class icon style used for dungeon group makeup in notifications.",
                     order = 3,
+                    values = function()
+                        return {
+                            default = BuildIconStyleLabel("default", "Default Icons"),
+                            fabled = BuildIconStyleLabel("fabled", "Fabled Icons"),
+                            pixel = BuildIconStyleLabel("pixel", "Pixel Icons"),
+                        }
+                    end,
                     handler = DTOptions,
-                    func = "TestNotification",
+                    get = "GetClassIconStyle",
+                    set = "SetClassIconStyle",
                 },
+                testGroup = W.IGroup(4, "Tests", {
+                    test = {
+                        type = "execute",
+                        name = "Test Notification",
+                        desc = "Play a test dungeon tracking notification.",
+                        order = 1,
+                        handler = DTOptions,
+                        func = "TestNotification",
+                    },
+                    testMythic = {
+                        type = "execute",
+                        name = "Test Mythic+ Notification",
+                        desc = "Play a test Mythic+ dungeon tracking notification with score and upgrade details.",
+                        order = 2,
+                        handler = DTOptions,
+                        func = "TestMythicNotification",
+                    },
+                }),
             }),
             leaveGroupButton = W.IGroup(20, "Leave Group Button", {
                 showButton = {
@@ -287,7 +325,37 @@ local function BuildSatchelWatchTab()
                     width = 1.5,
                     handler = SWOptions,
                     func = "ResetIgnoredEntries",
-                }
+                },
+            }),
+            periodicCheckGroup = W.IGroup(35, "Periodic Check", {
+                desc = W.Description(1, T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                    "Periodic satchel checks are disabled by default because they repeatedly query LFG data and can generate extra background work even when Blizzard has not reported any changes.")),
+                periodicCheckEnabled = {
+                    type = "toggle",
+                    name = "Enable Periodic Check",
+                    desc =
+                    "Periodically refresh satchel availability even if Blizzard does not fire an LFG update event.",
+                    order = 2,
+                    width = 1.75,
+                    handler = SWOptions,
+                    get = "GetPeriodicCheckEnabled",
+                    set = "SetPeriodicCheckEnabled",
+                },
+                periodicCheckInterval = {
+                    type = "range",
+                    name = "Periodic Check Interval",
+                    desc =
+                    "How often Satchel Watch should refresh satchel availability when periodic checking is enabled.",
+                    order = 3,
+                    min = 30,
+                    max = 60,
+                    step = 1,
+                    width = 1.5,
+                    disabled = function() return not SWOptions:GetPeriodicCheckEnabled() end,
+                    handler = SWOptions,
+                    get = "GetPeriodicCheckInterval",
+                    set = "SetPeriodicCheckInterval",
+                },
             }),
             soundGroup = W.IGroup(40, "Sound", {
                 displayDuration = {

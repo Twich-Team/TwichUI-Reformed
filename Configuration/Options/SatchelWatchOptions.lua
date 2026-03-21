@@ -27,7 +27,15 @@ function Options:GetIgnoredDungeonIDs()
 end
 
 local function GetModule()
+    ---@type SatchelWatchModule
     return T:GetModule("QualityOfLife"):GetModule("SatchelWatch")
+end
+
+local function RefreshPeriodicTimer()
+    local module = GetModule()
+    if module and module:IsEnabled() then
+        module:StartPeriodicRefresh()
+    end
 end
 
 function Options:GetEnabled(info)
@@ -54,6 +62,7 @@ end
 function Options:SetNotifyForDPS(info, value)
     local db = self:GetSatchelWatchDB()
     db.notifyForDPS = value
+    RefreshPeriodicTimer()
 end
 
 function Options:GetNotifyForHealers(info)
@@ -64,6 +73,7 @@ end
 function Options:SetNotifyForHealers(info, value)
     local db = self:GetSatchelWatchDB()
     db.notifyForHealers = value
+    RefreshPeriodicTimer()
 end
 
 function Options:GetNotifyForTanks(info)
@@ -74,6 +84,7 @@ end
 function Options:SetNotifyForTanks(info, value)
     local db = self:GetSatchelWatchDB()
     db.notifyForTanks = value
+    RefreshPeriodicTimer()
 end
 
 function Options:GetNotifyOnlyWhenNotInGroup(info)
@@ -84,6 +95,7 @@ end
 function Options:SetNotifyOnlyWhenNotInGroup(info, value)
     local db = self:GetSatchelWatchDB()
     db.notifyOnlyWhenNotInGroup = value
+    RefreshPeriodicTimer()
 end
 
 function Options:GetNotifyOnlyWhenNotCompleted(info)
@@ -94,6 +106,7 @@ end
 function Options:SetNotifyOnlyWhenNotCompleted(info, value)
     local db = self:GetSatchelWatchDB()
     db.notifyOnlyWhenNotCompleted = value
+    RefreshPeriodicTimer()
 end
 
 function Options:GetNotifyForRegularDungeon(info)
@@ -104,6 +117,7 @@ end
 function Options:SetNotifyForRegularDungeon(info, value)
     local db = self:GetSatchelWatchDB()
     db.notifyForRegularDungeon = value
+    RefreshPeriodicTimer()
 end
 
 function Options:GetNotifyForHeroicDungeon(info)
@@ -114,6 +128,7 @@ end
 function Options:SetNotifyForHeroicDungeon(info, value)
     local db = self:GetSatchelWatchDB()
     db.notifyForHeroicDungeon = value
+    RefreshPeriodicTimer()
 end
 
 function Options:GetNotifyOnlyForRaids(info)
@@ -124,6 +139,7 @@ end
 function Options:SetNotifyOnlyForRaids(info, value)
     local db = self:GetSatchelWatchDB()
     db.notifyOnlyForRaids = value
+    RefreshPeriodicTimer()
 end
 
 function Options:GetSound(info)
@@ -146,6 +162,34 @@ function Options:SetNotificationDisplayTime(info, value)
     db.notificationDisplayTime = value
 end
 
+function Options:GetPeriodicCheckEnabled(info)
+    local db = self:GetSatchelWatchDB()
+    return db.periodicCheckEnabled == true
+end
+
+function Options:SetPeriodicCheckEnabled(info, value)
+    local db = self:GetSatchelWatchDB()
+    db.periodicCheckEnabled = value == true
+    RefreshPeriodicTimer()
+end
+
+function Options:GetPeriodicCheckInterval(info)
+    local db = self:GetSatchelWatchDB()
+    local intervalSeconds = tonumber(db.periodicCheckIntervalSeconds)
+
+    if not intervalSeconds then
+        return 30
+    end
+
+    return math.max(30, math.min(60, intervalSeconds))
+end
+
+function Options:SetPeriodicCheckInterval(info, value)
+    local db = self:GetSatchelWatchDB()
+    db.periodicCheckIntervalSeconds = math.max(30, math.min(60, tonumber(value) or 30))
+    RefreshPeriodicTimer()
+end
+
 function Options:GetRaidWingEnabled(info)
     local db = self:GetSatchelWatchDB()
     local dungeonID = tonumber(info[#info])
@@ -156,6 +200,7 @@ function Options:SetRaidWingEnabled(info, value)
     local db = self:GetSatchelWatchDB()
     local dungeonID = tonumber(info[#info])
     db["raid_" .. dungeonID] = value
+    RefreshPeriodicTimer()
 end
 
 function Options:TestNotification()
@@ -165,4 +210,5 @@ end
 function Options:ResetIgnoredEntries()
     local db = self:GetSatchelWatchDB()
     db.ignoredDungeonIDs = {}
+    RefreshPeriodicTimer()
 end

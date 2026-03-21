@@ -15,6 +15,7 @@ ConfigurationModule.Options.DungeonTracking = Options
 
 local DEFAULT_SOUND = "TwichUI Alert 1"
 local DEFAULT_NOTIFICATION_DISPLAY_TIME = 10
+local DEFAULT_CLASS_ICON_STYLE = "default"
 
 local function TrimText(value)
     if type(value) ~= "string" then
@@ -71,6 +72,16 @@ function Options:SetNotificationDisplayTime(info, value)
     db.notificationDisplayTime = value
 end
 
+function Options:GetClassIconStyle(info)
+    local db = self:GetDB()
+    return db.classIconStyle or DEFAULT_CLASS_ICON_STYLE
+end
+
+function Options:SetClassIconStyle(info, value)
+    local db = self:GetDB()
+    db.classIconStyle = value or DEFAULT_CLASS_ICON_STYLE
+end
+
 function Options:GetShowLeaveGroupButton(info)
     local db = self:GetDB()
     if db.showLeaveGroupButton == nil then
@@ -98,4 +109,8 @@ end
 
 function Options:TestNotification()
     GetModule():TestNotification()
+end
+
+function Options:TestMythicNotification()
+    GetModule():TestMythicNotification()
 end

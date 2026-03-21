@@ -8,10 +8,12 @@ local QOL = T:GetModule("QualityOfLife")
 ---@type ConfigurationModule
 local ConfigurationModule = T:GetModule("Configuration")
 
----@class SatchelWatchModule : AceModule, AceEvent-3.0
-local SW = QOL:NewModule("SatchelWatch", "AceEvent-3.0")
+---@class SatchelWatchModule : AceModule, AceEvent-3.0, AceTimer-3.0
+local SW = QOL:NewModule("SatchelWatch", "AceEvent-3.0", "AceTimer-3.0")
 
 local AceGUI = LibStub("AceGUI-3.0")
+---@type fun(self: table, widgetType: string): any
+local CreateWidget = AceGUI.Create
 
 local LFG_SUBTYPE_DUNGEON = 1
 local LFG_SUBTYPE_HEROIC = 2
@@ -290,6 +292,86 @@ local function IsPlayerInInstance()
     return inInstance == true
 end
 
+local function HasWatchedRoles(db)
+    return db.notifyForTanks == true or db.notifyForHealers == true or db.notifyForDPS == true
+end
+
+local function HasMonitoringTargets(db)
+    return db.notifyForRegularDungeon == true or db.notifyForHeroicDungeon == true or db.notifyOnlyForRaids == true
+end
+
+local function HasScannableCandidates(db)
+    local candidates = GetDungeonCandidates(db)
+    if #candidates == 0 then
+        return false
+    end
+
+    if not db.notifyOnlyWhenNotCompleted then
+        return true
+    end
+
+    for _, candidate in ipairs(candidates) do
+        if not IsDungeonCompletedForLockout(candidate.dungeonID) then
+            return true
+        end
+    end
+
+    return false
+end
+
+function SW:ShouldUsePeriodicRefresh()
+    if not self:IsEnabled() then
+        return false
+    end
+
+    local options = GetOptionsModule()
+    if not options or not options:GetEnabled() or not options:GetPeriodicCheckEnabled() then
+        return false
+    end
+
+    local db = options:GetSatchelWatchDB()
+    if not db then
+        return false
+    end
+
+    if db.notifyOnlyWhenNotInGroup and IsInGroup() then
+        return false
+    end
+
+    if not HasWatchedRoles(db) then
+        return false
+    end
+
+    if not HasMonitoringTargets(db) then
+        return false
+    end
+
+    if not HasScannableCandidates(db) then
+        return false
+    end
+
+    return true
+end
+
+function SW:StartPeriodicRefresh()
+    self:StopPeriodicRefresh()
+
+    if not self:ShouldUsePeriodicRefresh() then
+        return
+    end
+
+    local options = GetOptionsModule()
+    local intervalSeconds = options:GetPeriodicCheckInterval()
+    self.periodicRefreshTimer = self:ScheduleRepeatingTimer("RefreshAvailability", intervalSeconds, false)
+end
+
+function SW:StopPeriodicRefresh()
+    if self.periodicRefreshTimer then
+        self:CancelTimer(self.periodicRefreshTimer)
+        self.periodicRefreshTimer = nil
+    end
+end
+
 function SW:RefreshAvailability(forceNotify)
     EnsureGroupFinderLoaded()
     self.notifyOnNextScan = forceNotify == true or self.notifyOnNextScan == true
@@ -307,12 +389,14 @@ function SW:OnEnable()
     self:RegisterEvent("LFG_UPDATE_RANDOM_INFO")
     self:RegisterEvent("GROUP_ROSTER_UPDATE")
     self:RegisterEvent("PLAYER_ENTERING_WORLD")
+    self:StartPeriodicRefresh()
     RequestLFDPlayerLockInfo()
 end
 
 function SW:OnDisable()
     self.activeSatchels = {}
     self.notifyOnNextScan = false
+    self:StopPeriodicRefresh()
     self:UnregisterAllEvents()
 end
 
@@ -323,6 +407,7 @@ function SW:PLAYER_ENTERING_WORLD()
     self.wasInGroup = isInGroup
     self.wasInInstance = isInInstance
 
+    self:StartPeriodicRefresh()
     self:RefreshAvailability(true)
 end
 
@@ -332,6 +417,8 @@ function SW:GROUP_ROSTER_UPDATE()
 
     self.wasInGroup = isInGroup
     self.wasInInstance = IsPlayerInInstance()
+
+    self:StartPeriodicRefresh()
 
     if leftGroup then
         self:RefreshAvailability(true)
@@ -353,6 +440,7 @@ function SW:ScanForSatchels(forceNotify)
     local options = GetOptionsModule()
     if not options:GetEnabled() then
         self.activeSatchels = {}
+        self:StartPeriodicRefresh()
         return
     end
 
@@ -363,6 +451,7 @@ function SW:ScanForSatchels(forceNotify)
     if db.notifyOnlyWhenNotInGroup and IsInGroup() then
         self.activeSatchels = {}
         self.lastScanFoundSatchel = false
+        self:StartPeriodicRefresh()
         return
     end
 
@@ -387,6 +476,7 @@ function SW:ScanForSatchels(forceNotify)
 
     self.activeSatchels = activeSatchels
     self.lastScanFoundSatchel = foundSatchel
+    self:StartPeriodicRefresh()
 end
 
 function SW:StopMonitoringDungeon(dungeonID, groupType)
@@ -400,6 +490,7 @@ function SW:StopMonitoringDungeon(dungeonID, groupType)
     end
 
     self.activeSatchels[dungeonID] = nil
+    self:StartPeriodicRefresh()
     self:ScanForSatchels(false)
 end
 
@@ -415,7 +506,8 @@ function SW:SendNotification(dungeonName, roles, groupType, dungeonID)
     }
     local groupLabel = groupLabels[groupType] or "Group Finder"
 
-    local message = AceGUI:Create("TwichUI_SatchelNotification")
+    ---@type TwichUI_SatchelNotificationWidget
+    local message = CreateWidget(AceGUI, "TwichUI_SatchelNotification")
     message:SetNotification(dungeonName, roles, groupLabel)
     if groupType == "raid" then
         message:SetEncounterProgress(GetEncounterProgress(dungeonID))

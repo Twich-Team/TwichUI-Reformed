@@ -1,4 +1,9 @@
 local AceGUI = LibStub("AceGUI-3.0")
+local TwichRx = _G["TwichRx"]
+---@type TwichUI|nil
+local T = TwichRx and unpack(TwichRx) or nil
+---@type TexturesTool|nil
+local Textures = T and T.Tools and T.Tools.Textures or nil
 
 local WIDGET_TYPE = "TwichUI_DungeonTrackingNotification"
 local Type, Version = WIDGET_TYPE, 1
@@ -9,11 +14,16 @@ local BUTTON_HEIGHT = 22
 local BUTTON_WIDTH = 120
 local BUTTON_SPACING = 10
 local ICON_SIZE = 36
+local GROUP_ICON_SIZE = 36
+local GROUP_ICON_SPACING = 6
+local ROLE_BADGE_SIZE = 16
 local TEXT_LEFT_OFFSET = 58
 local KEYSTONE_ITEM_ID = 180653
 local FALLBACK_KEYSTONE_TEXTURE = "Interface\\Icons\\INV_Misc_ShadowEgg"
 local FALLBACK_DUNGEON_TEXTURE = "Interface\\EncounterJournal\\UI-EJ-PortraitIcon-Dungeon"
 local FALLBACK_RAID_TEXTURE = "Interface\\EncounterJournal\\UI-EJ-PortraitIcon-Raid"
+local HEALER_BADGE_TEXTURE = "Interface\\AddOns\\TwichUI_Redux\\Media\\Textures\\Healer.tga"
+local TANK_BADGE_TEXTURE = "Interface\\AddOns\\TwichUI_Redux\\Media\\Textures\\Tank.tga"
 
 local ICON_ATLASES = {
     dungeon = {
@@ -113,18 +123,38 @@ local function Constructor()
     detail:SetWordWrap(true)
     detail:SetText("Completed in 00:00.")
 
+    local groupIcons = {}
+    for index = 1, 5 do
+        local groupIcon = CreateFrame("Frame", nil, frame)
+        groupIcon:SetSize(GROUP_ICON_SIZE, GROUP_ICON_SIZE)
+        if index == 1 then
+            groupIcon:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -10)
+        else
+            groupIcon:SetPoint("RIGHT", groupIcons[index - 1], "LEFT", -GROUP_ICON_SPACING, 0)
+        end
+
+        local classTexture = groupIcon:CreateTexture(nil, "OVERLAY")
+        classTexture:SetAllPoints(groupIcon)
+
+        local roleBadge = groupIcon:CreateTexture(nil, "ARTWORK")
+        roleBadge:SetSize(ROLE_BADGE_SIZE, ROLE_BADGE_SIZE)
+        roleBadge:SetPoint("BOTTOMRIGHT", groupIcon, "BOTTOMRIGHT", 2, -2)
+        roleBadge:Hide()
+
+        groupIcon.classTexture = classTexture
+        groupIcon.roleBadge = roleBadge
+        groupIcon:Hide()
+        groupIcons[index] = groupIcon
+    end
+
     local actionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     actionButton:SetSize(BUTTON_WIDTH, BUTTON_HEIGHT)
     actionButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 8)
     actionButton:SetText("Leave Group")
     actionButton:Hide()
 
-    local TwichRx = _G["TwichRx"]
-    if TwichRx then
-        local T = unpack(TwichRx)
-        if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
-            T.Tools.UI.SkinButton(actionButton)
-        end
+    if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
+        T.Tools.UI.SkinButton(actionButton)
     end
 
     ---@class TwichUI_DungeonTrackingNotificationWidget : AceGUIWidget
@@ -135,6 +165,7 @@ local function Constructor()
     ---@field status FontString
     ---@field title FontString
     ---@field detail FontString
+    ---@field groupIcons Frame[]
     ---@field actionButton Button
     ---@field actionCallback function|nil
     local widget = {
@@ -146,6 +177,7 @@ local function Constructor()
         status = status,
         title = title,
         detail = detail,
+        groupIcons = groupIcons,
         actionButton = actionButton,
         actionCallback = nil,
     }
@@ -187,6 +219,16 @@ local function Constructor()
         self.actionButton:Hide()
         self.title:SetText("")
         self.detail:SetText("")
+        for _, groupIcon in ipairs(self.groupIcons) do
+            if groupIcon.classTexture then
+                groupIcon.classTexture:SetTexture(nil)
+            end
+            if groupIcon.roleBadge then
+                groupIcon.roleBadge:SetTexture(nil)
+                groupIcon.roleBadge:Hide()
+            end
+            groupIcon:Hide()
+        end
     end
 
     function methods:Dismiss()
@@ -206,12 +248,79 @@ local function Constructor()
         self.actionCallback = callback
     end
 
+    local function ApplyRoleBadge(groupIcon, role)
+        if not groupIcon or not groupIcon.roleBadge then
+            return
+        end
+
+        if role == "HEALER" then
+            groupIcon.roleBadge:SetTexture(HEALER_BADGE_TEXTURE)
+            groupIcon.roleBadge:Show()
+            return
+        end
+
+        if role == "TANK" then
+            groupIcon.roleBadge:SetTexture(TANK_BADGE_TEXTURE)
+            groupIcon.roleBadge:Show()
+            return
+        end
+
+        groupIcon.roleBadge:SetTexture(nil)
+        groupIcon.roleBadge:Hide()
+    end
+
+    ---@param groupMembers table[]|nil
+    ---@param iconStyle string|nil
+    function methods:SetGroupMakeup(groupMembers, iconStyle)
+        local shown = 0
+
+        for _, groupIcon in ipairs(self.groupIcons) do
+            if groupIcon.classTexture then
+                groupIcon.classTexture:SetTexture(nil)
+            end
+            if groupIcon.roleBadge then
+                groupIcon.roleBadge:SetTexture(nil)
+                groupIcon.roleBadge:Hide()
+            end
+            groupIcon:Hide()
+        end
+
+        if type(groupMembers) ~= "table" or not Textures or type(Textures.ApplyClassTexture) ~= "function" then
+            self.status:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -10, -10)
+            return
+        end
+
+        for _, groupMember in ipairs(groupMembers) do
+            local groupIcon = self.groupIcons[shown + 1]
+            if not groupIcon then
+                break
+            end
+
+            local classToken = type(groupMember) == "table" and groupMember.classToken or groupMember
+            local role = type(groupMember) == "table" and groupMember.role or nil
+
+            if Textures:ApplyClassTexture(groupIcon.classTexture, classToken, iconStyle) then
+                shown = shown + 1
+                ApplyRoleBadge(groupIcon, role)
+                groupIcon:Show()
+            end
+        end
+
+        if shown > 0 then
+            self.status:SetPoint("TOPRIGHT", self.groupIcons[shown], "TOPLEFT", -8, 0)
+        else
+            self.status:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -10, -10)
+        end
+    end
+
     ---@param state "completed"|"ended"|nil
     ---@param titleText string|nil
     ---@param detailText string|nil
     ---@param iconKind "dungeon"|"raid"|"keystone"|nil
     ---@param showButton boolean|nil
-    function methods:SetNotification(state, titleText, detailText, iconKind, showButton)
+    ---@param groupMembers table[]|nil
+    ---@param iconStyle string|nil
+    function methods:SetNotification(state, titleText, detailText, iconKind, showButton, groupMembers, iconStyle)
         local style = STATUS_STYLES[state or "completed"] or STATUS_STYLES.completed
 
         self.status:SetText(style.status)
@@ -235,6 +344,10 @@ local function Constructor()
         if self.iconBackdrop and self.iconBackdrop.SetBackdropBorderColor then
             self.iconBackdrop:SetBackdropBorderColor(style.color[1], style.color[2], style.color[3], 1)
         end
+
+        self.status:ClearAllPoints()
+        self.status:SetPoint("TOPLEFT", self.frame, "TOPLEFT", TEXT_LEFT_OFFSET, -10)
+        self:SetGroupMakeup(groupMembers, iconStyle)
 
         showButton = showButton == true
         if showButton then
