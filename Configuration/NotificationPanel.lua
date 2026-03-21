@@ -70,6 +70,42 @@ local function BuildNotificationPanelConfiguration()
                     get = "GetPanelWidth",
                     set = "SetPanelWidth",
                     step = 1,
+                },
+                notificationFont = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Notification Font",
+                    desc = "Font used across TwichUI notifications. Default preserves the current widget fonts.",
+                    order = 4,
+                    width = 2,
+                    values = function()
+                        local fonts = LibStub("LibSharedMedia-3.0"):HashTable("font") or {}
+                        local values = {
+                            __default = "Default",
+                        }
+
+                        for key, value in pairs(fonts) do
+                            values[key] = value
+                        end
+
+                        return values
+                    end,
+                    handler = Options,
+                    get = "GetNotificationFont",
+                    set = "SetNotificationFont",
+                },
+                notificationFontSizeAdjustment = {
+                    type = "range",
+                    name = "Font Size",
+                    desc =
+                    "Adjust notification text size while keeping the current style hierarchy. Zero preserves the current sizes.",
+                    order = 5,
+                    min = -4,
+                    max = 8,
+                    step = 1,
+                    handler = Options,
+                    get = "GetNotificationFontSizeAdjustment",
+                    set = "SetNotificationFontSizeAdjustment",
                 }
             },
         },
@@ -313,7 +349,8 @@ local function BuildNotificationPanelConfiguration()
                     groupFinderDisplayDuration = {
                         type = "range",
                         name = "Display Duration",
-                        desc = "How long Group Finder acceptance notifications remain visible before dismissing automatically.",
+                        desc =
+                        "How long Group Finder acceptance notifications remain visible before dismissing automatically.",
                         order = 2,
                         min = 2,
                         max = 30,
@@ -345,6 +382,55 @@ local function BuildNotificationPanelConfiguration()
                         disabled = function() return not Options:GetEnableGroupFinderNotifications() end,
                         handler = Options,
                         func = "TestGroupFinderNotification",
+                    },
+                })
+
+                ,
+                chores = ConfigurationModule.Widgets.IGroup(30, "Chores", {
+                    enableChoresNotifications = {
+                        type = "toggle",
+                        name = "Enable",
+                        desc = "Show grouped notifications when tracked chores become available or are completed.",
+                        order = 1,
+                        handler = Options,
+                        get = "GetEnableChoresNotifications",
+                        set = "SetEnableChoresNotifications",
+                    },
+                    choresDisplayDuration = {
+                        type = "range",
+                        name = "Display Duration",
+                        desc = "How long Chores notifications remain visible before dismissing automatically.",
+                        order = 2,
+                        min = 2,
+                        max = 30,
+                        step = 1,
+                        width = 1.5,
+                        disabled = function() return not Options:GetEnableChoresNotifications() end,
+                        handler = Options,
+                        get = "GetChoresNotificationDisplayTime",
+                        set = "SetChoresNotificationDisplayTime",
+                    },
+                    choresSound = {
+                        type = "select",
+                        dialogControl = "LSM30_Sound",
+                        name = "Notification Sound",
+                        desc = "Sound to play when tracked chores become available or are completed.",
+                        order = 3,
+                        width = 2,
+                        values = function() return LibStub("LibSharedMedia-3.0"):HashTable("sound") or {} end,
+                        disabled = function() return not Options:GetEnableChoresNotifications() end,
+                        handler = Options,
+                        get = "GetChoresNotificationSound",
+                        set = "SetChoresNotificationSound",
+                    },
+                    testChoresNotification = {
+                        type = "execute",
+                        name = "Test Notification",
+                        desc = "Send a test Chores notification.",
+                        order = 4,
+                        disabled = function() return not Options:GetEnableChoresNotifications() end,
+                        handler = Options,
+                        func = "TestChoresNotification",
                     },
                 })
 

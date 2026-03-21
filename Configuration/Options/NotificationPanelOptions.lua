@@ -12,13 +12,16 @@ local ConfigurationModule = T:GetModule("Configuration")
 local Options = ConfigurationModule.Options.NotificationPanel or {}
 ConfigurationModule.Options.NotificationPanel = Options
 
-local DEFAULT_SOUND = "TwichUI Notification 7"
+local DEFAULT_SOUND = "TwichUI Alert 1"
 local DEFAULT_FRIENDS_DISPLAY_DURATION = 10
 local DEFAULT_FRIENDS_ICON_STYLE = "default"
-local DEFAULT_KEYSTONE_DISPLAY_DURATION = 10
+local DEFAULT_KEYSTONE_DISPLAY_DURATION = 15
 local DEFAULT_GREAT_VAULT_DISPLAY_DURATION = 10
 local DEFAULT_DAILY_RESET_DISPLAY_DURATION = 10
 local DEFAULT_GROUP_FINDER_DISPLAY_DURATION = 10
+local DEFAULT_CHORES_DISPLAY_DURATION = 15
+local DEFAULT_NOTIFICATION_FONT = "__default"
+local DEFAULT_NOTIFICATION_FONT_SIZE_ADJUSTMENT = 0
 
 
 function Options:GetDB()
@@ -64,9 +67,34 @@ function Options:GetPanelWidth(info)
     return db.panelWidth or 300
 end
 
+function Options:GetNotificationFont(info)
+    local db = self:GetDB()
+    return db.notificationFont or DEFAULT_NOTIFICATION_FONT
+end
+
+function Options:SetNotificationFont(info, value)
+    local db = self:GetDB()
+    db.notificationFont = value
+    RefreshFrame()
+end
+
+function Options:GetNotificationFontSizeAdjustment(info)
+    local db = self:GetDB()
+    return db.notificationFontSizeAdjustment or DEFAULT_NOTIFICATION_FONT_SIZE_ADJUSTMENT
+end
+
+function Options:SetNotificationFontSizeAdjustment(info, value)
+    local db = self:GetDB()
+    db.notificationFontSizeAdjustment = value
+    RefreshFrame()
+end
+
 function Options:GetEnableFriendsNotifications(info)
     local db = self:GetDB()
-    return db.enableFriendsNotifications or false
+    if db.enableFriendsNotifications == nil then
+        return true
+    end
+    return db.enableFriendsNotifications
 end
 
 function Options:SetEnableFriendsNotifications(info, value)
@@ -117,7 +145,10 @@ end
 
 function Options:GetEnableKeystoneNotifications(info)
     local db = self:GetDB()
-    return db.enableKeystoneNotifications or false
+    if db.enableKeystoneNotifications == nil then
+        return true
+    end
+    return db.enableKeystoneNotifications
 end
 
 function Options:SetEnableKeystoneNotifications(info, value)
@@ -147,7 +178,10 @@ end
 
 function Options:GetEnableGreatVaultNotifications(info)
     local db = self:GetDB()
-    return db.enableGreatVaultNotifications or false
+    if db.enableGreatVaultNotifications == nil then
+        return true
+    end
+    return db.enableGreatVaultNotifications
 end
 
 function Options:SetEnableGreatVaultNotifications(info, value)
@@ -177,7 +211,10 @@ end
 
 function Options:GetEnableDailyResetNotifications(info)
     local db = self:GetDB()
-    return db.enableDailyResetNotifications or false
+    if db.enableDailyResetNotifications == nil then
+        return true
+    end
+    return db.enableDailyResetNotifications
 end
 
 function Options:SetEnableDailyResetNotifications(info, value)
@@ -207,7 +244,10 @@ end
 
 function Options:GetEnableGroupFinderNotifications(info)
     local db = self:GetDB()
-    return db.enableGroupFinderNotifications or false
+    if db.enableGroupFinderNotifications == nil then
+        return true
+    end
+    return db.enableGroupFinderNotifications
 end
 
 function Options:SetEnableGroupFinderNotifications(info, value)
@@ -235,6 +275,39 @@ function Options:SetGroupFinderNotificationSound(info, value)
     db.groupFinderNotificationSound = value
 end
 
+function Options:GetEnableChoresNotifications(info)
+    local db = self:GetDB()
+    if db.enableChoresNotifications == nil then
+        return true
+    end
+    return db.enableChoresNotifications
+end
+
+function Options:SetEnableChoresNotifications(info, value)
+    local db = self:GetDB()
+    db.enableChoresNotifications = value
+end
+
+function Options:GetChoresNotificationDisplayTime(info)
+    local db = self:GetDB()
+    return db.choresNotificationDisplayTime or DEFAULT_CHORES_DISPLAY_DURATION
+end
+
+function Options:SetChoresNotificationDisplayTime(info, value)
+    local db = self:GetDB()
+    db.choresNotificationDisplayTime = value
+end
+
+function Options:GetChoresNotificationSound(info)
+    local db = self:GetDB()
+    return db.choresNotificationSound or DEFAULT_SOUND
+end
+
+function Options:SetChoresNotificationSound(info, value)
+    local db = self:GetDB()
+    db.choresNotificationSound = value
+end
+
 function Options:TestFriendsNotification()
     GetToastsModule():TestFriendNotification()
 end
@@ -253,4 +326,8 @@ end
 
 function Options:TestGroupFinderNotification()
     GetToastsModule():TestGroupFinderNotification()
+end
+
+function Options:TestChoresNotification()
+    GetToastsModule():TestChoresNotification()
 end

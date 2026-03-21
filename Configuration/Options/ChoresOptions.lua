@@ -95,6 +95,32 @@ function Options:SetTrackBountifulDelves(info, value)
     RefreshChores()
 end
 
+function Options:GetCountProfessionsTowardTotal(info)
+    local enabled = self:GetDB().countProfessionsTowardTotal
+    if enabled == nil then
+        return true
+    end
+    return enabled
+end
+
+function Options:SetCountProfessionsTowardTotal(info, value)
+    self:GetDB().countProfessionsTowardTotal = value == true
+    RefreshChores()
+end
+
+function Options:GetCountBountifulDelvesTowardTotal(info)
+    local enabled = self:GetDB().countBountifulDelvesTowardTotal
+    if enabled == nil then
+        return true
+    end
+    return enabled
+end
+
+function Options:SetCountBountifulDelvesTowardTotal(info, value)
+    self:GetDB().countBountifulDelvesTowardTotal = value == true
+    RefreshChores()
+end
+
 function Options:IsCategoryEnabled(categoryKey)
     local enabled = self:GetCategoryDB()[categoryKey]
     if enabled == nil then

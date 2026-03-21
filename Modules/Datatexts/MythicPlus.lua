@@ -337,7 +337,8 @@ local function GetVaultSlotRows()
 end
 
 local function BuildVaultSlotLabel(row)
-    return format("Slot %d  %s", row.slotIndex or 0, T.Tools.Text.Color(T.Tools.Colors.GRAY, "(" .. FormatRunCount(row.threshold) .. ")"))
+    return format("Slot %d  %s", row.slotIndex or 0,
+        T.Tools.Text.Color(T.Tools.Colors.GRAY, "(" .. FormatRunCount(row.threshold) .. ")"))
 end
 
 local function BuildVaultSlotValue(row)
@@ -394,7 +395,8 @@ function MPDT:Refresh()
     end
 
     if valueColorR and valueColorG and valueColorB then
-        self.panel.text:SetText("M+: " .. T.Tools.Text.ColorRGB(valueColorR, valueColorG, valueColorB, FormatWholeNumber(score)))
+        self.panel.text:SetText("M+: " ..
+        T.Tools.Text.ColorRGB(valueColorR, valueColorG, valueColorB, FormatWholeNumber(score)))
         return
     end
 
@@ -464,7 +466,8 @@ function MPDT:OnEnter(panel)
     if options:GetMythicPlusShowRewardProgress() then
         tooltip:AddLine(GetSectionTitle("Season Reward Progress"))
         for _, milestone in ipairs(MILESTONES) do
-            tooltip:AddDoubleLine(milestone.label, GetMilestoneProgressText(overallScore, milestone.score), 1, 1, 1, 1, 1, 1)
+            tooltip:AddDoubleLine(milestone.label, GetMilestoneProgressText(overallScore, milestone.score), 1, 1, 1, 1, 1,
+                1)
         end
         tooltip:AddLine(" ")
     end

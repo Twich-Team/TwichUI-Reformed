@@ -27,7 +27,7 @@ local function BuildAboutConfiguration()
             a = W.Description(0, "The following features are planned for future releases!"),
             space = W.Spacer(1),
             b = W.Description(5, "• Scan for Satchels from LFG and be notified when one is available."),
-            c = W.Description(5, "• Weekly chore tracking (Prey, Zone Events, Quests, etc)."),
+            c = W.Description(5, "• Weekly chore tracking (Zone Events, Quests, etc)."),
             d = W.Description(5,
                 "• Mythic+ season progress: track progress to milestones, show rewards, current rating, etc."),
             e = W.Description(5, "• Dungeon teleports added to the Portals datatext."),

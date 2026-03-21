@@ -67,7 +67,7 @@ local function ItemHathBeenReceived(itemInfo, previousState, currentState)
 		local newTrackStr = BIS.ItemScanner.GetGearTrackByRank(newTrackRank)
 
 		CreateMessage("You have received an upgraded Best in Slot item! " ..
-		T.Tools.Text.ToTitleCase(ownedTrackStr) .. " → " .. T.Tools.Text.ToTitleCase(newTrackStr))
+			T.Tools.Text.ToTitleCase(ownedTrackStr) .. " → " .. T.Tools.Text.ToTitleCase(newTrackStr))
 		return
 	end
 
@@ -157,15 +157,34 @@ local function BuildOwnedItemState(itemID)
 		bestTrackRank = nil,
 		bestLink = nil,
 		bestItemLevel = nil,
+		bagLinks = {},
 	}
 
-	local function ConsiderItem(link, trackRank, itemLevel)
+	local function ConsiderItem(link, trackRank, itemLevel, isBagItem)
 		state.count = state.count + 1
 
 		local currentBestTrack = state.bestTrackRank or -1
 		local candidateTrack = trackRank or -1
 		local currentBestLevel = state.bestItemLevel or -1
 		local candidateLevel = itemLevel or -1
+
+		if isBagItem and type(link) == "string" and link ~= "" then
+			local bagEntry = state.bagLinks[link]
+			if bagEntry then
+				bagEntry.count = bagEntry.count + 1
+				if candidateTrack > (bagEntry.trackRank or -1) or
+					(candidateTrack == (bagEntry.trackRank or -1) and candidateLevel > (bagEntry.itemLevel or -1)) then
+					bagEntry.trackRank = trackRank
+					bagEntry.itemLevel = itemLevel
+				end
+			else
+				state.bagLinks[link] = {
+					count = 1,
+					trackRank = trackRank,
+					itemLevel = itemLevel,
+				}
+			end
+		end
 
 		if not state.bestLink or candidateTrack > currentBestTrack or (candidateTrack == currentBestTrack and candidateLevel > currentBestLevel) then
 			state.bestTrackRank = trackRank
@@ -180,7 +199,7 @@ local function BuildOwnedItemState(itemID)
 			local itemLevel = link and C_Item.GetDetailedItemLevelInfo(link) or nil
 			local track = BIS.ItemScanner.GetTrackFromEquippedItem(slotIndex)
 			local trackRank = BIS.ItemScanner.GetGearTrackRank(track)
-			ConsiderItem(link, trackRank, itemLevel)
+			ConsiderItem(link, trackRank, itemLevel, false)
 		end
 	end
 
@@ -192,12 +211,52 @@ local function BuildOwnedItemState(itemID)
 				local itemLevel = link and C_Item.GetDetailedItemLevelInfo(link) or nil
 				local track = BIS.ItemScanner.GetTrackFromBagItem(bagIndex, slotIndex)
 				local trackRank = BIS.ItemScanner.GetGearTrackRank(track)
-				ConsiderItem(link, trackRank, itemLevel)
+				ConsiderItem(link, trackRank, itemLevel, true)
 			end
 		end
 	end
 
 	return state
+end
+
+local function SelectPreferredBagLink(candidates)
+	local bestCandidate
+
+	for _, candidate in ipairs(candidates) do
+		if not bestCandidate then
+			bestCandidate = candidate
+		else
+			local bestTrack = bestCandidate.trackRank or -1
+			local candidateTrack = candidate.trackRank or -1
+			local bestLevel = bestCandidate.itemLevel or -1
+			local candidateLevel = candidate.itemLevel or -1
+
+			if candidateTrack > bestTrack or (candidateTrack == bestTrack and candidateLevel > bestLevel) then
+				bestCandidate = candidate
+			end
+		end
+	end
+
+	return bestCandidate and bestCandidate.link or nil
+end
+
+local function GetReceivedBagLink(previousState, currentState)
+	local previousBagLinks = previousState and previousState.bagLinks or {}
+	local currentBagLinks = currentState and currentState.bagLinks or {}
+	local addedLinks = {}
+
+	for link, currentEntry in pairs(currentBagLinks) do
+		local previousCount = previousBagLinks[link] and previousBagLinks[link].count or 0
+		if currentEntry.count > previousCount then
+			table.insert(addedLinks, {
+				link = link,
+				trackRank = currentEntry.trackRank,
+				itemLevel = currentEntry.itemLevel,
+			})
+		end
+	end
+
+	return SelectPreferredBagLink(addedLinks)
 end
 
 local function BuildInventorySnapshot()
@@ -216,9 +275,16 @@ function Monitor:RefreshInventorySnapshot()
 end
 
 function Monitor:HandleReceivedBestInSlotItem(itemID, previousState, currentState)
-	local itemRef = currentState and currentState.bestLink or itemID
+	local itemLink = GetReceivedBagLink(previousState, currentState) or (currentState and currentState.bestLink) or nil
+	if type(itemLink) == "string" and itemLink ~= "" then
+		local linkedItemID = C_Item.GetItemInfoInstant(itemLink) or itemID
+		if Monitor.IsItemBestInSlot(linkedItemID) then
+			ItemHathBeenReceived({ itemID = linkedItemID, link = itemLink }, previousState, currentState)
+		end
+		return
+	end
 
-	GetItemInfoAsync(itemRef, function(itemInfo)
+	GetItemInfoAsync(itemID, function(itemInfo)
 		if not itemInfo or not itemInfo.link then
 			T:Print("Failed to retrieve item info for looted item:", tostring(itemID))
 			return
@@ -239,6 +305,11 @@ end
 function Monitor:OnEnable()
 	self:RefreshInventorySnapshot()
 	self:RegisterEvent("BAG_UPDATE_DELAYED")
+	self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+end
+
+function Monitor:PLAYER_SPECIALIZATION_CHANGED()
+	self:RefreshInventorySnapshot()
 end
 
 function Monitor:BAG_UPDATE_DELAYED()
@@ -246,8 +317,8 @@ function Monitor:BAG_UPDATE_DELAYED()
 	local currentSnapshot = BuildInventorySnapshot()
 
 	for itemID, currentState in pairs(currentSnapshot) do
-		local previousState = previousSnapshot[itemID] or { count = 0, bestTrackRank = nil }
-		if currentState.count > previousState.count then
+		local previousState = previousSnapshot[itemID]
+		if previousState and currentState.count > previousState.count then
 			self:HandleReceivedBestInSlotItem(itemID, previousState, currentState)
 		end
 	end

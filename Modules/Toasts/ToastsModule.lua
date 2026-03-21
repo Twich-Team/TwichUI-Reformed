@@ -21,12 +21,13 @@ TM:SetEnabledState(true)
 
 local AceGUI = LibStub("AceGUI-3.0")
 
-local DEFAULT_SOUND = "TwichUI Notification 7"
+local DEFAULT_SOUND = "TwichUI Alert 1"
 local DEFAULT_DURATION = 10
-local DEFAULT_KEYSTONE_DURATION = 10
+local DEFAULT_KEYSTONE_DURATION = 15
 local DEFAULT_GREAT_VAULT_DURATION = 10
 local DEFAULT_DAILY_RESET_DURATION = 10
 local DEFAULT_GROUP_FINDER_DURATION = 10
+local DEFAULT_CHORES_DURATION = 15
 local BNET_CLIENT_WOW = _G["BNET_CLIENT_WOW"] or "WoW"
 local DAILY_RESET_GRACE_WINDOW_SECONDS = 300
 local BLIZZARD_FRIEND_TOAST_CVARS = {
@@ -83,6 +84,26 @@ local function TrimText(value)
     end
 
     return value:match("^%s*(.-)%s*$") or ""
+end
+
+local function BuildInlineTextureIcon(texture, size)
+    if not texture then
+        return ""
+    end
+
+    return ("|T%s:%d:%d:0:0|t "):format(tostring(texture), size or 14, size or 14)
+end
+
+local function BuildInlineAtlasIcon(atlas, size)
+    if type(atlas) ~= "string" or atlas == "" then
+        return ""
+    end
+
+    return ("|A:%s:%d:%d|a "):format(atlas, size or 14, size or 14)
+end
+
+local function BuildColoredChoreCategory(label)
+    return ("|cff72c7ff%s|r"):format(label or "Chores")
 end
 
 local function NormalizeFriendName(name)
@@ -527,13 +548,13 @@ end
 function TM:GetGreatVaultNotificationSound()
     local options = GetNotificationOptions()
     return options and options.GetGreatVaultNotificationSound and options:GetGreatVaultNotificationSound() or
-    DEFAULT_SOUND
+        DEFAULT_SOUND
 end
 
 function TM:GetGreatVaultNotificationDisplayTime()
     local options = GetNotificationOptions()
     return options and options.GetGreatVaultNotificationDisplayTime and options:GetGreatVaultNotificationDisplayTime() or
-    DEFAULT_GREAT_VAULT_DURATION
+        DEFAULT_GREAT_VAULT_DURATION
 end
 
 function TM:IsDailyResetNotificationEnabled()
@@ -544,13 +565,13 @@ end
 function TM:GetDailyResetNotificationSound()
     local options = GetNotificationOptions()
     return options and options.GetDailyResetNotificationSound and options:GetDailyResetNotificationSound() or
-    DEFAULT_SOUND
+        DEFAULT_SOUND
 end
 
 function TM:GetDailyResetNotificationDisplayTime()
     local options = GetNotificationOptions()
     return options and options.GetDailyResetNotificationDisplayTime and options:GetDailyResetNotificationDisplayTime() or
-    DEFAULT_DAILY_RESET_DURATION
+        DEFAULT_DAILY_RESET_DURATION
 end
 
 function TM:IsGroupFinderNotificationEnabled()
@@ -558,14 +579,32 @@ function TM:IsGroupFinderNotificationEnabled()
     return options and options.GetEnableGroupFinderNotifications and options:GetEnableGroupFinderNotifications() or false
 end
 
+function TM:IsChoresNotificationEnabled()
+    local options = GetNotificationOptions()
+    return options and options.GetEnableChoresNotifications and options:GetEnableChoresNotifications() or false
+end
+
 function TM:GetGroupFinderNotificationSound()
     local options = GetNotificationOptions()
-    return options and options.GetGroupFinderNotificationSound and options:GetGroupFinderNotificationSound() or DEFAULT_SOUND
+    return options and options.GetGroupFinderNotificationSound and options:GetGroupFinderNotificationSound() or
+        DEFAULT_SOUND
 end
 
 function TM:GetGroupFinderNotificationDisplayTime()
     local options = GetNotificationOptions()
-    return options and options.GetGroupFinderNotificationDisplayTime and options:GetGroupFinderNotificationDisplayTime() or DEFAULT_GROUP_FINDER_DURATION
+    return options and options.GetGroupFinderNotificationDisplayTime and options:GetGroupFinderNotificationDisplayTime() or
+        DEFAULT_GROUP_FINDER_DURATION
+end
+
+function TM:GetChoresNotificationSound()
+    local options = GetNotificationOptions()
+    return options and options.GetChoresNotificationSound and options:GetChoresNotificationSound() or DEFAULT_SOUND
+end
+
+function TM:GetChoresNotificationDisplayTime()
+    local options = GetNotificationOptions()
+    return options and options.GetChoresNotificationDisplayTime and options:GetChoresNotificationDisplayTime() or
+        DEFAULT_CHORES_DURATION
 end
 
 function TM:GetFriendDisplayName(friendInfo)
@@ -579,13 +618,17 @@ end
 
 function TM:BuildFriendDetailText(friendInfo, usedNote)
     local details = {}
-
-    if type(friendInfo.level) == "number" and friendInfo.level > 0 then
-        table.insert(details, ("Level %d"):format(friendInfo.level))
-    end
+    local levelText = type(friendInfo.level) == "number" and friendInfo.level > 0 and
+        ("Level %d"):format(friendInfo.level) or nil
 
     if usedNote and friendInfo.characterName ~= "" then
-        table.insert(details, friendInfo.characterName)
+        local characterLine = friendInfo.characterName
+        if levelText then
+            characterLine = ("%s (%s)"):format(characterLine, levelText)
+        end
+        table.insert(details, characterLine)
+    elseif levelText then
+        table.insert(details, levelText)
     end
 
     if friendInfo.isOnline then
@@ -814,6 +857,27 @@ function TM:SendGroupFinderNotification(groupFinderInfo)
     self:SendMessage("TWICH_NOTIFICATION", widget, {
         displayDuration = self:GetGroupFinderNotificationDisplayTime(),
         soundKey = self:GetGroupFinderNotificationSound(),
+    })
+end
+
+function TM:CreateChoresNotificationWidget(kind, entries)
+    ---@type TwichUI_ChoresNotificationWidget
+    ---@diagnostic disable-next-line: param-type-mismatch
+    local widget = AceGUI:Create("TwichUI_ChoresNotification")
+    ---@diagnostic disable-next-line: undefined-field
+    widget:SetChoresNotification(kind, entries)
+    return widget
+end
+
+function TM:SendChoresNotification(kind, entries)
+    if not self:IsChoresNotificationEnabled() or type(entries) ~= "table" or #entries == 0 then
+        return
+    end
+
+    local widget = self:CreateChoresNotificationWidget(kind, entries)
+    self:SendMessage("TWICH_NOTIFICATION", widget, {
+        displayDuration = self:GetChoresNotificationDisplayTime(),
+        soundKey = self:GetChoresNotificationSound(),
     })
 end
 
@@ -1103,5 +1167,19 @@ end
 
 function TM:TestGroupFinderNotification()
     self:SendGroupFinderNotification(self:CreateFakeGroupFinderInfo())
+    return true
+end
+
+function TM:TestChoresNotification()
+    local enchantingIcon = C_Spell and type(C_Spell.GetSpellTexture) == "function" and C_Spell.GetSpellTexture(7411) or
+        "Interface\\Icons\\trade_engraving"
+
+    self:SendChoresNotification("available", {
+        BuildInlineAtlasIcon("delves-regular") ..
+        BuildColoredChoreCategory("Delver's Call") .. " |cff7f8c8d-|r Azj-Kahet: Spiral Weave",
+        BuildInlineTextureIcon(enchantingIcon) ..
+        BuildColoredChoreCategory("Enchanting") .. " |cff7f8c8d-|r Mobs/Treasures (1/2)",
+        BuildInlineAtlasIcon("Raid") .. BuildColoredChoreCategory("Raid Finder") .. " |cff7f8c8d-|r Wing 2",
+    })
     return true
 end

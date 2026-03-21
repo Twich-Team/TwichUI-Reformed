@@ -16,6 +16,7 @@ local GetRFDungeonInfo = _G.GetRFDungeonInfo
 local LegacyLoadAddOn = _G.LoadAddOn
 local PVEFrameLoadUI = _G.PVEFrame_LoadUI
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
+local C_Item = _G.C_Item
 
 ---@class ChoresDataText : AceModule, AceEvent-3.0
 ---@field definition DatatextDefinition
@@ -24,15 +25,25 @@ local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
 local CDT = DataTextModule:NewModule("ChoresDataText", "AceEvent-3.0")
 
 local MENU_CATEGORY_ITEMS = {
-    { key = "delves",            name = "Delves",             icon = "Interface\\Icons\\inv_misc_map08" },
-    { key = "abundance",         name = "Abundance",          icon = 134569 },
-    { key = "unity",             name = "Unity",              icon = "Interface\\Icons\\achievement_guildperk_everybodysfriend" },
-    { key = "hope",              name = "Hope",               icon = "Interface\\Icons\\spell_holy_holynova" },
-    { key = "soiree",            name = "Soiree",             icon = "Interface\\Icons\\inv_misc_food_13" },
-    { key = "stormarion",        name = "Stormarion",         icon = "Interface\\Icons\\spell_nature_lightning" },
-    { key = "specialAssignment", name = "Special Assignment", icon = "Interface\\Icons\\inv_scroll_11" },
-    { key = "dungeon",           name = "Dungeon",            iconAtlas = "Dungeon" },
+    { key = "delves",            name = "Delver's Call",          iconAtlas = "delves-regular" },
+    { key = "abundance",         name = "Abundance",              iconAtlas = "UI-EventPoi-abundancebountiful" },
+    { key = "unity",             name = "Unity Against the Void", icon = "Interface\\Icons\\Inv_nullstone_void" },
+    { key = "hope",              name = "Legends of the Haranir", icon = "Interface\\Icons\\Inv_achievement_zone_harandar" },
+    { key = "soiree",            name = "Saltheril's Soiree",     iconAtlas = "UI-EventPoi-saltherilssoiree" },
+    { key = "stormarion",        name = "Stormarion Assault",     iconAtlas = "UI-EventPoi-stormarionassault" },
+    { key = "specialAssignment", name = "Special Assignment",     iconAtlas = "worldquest-Capstone-questmarker-epic-locked" },
+    { key = "dungeon",           name = "Dungeon",                iconAtlas = "Dungeon" },
 }
+
+local function GetProfessionMenuItems()
+    ---@type ChoresModule
+    local choresModule = T:GetModule("Chores")
+    if not choresModule or not choresModule.GetProfessionCategoryDefinitions then
+        return {}
+    end
+
+    return choresModule:GetProfessionCategoryDefinitions() or {}
+end
 
 local function GetDatatextOptions()
     ---@type ConfigurationModule
@@ -151,12 +162,15 @@ local function GetStatusColorHex(status)
 end
 
 local function BuildProgressText(summary)
+    local progressColor = summary.countTowardsTotal == false and T.Tools.Colors.GRAY or GetStatusColorHex(summary.status)
+
     if summary.status == 2 then
-        return T.Tools.Text.Color(T.Tools.Colors.GREEN, "Complete")
+        return T.Tools.Text.Color(progressColor, "Complete")
     end
 
-    local progress = (summary.total - summary.remaining) .. "/" .. summary.total
-    return T.Tools.Text.Color(GetStatusColorHex(summary.status), progress)
+    local current = summary.progressStyle == "remaining" and summary.remaining or (summary.total - summary.remaining)
+    local progress = current .. "/" .. summary.total
+    return T.Tools.Text.Color(progressColor, progress)
 end
 
 local function GetTooltipLineFontStrings(tooltip, lineIndex)
@@ -256,16 +270,25 @@ end
 
 local function BuildObjectiveText(objective)
     local text = objective.text or ""
+    local prefix = ""
+
+    if objective.itemID and C_Item and type(C_Item.GetItemIconByID) == "function" then
+        local itemIcon = C_Item.GetItemIconByID(objective.itemID)
+        if itemIcon then
+            prefix = ("|T%d:14:14:0:0|t "):format(itemIcon)
+        end
+    end
+
     if objective.need and objective.need > 0 then
         local progress = (objective.have or 0) .. "/" .. objective.need
         if string.match(text, "^" .. progress:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1") .. "%s+") then
-            return text
+            return prefix .. text
         end
 
-        return progress .. " " .. text
+        return prefix .. progress .. " " .. text
     end
 
-    return text
+    return prefix .. text
 end
 
 local function AddObjectiveLines(tooltip, entry, fontSettings)
@@ -323,6 +346,10 @@ function CDT:HandleChoresUpdated()
     DataTextModule:RefreshDataText("TwichUI: Chores")
 end
 
+local function BuildMenuSectionTitle(text)
+    return T.Tools.Text.ColorRGB(0.45, 0.78, 1, text)
+end
+
 function CDT:GetMenuList()
     local choresOptions = GetChoresOptions()
     local menuList = {
@@ -359,7 +386,41 @@ function CDT:GetMenuList()
             notCheckable = true,
         },
         {
-            text = "Weekly Chores",
+            text = "Count Toward Total",
+            isTitle = true,
+            notCheckable = true,
+        },
+        {
+            text = T.Tools.Text.Icon("Interface\\Icons\\Inv_12_profession_enchanting_enchantedvellum_blue") ..
+                " Profession Chores",
+            checked = function()
+                return choresOptions:GetCountProfessionsTowardTotal()
+            end,
+            isNotRadio = true,
+            keepShownOnClick = true,
+            func = function()
+                choresOptions:SetCountProfessionsTowardTotal(nil, not choresOptions:GetCountProfessionsTowardTotal())
+            end,
+        },
+        {
+            text = "|A:delves-bountiful:16:16|a Bountiful Delves",
+            checked = function()
+                return choresOptions:GetCountBountifulDelvesTowardTotal()
+            end,
+            isNotRadio = true,
+            keepShownOnClick = true,
+            func = function()
+                choresOptions:SetCountBountifulDelvesTowardTotal(nil,
+                    not choresOptions:GetCountBountifulDelvesTowardTotal())
+            end,
+        },
+        {
+            text = "",
+            disabled = true,
+            notCheckable = true,
+        },
+        {
+            text = BuildMenuSectionTitle("Weekly Chores"),
             isTitle = true,
             notCheckable = true,
         },
@@ -367,7 +428,7 @@ function CDT:GetMenuList()
 
     for _, item in ipairs(MENU_CATEGORY_ITEMS) do
         local iconMarkup = item.iconAtlas and ("|A:%s:16:16|a "):format(item.iconAtlas) or
-        (T.Tools.Text.Icon(item.icon) .. " ")
+            (T.Tools.Text.Icon(item.icon) .. " ")
         table.insert(menuList, {
             text = iconMarkup .. item.name,
             checked = function()
@@ -381,18 +442,46 @@ function CDT:GetMenuList()
         })
     end
 
+    local professionMenuItems = GetProfessionMenuItems()
+    if #professionMenuItems > 0 then
+        table.insert(menuList, {
+            text = "",
+            disabled = true,
+            notCheckable = true,
+        })
+        table.insert(menuList, {
+            text = BuildMenuSectionTitle("Profession Chores"),
+            isTitle = true,
+            notCheckable = true,
+        })
+
+        for _, item in ipairs(professionMenuItems) do
+            table.insert(menuList, {
+                text = T.Tools.Text.Icon(item.icon) .. " " .. item.name,
+                checked = function()
+                    return choresOptions:IsCategoryEnabled(item.key)
+                end,
+                isNotRadio = true,
+                keepShownOnClick = true,
+                func = function()
+                    choresOptions:SetCategoryEnabled(item.key, not choresOptions:IsCategoryEnabled(item.key))
+                end,
+            })
+        end
+    end
+
     table.insert(menuList, {
         text = "",
         disabled = true,
         notCheckable = true,
     })
     table.insert(menuList, {
-        text = "Additional Tracking",
+        text = BuildMenuSectionTitle("Additional Tracking"),
         isTitle = true,
         notCheckable = true,
     })
     table.insert(menuList, {
-        text = T.Tools.Text.Icon("Interface\\Icons\\inv_misc_map08") .. " Bountiful Delves",
+        text = "|A:delves-bountiful:16:16|a Bountiful Delves",
         checked = function()
             return choresOptions:GetTrackBountifulDelves()
         end,
@@ -402,7 +491,6 @@ function CDT:GetMenuList()
             choresOptions:SetTrackBountifulDelves(nil, not choresOptions:GetTrackBountifulDelves())
         end,
     })
-
     local raidWings = GetCurrentExpansionRaidWings()
     if #raidWings > 0 then
         table.insert(menuList, {
@@ -411,7 +499,7 @@ function CDT:GetMenuList()
             notCheckable = true,
         })
         table.insert(menuList, {
-            text = "Raid Finder Wings",
+            text = BuildMenuSectionTitle("Raid Finder Wings"),
             isTitle = true,
             notCheckable = true,
         })
@@ -436,7 +524,7 @@ function CDT:GetMenuList()
 end
 
 function CDT:OnClick(panel, button)
-    if button == "RightButton" then
+    if button == "LeftButton" then
         DataTextModule:ShowMenu(panel, self:GetMenuList())
     end
 end
@@ -505,7 +593,7 @@ function CDT:OnEnter(panel)
                 if not (showCompleted and summary.status == 2) then
                     for _, entry in ipairs(visibleEntries) do
                         local shouldShowEntry = summary.showPendingEntries and entry.state.status ~= 2 or
-                        entry.state.status == 1
+                            entry.state.status == 1
                         if shouldShowEntry then
                             local entryColor = GetEntryColorHex(summary, entry.state.status)
                             tooltip:AddLine(T.Tools.Text.Color(entryColor, "  • " .. (entry.state.title or summary.name)))
@@ -527,7 +615,7 @@ function CDT:OnEnter(panel)
         tooltip:AddLine(" ")
     end
 
-    tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Right-click to toggle chores on or off."))
+    tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Left-click to toggle chores on or off."))
     ApplyTooltipLineFont(tooltip, tooltip:NumLines(), fontSettings.entryFont, fontSettings.entryFontSize)
     tooltip:Show()
 end

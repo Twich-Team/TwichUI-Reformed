@@ -23,11 +23,14 @@ local SWOptions = ConfigurationModule.Options.SatchelWatch
 ---@type ChoresConfigurationOptions
 local ChoresOptions = ConfigurationModule.Options.Chores
 
+---@type EasyFishConfigurationOptions
+local EasyFishOptions = ConfigurationModule.Options.EasyFish
+
 local function BuildGossipHotkeysTab()
     local tab = {
         type = "group",
         name = "Gossip Hotkeys",
-        order = 1,
+        order = 3,
         args = {
             desc = {
                 type = "description",
@@ -80,7 +83,7 @@ local function BuildSatchelWatchTab()
     local tab = {
         type = "group",
         name = "Satchel Watch",
-        order = 10,
+        order = 6,
         args = {
             desc = {
                 type = "description",
@@ -276,6 +279,72 @@ local function BuildSatchelWatchTab()
     return tab
 end
 
+local function BuildEasyFishTab()
+    local W = ConfigurationModule.Widgets
+
+    return {
+        type = "group",
+        name = "Easy Fish",
+        order = 2,
+        args = {
+            desc = {
+                type = "description",
+                order = 1,
+                name =
+                "Easy Fish binds a single key to cast Fishing and then reel in the bobber with the same key while temporarily muting other game sounds.",
+            },
+            enable = {
+                type = "toggle",
+                name = "Enable",
+                desc = "Enable or disable Easy Fish.",
+                order = 2,
+                handler = EasyFishOptions,
+                get = "GetEnabled",
+                set = "SetEnabled",
+            },
+            keybinding = {
+                type = "keybinding",
+                name = "Fishing Keybinding",
+                desc = "Set the keybind used to cast Fishing and reel in your bobber.",
+                order = 3,
+                handler = EasyFishOptions,
+                get = "GetEasyFishKeybinding",
+                set = "SetEasyFishKeybinding",
+            },
+            soundGroup = W.IGroup(10, "Enhanced Sounds", {
+                desc = W.Description(1,
+                    "While fishing, Easy Fish can mute other audio and keep the bobber easier to hear."),
+                muteOtherSounds = {
+                    type = "toggle",
+                    name = "Mute Other Sounds",
+                    desc = "Temporarily mute other game sounds while your fishing channel is active.",
+                    order = 2,
+                    handler = EasyFishOptions,
+                    get = "GetMuteOtherSounds",
+                    set = "SetMuteOtherSounds",
+                },
+                enhancedSoundsScale = {
+                    type = "range",
+                    name = "Enhanced Sounds Volume",
+                    desc = "Volume used for the remaining fishing audio while enhanced sounds are active.",
+                    order = 3,
+                    min = 0,
+                    max = 1,
+                    step = 0.05,
+                    isPercent = true,
+                    width = 1.5,
+                    disabled = function()
+                        return not EasyFishOptions:GetMuteOtherSounds()
+                    end,
+                    handler = EasyFishOptions,
+                    get = "GetEnhancedSoundsScale",
+                    set = "SetEnhancedSoundsScale",
+                },
+            }),
+        },
+    }
+end
+
 local function BuildQuestLogCleanerTab()
     ---@type QuestTools
     local QT = T.Tools.Quest
@@ -283,7 +352,7 @@ local function BuildQuestLogCleanerTab()
     local tab = {
         type = "group",
         name = "Quest Log Cleaner",
-        order = 10,
+        order = 5,
         args = {
             desc = {
                 type = "description",
@@ -437,7 +506,7 @@ local function BuildQuestAutomationTab()
     local tab = {
         type = "group",
         name = "Quest Automation",
-        order = 5,
+        order = 4,
         args = {
             desc = {
                 type = "description",
@@ -626,6 +695,42 @@ local function BuildChoresTab()
         }
     end
 
+    local professionArgs = {
+        desc = W.Description(1,
+            T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                "Enable or disable Midnight profession chore tracking for learned professions.")),
+    }
+
+    local professionOrder = 2
+    do
+        ---@type ChoresModule
+        local ChoresModule = T:GetModule("Chores")
+        local professionCategories = ChoresModule and ChoresModule.GetProfessionCategoryDefinitions and
+            ChoresModule:GetProfessionCategoryDefinitions() or {}
+
+        for _, professionDefinition in ipairs(professionCategories) do
+            professionArgs[professionDefinition.key] = {
+                type = "toggle",
+                name = T.Tools.Text.Icon(professionDefinition.icon) .. " " .. professionDefinition.name,
+                desc = ("Track Midnight profession chores for %s."):format(professionDefinition.name),
+                order = professionOrder,
+                width = 1.5,
+                get = function()
+                    return ChoresOptions:IsCategoryEnabled(professionDefinition.key)
+                end,
+                set = function(_, value)
+                    ChoresOptions:SetCategoryEnabled(professionDefinition.key, value)
+                end,
+            }
+            professionOrder = professionOrder + 1
+        end
+    end
+
+    if professionOrder == 2 then
+        professionArgs.unavailable = W.Description(2,
+            "No learned Midnight professions were detected. Open a profession window if the list needs to refresh.")
+    end
+
     local raidWingArgs = {
         desc = W.Description(1,
             T.Tools.Text.Color(T.Tools.Colors.GRAY,
@@ -658,7 +763,7 @@ local function BuildChoresTab()
     return {
         type = "group",
         name = "Chores",
-        order = 15,
+        order = 1,
         args = {
             desc = W.Description(1,
                 "Track a curated set of weekly chores and expose the remaining count to the Chores DataText."),
@@ -685,10 +790,10 @@ local function BuildChoresTab()
             additionalTracking = W.IGroup(5, "Additional Tracking", {
                 desc = W.Description(1,
                     T.Tools.Text.Color(T.Tools.Colors.GRAY,
-                        "Enable additional weekly tracking groups that contribute to the Chores datatext count.")),
+                        "Enable additional weekly tracking groups for the Chores tooltip and optional datatext counting.")),
                 bountifulDelves = {
                     type = "toggle",
-                    name = T.Tools.Text.Icon("Interface\\Icons\\inv_misc_map08") .. " Bountiful Delves",
+                    name = "|A:delves-bountiful:16:16|a Bountiful Delves",
                     desc = "Track current bountiful delves and show your current coffer keys in the datatext tooltip.",
                     order = 2,
                     width = 1.5,
@@ -697,31 +802,58 @@ local function BuildChoresTab()
                     set = "SetTrackBountifulDelves",
                 },
             }),
+            countTowardTotal = W.IGroup(6, "Count Toward Total", {
+                desc = W.Description(1,
+                    T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                        "Choose which tracked sections contribute to the top-level Chores total. Disabled sections still appear in the tooltip.")),
+                professions = {
+                    type = "toggle",
+                    name = "Profession Chores",
+                    desc = "Count tracked profession chores toward the Chores total.",
+                    order = 2,
+                    width = 1.5,
+                    handler = ChoresOptions,
+                    get = "GetCountProfessionsTowardTotal",
+                    set = "SetCountProfessionsTowardTotal",
+                },
+                bountifulDelves = {
+                    type = "toggle",
+                    name = "|A:delves-bountiful:16:16|a Bountiful Delves",
+                    desc = "Count tracked bountiful delves toward the Chores total.",
+                    order = 3,
+                    width = 1.5,
+                    handler = ChoresOptions,
+                    get = "GetCountBountifulDelvesTowardTotal",
+                    set = "SetCountBountifulDelvesTowardTotal",
+                },
+            }),
             summary = W.IGroup(10, "Tracked Chores", {
                 desc = W.Description(1,
                     T.Tools.Text.Color(T.Tools.Colors.GRAY,
                         "Disable any category you do not want counted. The datatext tooltip will only show enabled chores.")),
-                delves = BuildCategoryToggle(2, "delves", "Interface\\Icons\\inv_misc_map08", "Delves",
-                    "Track the Midnight Delver's Call weekly set."),
-                abundance = BuildCategoryToggle(3, "abundance", 134569, "Abundance",
-                    "Track the Abundant Offerings weekly chore."),
-                unity = BuildCategoryToggle(4, "unity", "Interface\\Icons\\achievement_guildperk_everybodysfriend",
-                    "Unity",
-                    "Track the Unity weekly choice quest."),
-                hope = BuildCategoryToggle(5, "hope", "Interface\\Icons\\spell_holy_holynova", "Hope",
-                    "Track Hope in the Darkest Corners."),
-                soiree = BuildCategoryToggle(6, "soiree", "Interface\\Icons\\inv_misc_food_13", "Soiree",
-                    "Track Saltheril's Soiree progress."),
-                stormarion = BuildCategoryToggle(7, "stormarion", "Interface\\Icons\\spell_nature_lightning",
-                    "Stormarion",
-                    "Track the Stormarion Assault weekly."),
-                specialAssignment = BuildCategoryToggle(8, "specialAssignment", "Interface\\Icons\\inv_scroll_11",
+                delves = BuildCategoryToggle(2, "delves", nil, "Delver's Call",
+                    "Track the Midnight Delver's Call weekly set.", "delves-regular"),
+                abundance = BuildCategoryToggle(3, "abundance", nil, "Abundance",
+                    "Track the Abundant Offerings weekly chore.", "UI-EventPoi-abundancebountiful"),
+                unity = BuildCategoryToggle(4, "unity", "Interface\\Icons\\Inv_nullstone_void",
+                    "Unity Against the Void",
+                    "Track Unity Against the Void."),
+                hope = BuildCategoryToggle(5, "hope", "Interface\\Icons\\Inv_achievement_zone_harandar",
+                    "Legends of the Haranir",
+                    "Track Legends of the Haranir."),
+                soiree = BuildCategoryToggle(6, "soiree", nil, "Saltheril's Soiree",
+                    "Track Saltheril's Soiree progress.", "UI-EventPoi-saltherilssoiree"),
+                stormarion = BuildCategoryToggle(7, "stormarion", nil,
+                    "Stormarion Assault",
+                    "Track the Stormarion Assault weekly.", "UI-EventPoi-stormarionassault"),
+                specialAssignment = BuildCategoryToggle(8, "specialAssignment", nil,
                     "Special Assignment",
-                    "Track the rotating Special Assignments."),
+                    "Track the rotating Special Assignments.", "worldquest-Capstone-questmarker-epic-locked"),
                 dungeon = BuildCategoryToggle(9, "dungeon", "Interface\\Icons\\achievement_dungeon_azjolkahet_dungeon",
                     "Dungeon",
                     "Track the weekly Midnight dungeon quest.", "Dungeon"),
             }),
+            professionChores = W.IGroup(15, "Profession Chores", professionArgs),
             raidWings = W.IGroup(20, "Raid Finder Wings", raidWingArgs),
         },
     }
@@ -737,10 +869,11 @@ local function BuildConfiguration()
             order = 1,
             name = "Features to improve your overall user experience.",
         },
-        questAutomationTab = BuildQuestAutomationTab(),
         choresTab = BuildChoresTab(),
-        questLogCleanerTab = BuildQuestLogCleanerTab(),
+        easyFishTab = BuildEasyFishTab(),
         gossipHotkeysTab = BuildGossipHotkeysTab(),
+        questAutomationTab = BuildQuestAutomationTab(),
+        questLogCleanerTab = BuildQuestLogCleanerTab(),
         satchelWatchTab = BuildSatchelWatchTab(),
     }
 

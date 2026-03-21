@@ -16,9 +16,13 @@ local C_QuestLog = _G.C_QuestLog
 local C_AreaPoiInfo = _G.C_AreaPoiInfo
 local C_CurrencyInfo = _G.C_CurrencyInfo
 local C_Map = _G.C_Map
+local C_SpellBook = _G.C_SpellBook
 local C_TaskQuest = _G.C_TaskQuest
+local C_TradeSkillUI = _G.C_TradeSkillUI
 local GetQuestProgressBarPercent = _G.GetQuestProgressBarPercent
 local GetAccountExpansionLevel = _G.GetAccountExpansionLevel
+local GetProfessionInfo = _G.GetProfessionInfo
+local GetProfessions = _G.GetProfessions
 local GetLFGDungeonInfo = _G.GetLFGDungeonInfo
 local GetLFGDungeonNumEncounters = _G.GetLFGDungeonNumEncounters
 local GetNumRFDungeons = _G.GetNumRFDungeons
@@ -26,8 +30,12 @@ local GetRFDungeonInfo = _G.GetRFDungeonInfo
 local LegacyLoadAddOn = _G.LoadAddOn
 local PVEFrameLoadUI = _G.PVEFrame_LoadUI
 local UnitLevel = _G.UnitLevel
+local LegacyIsPlayerSpell = rawget(_G, "IsPlayerSpell")
+local LegacyIsSpellKnown = rawget(_G, "IsSpellKnown")
+local IsProfessionSpellKnown = (C_SpellBook and type(C_SpellBook.IsSpellKnown) == "function" and C_SpellBook.IsSpellKnown) or
+    LegacyIsPlayerSpell or LegacyIsSpellKnown
 local OPTIONAL_OBJECTIVE = _G.OPTIONAL_QUEST_OBJECTIVE_DESCRIPTION and
-_G.OPTIONAL_QUEST_OBJECTIVE_DESCRIPTION:gsub("%%s", ".+"):gsub("([%(%)])", "%%%1") or nil
+    _G.OPTIONAL_QUEST_OBJECTIVE_DESCRIPTION:gsub("%%s", ".+"):gsub("([%(%)])", "%%%1") or nil
 
 local STATUS_NOT_STARTED = 0
 local STATUS_IN_PROGRESS = 1
@@ -37,11 +45,150 @@ local COFFER_KEY_SHARD_CURRENCY_ID = 3310
 local EXPANSION_WAR_WITHIN = 10
 local EXPANSION_MIDNIGHT = 11
 
+local PROFESSION_CATEGORY_DATA = {
+    {
+        key = "professionAlchemy",
+        name = "Alchemy",
+        baseSkillLineId = 171,
+        childSkillLineId = 2906,
+        professionSpellID = 2259,
+        entries = {
+            { key = "mobTreasure", name = "Mobs/Treasures", sources = { { quest = 93529, item = 259189, name = "Aged Cruor" }, { quest = 93528, item = 259188, name = "Lightbloomed Spore Sample" } } },
+            { key = "catchup",     name = "Catchup",        sources = { { quest = 5003189, currency = 3189 } } },
+            { key = "treatise",    name = "Treatise",       sources = { { quest = 95127 } } },
+            { key = "orders",      name = "Orders",         sources = { { quest = 93690 } } },
+        },
+    },
+    {
+        key = "professionBlacksmithing",
+        name = "Blacksmithing",
+        baseSkillLineId = 164,
+        childSkillLineId = 2907,
+        professionSpellID = 2018,
+        entries = {
+            { key = "mobTreasure", name = "Mobs/Treasures", sources = { { quest = 93531, item = 259191, name = "Infused Quenching Oil" }, { quest = 93530, item = 259190, name = "Thalassian Whestone" } } },
+            { key = "catchup",     name = "Catchup",        sources = { { quest = 5003199, currency = 3199 } } },
+            { key = "treatise",    name = "Treatise",       sources = { { quest = 95128 } } },
+            { key = "orders",      name = "Orders",         sources = { { quest = 93691 } } },
+        },
+    },
+    {
+        key = "professionEnchanting",
+        name = "Enchanting",
+        baseSkillLineId = 333,
+        childSkillLineId = 2909,
+        professionSpellID = 7411,
+        entries = {
+            { key = "mobTreasure", name = "Mobs/Treasures", sources = { { quest = 93533, item = 259193, name = "Lost Thalassian Vellum" }, { quest = 93532, item = 259192, name = "Voidstorm Ashes" } } },
+            { key = "catchup",     name = "Catchup",        sources = { { quest = 5003198, currency = 3198 } } },
+            { key = "treatise",    name = "Treatise",       sources = { { quest = 95129 } } },
+        },
+    },
+    {
+        key = "professionEngineering",
+        name = "Engineering",
+        baseSkillLineId = 202,
+        childSkillLineId = 2910,
+        professionSpellID = 4036,
+        entries = {
+            { key = "mobTreasure", name = "Mobs/Treasures", sources = { { quest = 93534, item = 259194, name = "Dance Gear" }, { quest = 93535, item = 259195, name = "Dawn Capacitor" } } },
+            { key = "catchup",     name = "Catchup",        sources = { { quest = 5003197, currency = 3197 } } },
+            { key = "treatise",    name = "Treatise",       sources = { { quest = 95138 } } },
+            { key = "orders",      name = "Orders",         sources = { { quest = 93692 } } },
+        },
+    },
+    {
+        key = "professionHerbalism",
+        name = "Herbalism",
+        baseSkillLineId = 182,
+        childSkillLineId = 2912,
+        professionSpellID = 2366,
+        entries = {
+            { key = "catchup",  name = "Catchup",  sources = { { quest = 5003196, currency = 3196 } } },
+            { key = "treatise", name = "Treatise", sources = { { quest = 95130 } } },
+        },
+    },
+    {
+        key = "professionInscription",
+        name = "Inscription",
+        baseSkillLineId = 773,
+        childSkillLineId = 2913,
+        professionSpellID = 45357,
+        entries = {
+            { key = "mobTreasure", name = "Mobs/Treasures", sources = { { quest = 93536, item = 259196, name = "Brilliant Phoenix Ink" }, { quest = 93537, item = 259197, name = "Loa-Blessed Rune" } } },
+            { key = "catchup",     name = "Catchup",        sources = { { quest = 5003195, currency = 3195 } } },
+            { key = "treatise",    name = "Treatise",       sources = { { quest = 95131 } } },
+            { key = "orders",      name = "Orders",         sources = { { quest = 93693 } } },
+        },
+    },
+    {
+        key = "professionJewelcrafting",
+        name = "Jewelcrafting",
+        baseSkillLineId = 755,
+        childSkillLineId = 2914,
+        professionSpellID = 25229,
+        entries = {
+            { key = "mobTreasure", name = "Mobs/Treasures", sources = { { quest = 93539, item = 259199, name = "Harandar Stone Sample" }, { quest = 93538, item = 259198, name = "Void-Touched Eversong Diamond Fragments" } } },
+            { key = "catchup",     name = "Catchup",        sources = { { quest = 5003194, currency = 3194 } } },
+            { key = "treatise",    name = "Treatise",       sources = { { quest = 95133 } } },
+            { key = "orders",      name = "Orders",         sources = { { quest = 93694 } } },
+        },
+    },
+    {
+        key = "professionLeatherworking",
+        name = "Leatherworking",
+        baseSkillLineId = 165,
+        childSkillLineId = 2915,
+        professionSpellID = 2108,
+        entries = {
+            { key = "mobTreasure", name = "Mobs/Treasures", sources = { { quest = 93540, item = 259200, name = "Amani Tanning Oil" }, { quest = 93541, item = 259201, name = "Thalassian Mana Oil" } } },
+            { key = "catchup",     name = "Catchup",        sources = { { quest = 5003193, currency = 3193 } } },
+            { key = "treatise",    name = "Treatise",       sources = { { quest = 95134 } } },
+            { key = "orders",      name = "Orders",         sources = { { quest = 93695 } } },
+        },
+    },
+    {
+        key = "professionMining",
+        name = "Mining",
+        baseSkillLineId = 186,
+        childSkillLineId = 2916,
+        professionSpellID = 2575,
+        entries = {
+            { key = "catchup",  name = "Catchup",  sources = { { quest = 5003192, currency = 3192 } } },
+            { key = "treatise", name = "Treatise", sources = { { quest = 95135 } } },
+        },
+    },
+    {
+        key = "professionSkinning",
+        name = "Skinning",
+        baseSkillLineId = 393,
+        childSkillLineId = 2917,
+        professionSpellID = 8613,
+        entries = {
+            { key = "catchup",  name = "Catchup",  sources = { { quest = 5003191, currency = 3191 } } },
+            { key = "treatise", name = "Treatise", sources = { { quest = 95136 } } },
+        },
+    },
+    {
+        key = "professionTailoring",
+        name = "Tailoring",
+        baseSkillLineId = 197,
+        childSkillLineId = 2918,
+        professionSpellID = 3908,
+        entries = {
+            { key = "mobTreasure", name = "Mobs/Treasures", sources = { { quest = 93542, item = 259202, name = "Embroidered Memento" }, { quest = 93543, item = 259203, name = "Finely Woven Lynx Collar" } } },
+            { key = "catchup",     name = "Catchup",        sources = { { quest = 5003190, currency = 3190 } } },
+            { key = "treatise",    name = "Treatise",       sources = { { quest = 95137 } } },
+            { key = "orders",      name = "Orders",         sources = { { quest = 93696 } } },
+        },
+    },
+}
+
 local CATEGORY_DATA = {
     {
         key = "delves",
-        name = "Delves",
-        icon = "Interface\\Icons\\inv_misc_map08",
+        name = "Delver's Call",
+        iconAtlas = "delves-regular",
         minimumLevel = 80,
         filter = function(playerLevel)
             return playerLevel < 90
@@ -61,7 +208,7 @@ local CATEGORY_DATA = {
     {
         key = "abundance",
         name = "Abundance",
-        icon = 134569,
+        iconAtlas = "UI-EventPoi-abundancebountiful",
         minimumLevel = 80,
         entries = {
             { quest = 89507 },
@@ -69,8 +216,8 @@ local CATEGORY_DATA = {
     },
     {
         key = "unity",
-        name = "Unity",
-        icon = "Interface\\Icons\\achievement_guildperk_everybodysfriend",
+        name = "Unity Against the Void",
+        icon = "Interface\\Icons\\Inv_nullstone_void",
         minimumLevel = 90,
         entries = {
             { quest = 93890 },
@@ -90,8 +237,8 @@ local CATEGORY_DATA = {
     },
     {
         key = "hope",
-        name = "Hope",
-        icon = "Interface\\Icons\\spell_holy_holynova",
+        name = "Legends of the Haranir",
+        icon = "Interface\\Icons\\Inv_achievement_zone_harandar",
         minimumLevel = 80,
         filter = function(playerLevel)
             return playerLevel < 90
@@ -102,8 +249,8 @@ local CATEGORY_DATA = {
     },
     {
         key = "soiree",
-        name = "Soiree",
-        icon = "Interface\\Icons\\inv_misc_food_13",
+        name = "Saltheril's Soiree",
+        iconAtlas = "UI-EventPoi-saltherilssoiree",
         minimumLevel = 80,
         entries = {
             { quest = 90573 },
@@ -114,8 +261,8 @@ local CATEGORY_DATA = {
     },
     {
         key = "stormarion",
-        name = "Stormarion",
-        icon = "Interface\\Icons\\spell_nature_lightning",
+        name = "Stormarion Assault",
+        iconAtlas = "UI-EventPoi-stormarionassault",
         minimumLevel = 80,
         entries = {
             { quest = 90962 },
@@ -124,7 +271,7 @@ local CATEGORY_DATA = {
     {
         key = "specialAssignment",
         name = "Special Assignment",
-        icon = "Interface\\Icons\\inv_scroll_11",
+        iconAtlas = "worldquest-Capstone-questmarker-epic-locked",
         minimumLevel = 80,
         pick = 2,
         alwaysShowObjectives = true,
@@ -305,7 +452,8 @@ local function GetBountifulKeyInfoText()
     end
 
     return " " ..
-    T.Tools.Text.Color(T.Tools.Colors.GRAY, "[") .. table.concat(parts) .. T.Tools.Text.Color(T.Tools.Colors.GRAY, "]")
+        T.Tools.Text.Color(T.Tools.Colors.GRAY, "[") ..
+        table.concat(parts) .. T.Tools.Text.Color(T.Tools.Colors.GRAY, "]")
 end
 
 local function GetRaidWingEntries()
@@ -414,7 +562,7 @@ local function GetQuestState(questID)
     local isOnQuest = C_QuestLog and type(C_QuestLog.IsOnQuest) == "function" and C_QuestLog.IsOnQuest(questID)
     local isWorldQuest = C_QuestLog and type(C_QuestLog.IsWorldQuest) == "function" and C_QuestLog.IsWorldQuest(questID)
     local hasWorldQuestTime = C_TaskQuest and type(C_TaskQuest.GetQuestTimeLeftSeconds) == "function" and
-    C_TaskQuest.GetQuestTimeLeftSeconds(questID)
+        C_TaskQuest.GetQuestTimeLeftSeconds(questID)
 
     if isOnQuest or (isWorldQuest and hasWorldQuestTime) then
         state.status = STATUS_IN_PROGRESS
@@ -494,6 +642,388 @@ local function BuildSimpleSummary(key, name, icon, iconAtlas)
         selectedEntries = {},
         showPendingEntries = false,
     }
+end
+
+local function ResolveProfessionName(definition)
+    if C_TradeSkillUI and type(C_TradeSkillUI.GetTradeSkillDisplayName) == "function" then
+        local displayName = C_TradeSkillUI.GetTradeSkillDisplayName(definition.childSkillLineId)
+        if type(displayName) == "string" and displayName ~= "" then
+            return displayName
+        end
+    end
+
+    if C_TradeSkillUI and type(C_TradeSkillUI.GetProfessionInfoBySkillLineID) == "function" then
+        local professionInfo = C_TradeSkillUI.GetProfessionInfoBySkillLineID(definition.childSkillLineId)
+        if type(professionInfo) == "table" and type(professionInfo.professionName) == "string" and professionInfo.professionName ~= "" then
+            return professionInfo.professionName
+        end
+    end
+
+    return definition.name
+end
+
+local function ResolveProfessionIcon(definition)
+    if C_Spell and type(C_Spell.GetSpellTexture) == "function" and definition.professionSpellID then
+        local iconTexture = C_Spell.GetSpellTexture(definition.professionSpellID)
+        if iconTexture then
+            return iconTexture
+        end
+    end
+
+    return nil
+end
+
+local function GetCurrencyQuestState(source)
+    local quantity = 0
+    local maxQuantity = 1
+
+    if source.currency and C_CurrencyInfo and type(C_CurrencyInfo.GetCurrencyInfo) == "function" then
+        local currencyInfo = C_CurrencyInfo.GetCurrencyInfo(source.currency)
+        if type(currencyInfo) == "table" then
+            quantity = currencyInfo.totalEarned or currencyInfo.quantity or 0
+            maxQuantity = currencyInfo.maxQuantity or 1
+            if maxQuantity == 0 then
+                maxQuantity = 1
+            end
+        end
+    end
+
+    local state = {
+        questID = source.quest,
+        title = source.name,
+        status = quantity >= maxQuantity and STATUS_COMPLETED or STATUS_IN_PROGRESS,
+        accountCompleted = quantity >= maxQuantity,
+        objectives = {
+            {
+                text = source.name or "Catchup",
+                have = quantity,
+                need = maxQuantity,
+            },
+        },
+    }
+
+    if quantity <= 0 then
+        state.status = STATUS_NOT_STARTED
+    end
+
+    return state
+end
+
+local function BuildProfessionSourceObjective(entry, source, sourceState)
+    local objective = {
+        text = source.name or sourceState.title or entry.name,
+        itemID = source.item,
+    }
+    local progressObjective = type(sourceState.objectives) == "table" and sourceState.objectives[1] or nil
+
+    if type(progressObjective) == "table" then
+        if progressObjective.need and progressObjective.need > 0 then
+            objective.have = progressObjective.have or 0
+            objective.need = progressObjective.need
+        end
+
+        if type(progressObjective.text) == "string" and progressObjective.text ~= "" then
+            objective.text = progressObjective.text
+        end
+    end
+
+    if (objective.text == nil or objective.text == "") and source.quest then
+        objective.text = GetQuestTitle(source.quest)
+    end
+
+    return objective
+end
+
+local function BuildNotificationEntryKey(summary, entry)
+    local parts = { summary.key or "summary" }
+    local data = entry and entry.data or nil
+
+    if type(data) == "table" then
+        if type(data.quest) == "number" and data.quest > 0 then
+            table.insert(parts, "quest:" .. data.quest)
+        elseif type(data.dungeonID) == "number" and data.dungeonID > 0 then
+            table.insert(parts, "dungeon:" .. data.dungeonID)
+        elseif type(data.key) == "string" and data.key ~= "" then
+            table.insert(parts, "key:" .. data.key)
+        elseif type(data.active) == "number" and data.active > 0 then
+            table.insert(parts, "poi:" .. data.active)
+        elseif type(data.inactive) == "number" and data.inactive > 0 then
+            table.insert(parts, "poi:" .. data.inactive)
+        elseif type(data.name) == "string" and data.name ~= "" then
+            table.insert(parts, "name:" .. data.name)
+        end
+    end
+
+    if #parts == 1 then
+        table.insert(parts, entry.label or entry.state.title or "entry")
+    end
+
+    return table.concat(parts, "|")
+end
+
+local function BuildNotificationLineText(summary, entry)
+    local iconText = ""
+    if summary.iconAtlas then
+        iconText = ("|A:%s:14:14|a "):format(summary.iconAtlas)
+    elseif summary.icon then
+        iconText = ("|T%s:14:14:0:0|t "):format(tostring(summary.icon))
+    end
+
+    local categoryText = ("|cff72c7ff%s|r"):format(summary.name or "Chores")
+    local entryTitle = entry.label or (entry.state and entry.state.title) or summary.name or "Chore"
+    return ("%s%s |cff7f8c8d-|r %s"):format(iconText, categoryText, entryTitle)
+end
+
+local function BuildNotificationSnapshot(state)
+    local snapshot = {}
+
+    if type(state) ~= "table" or state.enabled ~= true or type(state.orderedCategories) ~= "table" then
+        return snapshot
+    end
+
+    for _, summary in ipairs(state.orderedCategories) do
+        if summary.active ~= false and type(summary.entries) == "table" then
+            for _, entry in ipairs(summary.entries) do
+                local key = BuildNotificationEntryKey(summary, entry)
+                snapshot[key] = {
+                    status = entry.state and entry.state.status or STATUS_NOT_STARTED,
+                    summaryKey = summary.key,
+                    summaryName = summary.name,
+                    lineText = BuildNotificationLineText(summary, entry),
+                }
+            end
+        end
+    end
+
+    return snapshot
+end
+
+local function BuildNotificationChanges(previousSnapshot, currentSnapshot)
+    local changes = {
+        available = {},
+        completed = {},
+    }
+
+    for key, currentEntry in pairs(currentSnapshot) do
+        local previousEntry = previousSnapshot[key]
+        local previousStatus = previousEntry and previousEntry.status or STATUS_COMPLETED
+        local currentStatus = currentEntry.status or STATUS_NOT_STARTED
+
+        if currentStatus == STATUS_COMPLETED then
+            if previousEntry and previousStatus ~= STATUS_COMPLETED then
+                table.insert(changes.completed, currentEntry.lineText)
+            end
+        elseif previousStatus == STATUS_COMPLETED then
+            table.insert(changes.available, currentEntry.lineText)
+        end
+    end
+
+    table.sort(changes.available)
+    table.sort(changes.completed)
+    return changes
+end
+
+function Chores:MaybeSendNotifications(state)
+    local snapshot = BuildNotificationSnapshot(state)
+
+    if not state or state.enabled ~= true then
+        self.notificationSnapshot = snapshot
+        self.notificationsPrimed = false
+        return
+    end
+
+    local previousSnapshot = self.notificationSnapshot or {}
+    self.notificationSnapshot = snapshot
+
+    if not self.notificationsPrimed then
+        self.notificationsPrimed = true
+        return
+    end
+
+    ---@type ToastsModule
+    local toastsModule = T:GetModule("ToastsModule")
+    if not toastsModule or type(toastsModule.SendChoresNotification) ~= "function" then
+        return
+    end
+
+    local changes = BuildNotificationChanges(previousSnapshot, snapshot)
+    if #changes.completed > 0 then
+        toastsModule:SendChoresNotification("completed", changes.completed)
+    end
+
+    if #changes.available > 0 then
+        toastsModule:SendChoresNotification("available", changes.available)
+    end
+end
+
+local function ResolveProfessionEntryState(entry)
+    local sourceStates = {}
+    local completedSources = 0
+    local hasInProgress = false
+
+    for _, source in ipairs(entry.sources) do
+        local sourceState
+        if source.currency then
+            sourceState = GetCurrencyQuestState(source)
+        else
+            sourceState = GetQuestState(source.quest)
+        end
+
+        if source.name and (type(sourceState.title) ~= "string" or sourceState.title == "" or string.match(sourceState.title, "^Quest #%d+$")) then
+            sourceState.title = source.name
+        end
+
+        table.insert(sourceStates, {
+            source = source,
+            state = sourceState,
+        })
+
+        if sourceState.status == STATUS_COMPLETED then
+            completedSources = completedSources + 1
+        elseif sourceState.status == STATUS_IN_PROGRESS then
+            hasInProgress = true
+        end
+    end
+
+    local resolvedState = {
+        title = entry.name,
+        status = STATUS_NOT_STARTED,
+        objectives = {},
+    }
+
+    if #sourceStates == 0 then
+        return resolvedState
+    end
+
+    if entry.key == "catchup" then
+        local progressState = sourceStates[1].state
+        local progressObjective = type(progressState.objectives) == "table" and progressState.objectives[1] or nil
+        if progressObjective and progressObjective.need and progressObjective.need > 0 then
+            progressState.title = ("%s (%d/%d)"):format(entry.name, progressObjective.have or 0, progressObjective.need)
+        else
+            progressState.title = entry.name
+        end
+        progressState.objectives = {}
+        return progressState
+    end
+
+    if completedSources >= #sourceStates then
+        resolvedState.status = STATUS_COMPLETED
+    elseif completedSources > 0 or hasInProgress then
+        resolvedState.status = STATUS_IN_PROGRESS
+    end
+
+    if #sourceStates > 1 then
+        resolvedState.title = ("%s (%d/%d)"):format(entry.name, completedSources, #sourceStates)
+    end
+
+    for _, sourceInfo in ipairs(sourceStates) do
+        if sourceInfo.state.status < STATUS_COMPLETED then
+            table.insert(resolvedState.objectives,
+                BuildProfessionSourceObjective(entry, sourceInfo.source, sourceInfo.state))
+        end
+    end
+
+    return resolvedState
+end
+
+function Chores:GetProfessionCategoryDefinitions()
+    local definitions = {}
+    local professions = { type(GetProfessions) == "function" and GetProfessions() or nil }
+
+    for _, professionDefinition in ipairs(PROFESSION_CATEGORY_DATA) do
+        local skillLevel = 0
+        local currentSkillLineName = nil
+        local matchedProfession = false
+
+        for index = 1, 5 do
+            local professionID = professions[index]
+            if professionID then
+                local _, _, resolvedSkillLevel, _, _, _, skillLineId, _, _, _, resolvedSkillLineName = GetProfessionInfo(
+                    professionID)
+                if skillLineId == professionDefinition.baseSkillLineId then
+                    matchedProfession = true
+                    skillLevel = resolvedSkillLevel or 0
+                    currentSkillLineName = resolvedSkillLineName
+                    break
+                end
+            end
+        end
+
+        local hasProfessionSpell = type(IsProfessionSpellKnown) == "function" and professionDefinition.professionSpellID and
+            IsProfessionSpellKnown(professionDefinition.professionSpellID) or false
+
+        if matchedProfession or hasProfessionSpell then
+            local childDisplayName = C_TradeSkillUI and type(C_TradeSkillUI.GetTradeSkillDisplayName) == "function" and
+                C_TradeSkillUI.GetTradeSkillDisplayName(professionDefinition.childSkillLineId) or nil
+            local childInfo = C_TradeSkillUI and type(C_TradeSkillUI.GetProfessionInfoBySkillLineID) == "function" and
+                C_TradeSkillUI.GetProfessionInfoBySkillLineID(professionDefinition.childSkillLineId) or nil
+            local hasMidnightSkill = currentSkillLineName == childDisplayName or
+                (type(childInfo) == "table" and (childInfo.skillLevel or 0) > 0) or
+                matchedProfession or hasProfessionSpell
+
+            if hasMidnightSkill then
+                table.insert(definitions, {
+                    key = professionDefinition.key,
+                    name = ResolveProfessionName(professionDefinition),
+                    icon = ResolveProfessionIcon(professionDefinition),
+                    childSkillLineId = professionDefinition.childSkillLineId,
+                    skillLevel = skillLevel,
+                    entries = professionDefinition.entries,
+                })
+            end
+        end
+    end
+
+    table.sort(definitions, function(left, right)
+        return left.name < right.name
+    end)
+
+    return definitions
+end
+
+function Chores:BuildProfessionSummary(definition)
+    local summary = BuildSimpleSummary(definition.key, definition.name, definition.icon)
+    summary.showPendingEntries = true
+    summary.progressStyle = "remaining"
+
+    for _, entryDefinition in ipairs(definition.entries) do
+        local entryState = ResolveProfessionEntryState(entryDefinition)
+        local entry = {
+            data = CloneEntry(entryDefinition),
+            state = entryState,
+            label = entryDefinition.name,
+        }
+
+        summary.total = summary.total + 1
+        table.insert(summary.entries, entry)
+
+        if entryState.status == STATUS_COMPLETED then
+            summary.completed = summary.completed + 1
+        else
+            table.insert(summary.selectedEntries, entry)
+            if entryState.status == STATUS_IN_PROGRESS then
+                summary.status = STATUS_IN_PROGRESS
+            end
+        end
+    end
+
+    if summary.total == 0 then
+        summary.active = false
+        summary.visible = false
+        return summary
+    end
+
+    if summary.completed >= summary.total then
+        summary.status = STATUS_COMPLETED
+    elseif summary.completed > 0 and summary.status ~= STATUS_IN_PROGRESS then
+        summary.status = STATUS_IN_PROGRESS
+    end
+
+    summary.remaining = math.max(summary.total - summary.completed, 0)
+    table.sort(summary.entries, SortEntries)
+    table.sort(summary.selectedEntries, SortEntries)
+    return summary
 end
 
 function Chores:BuildCategorySummary(category, playerLevel)
@@ -576,7 +1106,7 @@ end
 
 function Chores:BuildBountifulDelvesSummary()
     local options = GetOptions()
-    local summary = BuildSimpleSummary("bountifulDelves", "Bountiful Delves", "Interface\\Icons\\inv_misc_map08")
+    local summary = BuildSimpleSummary("bountifulDelves", "Bountiful Delves", nil, "delves-bountiful")
     summary.showPendingEntries = true
     summary.infoText = GetBountifulKeyInfoText()
 
@@ -664,7 +1194,8 @@ function Chores:BuildRaidFinderSummary()
             summary.total = summary.total + 1
 
             local numEncounters, numCompleted =
-            type(GetLFGDungeonNumEncounters) == "function" and GetLFGDungeonNumEncounters(raidWing.dungeonID) or nil, nil
+                type(GetLFGDungeonNumEncounters) == "function" and GetLFGDungeonNumEncounters(raidWing.dungeonID) or nil,
+                nil
             if type(numEncounters) == "number" then
                 numCompleted = select(2, GetLFGDungeonNumEncounters(raidWing.dungeonID))
             end
@@ -742,35 +1273,43 @@ function Chores:RefreshState()
         return
     end
 
+    local function AddSummary(summary, countTowardsTotal)
+        if not summary or not summary.active then
+            return
+        end
+
+        summary.countTowardsTotal = countTowardsTotal ~= false
+        if summary.countTowardsTotal then
+            state.totalRemaining = state.totalRemaining + summary.remaining
+            state.totalTracked = state.totalTracked + summary.total
+        end
+
+        state.categories[summary.key] = summary
+        table.insert(state.orderedCategories, summary)
+    end
+
     for _, category in ipairs(CATEGORY_DATA) do
         if options:IsCategoryEnabled(category.key) then
             local summary = self:BuildCategorySummary(category, playerLevel)
-            if summary.active then
-                state.totalRemaining = state.totalRemaining + summary.remaining
-                state.totalTracked = state.totalTracked + summary.total
-                state.categories[category.key] = summary
-                table.insert(state.orderedCategories, summary)
-            end
+            AddSummary(summary, true)
+        end
+    end
+
+    for _, professionDefinition in ipairs(self:GetProfessionCategoryDefinitions()) do
+        if options:IsCategoryEnabled(professionDefinition.key) then
+            local professionSummary = self:BuildProfessionSummary(professionDefinition)
+            AddSummary(professionSummary, options:GetCountProfessionsTowardTotal())
         end
     end
 
     local bountifulDelvesSummary = self:BuildBountifulDelvesSummary()
-    if bountifulDelvesSummary.active then
-        state.totalRemaining = state.totalRemaining + bountifulDelvesSummary.remaining
-        state.totalTracked = state.totalTracked + bountifulDelvesSummary.total
-        state.categories[bountifulDelvesSummary.key] = bountifulDelvesSummary
-        table.insert(state.orderedCategories, bountifulDelvesSummary)
-    end
+    AddSummary(bountifulDelvesSummary, options:GetCountBountifulDelvesTowardTotal())
 
     local raidFinderSummary = self:BuildRaidFinderSummary()
-    if raidFinderSummary.active then
-        state.totalRemaining = state.totalRemaining + raidFinderSummary.remaining
-        state.totalTracked = state.totalTracked + raidFinderSummary.total
-        state.categories[raidFinderSummary.key] = raidFinderSummary
-        table.insert(state.orderedCategories, raidFinderSummary)
-    end
+    AddSummary(raidFinderSummary, true)
 
     self.state = state
+    self:MaybeSendNotifications(state)
     self:SendMessage("TWICHUI_CHORES_UPDATED", state)
 end
 
@@ -826,8 +1365,12 @@ function Chores:UNIT_QUEST_LOG_CHANGED(_, unitToken)
 end
 
 function Chores:OnEnable()
+    self.notificationsPrimed = false
+    self.notificationSnapshot = nil
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnRefreshEvent")
     self:RegisterEvent("PLAYER_LEVEL_UP", "OnRefreshEvent")
+    self:RegisterEvent("SKILL_LINES_CHANGED", "OnRefreshEvent")
+    self:RegisterEvent("TRADE_SKILL_SHOW", "OnRefreshEvent")
     self:RegisterEvent("AREA_POIS_UPDATED", "OnDelveEvent")
     self:RegisterEvent("CURRENCY_DISPLAY_UPDATE", "OnCurrencyEvent")
     self:RegisterEvent("LFG_LOCK_INFO_RECEIVED", "OnLFGEvent")
@@ -853,5 +1396,7 @@ function Chores:OnDisable()
         categories = {},
         orderedCategories = {},
     }
+    self.notificationsPrimed = false
+    self.notificationSnapshot = nil
     self:SendMessage("TWICHUI_CHORES_UPDATED", self.state)
 end

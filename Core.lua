@@ -86,6 +86,7 @@ function T:OnInitialize()
         { module = self:GetModule("ChatEnhancements"):GetModule("ChatAlerts"), enabled = CM.Options.ChatEnhancement:IsAlertsEnabled() },
         { module = self:GetModule("Chores"),                                   enabled = CM.Options.Chores:GetEnabled() },
         { module = self:GetModule("SmartMount"),                               enabled = CM.Options.SmartMount:GetEnabled() },
+        { module = self:GetModule("EasyFish"),                                 enabled = CM.Options.EasyFish:GetEnabled() },
         { module = self:GetModule("Datatexts"),                                enabled = CM.Options.Datatext:IsModuleEnabled() },
         { module = self:GetModule("BestInSlot"),                               enabled = CM.Options.BestInSlot:IsBestInSlotModuleEnabled() },
     }

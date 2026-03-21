@@ -3,6 +3,7 @@
     <Include file='ChoresOptions.lua' />
     <Include file='MediaOptions.lua' />
     <Include file='SmartMountOptions.lua' />
+    <Include file='EasyFishOptions.lua' />
     <Include file='DatatextOptions.lua' />
     <Include file='QuestAutomationOptions.lua' />
     <Include file='QuestLogCleanerOptions.lua' />

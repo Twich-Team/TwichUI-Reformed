@@ -8,6 +8,7 @@ local T = unpack(TwichRx)
 local NM = T:GetModule("Notification")
 
 local AceGUI = LibStub("AceGUI-3.0")
+local LSM = LibStub("LibSharedMedia-3.0", true)
 
 --- @class NotificationFrame
 local NotificationFrame = NM.Frame or {}
@@ -22,6 +23,80 @@ local BeginFadeOut
 
 local FADE_IN_DURATION = 0.2
 local FADE_OUT_DURATION = 0.2
+
+local function GetNotificationFontSettings()
+    local options = GetOptions()
+    if not options then
+        return nil, 0
+    end
+
+    local fontKey = options.GetNotificationFont and options:GetNotificationFont() or "__default"
+    local fontPath = nil
+    if fontKey and fontKey ~= "__default" and LSM and type(LSM.Fetch) == "function" then
+        fontPath = LSM:Fetch("font", fontKey, true)
+    end
+
+    local sizeAdjustment = options.GetNotificationFontSizeAdjustment and options:GetNotificationFontSizeAdjustment() or 0
+    return fontPath, tonumber(sizeAdjustment) or 0
+end
+
+local function ApplyNotificationFontToFontString(fontString, fontPathOverride, sizeAdjustment)
+    if not fontString or not fontString.GetFont or not fontString.SetFont then
+        return
+    end
+
+    local baseFont = rawget(fontString, "__twichuiNotificationBaseFont")
+    if type(baseFont) ~= "table" then
+        local currentPath, currentSize, currentFlags = fontString:GetFont()
+        baseFont = {
+            path = currentPath,
+            size = currentSize,
+            flags = currentFlags or "",
+        }
+        fontString.__twichuiNotificationBaseFont = baseFont
+    end
+
+    local resolvedPath = fontPathOverride or baseFont.path
+    local resolvedSize = math.max((baseFont.size or 12) + (sizeAdjustment or 0), 6)
+    fontString:SetFont(resolvedPath, resolvedSize, baseFont.flags or "")
+end
+
+local function ApplyNotificationFontOverrides(object, fontPathOverride, sizeAdjustment, visited)
+    if not object or visited[object] then
+        return
+    end
+
+    visited[object] = true
+
+    if object.GetObjectType and object:GetObjectType() == "FontString" then
+        ApplyNotificationFontToFontString(object, fontPathOverride, sizeAdjustment)
+    end
+
+    if object.GetRegions then
+        for _, region in ipairs({ object:GetRegions() }) do
+            ApplyNotificationFontOverrides(region, fontPathOverride, sizeAdjustment, visited)
+        end
+    end
+
+    if object.GetChildren then
+        for _, child in ipairs({ object:GetChildren() }) do
+            ApplyNotificationFontOverrides(child, fontPathOverride, sizeAdjustment, visited)
+        end
+    end
+end
+
+local function ApplyNotificationStyle(widget)
+    if not widget or not widget.frame then
+        return
+    end
+
+    local fontPath, sizeAdjustment = GetNotificationFontSettings()
+    if not fontPath and sizeAdjustment == 0 then
+        return
+    end
+
+    ApplyNotificationFontOverrides(widget.frame, fontPath, sizeAdjustment, {})
+end
 
 local function ClearAutoDismiss(frame)
     if not frame then
@@ -235,6 +310,7 @@ function NotificationFrame:DisplayNotification(widget, options)
 
     -- Add this notification to the stack instead of replacing existing ones.
     container:AddChild(widget)
+    ApplyNotificationStyle(widget)
 
     -- Allow the user to dismiss a notification with a right-click.
     if widget.frame then

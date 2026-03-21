@@ -18,6 +18,7 @@ local ReloadUI = ReloadUI
 --- @field ChatEnhancement ChatEnhancementConfigurationOptions
 --- @field Media MediaConfigurationOptions
 --- @field SmartMount SmartMountConfigurationOptions
+--- @field EasyFish EasyFishConfigurationOptions
 --- @field Datatext DatatextConfigurationOptions
 --- @field Chores ChoresConfigurationOptions
 --- @field QuestAutomation QuestAutomationConfigurationOptions
