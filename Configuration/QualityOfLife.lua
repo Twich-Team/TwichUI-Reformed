@@ -1089,6 +1089,7 @@ local function BuildConfiguration()
         questAutomationTab = BuildQuestAutomationTab(),
         questLogCleanerTab = BuildQuestLogCleanerTab(),
         satchelWatchTab = BuildSatchelWatchTab(),
+        smartMountTab = ConfigurationModule.BuildSmartMountTab and ConfigurationModule.BuildSmartMountTab(8),
     }
 
     return optionsTab

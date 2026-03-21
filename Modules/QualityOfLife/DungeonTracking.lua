@@ -300,10 +300,14 @@ local function BuildNotificationWidget(run, completed, canLeaveGroup, leavePhras
 
     widget:SetNotification(completed and "completed" or "ended", titleText, detailText,
         GetRunIconKind(run), canLeaveGroup, BuildGroupMembers(run), GetNotificationIconStyle())
+    if widget.SetLeavePhraseConfigured then
+        widget:SetLeavePhraseConfigured(TrimText(leavePhrase) ~= "")
+    end
 
     if canLeaveGroup then
         widget:SetActionCallback(function(notificationWidget)
-            DT:HandleLeaveGroupButtonClick(leavePhrase)
+            local silent = IsShiftKeyDown and IsShiftKeyDown() and TrimText(leavePhrase) ~= ""
+            DT:HandleLeaveGroupButtonClick(leavePhrase, silent)
             if notificationWidget and notificationWidget.Dismiss then
                 notificationWidget:Dismiss()
             end
@@ -329,21 +333,21 @@ function DT:SendRunNotification(run, completed)
         })
 end
 
-function DT:HandleLeaveGroupButtonClick(leavePhrase)
+function DT:HandleLeaveGroupButtonClick(leavePhrase, silent)
     local phrase = TrimText(leavePhrase)
     local chatType = GetLeaveChatType()
+    local silentLeave = silent == true and phrase ~= ""
 
-    if phrase ~= "" and chatType and type(SendChat) == "function" then
-        SendChat(phrase, chatType)
-    end
-
-    local canLeave = chatType ~= nil
-    if not canLeave then
+    if not chatType then
         return
     end
 
+    if not silentLeave and phrase ~= "" and type(SendChat) == "function" then
+        SendChat(phrase, chatType)
+    end
+
     if type(C_Timer_After) == "function" then
-        C_Timer_After(0.25, LeaveCurrentGroup)
+        C_Timer_After((not silentLeave and phrase ~= "") and 2 or 0, LeaveCurrentGroup)
     else
         LeaveCurrentGroup()
     end

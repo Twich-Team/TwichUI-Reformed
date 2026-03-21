@@ -59,10 +59,36 @@ local function ApplyClassIcon(texture, classToken)
     texture:SetTexCoord(0, 1, 0, 1)
 end
 
+local function HideFriendTooltip()
+    if GameTooltip and GameTooltip.Hide then
+        GameTooltip:Hide()
+    end
+end
+
+local function ShowFriendTooltip(frame, widget)
+    if not frame or not widget or not GameTooltip then
+        return
+    end
+
+    if type(widget.whisperTarget) ~= "string" or widget.whisperTarget == "" then
+        return
+    end
+
+    GameTooltip:SetOwner(frame, "ANCHOR_TOP")
+    GameTooltip:AddLine("Click to Whisper", 1, 1, 1)
+    if widget.isBattleNetWhisper then
+        GameTooltip:AddLine("Starts a Battle.net whisper.", 0.85, 0.85, 0.85, true)
+    else
+        GameTooltip:AddLine("Starts a character whisper.", 0.85, 0.85, 0.85, true)
+    end
+    GameTooltip:Show()
+end
+
 local function Constructor()
     local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     frame:Hide()
     frame:SetSize(FRAME_WIDTH, FRAME_HEIGHT)
+    frame:EnableMouse(true)
 
     if frame.SetTemplate then
         frame:SetTemplate("Transparent")
@@ -123,6 +149,9 @@ local function Constructor()
         name = name,
         status = status,
         detail = detail,
+        actionCallback = nil,
+        whisperTarget = nil,
+        isBattleNetWhisper = false,
     }
 
     local methods = {}
@@ -141,7 +170,20 @@ local function Constructor()
     function methods:OnRelease()
         self.frame:ClearAllPoints()
         self.frame:Hide()
+        self.actionCallback = nil
+        self.whisperTarget = nil
+        self.isBattleNetWhisper = false
+        HideFriendTooltip()
         self:SetFriendNotification("Unknown Friend", "", nil, true)
+    end
+
+    function methods:SetActionCallback(callback)
+        self.actionCallback = callback
+    end
+
+    function methods:SetWhisperTarget(target, isBattleNet)
+        self.whisperTarget = type(target) == "string" and target or nil
+        self.isBattleNetWhisper = isBattleNet == true
     end
 
     ---@param displayName string
@@ -178,6 +220,20 @@ local function Constructor()
     for method, func in pairs(methods) do
         widget[method] = func
     end
+
+    frame:SetScript("OnMouseUp", function(_, button)
+        if button == "LeftButton" and widget.actionCallback then
+            widget.actionCallback(widget)
+        end
+    end)
+
+    frame:SetScript("OnEnter", function(self)
+        ShowFriendTooltip(self, widget)
+    end)
+
+    frame:SetScript("OnLeave", function()
+        HideFriendTooltip()
+    end)
 
     return AceGUI:RegisterAsWidget(widget)
 end

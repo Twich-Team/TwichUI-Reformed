@@ -315,21 +315,41 @@ function NotificationFrame:DisplayNotification(widget, options)
     -- Allow the user to dismiss a notification with a right-click.
     if widget.frame then
         local frame = widget.frame
+        local oldOnEnter = frame:GetScript("OnEnter")
+        local oldOnLeave = frame:GetScript("OnLeave")
+        local oldOnMouseDown = frame:GetScript("OnMouseDown")
+
         frame:EnableMouse(true)
         frame:SetScript("OnEnter", function(self)
             self.dismissPaused = true
+            if oldOnEnter then
+                oldOnEnter(self)
+            end
             ShowEncounterTooltip(self)
         end)
         frame:SetScript("OnLeave", function(self)
             self.dismissPaused = false
+            if oldOnLeave then
+                oldOnLeave(self)
+            end
             GameTooltip:Hide()
         end)
 
         frame:SetScript("OnMouseDown", function(_, button)
+            if oldOnMouseDown then
+                oldOnMouseDown(frame, button)
+            end
+
             if button == "RightButton" then
                 BeginFadeOut(frame)
             end
         end)
+
+        if widget.SetDismissCallback then
+            widget:SetDismissCallback(function()
+                BeginFadeOut(frame)
+            end)
+        end
     end
 
     -- Ensure the panel is visible while the notification is active.

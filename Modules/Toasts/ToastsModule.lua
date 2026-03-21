@@ -10,6 +10,7 @@ local GetFriendInfo = _G["GetFriendInfo"]
 local GetNumFriends = _G["GetNumFriends"]
 local GetPlayerInfoByGUID = _G["GetPlayerInfoByGUID"]
 local ShowFriends = _G["ShowFriends"]
+local SetItemRef = _G["SetItemRef"]
 local UnitClass = _G["UnitClass"]
 local UnitLevel = _G["UnitLevel"]
 
@@ -20,6 +21,7 @@ local TM = T:NewModule("ToastsModule", "AceEvent-3.0", "AceTimer-3.0")
 TM:SetEnabledState(true)
 
 local AceGUI = LibStub("AceGUI-3.0")
+local ChatFrame_SendBNetTell = (ChatFrameUtil and ChatFrameUtil.SendBNetTell) or ChatFrame_SendBNetTell
 
 local DEFAULT_SOUND = "TwichUI Alert 1"
 local DEFAULT_DURATION = 10
@@ -317,6 +319,8 @@ local function GetFriendInfoByIndex(index)
             note = TrimText(info.notes),
             className = info.className,
             classToken = GetClassTokenFromGUID(info.guid),
+            isBattleNet = false,
+            whisperTarget = normalizedName,
         }
     end
 
@@ -335,6 +339,8 @@ local function GetFriendInfoByIndex(index)
         note = TrimText(note),
         className = className,
         classToken = GetFriendClassToken(classID),
+        isBattleNet = false,
+        whisperTarget = normalizedName,
     }
 end
 
@@ -371,6 +377,8 @@ local function GetBattleNetFriendsSnapshot()
                             note = note,
                             className = gameAccountInfo.className,
                             classToken = GetBattleNetClassToken(gameAccountInfo),
+                            isBattleNet = true,
+                            whisperTarget = accountInfo.accountName or accountInfo.battleTag,
                         }
                     end
                 end
@@ -654,7 +662,36 @@ function TM:CreateFriendNotificationWidget(friendInfo)
     local widget = AceGUI:Create("TwichUI_FriendNotification")
     ---@diagnostic disable-next-line: undefined-field
     widget:SetFriendNotification(displayName, detailText, friendInfo.classToken, friendInfo.isOnline, iconStyle)
+    if widget.SetWhisperTarget then
+        widget:SetWhisperTarget(friendInfo.whisperTarget, friendInfo.isBattleNet == true)
+    end
     return widget
+end
+
+function TM:StartWhisper(friendInfo)
+    if not friendInfo or friendInfo.isOnline ~= true then
+        return
+    end
+
+    local target = type(friendInfo.whisperTarget) == "string" and TrimText(friendInfo.whisperTarget) or ""
+    if target == "" then
+        target = type(friendInfo.characterName) == "string" and TrimText(friendInfo.characterName) or ""
+    end
+
+    if target == "" then
+        return
+    end
+
+    if friendInfo.isBattleNet == true then
+        if type(ChatFrame_SendBNetTell) == "function" then
+            ChatFrame_SendBNetTell(target)
+        end
+        return
+    end
+
+    if type(SetItemRef) == "function" then
+        SetItemRef("player:" .. target, string.format("|Hplayer:%1$s|h[%1$s]|h", target), "LeftButton")
+    end
 end
 
 function TM:SendFriendNotification(friendInfo)
@@ -663,6 +700,11 @@ function TM:SendFriendNotification(friendInfo)
     end
 
     local widget = self:CreateFriendNotificationWidget(friendInfo)
+    if widget.SetActionCallback then
+        widget:SetActionCallback(function()
+            self:StartWhisper(friendInfo)
+        end)
+    end
     self:SendMessage("TWICH_NOTIFICATION", widget, {
         displayDuration = self:GetFriendsNotificationDisplayTime(),
         soundKey = self:GetFriendsNotificationSound(),

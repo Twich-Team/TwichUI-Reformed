@@ -11,7 +11,7 @@ local Type, Version = WIDGET_TYPE, 1
 local FRAME_WIDTH = 300
 local BASE_HEIGHT = 80
 local BUTTON_HEIGHT = 22
-local BUTTON_WIDTH = 120
+local BUTTON_WIDTH = 168
 local BUTTON_SPACING = 10
 local ICON_SIZE = 36
 local GROUP_ICON_SIZE = 36
@@ -72,6 +72,43 @@ local function ApplyAtlasOrTexture(texture, atlasCandidates, fallbackTexture)
     if texture.SetTexCoord then
         texture:SetTexCoord(0, 1, 0, 1)
     end
+end
+
+local function IsSilentLeaveModeEnabled(widget)
+    return widget and widget.leavePhraseConfigured and IsShiftKeyDown and IsShiftKeyDown()
+end
+
+local function GetActionButtonText(widget)
+    if IsSilentLeaveModeEnabled(widget) then
+        return "Leave Group Silently"
+    end
+
+    return "Leave Group"
+end
+
+local function HideActionTooltip()
+    if GameTooltip and GameTooltip.Hide then
+        GameTooltip:Hide()
+    end
+end
+
+local function ShowActionTooltip(button, widget)
+    if not button or not GameTooltip then
+        return
+    end
+
+    GameTooltip:SetOwner(button, "ANCHOR_TOP")
+    GameTooltip:AddLine("Leave Group", 1, 1, 1)
+
+    if widget and widget.leavePhraseConfigured then
+        GameTooltip:AddLine("Click: Send your instance chat phrase, then leave the group after 2 seconds.", 0.85, 0.85,
+            0.85, true)
+        GameTooltip:AddLine("Shift+Click: Leave silently without sending the phrase.", 0.85, 0.85, 0.85, true)
+    else
+        GameTooltip:AddLine("Leave the current group.", 0.85, 0.85, 0.85, true)
+    end
+
+    GameTooltip:Show()
 end
 
 local function Constructor()
@@ -153,6 +190,9 @@ local function Constructor()
     actionButton:SetText("Leave Group")
     actionButton:Hide()
 
+    local hoverDriver = CreateFrame("Frame", nil, frame)
+    hoverDriver:Hide()
+
     if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
         T.Tools.UI.SkinButton(actionButton)
     end
@@ -179,10 +219,42 @@ local function Constructor()
         detail = detail,
         groupIcons = groupIcons,
         actionButton = actionButton,
+        hoverDriver = hoverDriver,
         actionCallback = nil,
+        dismissCallback = nil,
+        leavePhraseConfigured = false,
+        isActionHovering = false,
+        isNotificationHovering = false,
     }
 
     local methods = {}
+
+    local function UpdateActionButtonState(self)
+        if not self or not self.actionButton then
+            return
+        end
+
+        self.actionButton:SetText(GetActionButtonText(self))
+
+        if self.isActionHovering then
+            ShowActionTooltip(self.actionButton, self)
+        end
+    end
+
+    local function UpdateHoverTracking(self)
+        local hovered = self.isActionHovering or self.isNotificationHovering
+        if hovered then
+            self.hoverDriver:Show()
+            self.hoverDriver:SetScript("OnUpdate", function()
+                UpdateActionButtonState(self)
+            end)
+        else
+            self.hoverDriver:SetScript("OnUpdate", nil)
+            self.hoverDriver:Hide()
+            self.actionButton:SetText("Leave Group")
+            HideActionTooltip()
+        end
+    end
 
     local function UpdateDetailAnchors(self, showButton)
         self.detail:ClearAllPoints()
@@ -209,6 +281,12 @@ local function Constructor()
 
         self:SetNotification("completed", "Unknown Dungeon", "Completed in 00:00.", "dungeon", false)
         self:SetActionCallback(nil)
+        self.leavePhraseConfigured = false
+        self.isActionHovering = false
+        self.isNotificationHovering = false
+        self.actionButton:SetText("Leave Group")
+        self.hoverDriver:SetScript("OnUpdate", nil)
+        self.hoverDriver:Hide()
         self.frame:Show()
     end
 
@@ -217,6 +295,14 @@ local function Constructor()
         self.frame:Hide()
         self:SetActionCallback(nil)
         self.actionButton:Hide()
+        self.dismissCallback = nil
+        self.leavePhraseConfigured = false
+        self.isActionHovering = false
+        self.isNotificationHovering = false
+        self.actionButton:SetText("Leave Group")
+        self.hoverDriver:SetScript("OnUpdate", nil)
+        self.hoverDriver:Hide()
+        HideActionTooltip()
         self.title:SetText("")
         self.detail:SetText("")
         for _, groupIcon in ipairs(self.groupIcons) do
@@ -232,6 +318,11 @@ local function Constructor()
     end
 
     function methods:Dismiss()
+        if self.dismissCallback then
+            self.dismissCallback(self)
+            return
+        end
+
         local onMouseDown = self.frame and self.frame.GetScript and self.frame:GetScript("OnMouseDown") or nil
         if onMouseDown then
             onMouseDown(self.frame, "RightButton")
@@ -246,6 +337,15 @@ local function Constructor()
     ---@param callback function|nil
     function methods:SetActionCallback(callback)
         self.actionCallback = callback
+    end
+
+    function methods:SetDismissCallback(callback)
+        self.dismissCallback = callback
+    end
+
+    function methods:SetLeavePhraseConfigured(value)
+        self.leavePhraseConfigured = value == true
+        UpdateActionButtonState(self)
     end
 
     local function ApplyRoleBadge(groupIcon, role)
@@ -356,12 +456,37 @@ local function Constructor()
             self.actionButton:Hide()
         end
 
+        UpdateActionButtonState(self)
+
         UpdateDetailAnchors(self, showButton)
     end
 
     for method, func in pairs(methods) do
         widget[method] = func
     end
+
+    frame:SetScript("OnEnter", function()
+        widget.isNotificationHovering = true
+        UpdateHoverTracking(widget)
+        UpdateActionButtonState(widget)
+    end)
+
+    frame:SetScript("OnLeave", function()
+        widget.isNotificationHovering = false
+        UpdateHoverTracking(widget)
+    end)
+
+    actionButton:SetScript("OnEnter", function(self)
+        widget.isActionHovering = true
+        UpdateHoverTracking(widget)
+        ShowActionTooltip(self, widget)
+    end)
+
+    actionButton:SetScript("OnLeave", function()
+        widget.isActionHovering = false
+        UpdateHoverTracking(widget)
+        HideActionTooltip()
+    end)
 
     actionButton:SetScript("OnClick", function()
         if widget.actionCallback then

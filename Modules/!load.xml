@@ -8,6 +8,7 @@
     <Include file='Datatexts\!load.xml' />
     <Include file='EasyFish\!load.xml' />
     <Include file='SmartMount\!load.xml' />
+    <Include file='RaidFrames\!load.xml' />
     <Include file='QualityOfLife\!load.xml' />
     <Include file='BestInSlot\!load.xml' />
     <Include file='ThirdPartyAPI\!load.xml' />

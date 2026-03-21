@@ -7,6 +7,7 @@
     <Include file='ChatEnhancements.lua' />
     <Include file='SmartMount.lua' />
     <Include file='Datatexts.lua' />
+    <Include file='RaidFrames.lua' />
     <Include file='QualityOfLife.lua' />
     <Include file='BestInSlot.lua' />
     <Include file='NotificationPanel.lua' />

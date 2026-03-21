@@ -5,6 +5,7 @@
     <Include file='SmartMountOptions.lua' />
     <Include file='EasyFishOptions.lua' />
     <Include file='DatatextOptions.lua' />
+    <Include file='RaidFramesOptions.lua' />
     <Include file='QuestAutomationOptions.lua' />
     <Include file='QuestLogCleanerOptions.lua' />
     <Include file='DungeonTrackingOptions.lua' />
