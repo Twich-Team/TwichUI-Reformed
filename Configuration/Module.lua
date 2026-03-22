@@ -79,6 +79,7 @@ function ConfigurationModule:OnInitialize()
 
     -- Register with ElvUI instead
     E.Options.args.TwichUIRx = self.optionsTable
+    self:SetChoresTrackerConfigKeybinding()
 end
 
 function ConfigurationModule:RegisterConfigurationFunction(name, func)
@@ -138,8 +139,13 @@ function ConfigurationModule:Refresh()
     end
 end
 
+function ConfigurationModule:OpenChoresTrackerOptions()
+    self:ToggleOptionsUI("Quality of Life", "choresTab", "trackerFrame")
+end
+
 --- Open the configuration interface inside of the ElvUI configuration.
-function ConfigurationModule:ToggleOptionsUI()
+function ConfigurationModule:ToggleOptionsUI(...)
+    local groupPath = { ... }
     local opened
     if E and type(E.ToggleOptionsUI) == "function" then
         E:ToggleOptionsUI()
@@ -174,9 +180,9 @@ function ConfigurationModule:ToggleOptionsUI()
         local tries, maxTries, delay = 0, 20, 0.1 -- up to ~2s total
         local function trySelect()
             tries = tries + 1
-            local ok = pcall(ACD.SelectGroup, ACD, "ElvUI", "TwichUIRx")
+            local ok = pcall(ACD.SelectGroup, ACD, "ElvUI", "TwichUIRx", unpack(groupPath))
             if not ok then
-                ok = pcall(ACD.SelectGroup, ACD, "ElvUI", "plugins", "TwichUIRx")
+                ok = pcall(ACD.SelectGroup, ACD, "ElvUI", "plugins", "TwichUIRx", unpack(groupPath))
             end
             if not ok and _G.C_Timer and _G.C_Timer.After and tries < maxTries then
                 _G.C_Timer.After(delay, trySelect)
@@ -191,6 +197,48 @@ function ConfigurationModule:ToggleOptionsUI()
             trySelect()
         end
     end
+end
+
+function ConfigurationModule:EnsureChoresTrackerConfigButton()
+    if self.choresTrackerConfigButton then
+        return self.choresTrackerConfigButton
+    end
+
+    local button = CreateFrame("BUTTON", "TwichUIChoresTrackerConfigButton", UIParent)
+    button:SetScript("OnClick", function()
+        ---@type DataTextModule
+        local datatextModule = T:GetModule("Datatexts")
+        ---@type ChoresDataText|nil
+        ---@diagnostic disable-next-line: undefined-field
+        local choresDataText = datatextModule and datatextModule.GetModule and
+        datatextModule:GetModule("ChoresDataText", true)
+        if choresDataText and choresDataText.ToggleTrackerFrame then
+            choresDataText:ToggleTrackerFrame()
+        end
+    end)
+    self.choresTrackerConfigButton = button
+    return button
+end
+
+function ConfigurationModule:SetChoresTrackerConfigKeybinding()
+    local options = self.Options and self.Options.Chores
+    local keybinding = options and options.GetTrackerFrameConfigKeybinding and options:GetTrackerFrameConfigKeybinding() or
+    ""
+    local button = self:EnsureChoresTrackerConfigButton()
+
+    if self.currentChoresTrackerConfigBinding and self.currentChoresTrackerConfigBinding ~= "" then
+        SetBinding(self.currentChoresTrackerConfigBinding)
+        self.currentChoresTrackerConfigBinding = nil
+    end
+
+    if not keybinding or keybinding == "" then
+        SaveBindings(GetCurrentBindingSet())
+        return
+    end
+
+    SetBindingClick(keybinding, button:GetName(), "LeftButton")
+    self.currentChoresTrackerConfigBinding = keybinding
+    SaveBindings(GetCurrentBindingSet())
 end
 
 --- add the toggle options function to the globals so it can be set as the addon compartment function

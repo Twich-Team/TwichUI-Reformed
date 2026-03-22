@@ -1,0 +1,24 @@
+Portal Authority
+
+Copyright (c) stormyeyes. All rights reserved.
+
+This software, along with its source code, assets, and associated files, is
+the proprietary work of the copyright holder. No part of Portal Authority may
+be used, copied, modified, merged, published, distributed, sublicensed, sold,
+or redistributed in any form without prior written permission from the
+copyright holder.
+
+Permission is not granted to create derivative works, to reverse engineer this
+software except where prohibited by law, or to include it in any public or
+private redistribution package without prior written approval.
+
+This software is provided "AS IS", without warranty of any kind, express or
+implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose, and noninfringement. In no event shall the
+copyright holder be liable for any claim, damages, or other liability, whether
+in an action of contract, tort, or otherwise, arising from, out of, or in
+connection with the software or the use of or other dealings in the software.
+
+This notice applies to Portal Authority's original code and assets unless a
+specific file or directory states otherwise. Bundled third-party libraries,
+tools, or other components remain subject to their own respective licenses.

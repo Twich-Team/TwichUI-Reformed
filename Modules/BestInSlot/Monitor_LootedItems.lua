@@ -219,6 +219,39 @@ local function BuildOwnedItemState(itemID)
 	return state
 end
 
+local function ConsiderOwnedItem(state, link, trackRank, itemLevel, isBagItem)
+	state.count = state.count + 1
+
+	local currentBestTrack = state.bestTrackRank or -1
+	local candidateTrack = trackRank or -1
+	local currentBestLevel = state.bestItemLevel or -1
+	local candidateLevel = itemLevel or -1
+
+	if isBagItem and type(link) == "string" and link ~= "" then
+		local bagEntry = state.bagLinks[link]
+		if bagEntry then
+			bagEntry.count = bagEntry.count + 1
+			if candidateTrack > (bagEntry.trackRank or -1) or
+				(candidateTrack == (bagEntry.trackRank or -1) and candidateLevel > (bagEntry.itemLevel or -1)) then
+				bagEntry.trackRank = trackRank
+				bagEntry.itemLevel = itemLevel
+			end
+		else
+			state.bagLinks[link] = {
+				count = 1,
+				trackRank = trackRank,
+				itemLevel = itemLevel,
+			}
+		end
+	end
+
+	if not state.bestLink or candidateTrack > currentBestTrack or (candidateTrack == currentBestTrack and candidateLevel > currentBestLevel) then
+		state.bestTrackRank = trackRank
+		state.bestLink = link
+		state.bestItemLevel = itemLevel
+	end
+end
+
 local function SelectPreferredBagLink(candidates)
 	local bestCandidate
 
@@ -264,7 +297,40 @@ local function BuildInventorySnapshot()
 	local bisItems = GetBISItemIDs()
 
 	for itemID in pairs(bisItems) do
-		snapshot[itemID] = BuildOwnedItemState(itemID)
+		snapshot[itemID] = {
+			count = 0,
+			bestTrackRank = nil,
+			bestLink = nil,
+			bestItemLevel = nil,
+			bagLinks = {},
+		}
+	end
+
+	for slotIndex = 1, 19 do
+		local itemID = GetInventoryItemID("player", slotIndex)
+		local state = itemID and snapshot[itemID] or nil
+		if state then
+			local link = GetInventoryItemLink("player", slotIndex)
+			local itemLevel = link and C_Item.GetDetailedItemLevelInfo(link) or nil
+			local track = BIS.ItemScanner.GetTrackFromEquippedItem(slotIndex)
+			local trackRank = BIS.ItemScanner.GetGearTrackRank(track)
+			ConsiderOwnedItem(state, link, trackRank, itemLevel, false)
+		end
+	end
+
+	for bagIndex = 0, GetBagMaxIndex() do
+		local numSlots = C_Container.GetContainerNumSlots(bagIndex)
+		for slotIndex = 1, numSlots do
+			local itemID = C_Container.GetContainerItemID(bagIndex, slotIndex)
+			local state = itemID and snapshot[itemID] or nil
+			if state then
+				local link = C_Container.GetContainerItemLink(bagIndex, slotIndex)
+				local itemLevel = link and C_Item.GetDetailedItemLevelInfo(link) or nil
+				local track = BIS.ItemScanner.GetTrackFromBagItem(bagIndex, slotIndex)
+				local trackRank = BIS.ItemScanner.GetGearTrackRank(track)
+				ConsiderOwnedItem(state, link, trackRank, itemLevel, true)
+			end
+		end
 	end
 
 	return snapshot

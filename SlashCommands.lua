@@ -5,13 +5,55 @@
 local TwichRx = _G.TwichRx
 local T = unpack(TwichRx)
 
-local function OpenConfigurationPanel()
+local function OpenConfigurationPanel(input)
+    local command = type(input) == "string" and input:match("^%s*(.-)%s*$") or ""
+
+    if command == "chores" then
+        ---@type DataTextModule
+        local datatextModule = T:GetModule("Datatexts")
+        ---@type ChoresDataText|nil
+        ---@diagnostic disable-next-line: undefined-field
+        local choresDataText = datatextModule and datatextModule.GetModule and
+        datatextModule:GetModule("ChoresDataText", true)
+        if choresDataText and choresDataText.ShowTrackerFrame then
+            choresDataText:ShowTrackerFrame()
+            return
+        end
+
+        T:Print("[TwichUI] Chores tracker is unavailable")
+        return
+    end
+
     ---@type ConfigurationModule
     local ConfigurationModule = T:GetModule("Configuration")
     ConfigurationModule:ToggleOptionsUI()
 end
 
 T:RegisterChatCommand("tui", OpenConfigurationPanel)
+
+local function StartRaidFrameGlowTest()
+    local module = T:GetModule("RaidFrames", true)
+    if not module or not module.IsEnabled or not module:IsEnabled() then
+        T:Print("[TwichUI] RaidFrames module is not enabled")
+        return
+    end
+
+    module:StartTest(8)
+end
+
+T:RegisterChatCommand("tuirftest", StartRaidFrameGlowTest)
+
+local function DebugRaidFrameUnit(input)
+    local module = T:GetModule("RaidFrames", true)
+    if not module or type(module.DebugUnit) ~= "function" then
+        T:Print("[TwichUI] RaidFrames debug is unavailable")
+        return
+    end
+
+    module:DebugUnit(type(input) == "string" and input ~= "" and input or "player")
+end
+
+T:RegisterChatCommand("tuirfdebug", DebugRaidFrameUnit)
 
 local function FindTexture(input)
     local f = (GetMouseFoci and GetMouseFoci()[1]) or GetMouseFocus()

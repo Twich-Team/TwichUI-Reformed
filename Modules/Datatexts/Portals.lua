@@ -19,6 +19,15 @@ local function GetOptions()
     return DataTextModule.GetOptions()
 end
 
+local function GetTeleportsModule()
+    local qualityOfLife = T:GetModule("QualityOfLife", true)
+    if not qualityOfLife then
+        return nil
+    end
+
+    return qualityOfLife:GetModule("Teleports", true)
+end
+
 local function GetHearthstoneDestination(itemID)
     if not itemID or not C_TooltipInfo then return nil end
     local ttData
@@ -65,8 +74,10 @@ local function OnEnter(panel)
     end
     local dest = GetHearthstoneDestination(favoriteHearthstone)
     if dest then
+        tt:AddLine(ColorGray("Left-click: Teleports Popup"))
         tt:AddLine(ColorGray("Right-click: Hearthstone to " .. dest))
     else
+        tt:AddLine(ColorGray("Left-click: Teleports Popup"))
         tt:AddLine(ColorGray("Right-click: Hearthstone"))
     end
     tt:AddLine(ColorGray("Shift+Right-Click: Dalaran Hearthstone"))
@@ -78,89 +89,10 @@ local function PortalOnClick(self, button)
         return
     end
 
-    local Tools = T.Tools
-    local UI = Tools and Tools.UI
-    if not UI or not UI.CreateSecureMenu then
-        return
+    local teleports = GetTeleportsModule()
+    if teleports and teleports:IsEnabled() and teleports.ToggleDatatextPopup then
+        teleports:ToggleDatatextPopup(self)
     end
-
-    if not PDT.secureMenu then
-        PDT.secureMenu = UI.CreateSecureMenu("TwichUI_PortalSecureMenu")
-    end
-
-    if not PDT.secureMenu then
-        return
-    end
-
-    local Options = GetOptions()
-
-    local function BuildLabel(itemID)
-        if not itemID or itemID == 0 then
-            return nil
-        end
-
-        local name, icon
-
-        if C_ToyBox and C_ToyBox.GetToyInfo then
-            local _, toyName, toyIcon = C_ToyBox.GetToyInfo(itemID)
-            name = toyName or name
-            icon = toyIcon or icon
-        end
-
-        if (not name) and C_Item and C_Item.GetItemInfo then
-            local itemName, _, _, _, _, _, _, _, _, itemTexture = C_Item.GetItemInfo(itemID)
-            name = itemName or name
-            icon = itemTexture or icon
-        end
-
-        if not name then
-            return nil
-        end
-
-        local label = tostring(name)
-        if icon and T.Tools and T.Tools.Text and T.Tools.Text.Icon then
-            label = T.Tools.Text.Icon(icon) .. " " .. label
-        end
-
-        return label
-    end
-
-    local entries = {}
-
-    local function AddHearthEntry(itemID)
-        local label = BuildLabel(itemID)
-        if not label then
-            return
-        end
-
-        table.insert(entries, {
-            text = label,
-            item = itemID,
-        })
-    end
-
-    -- Example for future: add a portal spell
-    -- local function AddPortalSpell(spellID, label)
-    --     table.insert(entries, { text = label, spell = spellID })
-    -- end
-
-    -- Favorite hearthstone (falls back to normal Hearthstone if none selected)
-    local favoriteHearthstone = Options.GetFavoriteHearthstone and (Options:GetFavoriteHearthstone() or 0) or 0
-    if favoriteHearthstone == 0 then
-        favoriteHearthstone = 6948 -- regular Hearthstone item
-    end
-    AddHearthEntry(favoriteHearthstone)
-
-    -- Dalaran Hearthstone toy
-    local dalaranHearthstoneID = 140192
-    AddHearthEntry(dalaranHearthstoneID)
-
-    -- Garrison Hearthstone item
-    local garrisonHearthstoneID = 110560
-    AddHearthEntry(garrisonHearthstoneID)
-
-    -- Menu system disabled due to secure menu limitations in modern WoW
-    return
 end
 
 function PDT:GetMenuList()

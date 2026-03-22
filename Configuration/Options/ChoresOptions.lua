@@ -27,6 +27,18 @@ local function RefreshChores()
     end
 end
 
+local function GetTrackerFrameDB()
+    local datatextOptions = ConfigurationModule.Options.Datatext
+    local db = datatextOptions and datatextOptions.GetDatatextDB and datatextOptions:GetDatatextDB("chores") or nil
+    if not db then
+        ConfigurationModule:GetProfileDB().datatext = ConfigurationModule:GetProfileDB().datatext or {}
+        ConfigurationModule:GetProfileDB().datatext.chores = ConfigurationModule:GetProfileDB().datatext.chores or {}
+        db = ConfigurationModule:GetProfileDB().datatext.chores
+    end
+
+    return db
+end
+
 function Options:GetDB()
     if not ConfigurationModule:GetProfileDB().chores then
         ConfigurationModule:GetProfileDB().chores = {}
@@ -192,4 +204,63 @@ end
 function Options:SetRaidWingEnabled(dungeonID, value)
     self:GetRaidWingDB()[tostring(dungeonID)] = value == true
     RefreshChores()
+end
+
+function Options:GetTrackerFrameMode(info)
+    return GetTrackerFrameDB().trackerMode or "framed"
+end
+
+function Options:SetTrackerFrameMode(info, value)
+    GetTrackerFrameDB().trackerMode = value or "framed"
+    RefreshChores()
+end
+
+function Options:GetTrackerFrameTransparency(info)
+    local value = GetTrackerFrameDB().trackerFrameTransparency
+    if type(value) ~= "number" then
+        return 1
+    end
+
+    return math.min(1, math.max(0.2, value))
+end
+
+function Options:SetTrackerFrameTransparency(info, value)
+    GetTrackerFrameDB().trackerFrameTransparency = math.min(1, math.max(0.2, tonumber(value) or 1))
+    RefreshChores()
+end
+
+function Options:GetTrackerBackgroundTransparency(info)
+    local value = GetTrackerFrameDB().trackerBackgroundTransparency
+    if type(value) ~= "number" then
+        return 0.95
+    end
+
+    return math.min(1, math.max(0, value))
+end
+
+function Options:SetTrackerBackgroundTransparency(info, value)
+    GetTrackerFrameDB().trackerBackgroundTransparency = math.min(1, math.max(0, tonumber(value) or 0.95))
+    RefreshChores()
+end
+
+function Options:GetTrackerHeaderFont(info)
+    return GetTrackerFrameDB().trackerHeaderFont or "__tooltipHeader"
+end
+
+function Options:SetTrackerHeaderFont(info, value)
+    GetTrackerFrameDB().trackerHeaderFont = value or "__tooltipHeader"
+    RefreshChores()
+end
+
+function Options:GetTrackerFrameConfigKeybinding(info)
+    return self:GetDB().trackerFrameConfigKeybinding or ""
+end
+
+function Options:SetTrackerFrameConfigKeybinding(info, value)
+    self:GetDB().trackerFrameConfigKeybinding = value or ""
+
+    local configurationModule = T:GetModule("Configuration")
+    if configurationModule and configurationModule.SetChoresTrackerConfigKeybinding then
+        configurationModule:SetChoresTrackerConfigKeybinding()
+    end
 end

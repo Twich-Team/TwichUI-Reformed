@@ -30,6 +30,10 @@ local DEFAULT_GREAT_VAULT_DURATION = 10
 local DEFAULT_DAILY_RESET_DURATION = 10
 local DEFAULT_GROUP_FINDER_DURATION = 10
 local DEFAULT_CHORES_DURATION = 15
+local DEFAULT_PREY_DURATION = 12
+local FRIEND_SNAPSHOT_DEBOUNCE_SECONDS = 0.5
+local KEYSTONE_UPDATE_DEBOUNCE_SECONDS = 0.25
+local GREAT_VAULT_UPDATE_DEBOUNCE_SECONDS = 0.25
 local BNET_CLIENT_WOW = _G["BNET_CLIENT_WOW"] or "WoW"
 local DAILY_RESET_GRACE_WINDOW_SECONDS = 300
 local BLIZZARD_FRIEND_TOAST_CVARS = {
@@ -76,6 +80,15 @@ local function GetNotificationOptions()
     return T:GetModule("Configuration").Options.NotificationPanel
 end
 
+local function GetTeleportsModule()
+    local qualityOfLife = T:GetModule("QualityOfLife", true)
+    if not qualityOfLife or type(qualityOfLife.GetModule) ~= "function" then
+        return nil
+    end
+
+    return qualityOfLife:GetModule("Teleports", true)
+end
+
 local function IsTruthy(value)
     return value ~= nil and value ~= false and value ~= 0
 end
@@ -115,6 +128,40 @@ local function NormalizeFriendName(name)
     end
 
     return name
+end
+
+local function BuildGroupFinderTeleportInfo(activityName, listingName)
+    local teleports = GetTeleportsModule()
+    if not teleports or type(teleports.FindGroupFinderTeleportInfo) ~= "function" then
+        return nil
+    end
+
+    return teleports:FindGroupFinderTeleportInfo(activityName, listingName)
+end
+
+local function SetWaypoint(mapID, x, y, questID)
+    if type(mapID) == "number" and type(x) == "number" and type(y) == "number"
+        and type(CreateVector2D) == "function"
+        and C_Map and type(C_Map.SetUserWaypoint) == "function"
+    then
+        C_Map.SetUserWaypoint({
+            uiMapID = mapID,
+            position = CreateVector2D(x, y),
+        })
+
+        if C_SuperTrack and type(C_SuperTrack.SetSuperTrackedUserWaypoint) == "function" then
+            C_SuperTrack.SetSuperTrackedUserWaypoint(true)
+        end
+
+        return true
+    end
+
+    if type(questID) == "number" and C_SuperTrack and type(C_SuperTrack.SetSuperTrackedQuestID) == "function" then
+        C_SuperTrack.SetSuperTrackedQuestID(questID)
+        return true
+    end
+
+    return false
 end
 
 local function IsPlayerGrouped()
@@ -398,23 +445,27 @@ function TM:OnEnable()
     self.greatVaultState = self.greatVaultState or nil
     self.hasGreatVaultSnapshot = false
     self.dailyResetTimer = self.dailyResetTimer or nil
+    self.friendRefreshTimer = self.friendRefreshTimer or nil
+    self.keystoneRefreshTimer = self.keystoneRefreshTimer or nil
+    self.greatVaultRefreshTimer = self.greatVaultRefreshTimer or nil
     self.lastDailyResetNotificationAt = self.lastDailyResetNotificationAt or nil
     self.pendingGroupFinderInvite = self.pendingGroupFinderInvite or nil
     self.lastGroupFinderNotificationSearchResultID = self.lastGroupFinderNotificationSearchResultID or nil
     self.wasGrouped = IsPlayerGrouped()
 
-    self:RegisterEvent("FRIENDLIST_UPDATE", "HandleFriendListUpdate")
-    self:RegisterEvent("BN_CONNECTED", "HandleFriendListUpdate")
-    self:RegisterEvent("BN_FRIEND_INFO_CHANGED", "HandleFriendListUpdate")
-    self:RegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", "HandleFriendListUpdate")
-    self:RegisterEvent("BN_FRIEND_ACCOUNT_OFFLINE", "HandleFriendListUpdate")
-    self:RegisterEvent("BAG_UPDATE_DELAYED", "HandleKeystoneBagUpdate")
+    self:RegisterEvent("FRIENDLIST_UPDATE", "QueueFriendListUpdate")
+    self:RegisterEvent("BN_CONNECTED", "QueueFriendListUpdate")
+    self:RegisterEvent("BN_FRIEND_INFO_CHANGED", "QueueFriendListUpdate")
+    self:RegisterEvent("BN_FRIEND_ACCOUNT_ONLINE", "QueueFriendListUpdate")
+    self:RegisterEvent("BN_FRIEND_ACCOUNT_OFFLINE", "QueueFriendListUpdate")
+    self:RegisterEvent("BAG_UPDATE_DELAYED", "QueueKeystoneBagUpdate")
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "HandleGroupRosterUpdate")
     self:RegisterEvent("LFG_LIST_APPLICATION_STATUS_UPDATED", "HandleGroupFinderApplicationStatusUpdated")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "HandlePlayerEnteringWorld")
-    self:RegisterEvent("WEEKLY_REWARDS_UPDATE", "HandleGreatVaultUpdate")
+    self:RegisterEvent("WEEKLY_REWARDS_UPDATE", "QueueGreatVaultUpdate")
     self:SyncBlizzardFriendToasts()
     self:RequestFriendListRefresh()
+    self:QueueFriendListUpdate()
 end
 
 function TM:OnDisable()
@@ -423,6 +474,21 @@ function TM:OnDisable()
     if self.dailyResetTimer then
         self:CancelTimer(self.dailyResetTimer)
         self.dailyResetTimer = nil
+    end
+
+    if self.friendRefreshTimer then
+        self:CancelTimer(self.friendRefreshTimer)
+        self.friendRefreshTimer = nil
+    end
+
+    if self.keystoneRefreshTimer then
+        self:CancelTimer(self.keystoneRefreshTimer)
+        self.keystoneRefreshTimer = nil
+    end
+
+    if self.greatVaultRefreshTimer then
+        self:CancelTimer(self.greatVaultRefreshTimer)
+        self.greatVaultRefreshTimer = nil
     end
 
     self:UnregisterAllEvents()
@@ -592,6 +658,11 @@ function TM:IsChoresNotificationEnabled()
     return options and options.GetEnableChoresNotifications and options:GetEnableChoresNotifications() or false
 end
 
+function TM:IsPreyNotificationEnabled()
+    local options = GetNotificationOptions()
+    return options and options.GetEnablePreyNotifications and options:GetEnablePreyNotifications() or false
+end
+
 function TM:GetGroupFinderNotificationSound()
     local options = GetNotificationOptions()
     return options and options.GetGroupFinderNotificationSound and options:GetGroupFinderNotificationSound() or
@@ -613,6 +684,17 @@ function TM:GetChoresNotificationDisplayTime()
     local options = GetNotificationOptions()
     return options and options.GetChoresNotificationDisplayTime and options:GetChoresNotificationDisplayTime() or
         DEFAULT_CHORES_DURATION
+end
+
+function TM:GetPreyNotificationSound()
+    local options = GetNotificationOptions()
+    return options and options.GetPreyNotificationSound and options:GetPreyNotificationSound() or DEFAULT_SOUND
+end
+
+function TM:GetPreyNotificationDisplayTime()
+    local options = GetNotificationOptions()
+    return options and options.GetPreyNotificationDisplayTime and options:GetPreyNotificationDisplayTime() or
+        DEFAULT_PREY_DURATION
 end
 
 function TM:GetFriendDisplayName(friendInfo)
@@ -878,6 +960,7 @@ function TM:BuildGroupFinderNotificationInfo(searchResultID)
         searchResultID = searchResultID,
         activityName = activityName,
         listingName = listingName,
+        teleportInfo = BuildGroupFinderTeleportInfo(activityName, listingName),
     }
 end
 
@@ -885,8 +968,16 @@ function TM:CreateGroupFinderNotificationWidget(groupFinderInfo)
     ---@type TwichUI_GroupFinderNotificationWidget
     ---@diagnostic disable-next-line: param-type-mismatch
     local widget = AceGUI:Create("TwichUI_GroupFinderNotification")
+    local teleports = GetTeleportsModule()
+    local openTeleportCallback = nil
+    if teleports and type(teleports.OpenNotificationTeleportBrowser) == "function" then
+        openTeleportCallback = function(anchorFrame)
+            teleports:OpenNotificationTeleportBrowser(anchorFrame)
+        end
+    end
     ---@diagnostic disable-next-line: undefined-field
-    widget:SetGroupFinderNotification(groupFinderInfo.activityName, groupFinderInfo.listingName)
+    widget:SetGroupFinderNotification(groupFinderInfo.activityName, groupFinderInfo.listingName,
+        groupFinderInfo.teleportInfo, openTeleportCallback)
     return widget
 end
 
@@ -902,24 +993,68 @@ function TM:SendGroupFinderNotification(groupFinderInfo)
     })
 end
 
-function TM:CreateChoresNotificationWidget(kind, entries)
+function TM:CreateChoresNotificationWidget(kind, entries, notificationInfo)
     ---@type TwichUI_ChoresNotificationWidget
     ---@diagnostic disable-next-line: param-type-mismatch
     local widget = AceGUI:Create("TwichUI_ChoresNotification")
+    local callback = nil
+
+    if type(notificationInfo) == "table" and
+        (notificationInfo.questID or (notificationInfo.mapID and notificationInfo.x and notificationInfo.y)) then
+        callback = function()
+            SetWaypoint(notificationInfo.mapID, notificationInfo.x, notificationInfo.y, notificationInfo.questID)
+        end
+    end
+
     ---@diagnostic disable-next-line: undefined-field
-    widget:SetChoresNotification(kind, entries)
+    widget:SetActionCallback(callback)
+    ---@diagnostic disable-next-line: undefined-field
+    widget:SetChoresNotification(kind, entries, notificationInfo and notificationInfo.buttonText,
+        notificationInfo and notificationInfo.buttonTooltipText)
     return widget
 end
 
-function TM:SendChoresNotification(kind, entries)
+function TM:SendChoresNotification(kind, entries, notificationInfo)
     if not self:IsChoresNotificationEnabled() or type(entries) ~= "table" or #entries == 0 then
         return
     end
 
-    local widget = self:CreateChoresNotificationWidget(kind, entries)
+    local widget = self:CreateChoresNotificationWidget(kind, entries, notificationInfo)
     self:SendMessage("TWICH_NOTIFICATION", widget, {
         displayDuration = self:GetChoresNotificationDisplayTime(),
         soundKey = self:GetChoresNotificationSound(),
+    })
+end
+
+function TM:CreatePreyNotificationWidget(preyInfo)
+    ---@type TwichUI_PreyNotificationWidget
+    ---@diagnostic disable-next-line: param-type-mismatch
+    local widget = AceGUI:Create("TwichUI_PreyNotification")
+    local callback = nil
+
+    if preyInfo and (preyInfo.questID or (preyInfo.mapID and preyInfo.x and preyInfo.y)) then
+        callback = function()
+            SetWaypoint(preyInfo.mapID, preyInfo.x, preyInfo.y, preyInfo.questID)
+        end
+    end
+
+    ---@diagnostic disable-next-line: undefined-field
+    widget:SetActionCallback(callback)
+    ---@diagnostic disable-next-line: undefined-field
+    widget:SetPreyNotification(preyInfo.titleText, preyInfo.detailText, preyInfo.statusText, preyInfo.atlasName,
+        preyInfo.buttonText)
+    return widget
+end
+
+function TM:SendPreyNotification(preyInfo)
+    if not self:IsPreyNotificationEnabled() or type(preyInfo) ~= "table" then
+        return
+    end
+
+    local widget = self:CreatePreyNotificationWidget(preyInfo)
+    self:SendMessage("TWICH_NOTIFICATION", widget, {
+        displayDuration = self:GetPreyNotificationDisplayTime(),
+        soundKey = self:GetPreyNotificationSound(),
     })
 end
 
@@ -985,13 +1120,76 @@ function TM:HandleDailyResetTimer()
 end
 
 function TM:HandlePlayerEnteringWorld()
-    self:HandleGreatVaultUpdate()
+    self:QueueGreatVaultUpdate(true)
     self:ScheduleDailyResetNotification()
     self:TrySendDailyResetLoginCatchup()
     self.wasGrouped = IsPlayerGrouped()
     if not self.wasGrouped then
         self.pendingGroupFinderInvite = nil
     end
+end
+
+function TM:QueueFriendListUpdate(immediate)
+    if self.friendRefreshTimer then
+        if not immediate then
+            return
+        end
+
+        self:CancelTimer(self.friendRefreshTimer)
+        self.friendRefreshTimer = nil
+    end
+
+    if immediate then
+        self:HandleFriendListUpdate()
+        return
+    end
+
+    self.friendRefreshTimer = self:ScheduleTimer(function()
+        self.friendRefreshTimer = nil
+        self:HandleFriendListUpdate()
+    end, FRIEND_SNAPSHOT_DEBOUNCE_SECONDS)
+end
+
+function TM:QueueKeystoneBagUpdate(immediate)
+    if self.keystoneRefreshTimer then
+        if not immediate then
+            return
+        end
+
+        self:CancelTimer(self.keystoneRefreshTimer)
+        self.keystoneRefreshTimer = nil
+    end
+
+    if immediate then
+        self:HandleKeystoneBagUpdate()
+        return
+    end
+
+    self.keystoneRefreshTimer = self:ScheduleTimer(function()
+        self.keystoneRefreshTimer = nil
+        self:HandleKeystoneBagUpdate()
+    end, KEYSTONE_UPDATE_DEBOUNCE_SECONDS)
+end
+
+function TM:QueueGreatVaultUpdate(immediate)
+    if self.greatVaultRefreshTimer then
+        if not immediate then
+            return
+        end
+
+        self:CancelTimer(self.greatVaultRefreshTimer)
+        self.greatVaultRefreshTimer = nil
+    end
+
+    if immediate then
+        self:HandleGreatVaultUpdate()
+        return
+    end
+
+    self.greatVaultRefreshTimer = self:ScheduleTimer(function()
+        self.greatVaultRefreshTimer = nil
+        self:HandleGreatVaultUpdate()
+    end, GREAT_VAULT_UPDATE_DEBOUNCE_SECONDS)
 end
 
 function TM:HandleGroupFinderApplicationStatusUpdated(event, ...)
@@ -1163,11 +1361,43 @@ function TM:CreateFakeDailyResetInfo()
     return true
 end
 
-function TM:CreateFakeGroupFinderInfo()
-    return {
+function TM:CreateFakeGroupFinderInfo(activityName, listingName)
+    activityName = TrimText(activityName)
+    listingName = TrimText(listingName)
+
+    local info = {
         searchResultID = -1,
-        activityName = "Mythic+ Ara-Kara, City of Echoes",
-        listingName = "Weekly Key Push",
+        activityName = activityName ~= "" and activityName or "Mythic+ Ara-Kara, City of Echoes",
+        listingName = listingName ~= "" and listingName or "Weekly Key Push",
+    }
+
+    info.teleportInfo = BuildGroupFinderTeleportInfo(info.activityName, info.listingName)
+    return info
+end
+
+function TM:CreateFakePreyNotificationInfo()
+    local qualityOfLife = T:GetModule("QualityOfLife", true)
+    local preyTweaks = qualityOfLife and type(qualityOfLife.GetModule) == "function" and
+        qualityOfLife:GetModule("PreyTweaks", true)
+        or nil
+    if preyTweaks and type(preyTweaks.BuildSnapshot) == "function" and type(preyTweaks.BuildPreyReadyNotificationInfo) == "function" then
+        local liveInfo = preyTweaks:BuildPreyReadyNotificationInfo(preyTweaks:BuildSnapshot())
+        if liveInfo then
+            return liveInfo
+        end
+    end
+
+    local mapID = C_Map and type(C_Map.GetBestMapForUnit) == "function" and C_Map.GetBestMapForUnit("player") or nil
+    return {
+        questID = nil,
+        mapID = mapID,
+        x = mapID and 0.5 or nil,
+        y = mapID and 0.5 or nil,
+        titleText = "Nightmare Prey Hunt",
+        detailText = "FINAL prey active at 100%. Use the button to place a sample waypoint.",
+        statusText = "PREY READY",
+        atlasName = "ui-prey-targeticon-final",
+        buttonText = "Set Waypoint",
     }
 end
 
@@ -1209,6 +1439,16 @@ end
 
 function TM:TestGroupFinderNotification()
     self:SendGroupFinderNotification(self:CreateFakeGroupFinderInfo())
+    return true
+end
+
+function TM:TestGroupFinderManaforgeNotification()
+    self:SendGroupFinderNotification(self:CreateFakeGroupFinderInfo("Raid: Manaforge Omega", "Manaforge Omega Heroic"))
+    return true
+end
+
+function TM:TestPreyNotification()
+    self:SendPreyNotification(self:CreateFakePreyNotificationInfo())
     return true
 end
 

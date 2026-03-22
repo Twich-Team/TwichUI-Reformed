@@ -1,0 +1,5 @@
+<Bindings>
+    <Binding name="PORTAL_AUTHORITY_OPEN_SETTINGS" header="PORTAL_AUTHORITY" category="ADDONS">
+        PA_Binding_ToggleSettingsWindow()
+    </Binding>
+</Bindings>

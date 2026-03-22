@@ -63,11 +63,28 @@ local function BuildRaidFramesConfiguration()
                         get = "GetGlowColor",
                         set = "SetGlowColor",
                     },
+                    glowStyle = {
+                        type = "select",
+                        name = "Glow Style",
+                        desc = "Choose between the current custom glow and a Blizzard-style button proc glow.",
+                        order = 3,
+                        width = 1.4,
+                        values = {
+                            classic = "Classic",
+                            button = "Button Glow",
+                        },
+                        disabled = function()
+                            return not Options:GetEnabled() or not Options:GetDispellableDebuffsHighlightEnabled()
+                        end,
+                        handler = Options,
+                        get = "GetGlowStyle",
+                        set = "SetGlowStyle",
+                    },
                     testGlow = {
                         type = "execute",
                         name = "Test Glow",
                         desc = "Show the glow on visible party and raid frames for a few seconds.",
-                        order = 3,
+                        order = 4,
                         width = 1.25,
                         disabled = function()
                             return not Options:GetEnabled() or not Options:GetDispellableDebuffsHighlightEnabled()

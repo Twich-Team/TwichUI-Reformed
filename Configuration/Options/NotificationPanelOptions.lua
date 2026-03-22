@@ -20,6 +20,7 @@ local DEFAULT_GREAT_VAULT_DISPLAY_DURATION = 10
 local DEFAULT_DAILY_RESET_DISPLAY_DURATION = 10
 local DEFAULT_GROUP_FINDER_DISPLAY_DURATION = 10
 local DEFAULT_CHORES_DISPLAY_DURATION = 15
+local DEFAULT_PREY_DISPLAY_DURATION = 12
 local DEFAULT_NOTIFICATION_FONT = "__default"
 local DEFAULT_NOTIFICATION_FONT_SIZE_ADJUSTMENT = 0
 
@@ -308,6 +309,39 @@ function Options:SetChoresNotificationSound(info, value)
     db.choresNotificationSound = value
 end
 
+function Options:GetEnablePreyNotifications(info)
+    local db = self:GetDB()
+    if db.enablePreyNotifications == nil then
+        return true
+    end
+    return db.enablePreyNotifications
+end
+
+function Options:SetEnablePreyNotifications(info, value)
+    local db = self:GetDB()
+    db.enablePreyNotifications = value
+end
+
+function Options:GetPreyNotificationDisplayTime(info)
+    local db = self:GetDB()
+    return db.preyNotificationDisplayTime or DEFAULT_PREY_DISPLAY_DURATION
+end
+
+function Options:SetPreyNotificationDisplayTime(info, value)
+    local db = self:GetDB()
+    db.preyNotificationDisplayTime = value
+end
+
+function Options:GetPreyNotificationSound(info)
+    local db = self:GetDB()
+    return db.preyNotificationSound or DEFAULT_SOUND
+end
+
+function Options:SetPreyNotificationSound(info, value)
+    local db = self:GetDB()
+    db.preyNotificationSound = value
+end
+
 function Options:TestFriendsNotification()
     GetToastsModule():TestFriendNotification()
 end
@@ -326,6 +360,14 @@ end
 
 function Options:TestGroupFinderNotification()
     GetToastsModule():TestGroupFinderNotification()
+end
+
+function Options:TestGroupFinderManaforgeNotification()
+    GetToastsModule():TestGroupFinderManaforgeNotification()
+end
+
+function Options:TestPreyNotification()
+    GetToastsModule():TestPreyNotification()
 end
 
 function Options:TestChoresNotification()

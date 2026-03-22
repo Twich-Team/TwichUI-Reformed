@@ -1,3 +1,6 @@
+local TwichRx = _G.TwichRx
+local T = TwichRx and unpack(TwichRx) or nil
+
 local AceGUI = LibStub("AceGUI-3.0")
 
 local WIDGET_TYPE = "TwichUI_ChoresNotification"
@@ -5,9 +8,30 @@ local Type, Version = WIDGET_TYPE, 1
 
 local FRAME_WIDTH = 300
 local BASE_HEIGHT = 70
+local BUTTON_HEIGHT = 22
+local BUTTON_WIDTH = 124
+local BUTTON_SPACING = 10
 local ICON_SIZE = 36
 local TEXT_LEFT_OFFSET = 58
 local MAX_LINES = 4
+
+local function HideActionTooltip()
+    if GameTooltip and GameTooltip.Hide then
+        GameTooltip:Hide()
+    end
+end
+
+local function ShowActionTooltip(button)
+    if not button or not GameTooltip then
+        return
+    end
+
+    GameTooltip:SetOwner(button, "ANCHOR_TOP")
+    GameTooltip:AddLine(button.tooltipTitle or "Set Waypoint", 1, 1, 1)
+    GameTooltip:AddLine(button.tooltipText or "Place a waypoint for this Special Assignment.", 0.85, 0.85, 0.85,
+        true)
+    GameTooltip:Show()
+end
 
 local NOTIFICATION_STYLES = {
     available = {
@@ -16,6 +40,13 @@ local NOTIFICATION_STYLES = {
         icon = "Interface\\Icons\\inv_scroll_11",
         singularTitle = "1 Chore Available",
         pluralTitle = "%d Chores Available",
+    },
+    unlocked = {
+        status = "SPECIAL ASSIGNMENT",
+        color = { 0.96, 0.77, 0.28 },
+        icon = "Interface\\Icons\\inv_misc_lockbox_01",
+        singularTitle = "1 Special Assignment Unlocked",
+        pluralTitle = "%d Special Assignments Unlocked",
     },
     completed = {
         status = "CHORES COMPLETE",
@@ -91,6 +122,16 @@ local function Constructor()
     detail:SetTextColor(0.58, 0.64, 0.72)
     detail:Hide()
 
+    local actionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    actionButton:SetSize(BUTTON_WIDTH, BUTTON_HEIGHT)
+    actionButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -10, 8)
+    actionButton:SetText("Set Waypoint")
+    actionButton:Hide()
+
+    if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
+        T.Tools.UI.SkinButton(actionButton)
+    end
+
     local lines = {}
     local previousLine = title
     for index = 1, MAX_LINES do
@@ -114,6 +155,8 @@ local function Constructor()
     ---@field title FontString
     ---@field detail FontString
     ---@field lines FontString[]
+    ---@field actionButton Button
+    ---@field actionCallback function|nil
     local widget = {
         type = Type,
         frame = frame,
@@ -124,6 +167,8 @@ local function Constructor()
         title = title,
         detail = detail,
         lines = lines,
+        actionButton = actionButton,
+        actionCallback = nil,
     }
 
     local methods = {}
@@ -135,6 +180,7 @@ local function Constructor()
             self:SetFullWidth(true)
         end
 
+        self:SetActionCallback(nil)
         self:SetChoresNotification("available", {
             BuildPreviewLine("|TInterface\\Icons\\inv_misc_map08:14:14:0:0|t ", "Delver's Call", "Open the tooltip"),
         })
@@ -144,17 +190,29 @@ local function Constructor()
     function methods:OnRelease()
         self.frame:ClearAllPoints()
         self.frame:Hide()
+        self:SetActionCallback(nil)
         self.title:SetText("")
         self.detail:SetText("")
+        self.actionButton:Hide()
         for _, line in ipairs(self.lines) do
             line:SetText("")
             line:Hide()
         end
     end
 
+    function methods:SetActionCallback(callback)
+        self.actionCallback = callback
+        self.actionButton:SetEnabled(callback ~= nil)
+        self.actionButton:SetScript("OnClick", function()
+            if self.actionCallback then
+                self.actionCallback()
+            end
+        end)
+    end
+
     ---@param kind string|nil
     ---@param entries string[]|nil
-    function methods:SetChoresNotification(kind, entries)
+    function methods:SetChoresNotification(kind, entries, buttonText, buttonTooltipText)
         local style = GetStyle(kind)
         local count = type(entries) == "table" and #entries or 0
         local visibleLines = {}
@@ -199,7 +257,21 @@ local function Constructor()
             shownCount = MAX_LINES
         end
 
-        self:SetHeight(BASE_HEIGHT + shownCount * 15)
+        local showButton = self.actionCallback ~= nil
+        if showButton then
+            self.actionButton:SetText(buttonText or "Set Waypoint")
+            self.actionButton.tooltipTitle = "Set Waypoint"
+            self.actionButton.tooltipText = buttonTooltipText or "Place a waypoint for this Special Assignment."
+            self.actionButton:SetScript("OnEnter", ShowActionTooltip)
+            self.actionButton:SetScript("OnLeave", HideActionTooltip)
+            self.actionButton:Show()
+        else
+            self.actionButton:Hide()
+            self.actionButton:SetScript("OnEnter", nil)
+            self.actionButton:SetScript("OnLeave", nil)
+        end
+
+        self:SetHeight(BASE_HEIGHT + shownCount * 15 + (showButton and (BUTTON_HEIGHT + BUTTON_SPACING + 6) or 0))
     end
 
     for method, func in pairs(methods) do

@@ -19,6 +19,8 @@ local DEFAULT_COLOR = {
     a = 0.9,
 }
 
+local DEFAULT_GLOW_STYLE = "classic"
+
 local function GetModule()
     return T:GetModule("RaidFrames")
 end
@@ -73,6 +75,29 @@ function Options:GetGlowColor(info)
     local db = self:GetDB()
     local color = db.glowColor or DEFAULT_COLOR
     return color.r, color.g, color.b, color.a
+end
+
+function Options:GetGlowStyle(info)
+    local db = self:GetDB()
+    local style = db.glowStyle
+    if style == nil or style == "" then
+        return DEFAULT_GLOW_STYLE
+    end
+
+    if style == "button" then
+        return "button"
+    end
+
+    return DEFAULT_GLOW_STYLE
+end
+
+function Options:SetGlowStyle(info, value)
+    local db = self:GetDB()
+    db.glowStyle = value == "button" and "button" or DEFAULT_GLOW_STYLE
+
+    if GetModule():IsEnabled() then
+        GetModule():Refresh()
+    end
 end
 
 function Options:SetGlowColor(info, r, g, b, a)

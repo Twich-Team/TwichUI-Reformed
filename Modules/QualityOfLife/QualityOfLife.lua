@@ -30,4 +30,12 @@ function QOL:OnEnable()
     if Options.DungeonTracking and Options.DungeonTracking:GetEnabled() then
         self:GetModule("DungeonTracking"):Enable()
     end
+
+    if Options.PreyTweaks and Options.PreyTweaks:GetEnabled() then
+        self:GetModule("PreyTweaks"):Enable()
+    end
+
+    if Options.Teleports and Options.Teleports:GetEnabled() then
+        self:GetModule("Teleports"):Enable()
+    end
 end

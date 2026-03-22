@@ -15,6 +15,35 @@ local T = unpack(TwichRx)
 ---@field Frame BestInSlotFrame
 local BIS = T:NewModule("BestInSlot", "AceEvent-3.0", "AceConsole-3.0")
 
+local function CopySelectedItems(items)
+    local copied = {}
+    for slotID, bisItem in pairs(items or {}) do
+        if type(slotID) == "number" and type(bisItem) == "table" then
+            copied[slotID] = {
+                itemID = bisItem.itemID,
+                slotID = bisItem.slotID,
+                sourceInstance = bisItem.sourceInstance,
+            }
+        end
+    end
+
+    return copied
+end
+
+function BIS.GetCurrentSpecializationID()
+    if type(GetSpecialization) ~= "function" or type(GetSpecializationInfo) ~= "function" then
+        return 0
+    end
+
+    local specIndex = GetSpecialization()
+    if type(specIndex) ~= "number" then
+        return 0
+    end
+
+    local specID = GetSpecializationInfo(specIndex)
+    return type(specID) == "number" and specID or 0
+end
+
 --- The character-level best in slot database. This contains loot cache and other per-character data.
 function BIS.GetCharacterBISDB()
     if not T.db.char.bis then
@@ -28,13 +57,31 @@ end
 
 ---@alias BisItem { itemID: number, slotID: number, sourceInstance: string}
 
+---@param specID number|nil
 ---@return table<number, BisItem> slotIDtItemID mapping of slotID to itemID for the selected best in slot items.
-function BIS.GetBestInSlotItemDB()
+function BIS.GetBestInSlotItemDB(specID)
     local charDB = BIS.GetCharacterBISDB()
-    if not charDB.SelectedItems then
-        charDB.SelectedItems = {}
+
+    if type(charDB.SelectedItemsBySpec) ~= "table" then
+        charDB.SelectedItemsBySpec = {}
     end
-    return charDB.SelectedItems
+
+    local resolvedSpecID = type(specID) == "number" and specID or BIS.GetCurrentSpecializationID()
+
+    if charDB.LegacySelectedItemsMigrated ~= true and type(charDB.SelectedItems) == "table" and next(charDB.SelectedItems) ~= nil then
+        if type(charDB.SelectedItemsBySpec[resolvedSpecID]) ~= "table" or next(charDB.SelectedItemsBySpec[resolvedSpecID]) == nil then
+            charDB.SelectedItemsBySpec[resolvedSpecID] = CopySelectedItems(charDB.SelectedItems)
+        end
+
+        charDB.LegacySelectedItemsMigrated = true
+        charDB.SelectedItems = nil
+    end
+
+    if type(charDB.SelectedItemsBySpec[resolvedSpecID]) ~= "table" then
+        charDB.SelectedItemsBySpec[resolvedSpecID] = {}
+    end
+
+    return charDB.SelectedItemsBySpec[resolvedSpecID]
 end
 
 function BIS.GetConfigurationOptions()

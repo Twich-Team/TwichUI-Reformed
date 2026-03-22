@@ -274,6 +274,31 @@ function Options:SetChoresTextColor(info, r, g, b, a)
     RefreshDatatext("TwichUI: Chores")
 end
 
+function Options:GetChoresUseCustomDoneColor(info)
+    local db = self:GetDatatextDB("chores")
+    return db.customDoneColor == true
+end
+
+function Options:SetChoresUseCustomDoneColor(info, value)
+    local db = self:GetDatatextDB("chores")
+    db.customDoneColor = value == true
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetChoresDoneTextColor(info)
+    local db = self:GetDatatextDB("chores")
+    if not db.doneTextColor then
+        db.doneTextColor = { 0.2, 0.82, 0.32, 1 }
+    end
+    return unpack(db.doneTextColor)
+end
+
+function Options:SetChoresDoneTextColor(info, r, g, b, a)
+    local db = self:GetDatatextDB("chores")
+    db.doneTextColor = { r, g, b, a }
+    RefreshDatatext("TwichUI: Chores")
+end
+
 function Options:GetChoresTooltipHeaderFont(info)
     local db = self:GetDatatextDB("chores")
     return db.tooltipHeaderFont or "Friz Quadrata TT"
@@ -315,6 +340,47 @@ end
 function Options:SetChoresTooltipEntryFontSize(info, value)
     local db = self:GetDatatextDB("chores")
     db.tooltipEntryFontSize = value
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetChoresTrackerMode(info)
+    local db = self:GetDatatextDB("chores")
+    return db.trackerMode or "framed"
+end
+
+function Options:SetChoresTrackerMode(info, value)
+    local db = self:GetDatatextDB("chores")
+    db.trackerMode = value or "framed"
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetChoresTrackerFrameTransparency(info)
+    local db = self:GetDatatextDB("chores")
+    local value = db.trackerFrameTransparency
+    if type(value) ~= "number" then
+        return 1
+    end
+    return math.min(1, math.max(0.2, value))
+end
+
+function Options:SetChoresTrackerFrameTransparency(info, value)
+    local db = self:GetDatatextDB("chores")
+    db.trackerFrameTransparency = math.min(1, math.max(0.2, tonumber(value) or 1))
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetChoresTrackerBackgroundTransparency(info)
+    local db = self:GetDatatextDB("chores")
+    local value = db.trackerBackgroundTransparency
+    if type(value) ~= "number" then
+        return 0.95
+    end
+    return math.min(1, math.max(0, value))
+end
+
+function Options:SetChoresTrackerBackgroundTransparency(info, value)
+    local db = self:GetDatatextDB("chores")
+    db.trackerBackgroundTransparency = math.min(1, math.max(0, tonumber(value) or 0.95))
     RefreshDatatext("TwichUI: Chores")
 end
 

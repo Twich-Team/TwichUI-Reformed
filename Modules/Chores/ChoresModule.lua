@@ -25,9 +25,12 @@ local GetAccountExpansionLevel = _G.GetAccountExpansionLevel
 local GetProfessionInfo = _G.GetProfessionInfo
 local GetProfessions = _G.GetProfessions
 local GetLFGDungeonInfo = _G.GetLFGDungeonInfo
+local GetLFGDungeonEncounterInfo = _G.GetLFGDungeonEncounterInfo
 local GetLFGDungeonNumEncounters = _G.GetLFGDungeonNumEncounters
 local GetNumRFDungeons = _G.GetNumRFDungeons
 local GetRFDungeonInfo = _G.GetRFDungeonInfo
+local GetTime = _G.GetTime
+local floor = _G.floor
 local LegacyLoadAddOn = _G.LoadAddOn
 local PVEFrameLoadUI = _G.PVEFrame_LoadUI
 local UnitLevel = _G.UnitLevel
@@ -42,6 +45,7 @@ local STATUS_NOT_STARTED = 0
 local STATUS_IN_PROGRESS = 1
 local STATUS_COMPLETED = 2
 local STATUS_UNKNOWN = -1
+local MIN_REFRESH_INTERVAL_SECONDS = 1
 local COFFER_KEY_CURRENCY_ID = 3028
 local COFFER_KEY_SHARD_CURRENCY_ID = 3310
 local EXPANSION_WAR_WITHIN = 10
@@ -49,6 +53,9 @@ local EXPANSION_MIDNIGHT = 11
 local PREY_TARGETS_PER_DIFFICULTY = 4
 local PREY_ICON =
 "Interface\\AddOns\\TwichUI_Redux\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
+local ASTALOR_PREY_MAP_ID = 2393
+local ASTALOR_PREY_X = 0.55
+local ASTALOR_PREY_Y = 0.634
 
 local PROFESSION_CATEGORY_DATA = {
     {
@@ -640,6 +647,9 @@ local function GetQuestState(questID)
 
     if isOnQuest or (isWorldQuest and hasWorldQuestTime) then
         state.status = STATUS_IN_PROGRESS
+        if type(hasWorldQuestTime) == "number" and hasWorldQuestTime > 0 then
+            state.timeLeftSeconds = hasWorldQuestTime
+        end
         if C_QuestLog and type(C_QuestLog.GetQuestObjectives) == "function" then
             local objectives = C_QuestLog.GetQuestObjectives(questID)
             if type(objectives) == "table" then
@@ -652,7 +662,50 @@ local function GetQuestState(questID)
         end
     end
 
+    if type(state.timeLeftSeconds) == "number" and state.timeLeftSeconds > 0 then
+        local totalSeconds = math.max(0, floor(state.timeLeftSeconds))
+        local hours = floor(totalSeconds / 3600)
+        local minutes = floor((totalSeconds % 3600) / 60)
+
+        if hours > 0 then
+            state.timeRemainingText = minutes > 0 and ("%dh %dm"):format(hours, minutes) or ("%dh"):format(hours)
+        elseif minutes > 0 then
+            state.timeRemainingText = ("%dm"):format(minutes)
+        else
+            state.timeRemainingText = "<1m"
+        end
+    end
+
+    if state.status == STATUS_IN_PROGRESS and C_TaskQuest then
+        if type(C_TaskQuest.GetQuestZoneID) == "function" then
+            state.mapID = C_TaskQuest.GetQuestZoneID(questID)
+        end
+
+        if type(state.mapID) == "number" and state.mapID > 0 and type(C_TaskQuest.GetQuestLocation) == "function" then
+            local x, y = C_TaskQuest.GetQuestLocation(questID, state.mapID)
+            if type(x) == "number" and type(y) == "number" then
+                state.x = x
+                state.y = y
+            end
+        end
+    end
+
     return state
+end
+
+local function BuildSpecialAssignmentNotificationInfo(state)
+    if type(state) ~= "table" then
+        return nil
+    end
+
+    return {
+        questID = state.questID or state.sourceQuestID,
+        mapID = state.mapID,
+        x = state.x,
+        y = state.y,
+        buttonText = "Set Waypoint",
+        buttonTooltipText = "Place a waypoint for this Special Assignment.",
+    }
 end
 
 local function CloneEntry(entry)
@@ -664,6 +717,38 @@ local function CloneEntry(entry)
 end
 
 local function ResolveEntryState(entry, category)
+    if category and category.key == "specialAssignment" and entry.unlockQuest then
+        local assignmentState = GetQuestState(entry.quest)
+        assignmentState.sourceQuestID = entry.quest
+        if assignmentState.status == STATUS_COMPLETED then
+            return assignmentState
+        end
+
+        if entry.actualQuest then
+            local actualState = GetQuestState(entry.actualQuest)
+            actualState.sourceQuestID = entry.actualQuest
+            if actualState.status > STATUS_NOT_STARTED then
+                return actualState
+            end
+        end
+
+        local unlockState = GetQuestState(entry.unlockQuest)
+        unlockState.sourceQuestID = entry.unlockQuest
+        if unlockState.status == STATUS_COMPLETED then
+            assignmentState.status = STATUS_IN_PROGRESS
+            assignmentState.notificationKind = "unlocked"
+            assignmentState.notificationStatus = STATUS_COMPLETED
+            assignmentState.notificationInfo = BuildSpecialAssignmentNotificationInfo(assignmentState)
+            return assignmentState
+        end
+
+        if unlockState.status > STATUS_NOT_STARTED then
+            return unlockState
+        end
+
+        return assignmentState.title and assignmentState or unlockState
+    end
+
     local questIDs = { entry.quest }
     if entry.actualQuest then
         table.insert(questIDs, entry.actualQuest)
@@ -845,6 +930,9 @@ local function BuildNotificationLineText(summary, entry)
 
     local categoryText = ("|cff72c7ff%s|r"):format(summary.name or "Chores")
     local entryTitle = entry.label or (entry.state and entry.state.title) or summary.name or "Chore"
+    if entry.state and entry.state.timeRemainingText then
+        entryTitle = ("%s |cff7f8c8d(%s left)|r"):format(entryTitle, entry.state.timeRemainingText)
+    end
     return ("%s%s |cff7f8c8d-|r %s"):format(iconText, categoryText, entryTitle)
 end
 
@@ -860,10 +948,13 @@ local function BuildNotificationSnapshot(state)
             for _, entry in ipairs(summary.entries) do
                 local key = BuildNotificationEntryKey(summary, entry)
                 snapshot[key] = {
-                    status = entry.state and entry.state.status or STATUS_NOT_STARTED,
+                    status = entry.notificationStatus or (entry.state and entry.state.status) or STATUS_NOT_STARTED,
+                    kind = entry.notificationKind or (entry.state and entry.state.notificationKind) or nil,
+                    notificationInfo = entry.notificationInfo or (entry.state and entry.state.notificationInfo) or nil,
                     summaryKey = summary.key,
                     summaryName = summary.name,
-                    lineText = BuildNotificationLineText(summary, entry),
+                    lineText = entry.notificationLineText or (entry.state and entry.state.notificationLineText) or
+                        BuildNotificationLineText(summary, entry),
                 }
             end
         end
@@ -876,6 +967,8 @@ local function BuildNotificationChanges(previousSnapshot, currentSnapshot)
     local changes = {
         available = {},
         completed = {},
+        unlocked = {},
+        unlockedInfo = {},
     }
 
     for key, currentEntry in pairs(currentSnapshot) do
@@ -885,10 +978,17 @@ local function BuildNotificationChanges(previousSnapshot, currentSnapshot)
 
         if previousStatus ~= STATUS_UNKNOWN and currentStatus ~= STATUS_UNKNOWN then
             if currentStatus == STATUS_COMPLETED then
-                if previousEntry and previousStatus ~= STATUS_COMPLETED then
+                if currentEntry.kind == "unlocked" then
+                    local wasUnlocked = previousEntry and previousStatus == STATUS_COMPLETED and
+                    previousEntry.kind == "unlocked"
+                    if not wasUnlocked then
+                        table.insert(changes.unlocked, currentEntry.lineText)
+                        table.insert(changes.unlockedInfo, currentEntry.notificationInfo)
+                    end
+                elseif previousEntry and (previousStatus ~= STATUS_COMPLETED or previousEntry.kind == "unlocked") then
                     table.insert(changes.completed, currentEntry.lineText)
                 end
-            elseif previousStatus == STATUS_COMPLETED then
+            elseif previousStatus == STATUS_COMPLETED and (not previousEntry or previousEntry.kind ~= "unlocked") then
                 table.insert(changes.available, currentEntry.lineText)
             end
         end
@@ -923,6 +1023,11 @@ function Chores:MaybeSendNotifications(state)
     end
 
     local changes = BuildNotificationChanges(previousSnapshot, snapshot)
+    if #changes.unlocked > 0 then
+        local notificationInfo = #changes.unlockedInfo == 1 and changes.unlockedInfo[1] or nil
+        toastsModule:SendChoresNotification("unlocked", changes.unlocked, notificationInfo)
+    end
+
     if #changes.completed > 0 then
         toastsModule:SendChoresNotification("completed", changes.completed)
     end
@@ -1321,6 +1426,11 @@ function Chores:BuildPreySummary()
             local entry = {
                 data = {
                     key = ("prey-%s"):format(definition.key),
+                    mapID = ASTALOR_PREY_MAP_ID,
+                    x = ASTALOR_PREY_X,
+                    y = ASTALOR_PREY_Y,
+                    waypointName = "Astalor Bloodsworn",
+                    waypointZone = "Silvermoon City",
                 },
                 state = difficultyState,
             }
@@ -1358,6 +1468,7 @@ function Chores:BuildRaidFinderSummary()
     local options = GetOptions()
     local summary = BuildSimpleSummary("raidFinder", "Raid Finder", nil, "Raid")
     summary.showPendingEntries = true
+    local notificationsReady = self.raidFinderNotificationsReady == true
 
     for _, raidWing in ipairs(GetRaidWingEntries()) do
         if options:IsRaidWingEnabled(raidWing.dungeonID) then
@@ -1374,10 +1485,24 @@ function Chores:BuildRaidFinderSummary()
                 title = raidWing.name,
                 status = STATUS_UNKNOWN,
                 objectives = {},
+                encounters = {},
             }
 
             if type(numEncounters) == "number" and numEncounters > 0 then
                 local completedEncounters = type(numCompleted) == "number" and numCompleted or 0
+                if type(GetLFGDungeonEncounterInfo) == "function" then
+                    for encounterIndex = 1, numEncounters do
+                        local encounterName, _, isCompleted = GetLFGDungeonEncounterInfo(raidWing.dungeonID,
+                            encounterIndex)
+                        if encounterName then
+                            table.insert(wingState.encounters, {
+                                name = encounterName,
+                                isCompleted = isCompleted == true,
+                            })
+                        end
+                    end
+                end
+
                 if completedEncounters >= numEncounters then
                     wingState.status = STATUS_COMPLETED
                     summary.completed = summary.completed + 1
@@ -1395,6 +1520,7 @@ function Chores:BuildRaidFinderSummary()
                     dungeonID = raidWing.dungeonID,
                 },
                 state = wingState,
+                notificationStatus = notificationsReady and wingState.status or STATUS_UNKNOWN,
             }
 
             table.insert(summary.entries, entry)
@@ -1426,6 +1552,10 @@ function Chores:RefreshState()
     if self.refreshTimer then
         self:CancelTimer(self.refreshTimer)
         self.refreshTimer = nil
+    end
+
+    if type(GetTime) == "function" then
+        self.lastRefreshTime = GetTime()
     end
 
     local options = GetOptions()
@@ -1498,7 +1628,16 @@ function Chores:RequestRefresh(immediate)
         return
     end
 
-    self.refreshTimer = self:ScheduleTimer("RefreshState", 0.2)
+    local delay = 0.2
+
+    if type(GetTime) == "function" and type(self.lastRefreshTime) == "number" then
+        local remaining = (self.lastRefreshTime + MIN_REFRESH_INTERVAL_SECONDS) - GetTime()
+        if remaining > delay then
+            delay = remaining
+        end
+    end
+
+    self.refreshTimer = self:ScheduleTimer("RefreshState", delay)
 end
 
 function Chores:GetState()
@@ -1526,6 +1665,7 @@ function Chores:OnDelveEvent()
 end
 
 function Chores:OnLFGEvent()
+    self.raidFinderNotificationsReady = true
     self:RequestRefresh(false)
 end
 
@@ -1542,6 +1682,7 @@ end
 function Chores:OnEnable()
     self.notificationsPrimed = false
     self.notificationSnapshot = nil
+    self.raidFinderNotificationsReady = false
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnRefreshEvent")
     self:RegisterEvent("PLAYER_LEVEL_UP", "OnRefreshEvent")
     self:RegisterEvent("SKILL_LINES_CHANGED", "OnRefreshEvent")
@@ -1573,5 +1714,6 @@ function Chores:OnDisable()
     }
     self.notificationsPrimed = false
     self.notificationSnapshot = nil
+    self.raidFinderNotificationsReady = false
     self:SendMessage("TWICHUI_CHORES_UPDATED", self.state)
 end

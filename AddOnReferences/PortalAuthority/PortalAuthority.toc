@@ -1,0 +1,21 @@
+## Interface: 120001
+## Title: |cFF8788EEPortal Authority |cff808080by stormyeyes|r
+## Notes: Your all-in-one Mythic+ toolkit.
+## Author: stormyeyes
+## X-License: All Rights Reserved
+## IconTexture: Interface\AddOns\PortalAuthority\Media\Images\PA_logo_TOC
+## Version: 2.1.2
+## SavedVariables: PortalAuthorityDB, PortalAuthorityProfilesDB
+## SavedVariablesPerCharacter: PortalAuthorityCharacterDB, PortalAuthorityDiagDump
+
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0\CallbackHandler-1.0.xml
+Libs\LibSharedMedia-3.0\lib.xml
+media.lua
+core.lua
+profiles.lua
+mplus_data.lua
+dock.lua
+modules.lua
+options.lua
+settings_window.lua

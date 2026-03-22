@@ -236,7 +236,7 @@ local function BuildPortalsConfiguration()
             desc = W.Description(1, "Provides a DataText for quick access to favorite portals."),
             desc2 = W.Description(2,
                 T.Tools.Text.Color(T.Tools.Colors.SECONDARY, "NOTE:") ..
-                " Additional functionality such as dungeon teleports will be added at a later time."),
+                " When Quality of Life > Teleports is enabled, left-click also opens the teleport browser."),
             color = W.IGroup(10, "Colors", {
                 customColor = {
                     type = "toggle",
@@ -397,6 +397,28 @@ local function BuildChoresConfiguration()
                     handler = Options,
                     get = "GetChoresTextColor",
                     set = "SetChoresTextColor",
+                },
+                customDoneColor = {
+                    type = "toggle",
+                    name = "Custom Done Color",
+                    desc = "Override the default green color used when all tracked chores are complete.",
+                    order = 3,
+                    handler = Options,
+                    get = "GetChoresUseCustomDoneColor",
+                    set = "SetChoresUseCustomDoneColor",
+                },
+                doneTextColor = {
+                    type = "color",
+                    name = "Done Color",
+                    desc = "Color used for the datatext when all tracked chores are complete.",
+                    order = 4,
+                    hasAlpha = true,
+                    disabled = function()
+                        return not Options:GetDatatextDB("chores").customDoneColor
+                    end,
+                    handler = Options,
+                    get = "GetChoresDoneTextColor",
+                    set = "SetChoresDoneTextColor",
                 },
             }),
             tooltipFonts = W.IGroup(20, "Tooltip Fonts", {
