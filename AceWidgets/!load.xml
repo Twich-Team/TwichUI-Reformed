@@ -3,6 +3,7 @@
     <Include file='AceItemWidget.lua' />
     <Include file='AceDailyResetNotificationWidget.lua' />
     <Include file='AceChoresNotificationWidget.lua' />
+    <Include file='AceMythicPlusAlertNotificationWidget.lua' />
     <Include file='AceFriendNotificationWidget.lua' />
     <Include file='AceGroupFinderNotificationWidget.lua' />
     <Include file='AceGreatVaultNotificationWidget.lua' />

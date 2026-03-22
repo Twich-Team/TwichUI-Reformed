@@ -125,3 +125,14 @@ local function FindTexture(input)
 end
 
 T:RegisterChatCommand("findtexture", FindTexture)
+
+local function ShowMPTDebugPanel()
+    local mpt = _G.TwichUIMythicPlusToolsRuntime
+    if not mpt or type(mpt.ShowDebugFrame) ~= "function" then
+        T:Print("[TwichUI] Mythic+ Tools debug is unavailable")
+        return
+    end
+    mpt:ShowDebugFrame()
+end
+
+T:RegisterChatCommand("tuimptdebug", ShowMPTDebugPanel)

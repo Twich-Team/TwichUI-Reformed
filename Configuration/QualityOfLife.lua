@@ -23,6 +23,10 @@ local GHCOptions = ConfigurationModule.Options.GossipHotkeys
 ---@type DungeonTrackingConfigurationOptions
 local DTOptions = ConfigurationModule.Options.DungeonTracking
 
+---@type MythicPlusToolsConfigurationOptions
+---@diagnostic disable-next-line: undefined-field
+local MPTOptions = ConfigurationModule.Options.MythicPlusTools
+
 ---@type PreyTweaksConfigurationOptions
 local PTOptions = ConfigurationModule.Options.PreyTweaks
 
@@ -180,6 +184,510 @@ local function BuildDungeonTrackingTab()
                     handler = DTOptions,
                     get = "GetLeavePhrase",
                     set = "SetLeavePhrase",
+                },
+            }),
+        },
+    }
+end
+
+local function BuildMythicPlusToolsTab()
+    local W = ConfigurationModule.Widgets
+
+    return {
+        type = "group",
+        name = "Mythic+ Tools",
+        order = 3,
+        args = {
+            desc = {
+                type = "description",
+                order = 1,
+                name = "Mythic+ quality-of-life helpers for keystones, death notifications, utility timers, and interrupts.",
+            },
+            enable = {
+                type = "toggle",
+                name = "Enable",
+                desc = "Enable the Mythic+ Tools module.",
+                order = 2,
+                handler = MPTOptions,
+                get = "GetEnabled",
+                set = "SetEnabled",
+            },
+            keystoneHelpers = W.IGroup(10, "Keystone Helpers", {
+                autoSlot = {
+                    type = "toggle",
+                    name = "Auto Slot Keystone",
+                    desc = "Automatically slot your keystone when the receptacle opens.",
+                    order = 1,
+                    width = 1.5,
+                    handler = MPTOptions,
+                    get = "GetAutoSlotKeystoneEnabled",
+                    set = "SetAutoSlotKeystoneEnabled",
+                },
+                autoStart = {
+                    type = "toggle",
+                    name = "Auto Start After Pull Timer",
+                    desc = "When a pull timer starts and your keystone is already slotted, start the key when the timer finishes if you are leader or assistant.",
+                    order = 2,
+                    width = 1.75,
+                    handler = MPTOptions,
+                    get = "GetAutoStartDungeonEnabled",
+                    set = "SetAutoStartDungeonEnabled",
+                },
+                testPull = {
+                    type = "execute",
+                    name = "Start 10s Pull Timer",
+                    desc = "Run a live-style 10 second countdown. If Auto Start After Pull Timer is enabled and a keystone is slotted, the key will start when the timer finishes.",
+                    order = 3,
+                    handler = MPTOptions,
+                    func = "TestPullTimer",
+                },
+            }),
+            deathNotifications = W.IGroup(20, "Death Notifications", {
+                enable = {
+                    type = "toggle",
+                    name = "Enable Death Notifications",
+                    desc = "Send Mythic+ death alerts through the TwichUI notification panel.",
+                    order = 1,
+                    width = 1.75,
+                    handler = MPTOptions,
+                    get = "GetDeathNotificationEnabled",
+                    set = "SetDeathNotificationEnabled",
+                },
+                displayDuration = {
+                    type = "range",
+                    name = "Display Duration",
+                    desc = "How long death notifications remain visible.",
+                    order = 2,
+                    min = 2,
+                    max = 30,
+                    step = 1,
+                    width = 1.5,
+                    handler = MPTOptions,
+                    get = "GetDeathNotificationDisplayTime",
+                    set = "SetDeathNotificationDisplayTime",
+                },
+                sound = {
+                    type = "select",
+                    dialogControl = "LSM30_Sound",
+                    name = "Notification Sound",
+                    desc = "Sound to play when a tracked party member dies in an active key.",
+                    order = 3,
+                    width = 2,
+                    values = function()
+                        local values = { __none = "None" }
+                        local sounds = LibStub("LibSharedMedia-3.0"):HashTable("sound") or {}
+                        for key, value in pairs(sounds) do
+                            values[key] = value
+                        end
+                        return values
+                    end,
+                    handler = MPTOptions,
+                    get = "GetDeathNotificationSound",
+                    set = "SetDeathNotificationSound",
+                },
+                tank = {
+                    type = "toggle",
+                    name = "Tank",
+                    desc = "Notify when the tank dies.",
+                    order = 4,
+                    width = 1.25,
+                    handler = MPTOptions,
+                    get = "GetNotifyForTankDeaths",
+                    set = "SetNotifyForTankDeaths",
+                },
+                healer = {
+                    type = "toggle",
+                    name = "Healer",
+                    desc = "Notify when the healer dies.",
+                    order = 5,
+                    width = 1.25,
+                    handler = MPTOptions,
+                    get = "GetNotifyForHealerDeaths",
+                    set = "SetNotifyForHealerDeaths",
+                },
+                dps = {
+                    type = "toggle",
+                    name = "DPS",
+                    desc = "Notify when a damage dealer dies.",
+                    order = 6,
+                    width = 1.25,
+                    handler = MPTOptions,
+                    get = "GetNotifyForDPSDeaths",
+                    set = "SetNotifyForDPSDeaths",
+                },
+                self = {
+                    type = "toggle",
+                    name = "Self",
+                    desc = "Notify when you die.",
+                    order = 7,
+                    width = 1.25,
+                    handler = MPTOptions,
+                    get = "GetNotifyForSelfDeaths",
+                    set = "SetNotifyForSelfDeaths",
+                },
+                wipeSpam = {
+                    type = "toggle",
+                    name = "Suppress Wipe Spam",
+                    desc = "Reduce repeated death toasts during near-full wipes while still tracking the running death total.",
+                    order = 8,
+                    width = 1.75,
+                    handler = MPTOptions,
+                    get = "GetSuppressWipeSpam",
+                    set = "SetSuppressWipeSpam",
+                },
+                test = {
+                    type = "execute",
+                    name = "Test Death Notification",
+                    desc = "Play a sample Mythic+ death notification.",
+                    order = 9,
+                    handler = MPTOptions,
+                    func = "TestDeathNotification",
+                },
+            }),
+            interrupts = W.IGroup(40, "Interrupt Tracker", {
+                enable = {
+                    type = "toggle",
+                    name = "Enable Interrupt Tracker",
+                    desc = "Show a movable interrupt tracker for your current group.",
+                    order = 1,
+                    width = 1.75,
+                    handler = MPTOptions,
+                    get = "GetInterruptTrackerEnabled",
+                    set = "SetInterruptTrackerEnabled",
+                },
+                readySound = {
+                    type = "select",
+                    dialogControl = "LSM30_Sound",
+                    name = "Ready Sound",
+                    desc = "Optional sound to play when a tracked interrupt becomes ready again.",
+                    order = 2,
+                    width = 2,
+                    values = function()
+                        local values = { __none = "None" }
+                        local sounds = LibStub("LibSharedMedia-3.0"):HashTable("sound") or {}
+                        for key, value in pairs(sounds) do
+                            values[key] = value
+                        end
+                        return values
+                    end,
+                    handler = MPTOptions,
+                    get = "GetInterruptReadySound",
+                    set = "SetInterruptReadySound",
+                },
+                locked = {
+                    type = "toggle",
+                    name = "Lock Interrupt Frame",
+                    desc = "Lock the interrupt tracker in place. Disable to drag it.",
+                    order = 3,
+                    width = 1.75,
+                    handler = MPTOptions,
+                    get = "GetInterruptTrackerLocked",
+                    set = "SetInterruptTrackerLocked",
+                },
+                reset = {
+                    type = "execute",
+                    name = "Reset Interrupt Position",
+                    desc = "Move the interrupt tracker back to its default position.",
+                    order = 4,
+                    handler = MPTOptions,
+                    func = "ResetInterruptTrackerPosition",
+                },
+                preview = {
+                    type = "execute",
+                    name = "Start Interrupt Preview",
+                    desc = "Show a live-style interrupt preview with sample party members.",
+                    order = 5,
+                    handler = MPTOptions,
+                    func = "StartInterruptPreview",
+                },
+                stopPreview = {
+                    type = "execute",
+                    name = "Stop Interrupt Preview",
+                    desc = "Hide the interrupt preview.",
+                    order = 6,
+                    handler = MPTOptions,
+                    func = "StopInterruptPreview",
+                },
+            }),
+            appearance = W.IGroup(50, "Tracker Appearance", {
+                trackerStyle = {
+                    type = "select",
+                    name = "Tracker Style",
+                    desc = "Choose the visual style for the Interrupt Tracker frame.",
+                    order = 0,
+                    width = 1.6,
+                    values = {
+                        paneled = "Paneled (default)",
+                        bare = "Bare Bars",
+                    },
+                    handler = MPTOptions,
+                    get = "GetTrackerStyle",
+                    set = "SetTrackerStyle",
+                },
+                trackerFont = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Tracker Font",
+                    desc = "Font used by the interrupt tracker and timer tracker.",
+                    order = 1,
+                    width = 2,
+                    values = function()
+                        local fonts = LibStub("LibSharedMedia-3.0"):HashTable("font") or {}
+                        local values = {
+                            __default = "Default",
+                        }
+
+                        for key, value in pairs(fonts) do
+                            values[key] = value
+                        end
+
+                        return values
+                    end,
+                    handler = MPTOptions,
+                    get = "GetTrackerFont",
+                    set = "SetTrackerFont",
+                },
+                trackerFontSize = {
+                    type = "range",
+                    name = "Tracker Font Size",
+                    desc = "Base font size used by the tracker rows.",
+                    order = 2,
+                    min = 8,
+                    max = 24,
+                    step = 1,
+                    handler = MPTOptions,
+                    get = "GetTrackerFontSize",
+                    set = "SetTrackerFontSize",
+                },
+                trackerFontOutline = {
+                    type = "select",
+                    name = "Tracker Font Outline",
+                    desc = "Outline style used by the tracker text.",
+                    order = 3,
+                    values = {
+                        default = "Default",
+                        none = "None",
+                        outline = "Outline",
+                        thick = "Thick Outline",
+                    },
+                    handler = MPTOptions,
+                    get = "GetTrackerFontOutline",
+                    set = "SetTrackerFontOutline",
+                },
+                trackerBarTexture = {
+                    type = "select",
+                    dialogControl = "LSM30_Statusbar",
+                    name = "Tracker Bar Texture",
+                    desc = "Status bar texture used by both Mythic+ trackers.",
+                    order = 4,
+                    width = 2,
+                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("statusbar") or {} end,
+                    handler = MPTOptions,
+                    get = "GetTrackerBarTexture",
+                    set = "SetTrackerBarTexture",
+                },
+                trackerRowGap = {
+                    type = "range",
+                    name = "Row Gap",
+                    desc = "Vertical gap between tracker rows.",
+                    order = 5,
+                    min = 0,
+                    max = 30,
+                    step = 1,
+                    handler = MPTOptions,
+                    get = "GetTrackerRowGap",
+                    set = "SetTrackerRowGap",
+                },
+                trackerIconSize = {
+                    type = "range",
+                    name = "Icon Size",
+                    desc = "Size of the tracker row icons.",
+                    order = 6,
+                    min = 14,
+                    max = 48,
+                    step = 1,
+                    handler = MPTOptions,
+                    get = "GetTrackerIconSize",
+                    set = "SetTrackerIconSize",
+                },
+                trackerBarHeight = {
+                    type = "range",
+                    name = "Bar Height",
+                    desc = "Height of the tracker status bars.",
+                    order = 7,
+                    min = 10,
+                    max = 40,
+                    step = 1,
+                    handler = MPTOptions,
+                    get = "GetTrackerBarHeight",
+                    set = "SetTrackerBarHeight",
+                },
+            }),
+            visibility = W.IGroup(55, "Frame Visibility", {
+                frameVisibilityMode = {
+                    type = "select",
+                    name = "Show Frames",
+                    desc = "Choose when the Mythic+ tracker frames should be visible.",
+                    order = 1,
+                    width = 1.6,
+                    values = {
+                        always = "Always",
+                        combat = "In Combat",
+                        group = "In Group",
+                        dungeon = "In Dungeon",
+                        mythicplus = "In Mythic+",
+                    },
+                    handler = MPTOptions,
+                    get = "GetFrameVisibilityMode",
+                    set = "SetFrameVisibilityMode",
+                },
+            }),
+            interruptAppearance = W.IGroup(60, "Interrupt Colors", {
+                useClassBarColor = {
+                    type = "toggle",
+                    name = "Use Class Color For Bars",
+                    desc = "Color interrupt cooldown bars by player class instead of a static color.",
+                    order = 1,
+                    width = 1.8,
+                    handler = MPTOptions,
+                    get = "GetInterruptUseClassBarColor",
+                    set = "SetInterruptUseClassBarColor",
+                },
+                barColor = {
+                    type = "color",
+                    name = "Static Bar Color",
+                    desc = "Bar color used when class-colored interrupt bars are disabled.",
+                    order = 2,
+                    hasAlpha = false,
+                    disabled = function() return MPTOptions:GetInterruptUseClassBarColor() end,
+                    handler = MPTOptions,
+                    get = "GetInterruptBarColor",
+                    set = "SetInterruptBarColor",
+                },
+                readyBarColorMode = {
+                    type = "select",
+                    name = "Ready Bar Color",
+                    desc = "Choose how ready interrupt bars are colored.",
+                    order = 3,
+                    width = 1.6,
+                    values = {
+                        default = "Default",
+                        class = "Class Color",
+                        static = "Static Color",
+                    },
+                    handler = MPTOptions,
+                    get = "GetInterruptReadyBarColorMode",
+                    set = "SetInterruptReadyBarColorMode",
+                },
+                readyBarColor = {
+                    type = "color",
+                    name = "Ready Static Color",
+                    desc = "Color used for ready interrupt bars when Ready Bar Color is set to Static Color.",
+                    order = 4,
+                    hasAlpha = false,
+                    disabled = function() return MPTOptions:GetInterruptReadyBarColorMode() ~= "static" end,
+                    handler = MPTOptions,
+                    get = "GetInterruptReadyBarColor",
+                    set = "SetInterruptReadyBarColor",
+                },
+                useClassFontColor = {
+                    type = "toggle",
+                    name = "Use Class Color For Names",
+                    desc = "Color interrupt tracker names by class instead of a static font color.",
+                    order = 5,
+                    width = 1.8,
+                    handler = MPTOptions,
+                    get = "GetInterruptUseClassFontColor",
+                    set = "SetInterruptUseClassFontColor",
+                },
+                fontColor = {
+                    type = "color",
+                    name = "Static Name Color",
+                    desc = "Font color used when class-colored interrupt names are disabled.",
+                    order = 6,
+                    hasAlpha = false,
+                    disabled = function() return MPTOptions:GetInterruptUseClassFontColor() end,
+                    handler = MPTOptions,
+                    get = "GetInterruptFontColor",
+                    set = "SetInterruptFontColor",
+                },
+            }),
+            statusText = W.IGroup(70, "Status Text", {
+                statusTextFont = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Status Font",
+                    desc = "Font used for active timer and cooldown status text.",
+                    order = 1,
+                    width = 2,
+                    values = function()
+                        local fonts = LibStub("LibSharedMedia-3.0"):HashTable("font") or {}
+                        local values = {
+                            __default = "Default",
+                        }
+
+                        for key, value in pairs(fonts) do
+                            values[key] = value
+                        end
+
+                        return values
+                    end,
+                    handler = MPTOptions,
+                    get = "GetStatusTextFont",
+                    set = "SetStatusTextFont",
+                },
+                statusTextColor = {
+                    type = "color",
+                    name = "Status Text Color",
+                    desc = "Color used for active timer and cooldown status text.",
+                    order = 2,
+                    hasAlpha = false,
+                    handler = MPTOptions,
+                    get = "GetStatusTextColor",
+                    set = "SetStatusTextColor",
+                },
+                readyTextFont = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Ready Font",
+                    desc = "Font used when a tracker row is ready.",
+                    order = 3,
+                    width = 2,
+                    values = function()
+                        local fonts = LibStub("LibSharedMedia-3.0"):HashTable("font") or {}
+                        local values = {
+                            __default = "Default",
+                        }
+
+                        for key, value in pairs(fonts) do
+                            values[key] = value
+                        end
+
+                        return values
+                    end,
+                    handler = MPTOptions,
+                    get = "GetReadyTextFont",
+                    set = "SetReadyTextFont",
+                },
+                readyTextColor = {
+                    type = "color",
+                    name = "Ready Text Color",
+                    desc = "Color used when a tracker row is ready.",
+                    order = 4,
+                    hasAlpha = false,
+                    handler = MPTOptions,
+                    get = "GetReadyTextColor",
+                    set = "SetReadyTextColor",
+                },
+                showReadyText = {
+                    type = "toggle",
+                    name = "Show Ready Text",
+                    desc = "Display the word Ready when a row is available. Disable to leave the bar full with no label.",
+                    order = 5,
+                    width = 1.8,
+                    handler = MPTOptions,
+                    get = "GetShowReadyText",
+                    set = "SetShowReadyText",
                 },
             }),
         },
@@ -1790,6 +2298,7 @@ local function BuildConfiguration()
         },
         choresTab = BuildChoresTab(),
         dungeonTrackingTab = BuildDungeonTrackingTab(),
+        mythicPlusToolsTab = BuildMythicPlusToolsTab(),
         easyFishTab = BuildEasyFishTab(),
         gossipHotkeysTab = BuildGossipHotkeysTab(),
         preyTweaksTab = BuildPreyTweaksTab(),

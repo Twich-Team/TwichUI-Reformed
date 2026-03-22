@@ -1874,7 +1874,7 @@ function CDT:RenderTrackerFrame()
                         objectiveLine.Text:SetText(T.Tools.Text.Color(T.Tools.Colors.GRAY,
                             "    • " .. BuildObjectiveText(objective)))
                         objectiveLine:SetHeight(math.max(objectiveLine.Text:GetStringHeight(), fontSettings
-                        .entryFontSize))
+                            .entryFontSize))
                         ApplyTrackerLineInteraction(objectiveLine, GetTrackerObjectiveTooltipData(entry, objective),
                             nil)
                         objectiveLine:Show()
