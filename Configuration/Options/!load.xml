@@ -9,6 +9,7 @@
     <Include file='QuestAutomationOptions.lua' />
     <Include file='QuestLogCleanerOptions.lua' />
     <Include file='DungeonTrackingOptions.lua' />
+    <Include file='MythicPlusToolsOptions.lua' />
     <Include file='PreyTweaksOptions.lua' />
     <Include file='TeleportsOptions.lua' />
     <Include file='GossipHotkeysOptions.lua' />
