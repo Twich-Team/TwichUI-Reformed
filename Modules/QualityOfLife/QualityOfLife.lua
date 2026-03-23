@@ -31,6 +31,7 @@ function QOL:OnEnable()
         self:GetModule("DungeonTracking"):Enable()
     end
 
+
     if Options.PreyTweaks and Options.PreyTweaks:GetEnabled() then
         self:GetModule("PreyTweaks"):Enable()
     end

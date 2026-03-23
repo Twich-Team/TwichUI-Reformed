@@ -24,7 +24,6 @@ local GHCOptions = ConfigurationModule.Options.GossipHotkeys
 local DTOptions = ConfigurationModule.Options.DungeonTracking
 
 ---@type MythicPlusToolsConfigurationOptions
----@diagnostic disable-next-line: undefined-field
 local MPTOptions = ConfigurationModule.Options.MythicPlusTools
 
 ---@type PreyTweaksConfigurationOptions
@@ -190,6 +189,7 @@ local function BuildDungeonTrackingTab()
     }
 end
 
+
 local function BuildMythicPlusToolsTab()
     local W = ConfigurationModule.Widgets
 
@@ -201,7 +201,8 @@ local function BuildMythicPlusToolsTab()
             desc = {
                 type = "description",
                 order = 1,
-                name = "Mythic+ quality-of-life helpers for keystones, death notifications, utility timers, and interrupts.",
+                name =
+                "Mythic+ quality-of-life helpers for keystones, death notifications, utility timers, and interrupts.",
             },
             enable = {
                 type = "toggle",
@@ -226,7 +227,8 @@ local function BuildMythicPlusToolsTab()
                 autoStart = {
                     type = "toggle",
                     name = "Auto Start After Pull Timer",
-                    desc = "When a pull timer starts and your keystone is already slotted, start the key when the timer finishes if you are leader or assistant.",
+                    desc =
+                    "When a pull timer starts and your keystone is already slotted, start the key when the timer finishes if you are leader or assistant.",
                     order = 2,
                     width = 1.75,
                     handler = MPTOptions,
@@ -236,7 +238,8 @@ local function BuildMythicPlusToolsTab()
                 testPull = {
                     type = "execute",
                     name = "Start 10s Pull Timer",
-                    desc = "Run a live-style 10 second countdown. If Auto Start After Pull Timer is enabled and a keystone is slotted, the key will start when the timer finishes.",
+                    desc =
+                    "Run a live-style 10 second countdown. If Auto Start After Pull Timer is enabled and a keystone is slotted, the key will start when the timer finishes.",
                     order = 3,
                     handler = MPTOptions,
                     func = "TestPullTimer",
@@ -328,7 +331,8 @@ local function BuildMythicPlusToolsTab()
                 wipeSpam = {
                     type = "toggle",
                     name = "Suppress Wipe Spam",
-                    desc = "Reduce repeated death toasts during near-full wipes while still tracking the running death total.",
+                    desc =
+                    "Reduce repeated death toasts during near-full wipes while still tracking the running death total.",
                     order = 8,
                     width = 1.75,
                     handler = MPTOptions,
@@ -693,6 +697,7 @@ local function BuildMythicPlusToolsTab()
         },
     }
 end
+
 
 local function BuildSatchelWatchTab()
     local W = ConfigurationModule.Widgets
@@ -2299,6 +2304,7 @@ local function BuildConfiguration()
         choresTab = BuildChoresTab(),
         dungeonTrackingTab = BuildDungeonTrackingTab(),
         mythicPlusToolsTab = BuildMythicPlusToolsTab(),
+        -- gatheringTab removed
         easyFishTab = BuildEasyFishTab(),
         gossipHotkeysTab = BuildGossipHotkeysTab(),
         preyTweaksTab = BuildPreyTweaksTab(),

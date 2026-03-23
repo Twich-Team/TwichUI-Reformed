@@ -473,6 +473,45 @@ local function BuildChoresConfiguration()
     }
 end
 
+local function BuildGatheringConfiguration()
+    local W = ConfigurationModule.Widgets
+
+    return {
+        type = "group",
+        name = "Gathering",
+        order = 24,
+        args = {
+            title = W.TitleWidget(0, "Gathering"),
+            desc = W.Description(1,
+                "Shows gathering session value and gold-per-hour stats, with quick controls from the datatext menu."),
+            color = W.IGroup(10, "Colors", {
+                customColor = {
+                    type = "toggle",
+                    name = "Custom Text Color",
+                    desc = "Use a custom color for the gathering datatext.",
+                    order = 1,
+                    handler = Options,
+                    get = "GetGatheringUseCustomColor",
+                    set = "SetGatheringUseCustomColor",
+                },
+                textColor = {
+                    type = "color",
+                    name = "Text Color",
+                    desc = "Color of the gathering datatext.",
+                    order = 2,
+                    hasAlpha = true,
+                    disabled = function()
+                        return not Options:GetDatatextDB("gathering").customColor
+                    end,
+                    handler = Options,
+                    get = "GetGatheringTextColor",
+                    set = "SetGatheringTextColor",
+                },
+            }),
+        },
+    }
+end
+
 local function BuildDatatextConfiguration()
     local AW = ConfigurationModule.Widgets
     local function TooltipForMountSpell(spellID)
@@ -702,6 +741,7 @@ local function BuildDatatextConfiguration()
                 }),
             }
         },
+        gathering = BuildGatheringConfiguration(),
         chores = BuildChoresConfiguration(),
         portals = BuildPortalsConfiguration(),
         mythicPlus = BuildMythicPlusConfiguration(),

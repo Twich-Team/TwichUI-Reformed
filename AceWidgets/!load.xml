@@ -1,14 +1,13 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Include file='AceSlotWidget.lua' />
     <Include file='AceItemWidget.lua' />
+    <Include file='AceGatherNotificationWidget.lua' />
     <Include file='AceDailyResetNotificationWidget.lua' />
     <Include file='AceChoresNotificationWidget.lua' />
-    <Include file='AceMythicPlusAlertNotificationWidget.lua' />
     <Include file='AceFriendNotificationWidget.lua' />
     <Include file='AceGroupFinderNotificationWidget.lua' />
     <Include file='AceGreatVaultNotificationWidget.lua' />
     <Include file='AceKeystoneNotificationWidget.lua' />
-    <Include file='AcePreyNotificationWidget.lua' />
     <Include file='AceDungeonTrackingNotificationWidget.lua' />
     <Include file='AceSatchelNotificationWidget.lua' />
     <Include file='AceEmptyPanelWidget.lua' />

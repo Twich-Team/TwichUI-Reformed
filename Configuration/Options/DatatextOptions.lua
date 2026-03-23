@@ -343,6 +343,31 @@ function Options:SetChoresTooltipEntryFontSize(info, value)
     RefreshDatatext("TwichUI: Chores")
 end
 
+function Options:GetGatheringUseCustomColor(info)
+    local db = self:GetDatatextDB("gathering")
+    return db.customColor == true
+end
+
+function Options:SetGatheringUseCustomColor(info, value)
+    local db = self:GetDatatextDB("gathering")
+    db.customColor = value == true
+    RefreshDatatext("TwichUI_GatheringDataText")
+end
+
+function Options:GetGatheringTextColor(info)
+    local db = self:GetDatatextDB("gathering")
+    if not db.textColor then
+        db.textColor = { 1, 1, 1, 1 }
+    end
+    return unpack(db.textColor)
+end
+
+function Options:SetGatheringTextColor(info, r, g, b, a)
+    local db = self:GetDatatextDB("gathering")
+    db.textColor = { r, g, b, a }
+    RefreshDatatext("TwichUI_GatheringDataText")
+end
+
 function Options:GetChoresTrackerMode(info)
     local db = self:GetDatatextDB("chores")
     return db.trackerMode or "framed"

@@ -1,10 +1,10 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Include file='QualityOfLife.lua' />
+    <!-- Gathering.lua removed -->
     <Include file='QuestAutomation.lua' />
     <Include file='QuestLogCleaner.lua' />
     <Include file='GossipHotkeys.lua' />
     <Include file='DungeonTracking.lua' />
-    <Include file='MythicPlusTools.lua' />
     <Include file='PreyTweaks.xml' />
     <Include file='PreyTweaks.lua' />
     <Include file='Teleports.lua' />
