@@ -45,7 +45,7 @@ local HUD_DEFAULT_SIZE  = 400
 local HUD_MINIMAP_SIZE  = 256  -- HorizonSuite always uses 256 physical, we drive via scale
 local GPS_TICKER_INTERVAL = 5.0
 local MIN_GPH_TICKER_INTERVAL = 1.0
-local HUD_COMPATIBILITY_TICK_INTERVAL = 1.0
+local HUD_COMPATIBILITY_TICK_INTERVAL = 0.2
 local DEBUG_LOG_LIMIT = 80
 
 local GOLD_COLOR   = "|cffffd24a"
@@ -576,6 +576,28 @@ function Gathering:BuildDebugReport()
             SafeDebugString(_G.GetMinimapShape and _G.GetMinimapShape() or nil),
             SafeDebugString(_G.GetCVar and _G.GetCVar("rotateMinimap") or nil),
             SafeDebugString(mm.GetMaskTexture and mm:GetMaskTexture() or nil))
+
+        if mm.pinPools then
+            local activePools = {}
+            for templateName, pinPool in pairs(mm.pinPools) do
+                if pinPool and pinPool.EnumerateActive then
+                    local count = 0
+                    for _ in pinPool:EnumerateActive() do
+                        count = count + 1
+                    end
+                    if count > 0 then
+                        activePools[#activePools + 1] = format("%s=%d", SafeDebugString(templateName), count)
+                    end
+                end
+            end
+
+            if #activePools > 0 then
+                table.sort(activePools)
+                lines[#lines + 1] = "minimap active pinPools=" .. table.concat(activePools, ", ")
+            else
+                lines[#lines + 1] = "minimap active pinPools=<none>"
+            end
+        end
     else
         lines[#lines + 1] = "minimap=nil"
     end
@@ -1363,6 +1385,7 @@ function Gathering:DisableHUD()
                 end)
             end
         end
+
         if self.hud.savedParent then
             proxy.SetParent(mm, self.hud.savedParent)
         end
@@ -1571,7 +1594,17 @@ function Gathering:CreateTrackerFrame()
     })
     titleBar:SetBackdropColor(bgR * 0.75, bgG * 0.75, bgB * 0.75, 0.98)
     titleBar:SetBackdropBorderColor(borderR, borderG, borderB, 0.35)
-    titleBar:EnableMouse(false)
+    titleBar:EnableMouse(true)
+    titleBar:RegisterForDrag("LeftButton")
+    titleBar:SetScript("OnDragStart", function()
+        if not self:IsTrackerLocked() then
+            frame:StartMoving()
+        end
+    end)
+    titleBar:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+        self:SaveTrackerPosition()
+    end)
     frame.titleBar = titleBar
 
     -- Gold accent strip
@@ -1710,7 +1743,7 @@ function Gathering:CreateTrackerFrame()
     -- --------- Scroll area ---------
     local contentInset = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     contentInset:SetPoint("TOPLEFT",     frame, "TOPLEFT",     4, -92)
-    contentInset:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 28)
+    contentInset:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 38)
     contentInset:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
@@ -1736,6 +1769,42 @@ function Gathering:CreateTrackerFrame()
     frame.scrollFrame  = scrollFrame
     frame.scrollChild  = scrollChild
     frame.rows         = {}
+
+    -- --------- Footer actions ---------
+    local footerBar = CreateFrame("Frame", nil, frame)
+    footerBar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 8, 8)
+    footerBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -28, 8)
+    footerBar:SetHeight(24)
+    frame.footerBar = footerBar
+
+    local sessionToggleButton = CreateFrame("Button", nil, footerBar, "UIPanelButtonTemplate")
+    sessionToggleButton:SetSize(116, 22)
+    sessionToggleButton:SetPoint("LEFT", footerBar, "LEFT", 0, 0)
+    sessionToggleButton:SetScript("OnClick", function()
+        if not self.session.startTime or not self.session.active then
+            self:StartSession()
+        else
+            self:PauseSession()
+        end
+        self:RefreshTrackerFrame()
+    end)
+    if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
+        T.Tools.UI.SkinButton(sessionToggleButton)
+    end
+    frame.sessionToggleButton = sessionToggleButton
+
+    local resetSessionButton = CreateFrame("Button", nil, footerBar, "UIPanelButtonTemplate")
+    resetSessionButton:SetSize(96, 22)
+    resetSessionButton:SetPoint("LEFT", sessionToggleButton, "RIGHT", 8, 0)
+    resetSessionButton:SetText("Reset Session")
+    resetSessionButton:SetScript("OnClick", function()
+        self:ResetSession()
+        self:RefreshTrackerFrame()
+    end)
+    if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
+        T.Tools.UI.SkinButton(resetSessionButton)
+    end
+    frame.resetSessionButton = resetSessionButton
 
     -- --------- Resize handle ---------
     local resizeHandle = CreateFrame("Button", nil, frame)
@@ -1765,11 +1834,29 @@ function Gathering:CreateTrackerFrame()
     self:ApplyTrackerFrameStyle()
     self:RestoreTrackerPosition()
     self:UpdateTrackerInteractivity()
+    self:UpdateTrackerSessionButtons()
     return frame
 end
 
 local ROW_HEIGHT    = 28
 local ICON_ROW_SIZE = 20
+
+local function ConfigureTrackerLabel(fontString, justifyH)
+    if not fontString then return end
+    fontString:SetJustifyH(justifyH or "LEFT")
+    if fontString.SetJustifyV then
+        fontString:SetJustifyV("MIDDLE")
+    end
+    if fontString.SetWordWrap then
+        fontString:SetWordWrap(false)
+    end
+    if fontString.SetNonSpaceWrap then
+        fontString:SetNonSpaceWrap(false)
+    end
+    if fontString.SetMaxLines then
+        fontString:SetMaxLines(1)
+    end
+end
 
 local function EnsureTrackerRow(scrollChild, rows, index)
     if rows[index] then return rows[index] end
@@ -1810,15 +1897,14 @@ local function EnsureTrackerRow(scrollChild, rows, index)
     local itemLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     itemLabel:SetPoint("LEFT",  icon, "RIGHT", 4, 0)
     itemLabel:SetWidth(170)
-    itemLabel:SetJustifyH("LEFT")
-    itemLabel:SetWordWrap(false)
+    ConfigureTrackerLabel(itemLabel, "LEFT")
     row.itemLabel = itemLabel
 
     -- Qty
     local qtyLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     qtyLabel:SetPoint("LEFT", row, "LEFT", 0, 0)
     qtyLabel:SetWidth(50)
-    qtyLabel:SetJustifyH("CENTER")
+    ConfigureTrackerLabel(qtyLabel, "CENTER")
     qtyLabel:SetTextColor(0.85, 0.85, 0.85, 1)
     row.qtyLabel = qtyLabel
 
@@ -1826,14 +1912,14 @@ local function EnsureTrackerRow(scrollChild, rows, index)
     local itemValLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     itemValLabel:SetPoint("LEFT", row, "LEFT", 0, 0)
     itemValLabel:SetWidth(80)
-    itemValLabel:SetJustifyH("CENTER")
+    ConfigureTrackerLabel(itemValLabel, "CENTER")
     row.itemValLabel = itemValLabel
 
     -- Total value
     local totalValLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     totalValLabel:SetPoint("RIGHT", row, "RIGHT", -8, 0)
     totalValLabel:SetWidth(90)
-    totalValLabel:SetJustifyH("RIGHT")
+    ConfigureTrackerLabel(totalValLabel, "RIGHT")
     totalValLabel:SetTextColor(0.9, 0.78, 0.2, 1)
     row.totalValLabel = totalValLabel
 
@@ -1863,6 +1949,34 @@ local function EnsureTrackerRow(scrollChild, rows, index)
     return row
 end
 
+function Gathering:UpdateTrackerSessionButtons()
+    local frame = self.trackerFrame
+    if not frame then return end
+
+    local sess = self.session
+    if frame.sessionToggleButton then
+        if not sess.startTime then
+            frame.sessionToggleButton:SetText("Start Session")
+        elseif sess.active then
+            frame.sessionToggleButton:SetText("Pause Session")
+        else
+            frame.sessionToggleButton:SetText("Resume Session")
+        end
+    end
+
+    if frame.resetSessionButton then
+        if sess.startTime then
+            if frame.resetSessionButton.Enable then
+                frame.resetSessionButton:Enable()
+            end
+        else
+            if frame.resetSessionButton.Disable then
+                frame.resetSessionButton:Disable()
+            end
+        end
+    end
+end
+
 function Gathering:ApplyTrackerFrameStyle()
     local frame = self.trackerFrame
     if not frame then return end
@@ -1885,6 +1999,12 @@ function Gathering:ApplyTrackerFrameStyle()
     ApplyFontObject(frame.totalValueLabel, fontPath, trackerSettings.fontSize, trackerSettings.outline)
     ApplyFontObject(frame.sessionTimeLabel, fontPath, trackerSettings.fontSize, trackerSettings.outline)
     ApplyFontObject(frame.emptyText, fontPath, trackerSettings.fontSize, trackerSettings.outline)
+    if frame.sessionToggleButton and frame.sessionToggleButton.GetFontString then
+        ApplyFontObject(frame.sessionToggleButton:GetFontString(), fontPath, trackerSettings.fontSize - 1, trackerSettings.outline)
+    end
+    if frame.resetSessionButton and frame.resetSessionButton.GetFontString then
+        ApplyFontObject(frame.resetSessionButton:GetFontString(), fontPath, trackerSettings.fontSize - 1, trackerSettings.outline)
+    end
 
     local iconLeft = 4
     local iconRight = iconLeft + ICON_ROW_SIZE
@@ -1942,10 +2062,14 @@ function Gathering:ApplyTrackerFrameStyle()
         ApplyFontObject(row.qtyLabel, fontPath, trackerSettings.fontSize, trackerSettings.outline)
         ApplyFontObject(row.itemValLabel, fontPath, trackerSettings.fontSize, trackerSettings.outline)
         ApplyFontObject(row.totalValLabel, fontPath, trackerSettings.fontSize, trackerSettings.outline)
+        ConfigureTrackerLabel(row.itemLabel, "LEFT")
+        ConfigureTrackerLabel(row.qtyLabel, "CENTER")
+        ConfigureTrackerLabel(row.itemValLabel, "RIGHT")
+        ConfigureTrackerLabel(row.totalValLabel, "RIGHT")
 
         row.itemLabel:SetWidth(trackerSettings.itemColumnWidth)
         row.qtyLabel:SetWidth(trackerSettings.qtyColumnWidth)
-        row.itemValLabel:SetWidth(trackerSettings.itemValueColumnWidth)
+        row.itemValLabel:SetWidth(0)
         row.totalValLabel:SetWidth(0)
 
         row.itemLabel:ClearAllPoints()
@@ -1956,6 +2080,7 @@ function Gathering:ApplyTrackerFrameStyle()
 
         row.itemValLabel:ClearAllPoints()
         row.itemValLabel:SetPoint("LEFT", row, "LEFT", itemValueLeft, 0)
+        row.itemValLabel:SetPoint("RIGHT", row, "LEFT", totalValueLeft - 8, 0)
 
         row.totalValLabel:ClearAllPoints()
         row.totalValLabel:SetPoint("LEFT", row, "LEFT", totalValueLeft, 0)
@@ -1968,6 +2093,9 @@ function Gathering:UpdateTrackerInteractivity()
     if not frame then return end
 
     local unlocked = not self:IsTrackerLocked()
+    if frame.titleBar then
+        frame.titleBar:EnableMouse(unlocked)
+    end
     if frame.resizeHandle then
         if unlocked then frame.resizeHandle:Show() else frame.resizeHandle:Hide() end
     end
@@ -2191,6 +2319,7 @@ function Gathering:RefreshTrackerFrame()
         statusStr = format("%dm %ds", mins, secs2)
     end
     frame.sessionTimeLabel:SetText(statusStr)
+    self:UpdateTrackerSessionButtons()
 end
 
 function Gathering:ToggleTrackerFrame()

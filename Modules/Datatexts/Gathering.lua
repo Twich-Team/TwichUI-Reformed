@@ -71,6 +71,24 @@ local function FormatCopperColored(copper)
     end
 end
 
+local function FormatGoldOnlyColored(copper)
+    if not copper or copper <= 0 then return "|cffaaaaaa0g|r" end
+
+    local gold = copper / 10000
+    local precision
+    if gold >= 100 then
+        precision = "%.0f"
+    elseif gold >= 10 then
+        precision = "%.1f"
+    else
+        precision = "%.2f"
+    end
+
+    local text = format(precision, gold)
+    text = text:gsub("(%..-)0+$", "%1"):gsub("%.$", "")
+    return format("%s%sg|r", GOLD_COLOR, text)
+end
+
 local function GetSortedItems(session)
     local items = {}
     for _, entry in pairs(session.items or {}) do
@@ -112,7 +130,7 @@ local function OnUpdate(panel, elapsed)
 
         if sess.startTime then
             local gphStr = (sess.goldPerHour and sess.goldPerHour > 0)
-                and (FormatCopperColored(sess.goldPerHour) .. "/hr")
+                and (FormatGoldOnlyColored(sess.goldPerHour) .. "/hr")
                 or "|cffaaaaaa0g/hr|r"
             table.insert(parts, gphStr)
 
