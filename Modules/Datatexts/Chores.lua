@@ -43,6 +43,7 @@ local TRACKER_MAX_HEIGHT = 900
 local ASTALOR_PREY_MAP_ID = 2393
 local ASTALOR_PREY_X = 0.55
 local ASTALOR_PREY_Y = 0.634
+local plumberSuperTrackFrame = nil
 
 local MENU_CATEGORY_ITEMS = {
     { key = "delves",            name = "Delver's Call",          iconAtlas = "delves-regular" },
@@ -631,7 +632,116 @@ local function ShowPreyWaypointTooltip(owner, tooltipData)
     return true
 end
 
-local function SetWaypoint(mapID, x, y, questID)
+local function FormatWaypointCoordinates(x, y)
+    if type(x) ~= "number" or type(y) ~= "number" then
+        return nil
+    end
+
+    return ("%.1f, %.1f"):format(x * 100, y * 100)
+end
+
+local function AppendWaypointActionTooltip(actionData)
+    if not GameTooltip or type(actionData) ~= "table" or actionData.kind ~= "waypoint" then
+        return
+    end
+
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine(actionData.waypointTooltipText or "Click to set a waypoint.", 1, 0.82, 0.2, true)
+
+    if actionData.waypointZone and actionData.waypointName then
+        GameTooltip:AddLine(("%s: %s"):format(actionData.waypointZone, actionData.waypointName), 0.8, 0.8, 0.8,
+            true)
+    elseif actionData.waypointZone then
+        GameTooltip:AddLine(actionData.waypointZone, 0.8, 0.8, 0.8, true)
+    elseif actionData.waypointName then
+        GameTooltip:AddLine(actionData.waypointName, 0.8, 0.8, 0.8, true)
+    end
+
+    local coordinateText = FormatWaypointCoordinates(actionData.x, actionData.y)
+    if coordinateText then
+        GameTooltip:AddLine(coordinateText, 0.8, 0.8, 0.8, true)
+    end
+
+    GameTooltip:Show()
+end
+
+local function ShowWaypointActionTooltip(owner, actionData)
+    if not GameTooltip or not owner or not GameTooltip.SetOwner or type(actionData) ~= "table" then
+        return false
+    end
+
+    GameTooltip:SetOwner(owner, "ANCHOR_CURSOR_RIGHT")
+    GameTooltip:ClearLines()
+    GameTooltip:AddLine(actionData.waypointName or "Waypoint")
+    AppendWaypointActionTooltip(actionData)
+    return true
+end
+
+local function GetPlumberSuperTrackFrame()
+    if plumberSuperTrackFrame and plumberSuperTrackFrame.SetTarget then
+        return plumberSuperTrackFrame
+    end
+
+    if not _G.PlumberSuperTrackingMixin or type(_G.CreateFrame) ~= "function" then
+        return nil
+    end
+
+    plumberSuperTrackFrame = _G.CreateFrame("Frame", nil, UIParent, "PlumberSuperTrackingTemplate")
+    if plumberSuperTrackFrame.TryEnableByModule then
+        plumberSuperTrackFrame:TryEnableByModule()
+    end
+    if plumberSuperTrackFrame.CheckInitializeNavigationFrame then
+        plumberSuperTrackFrame:CheckInitializeNavigationFrame()
+    end
+
+    if plumberSuperTrackFrame.enabled and plumberSuperTrackFrame.frameReady and plumberSuperTrackFrame.SetTarget then
+        return plumberSuperTrackFrame
+    end
+
+    return nil
+end
+
+local function TrySetMapPinEnhancedWaypoint(mapID, x, y, waypointName)
+    local mapPinEnhanced = _G.MapPinEnhanced
+    if not mapPinEnhanced or type(mapPinEnhanced.GetModule) ~= "function" then
+        return false
+    end
+
+    local ok, pinManager = pcall(mapPinEnhanced.GetModule, mapPinEnhanced, "PinManager")
+    if not ok or type(pinManager) ~= "table" or type(pinManager.AddPin) ~= "function" then
+        return false
+    end
+
+    if type(pinManager.UntrackTrackedPin) == "function" then
+        pcall(pinManager.UntrackTrackedPin, pinManager)
+    end
+
+    local title = type(waypointName) == "string" and waypointName ~= "" and waypointName or "Waypoint"
+    local success = pcall(pinManager.AddPin, pinManager, {
+        mapID = mapID,
+        x = x,
+        y = y,
+        title = title,
+        setTracked = true,
+        lock = true,
+    })
+
+    return success
+end
+
+local function SetWaypoint(mapID, x, y, questID, waypointName)
+    if type(mapID) == "number" and type(x) == "number" and type(y) == "number" then
+        if TrySetMapPinEnhancedWaypoint(mapID, x, y, waypointName) then
+            return true
+        end
+    end
+
+    local namedFrame = type(waypointName) == "string" and waypointName ~= "" and GetPlumberSuperTrackFrame() or nil
+    if namedFrame then
+        namedFrame:SetTarget(waypointName, mapID, x, y)
+        return true
+    end
+
     if type(mapID) == "number" and type(x) == "number" and type(y) == "number"
         and type(CreateVector2D) == "function"
         and C_Map and type(C_Map.SetUserWaypoint) == "function"
@@ -728,6 +838,28 @@ local function GetTrackerEntryActionData(entry)
             x = data.x or ASTALOR_PREY_X,
             y = data.y or ASTALOR_PREY_Y,
             questID = data.questID,
+            waypointName = data.waypointName,
+            waypointZone = data.waypointZone,
+            waypointTooltipText = data.waypointTooltipText,
+        }
+    end
+
+    if type(data) == "table"
+        and type(data.mapID) == "number"
+        and type(data.x) == "number"
+        and type(data.y) == "number"
+        and type(state) == "table"
+        and state.status ~= 2
+    then
+        return {
+            kind = "waypoint",
+            mapID = data.mapID,
+            x = data.x,
+            y = data.y,
+            questID = data.questID or state.questID or state.sourceQuestID,
+            waypointName = data.waypointName or state.title,
+            waypointZone = data.waypointZone,
+            waypointTooltipText = data.waypointTooltipText,
         }
     end
 
@@ -746,8 +878,18 @@ end
 
 local function ShowTrackerLineTooltip(line)
     local tooltipData = line and line.tooltipData or nil
+    local actionData = line and line.actionData or nil
     if type(tooltipData) ~= "table" then
+        if type(actionData) == "table" and actionData.kind == "waypoint" then
+            ShowWaypointActionTooltip(line, actionData)
+        end
         return
+    end
+
+    if type(actionData) == "table" and actionData.kind == "waypoint" and tooltipData.kind ~= "preyWaypoint" then
+        if ShowWaypointActionTooltip(line, actionData) then
+            return
+        end
     end
 
     if tooltipData.kind == "item" and tooltipData.itemID then
@@ -770,6 +912,13 @@ local function ShowTrackerLineTooltip(line)
 
     if tooltipData.kind == "quest" and tooltipData.questID then
         if ShowQuestTooltip(line, tooltipData.questID) then
+            AppendWaypointActionTooltip(actionData)
+            return
+        end
+    end
+
+    if type(actionData) == "table" and actionData.kind == "waypoint" then
+        if ShowWaypointActionTooltip(line, actionData) then
             return
         end
     end
@@ -784,7 +933,7 @@ local function HandleTrackerLineClick(line)
     end
 
     if actionData.kind == "waypoint" then
-        SetWaypoint(actionData.mapID, actionData.x, actionData.y, actionData.questID)
+        SetWaypoint(actionData.mapID, actionData.x, actionData.y, actionData.questID, actionData.waypointName)
     end
 end
 
@@ -1580,7 +1729,7 @@ function CDT:RefreshTrackerControls(frame)
     end
 
     if frame.CloseButton then
-        frame.CloseButton:SetShown(not isLocked)
+        frame.CloseButton:SetShown((not isLocked) or isHovered)
     end
 
     if frame.SettingsButton then
@@ -2144,6 +2293,21 @@ function CDT:GetMenuList()
         keepShownOnClick = true,
         func = function()
             choresOptions:SetTrackBountifulDelves(nil, not choresOptions:GetTrackBountifulDelves())
+        end,
+    })
+    table.insert(menuList, {
+        text = "Only Track Bountiful Delves With Key",
+        checked = function()
+            return choresOptions:GetOnlyTrackBountifulDelvesWithKey()
+        end,
+        disabled = function()
+            return not choresOptions:GetTrackBountifulDelves()
+        end,
+        isNotRadio = true,
+        keepShownOnClick = true,
+        func = function()
+            choresOptions:SetOnlyTrackBountifulDelvesWithKey(nil,
+                not choresOptions:GetOnlyTrackBountifulDelvesWithKey())
         end,
     })
     table.insert(menuList, {

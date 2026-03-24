@@ -510,7 +510,7 @@ local function GetCurrentExpansionContentKey()
     return nil
 end
 
-local function GetBountifulKeyInfoText()
+local function GetBountifulKeyCurrencyCounts()
     local keyCount = 0
     local shardCount = 0
 
@@ -520,6 +520,12 @@ local function GetBountifulKeyInfoText()
         keyCount = keyInfo and keyInfo.quantity or 0
         shardCount = shardInfo and shardInfo.quantity or 0
     end
+
+    return keyCount, shardCount
+end
+
+local function GetBountifulKeyInfoText()
+    local keyCount, shardCount = GetBountifulKeyCurrencyCounts()
 
     local parts = {
         T.Tools.Text.Color(T.Tools.Colors.WARNING, tostring(keyCount)),
@@ -535,6 +541,15 @@ local function GetBountifulKeyInfoText()
     return " " ..
         T.Tools.Text.Color(T.Tools.Colors.GRAY, "[") ..
         table.concat(parts) .. T.Tools.Text.Color(T.Tools.Colors.GRAY, "]")
+end
+
+local function GetAreaPOIPositionXY(poiInfo)
+    local position = poiInfo and poiInfo.position or nil
+    if position and type(position.GetXY) == "function" then
+        return position:GetXY()
+    end
+
+    return nil, nil
 end
 
 local function GetRaidWingEntries()
@@ -1303,8 +1318,18 @@ function Chores:BuildBountifulDelvesSummary()
     local summary = BuildSimpleSummary("bountifulDelves", "Bountiful Delves", nil, "delves-bountiful")
     summary.showPendingEntries = true
     summary.infoText = GetBountifulKeyInfoText()
+    local keyCount = GetBountifulKeyCurrencyCounts()
+    local trackWithKeyOnly = options.GetOnlyTrackBountifulDelvesWithKey
+        and options:GetOnlyTrackBountifulDelvesWithKey()
 
     if not options:GetTrackBountifulDelves() then
+        summary.active = false
+        summary.visible = false
+        return summary
+    end
+
+    if trackWithKeyOnly and keyCount <= 0
+    then
         summary.active = false
         summary.visible = false
         return summary
@@ -1331,8 +1356,17 @@ function Chores:BuildBountifulDelvesSummary()
             local questState = poi.quest and poi.quest > 0 and GetQuestState(poi.quest) or nil
 
             if activePoi then
+                local entryData = CloneEntry(poi)
+                local x, y = GetAreaPOIPositionXY(activePoi)
+                entryData.mapID = zone.uiMapId
+                entryData.x = x
+                entryData.y = y
+                entryData.waypointName = activePoi.name or "Bountiful Delve"
+                entryData.waypointZone = mapName
+                entryData.waypointTooltipText = "Click to set a waypoint to this bountiful delve."
+
                 local entry = {
-                    data = CloneEntry(poi),
+                    data = entryData,
                     state = {
                         title = ("%s: %s"):format(mapName, activePoi.name or "Bountiful Delve"),
                         status = STATUS_NOT_STARTED,
@@ -1366,6 +1400,32 @@ function Chores:BuildBountifulDelvesSummary()
         return summary
     end
 
+    table.sort(summary.entries, SortEntries)
+    table.sort(summary.selectedEntries, SortEntries)
+
+    if trackWithKeyOnly then
+        local trackedPendingCount = math.min(keyCount, #summary.selectedEntries)
+        local trackedEntries = {}
+        local trackedSelectedEntries = {}
+
+        for _, entry in ipairs(summary.entries) do
+            if entry.state.status == STATUS_COMPLETED then
+                table.insert(trackedEntries, entry)
+            end
+        end
+
+        for index = 1, trackedPendingCount do
+            local entry = summary.selectedEntries[index]
+            trackedSelectedEntries[index] = entry
+            trackedEntries[#trackedEntries + 1] = entry
+        end
+
+        table.sort(trackedEntries, SortEntries)
+        summary.entries = trackedEntries
+        summary.selectedEntries = trackedSelectedEntries
+        summary.total = summary.completed + trackedPendingCount
+    end
+
     summary.remaining = math.max(summary.total - summary.completed, 0)
     if summary.remaining == 0 then
         summary.status = STATUS_COMPLETED
@@ -1373,8 +1433,6 @@ function Chores:BuildBountifulDelvesSummary()
         summary.status = STATUS_IN_PROGRESS
     end
 
-    table.sort(summary.entries, SortEntries)
-    table.sort(summary.selectedEntries, SortEntries)
     return summary
 end
 

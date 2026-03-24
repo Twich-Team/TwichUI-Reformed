@@ -7,20 +7,44 @@ local T = unpack(TwichRx)
 
 local function OpenConfigurationPanel(input)
     local command = type(input) == "string" and input:match("^%s*(.-)%s*$") or ""
+    local primaryCommand, remainder = command:match("^(%S+)%s*(.-)%s*$")
+    primaryCommand = primaryCommand or ""
+    remainder = remainder or ""
 
-    if command == "chores" then
+    if primaryCommand == "chores" then
         ---@type DataTextModule
         local datatextModule = T:GetModule("Datatexts")
         ---@type ChoresDataText|nil
         ---@diagnostic disable-next-line: undefined-field
         local choresDataText = datatextModule and datatextModule.GetModule and
-        datatextModule:GetModule("ChoresDataText", true)
+            datatextModule:GetModule("ChoresDataText", true)
         if choresDataText and choresDataText.ShowTrackerFrame then
             choresDataText:ShowTrackerFrame()
             return
         end
 
         T:Print("[TwichUI] Chores tracker is unavailable")
+        return
+    end
+
+    if primaryCommand == "debug" then
+        local console = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+        if not console or type(console.Show) ~= "function" then
+            T:Print("[TwichUI] Debug console is unavailable")
+            return
+        end
+
+        if remainder ~= "" and not console:ResolveSourceKey(remainder) then
+            local available = console:ListSourceTitles()
+            if #available > 0 then
+                T:Print("[TwichUI] Unknown debug source. Available sources: " .. table.concat(available, ", "))
+            else
+                T:Print("[TwichUI] No debug sources are registered")
+            end
+            return
+        end
+
+        console:Show(remainder ~= "" and remainder or nil)
         return
     end
 
@@ -126,26 +150,3 @@ end
 
 T:RegisterChatCommand("findtexture", FindTexture)
 
-local function ShowMPTDebugPanel()
-    local mpt = _G.TwichUIMythicPlusToolsRuntime
-    if not mpt or type(mpt.ShowDebugFrame) ~= "function" then
-        T:Print("[TwichUI] Mythic+ Tools debug is unavailable")
-        return
-    end
-    mpt:ShowDebugFrame()
-end
-
-T:RegisterChatCommand("tuimptdebug", ShowMPTDebugPanel)
-
-local function ShowGatheringDebugPanel()
-    local qol = T:GetModule("QualityOfLife", true)
-    local gathering = qol and qol.GetModule and qol:GetModule("Gathering", true) or nil
-    if not gathering or type(gathering.ShowDebugFrame) ~= "function" then
-        T:Print("[TwichUI] Gathering debug is unavailable")
-        return
-    end
-
-    gathering:ShowDebugFrame()
-end
-
-T:RegisterChatCommand("tuigatherdebug", ShowGatheringDebugPanel)

@@ -19,7 +19,36 @@ local DEFAULT_COLOR = {
     a = 0.9,
 }
 
+local DEFAULT_SPARK_COLOR = {
+    r = 1,
+    g = 0.88,
+    b = 0.34,
+    a = 0.95,
+}
+
 local DEFAULT_GLOW_STYLE = "classic"
+local DEFAULT_SPARK_COUNT = 1
+local DEFAULT_SPARK_WIDTH = 12
+local DEFAULT_SPARK_HEIGHT = 2
+local MIN_SPARK_COUNT = 1
+local MAX_SPARK_COUNT = 6
+local MIN_SPARK_WIDTH = 4
+local MAX_SPARK_WIDTH = 32
+local MIN_SPARK_HEIGHT = 1
+local MAX_SPARK_HEIGHT = 8
+
+local function ClampNumber(value, minimum, maximum, fallback)
+    value = tonumber(value)
+    if type(value) ~= "number" then
+        value = fallback
+    end
+
+    if type(value) ~= "number" then
+        value = minimum
+    end
+
+    return math.min(maximum, math.max(minimum, value))
+end
 
 local function GetModule()
     return T:GetModule("RaidFrames")
@@ -77,6 +106,12 @@ function Options:GetGlowColor(info)
     return color.r, color.g, color.b, color.a
 end
 
+function Options:GetSparkColor(info)
+    local db = self:GetDB()
+    local color = db.sparkColor or DEFAULT_SPARK_COLOR
+    return color.r, color.g, color.b, color.a
+end
+
 function Options:GetGlowStyle(info)
     local db = self:GetDB()
     local style = db.glowStyle
@@ -108,6 +143,62 @@ function Options:SetGlowColor(info, r, g, b, a)
         b = b,
         a = a,
     }
+
+    if GetModule():IsEnabled() then
+        GetModule():Refresh()
+    end
+end
+
+function Options:SetSparkColor(info, r, g, b, a)
+    local db = self:GetDB()
+    db.sparkColor = {
+        r = r,
+        g = g,
+        b = b,
+        a = a,
+    }
+
+    if GetModule():IsEnabled() then
+        GetModule():Refresh()
+    end
+end
+
+function Options:GetSparkCount(info)
+    local db = self:GetDB()
+    return ClampNumber(db.sparkCount, MIN_SPARK_COUNT, MAX_SPARK_COUNT, DEFAULT_SPARK_COUNT)
+end
+
+function Options:SetSparkCount(info, value)
+    local db = self:GetDB()
+    db.sparkCount = math.floor(ClampNumber(value, MIN_SPARK_COUNT, MAX_SPARK_COUNT, DEFAULT_SPARK_COUNT) + 0.5)
+
+    if GetModule():IsEnabled() then
+        GetModule():Refresh()
+    end
+end
+
+function Options:GetSparkWidth(info)
+    local db = self:GetDB()
+    return ClampNumber(db.sparkWidth, MIN_SPARK_WIDTH, MAX_SPARK_WIDTH, DEFAULT_SPARK_WIDTH)
+end
+
+function Options:SetSparkWidth(info, value)
+    local db = self:GetDB()
+    db.sparkWidth = math.floor(ClampNumber(value, MIN_SPARK_WIDTH, MAX_SPARK_WIDTH, DEFAULT_SPARK_WIDTH) + 0.5)
+
+    if GetModule():IsEnabled() then
+        GetModule():Refresh()
+    end
+end
+
+function Options:GetSparkHeight(info)
+    local db = self:GetDB()
+    return ClampNumber(db.sparkHeight, MIN_SPARK_HEIGHT, MAX_SPARK_HEIGHT, DEFAULT_SPARK_HEIGHT)
+end
+
+function Options:SetSparkHeight(info, value)
+    local db = self:GetDB()
+    db.sparkHeight = math.floor(ClampNumber(value, MIN_SPARK_HEIGHT, MAX_SPARK_HEIGHT, DEFAULT_SPARK_HEIGHT) + 0.5)
 
     if GetModule():IsEnabled() then
         GetModule():Refresh()

@@ -133,6 +133,25 @@ function Options:SetEnabled(info, value)
     end
 end
 
+function Options:GetDebugEnabled()
+    return self:GetDB().debugEnabled == true
+end
+
+function Options:SetDebugEnabled(info, value)
+    self:GetDB().debugEnabled = NormalizeBoolean(value)
+
+    if value ~= true and T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole then
+        T.Tools.UI.DebugConsole:ClearLogs("mythicplustools")
+    end
+end
+
+function Options:OpenDebugConsole()
+    local console = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+    if console and console.Show then
+        console:Show("mythicplustools")
+    end
+end
+
 function Options:GetAutoSlotKeystoneEnabled()
     return self:GetDB().autoSlotKeystone ~= false
 end

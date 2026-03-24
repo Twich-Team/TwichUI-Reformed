@@ -19,38 +19,40 @@ Gathering:SetEnabledState(false)
 -- ============================================================
 -- Localised WoW API
 -- ============================================================
-local AceGUI            = LibStub("AceGUI-3.0")
-local C_Item            = _G.C_Item
-local C_Container       = _G.C_Container
-local GetContainerNumSlots = _G.C_Container and _G.C_Container.GetContainerNumSlots or _G.GetContainerNumSlots
-local GetContainerItemInfo = _G.C_Container and function(bag, slot) return _G.C_Container.GetContainerItemInfo(bag, slot) end or _G.GetContainerItemInfo
-local GetTime           = _G.GetTime
-local UIParent          = _G.UIParent
-local CreateFrame       = _G.CreateFrame
-local IsControlKeyDown  = _G.IsControlKeyDown
-local IsShiftKeyDown    = _G.IsShiftKeyDown
-local GetItemInfo       = _G.GetItemInfo
-local time              = _G.time
-local date              = _G.date
-local format            = string.format
-local floor             = math.floor
-local max               = math.max
-local min               = math.min
+local AceGUI                          = LibStub("AceGUI-3.0")
+local C_Item                          = _G.C_Item
+local C_Container                     = _G.C_Container
+local GetContainerNumSlots            = _G.C_Container and _G.C_Container.GetContainerNumSlots or _G
+.GetContainerNumSlots
+local GetContainerItemInfo            = _G.C_Container and
+function(bag, slot) return _G.C_Container.GetContainerItemInfo(bag, slot) end or _G.GetContainerItemInfo
+local GetTime                         = _G.GetTime
+local UIParent                        = _G.UIParent
+local CreateFrame                     = _G.CreateFrame
+local IsControlKeyDown                = _G.IsControlKeyDown
+local IsShiftKeyDown                  = _G.IsShiftKeyDown
+local GetItemInfo                     = _G.GetItemInfo
+local time                            = _G.time
+local date                            = _G.date
+local format                          = string.format
+local floor                           = math.floor
+local max                             = math.max
+local min                             = math.min
 
 -- ============================================================
 -- Constants
 -- ============================================================
-local NUM_BAGS          = 5  -- 0..4
-local HUD_DEFAULT_SIZE  = 400
-local HUD_MINIMAP_SIZE  = 256  -- HorizonSuite always uses 256 physical, we drive via scale
-local GPS_TICKER_INTERVAL = 5.0
-local MIN_GPH_TICKER_INTERVAL = 1.0
+local NUM_BAGS                        = 5 -- 0..4
+local HUD_DEFAULT_SIZE                = 400
+local HUD_MINIMAP_SIZE                = 256 -- HorizonSuite always uses 256 physical, we drive via scale
+local GPS_TICKER_INTERVAL             = 5.0
+local MIN_GPH_TICKER_INTERVAL         = 1.0
 local HUD_COMPATIBILITY_TICK_INTERVAL = 0.2
-local DEBUG_LOG_LIMIT = 80
+local DEBUG_LOG_LIMIT                 = 80
 
-local GOLD_COLOR   = "|cffffd24a"
-local SILVER_COLOR = "|cffd7e0ea"
-local COPPER_COLOR = "|cffd08a43"
+local GOLD_COLOR                      = "|cffffd24a"
+local SILVER_COLOR                    = "|cffd7e0ea"
+local COPPER_COLOR                    = "|cffd08a43"
 
 -- ============================================================
 -- Module config helpers
@@ -71,6 +73,9 @@ end
 local function GetLSM()
     return T.Libs and T.Libs.LSM or LibStub("LibSharedMedia-3.0", true)
 end
+
+local DebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+local DEBUG_SOURCE_KEY = "gathering"
 
 local function RefreshExternalMinimapOverlays()
     local routesCanvas = _G.Minimap
@@ -140,7 +145,7 @@ local function ScheduleExternalOverlayRefreshes(owner)
         local function scheduleDelayedRefresh(delay)
             _G.C_Timer.After(delay, function()
                 if owner and owner.LogHUDDebug then
-                    owner:LogHUDDebug(format("Running delayed external overlay refresh (+%.2fs)", delay))
+                    owner:LogHUDDebugf(false, "Running delayed external overlay refresh (+%.2fs)", delay)
                 end
                 RefreshExternalMinimapOverlays()
                 if owner and owner.hud and owner.hud.active then
@@ -315,42 +320,42 @@ end
 -- Session state
 -- ============================================================
 Gathering.session = {
-    active         = false,
-    startTime      = nil,
-    pausedAt       = nil,
-    activeSeconds  = 0,        -- total seconds the session was unpaused
-    items          = {},       -- [itemID] = { itemLink, name, qty, totalValue, iconTexture }
-    totalValue     = 0,        -- copper
-    goldPerHour    = 0,        -- copper
-    lastGPHUpdate  = nil,
+    active        = false,
+    startTime     = nil,
+    pausedAt      = nil,
+    activeSeconds = 0,   -- total seconds the session was unpaused
+    items         = {},  -- [itemID] = { itemLink, name, qty, totalValue, iconTexture }
+    totalValue    = 0,   -- copper
+    goldPerHour   = 0,   -- copper
+    lastGPHUpdate = nil,
 }
 
 -- ============================================================
 -- Minimap / HUD state
 -- ============================================================
 Gathering.hud = {
-    active             = false,
-    savedParent        = nil,
-    savedFrameStrata   = nil,
-    savedFrameLevel    = nil,
-    savedScale         = nil,
-    savedPoint         = nil,
-    savedRelativeTo    = nil,
-    savedRelPoint      = nil,
-    savedX             = nil,
-    savedY             = nil,
-    savedAlpha         = nil,
-    savedMouseEnabled  = nil,
-    savedMouseMotionEnabled = nil,
-    savedClusterMouseEnabled = nil,
+    active                         = false,
+    savedParent                    = nil,
+    savedFrameStrata               = nil,
+    savedFrameLevel                = nil,
+    savedScale                     = nil,
+    savedPoint                     = nil,
+    savedRelativeTo                = nil,
+    savedRelPoint                  = nil,
+    savedX                         = nil,
+    savedY                         = nil,
+    savedAlpha                     = nil,
+    savedMouseEnabled              = nil,
+    savedMouseMotionEnabled        = nil,
+    savedClusterMouseEnabled       = nil,
     savedClusterMouseMotionEnabled = nil,
-    savedRotateMinimap = nil,
-    savedGetMinimapShape = nil,
-    savedMouseFrames   = nil,
-    ringFrame          = nil,
-    overlayFrame       = nil,
-    gpsTicker          = nil,
-    compatibilityTicker = nil,
+    savedRotateMinimap             = nil,
+    savedGetMinimapShape           = nil,
+    savedMouseFrames               = nil,
+    ringFrame                      = nil,
+    overlayFrame                   = nil,
+    gpsTicker                      = nil,
+    compatibilityTicker            = nil,
 }
 
 -- ============================================================
@@ -492,20 +497,31 @@ local function CreateTrackerHeaderButton(parent, text)
 end
 
 function Gathering:LogHUDDebug(message)
-    self.debugLines = self.debugLines or {}
-
-    local prefix = date and date("%H:%M:%S") or format("%.3f", GetTime())
-    self.debugLines[#self.debugLines + 1] = format("[%s] %s", SafeDebugString(prefix), SafeDebugString(message))
-    while #self.debugLines > DEBUG_LOG_LIMIT do
-        table.remove(self.debugLines, 1)
+    if not DebugConsole or type(DebugConsole.Log) ~= "function" then
+        return false
     end
 
-    if self.debugFrame and self.debugFrame:IsShown() then
-        self:RefreshDebugFrame()
+    return DebugConsole:Log(DEBUG_SOURCE_KEY, SafeDebugString(message), false)
+end
+
+function Gathering:LogHUDDebugf(shouldShow, messageFormat, ...)
+    if not DebugConsole or type(DebugConsole.Logf) ~= "function" then
+        return false
     end
+
+    return DebugConsole:Logf(DEBUG_SOURCE_KEY, shouldShow, messageFormat, ...)
+end
+
+function Gathering:IsDebugEnabled()
+    local options = GetOptions()
+    return options and options.GetDebugEnabled and options:GetDebugEnabled() or false
 end
 
 function Gathering:LogHUDSnapshot(label)
+    if not self:IsDebugEnabled() then
+        return
+    end
+
     local mm = _G.Minimap
     if not mm then
         self:LogHUDDebug((label or "snapshot") .. " | minimap=nil")
@@ -514,7 +530,7 @@ function Gathering:LogHUDSnapshot(label)
 
     local point, relativeTo, relPoint, x, y = mm:GetPoint()
     local overlayStats = CollectGatheringOverlayStats()
-    self:LogHUDDebug(format(
+    self:LogHUDDebugf(false,
         "%s | active=%s parent=%s point=%s/%s relTo=%s offset=(%s,%s) scale=%.3f size=%.1fx%.1f alpha=%.2f strata=%s level=%s shape=%s rotate=%s overlays=%d/%d",
         label or "snapshot",
         BoolToDebugString(self.hud.active),
@@ -533,7 +549,7 @@ function Gathering:LogHUDSnapshot(label)
         SafeDebugString(_G.GetMinimapShape and _G.GetMinimapShape() or nil),
         SafeDebugString(_G.GetCVar and _G.GetCVar("rotateMinimap") or nil),
         overlayStats.visible,
-        overlayStats.total))
+        overlayStats.total)
 end
 
 function Gathering:BuildDebugReport()
@@ -562,7 +578,8 @@ function Gathering:BuildDebugReport()
             GetFrameDebugName(relativeTo),
             SafeDebugString(x),
             SafeDebugString(y))
-        lines[#lines + 1] = format("minimap size=%.1fx%.1f scale=%.3f effectiveScale=%.3f alpha=%.2f shown=%s children=%d",
+        lines[#lines + 1] = format(
+            "minimap size=%.1fx%.1f scale=%.3f effectiveScale=%.3f alpha=%.2f shown=%s children=%d",
             mm:GetWidth() or 0,
             mm:GetHeight() or 0,
             mm:GetScale() or 0,
@@ -637,7 +654,8 @@ function Gathering:BuildDebugReport()
             end
         end
 
-        lines[#lines + 1] = format("GatherMate2 loaded=%s display=%s changedVars=%s updateMiniMap=%s updateIconPositions=%s",
+        lines[#lines + 1] = format(
+            "GatherMate2 loaded=%s display=%s changedVars=%s updateMiniMap=%s updateIconPositions=%s",
             BoolToDebugString(gatherMateLoaded),
             BoolToDebugString(gatherMateDisplay ~= nil),
             BoolToDebugString(gatherMateDisplay and type(gatherMateDisplay.ChangedVars) == "function" or false),
@@ -645,7 +663,8 @@ function Gathering:BuildDebugReport()
             BoolToDebugString(gatherMateDisplay and type(gatherMateDisplay.UpdateIconPositions) == "function" or false))
     end
 
-    lines[#lines + 1] = format("overlay frames total=%d visible=%d parentedToMinimap=%d parentedToUIParent=%d parentedElsewhere=%d",
+    lines[#lines + 1] = format(
+        "overlay frames total=%d visible=%d parentedToMinimap=%d parentedToUIParent=%d parentedElsewhere=%d",
         overlayStats.total,
         overlayStats.visible,
         overlayStats.minimapParent,
@@ -677,8 +696,9 @@ function Gathering:BuildDebugReport()
 
     lines[#lines + 1] = ""
     lines[#lines + 1] = "Recent Log"
-    if self.debugLines and #self.debugLines > 0 then
-        for _, line in ipairs(self.debugLines) do
+    local debugLines = DebugConsole and DebugConsole.GetLines and DebugConsole:GetLines(DEBUG_SOURCE_KEY) or nil
+    if debugLines and #debugLines > 0 then
+        for _, line in ipairs(debugLines) do
             lines[#lines + 1] = line
         end
     else
@@ -686,87 +706,6 @@ function Gathering:BuildDebugReport()
     end
 
     return table.concat(lines, "\n")
-end
-
-function Gathering:EnsureDebugFrame()
-    if self.debugFrame then
-        return self.debugFrame
-    end
-
-    local frame = CreateFrame("Frame", "TwichUIGatheringDebugFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(760, 420)
-    frame:SetPoint("CENTER")
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    frame:Hide()
-
-    frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    frame.title:SetPoint("LEFT", frame.TitleBg, "LEFT", 8, 0)
-    frame.title:SetText("TwichUI Gathering HUD Debug")
-
-    local refreshButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    refreshButton:SetSize(72, 22)
-    refreshButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -36, -30)
-    refreshButton:SetText("Refresh")
-    refreshButton:SetScript("OnClick", function()
-        self:RefreshDebugFrame()
-    end)
-
-    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -58)
-    scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 10)
-
-    local editBox = CreateFrame("EditBox", nil, scroll)
-    editBox:SetMultiLine(true)
-    editBox:SetAutoFocus(false)
-    editBox:SetFontObject(ChatFontNormal)
-    editBox:SetWidth(700)
-    editBox:SetHeight(1200)
-    editBox:SetScript("OnEscapePressed", function()
-        frame:Hide()
-    end)
-    editBox:SetScript("OnTextChanged", function(box)
-        local text = box:GetText() or ""
-        local _, lineCount = text:gsub("\n", "\n")
-        local _, fontHeight = box:GetFont()
-        local lineHeight = (fontHeight or 14) + 2
-        local height = max(1200, ((lineCount + 1) * lineHeight) + 24)
-        box:SetHeight(height)
-    end)
-
-    scroll:SetScrollChild(editBox)
-
-    frame.refreshButton = refreshButton
-    frame.scroll = scroll
-    frame.editBox = editBox
-    frame:SetScript("OnShow", function()
-        self:RefreshDebugFrame()
-    end)
-
-    self.debugFrame = frame
-    return frame
-end
-
-function Gathering:RefreshDebugFrame()
-    if not self.debugFrame then
-        return
-    end
-
-    local text = self:BuildDebugReport()
-    self.debugFrame.editBox:SetText(text)
-    self.debugFrame.editBox:SetCursorPosition(0)
-    self.debugFrame.editBox:HighlightText()
-    self.debugFrame.scroll:SetVerticalScroll(0)
-end
-
-function Gathering:ShowDebugFrame()
-    local frame = self:EnsureDebugFrame()
-    self:RefreshDebugFrame()
-    frame:Show()
-    frame.editBox:HighlightText()
 end
 
 local function GetTrackerFontPath(fontKey)
@@ -880,10 +819,10 @@ function Gathering:StartSession()
     if sess.active then return end
     sess.active = true
     if not sess.startTime then
-        sess.startTime = GetTime()
-        sess.items     = {}
-        sess.totalValue = 0
-        sess.goldPerHour = 0
+        sess.startTime     = GetTime()
+        sess.items         = {}
+        sess.totalValue    = 0
+        sess.goldPerHour   = 0
         sess.activeSeconds = 0
     else
         -- Resuming from pause
@@ -911,16 +850,16 @@ function Gathering:PauseSession()
 end
 
 function Gathering:ResetSession()
-    local sess = self.session
-    local wasActive = sess.active
-    sess.active         = false
-    sess.startTime      = nil
-    sess.pausedAt       = nil
-    sess.activeSeconds  = 0
-    sess.items          = {}
-    sess.totalValue     = 0
-    sess.goldPerHour    = 0
-    sess.lastGPHUpdate  = nil
+    local sess         = self.session
+    local wasActive    = sess.active
+    sess.active        = false
+    sess.startTime     = nil
+    sess.pausedAt      = nil
+    sess.activeSeconds = 0
+    sess.items         = {}
+    sess.totalValue    = 0
+    sess.goldPerHour   = 0
+    sess.lastGPHUpdate = nil
     if wasActive then
         self:StartSession()
         return
@@ -961,7 +900,7 @@ end
 -- ============================================================
 -- Bag scanning & loot detection
 -- ============================================================
-Gathering.bagSnapshot = nil  -- [bag][slot] = { itemID, count }
+Gathering.bagSnapshot = nil -- [bag][slot] = { itemID, count }
 
 local function TakeBagSnapshot()
     local snap = {}
@@ -983,7 +922,7 @@ end
 local function DiffBagSnapshots(old, new)
     -- Returns table of {itemID, delta (positive = gained)}
     local changes = {}
-    local delta   = {}  -- [itemID] = delta
+    local delta   = {} -- [itemID] = delta
 
     for bag = 0, NUM_BAGS - 1 do
         local oldBag = old[bag] or {}
@@ -1057,15 +996,15 @@ function Gathering:OnItemGained(itemID, qty)
     end
 
     -- TSM price
-    local pricePerUnit = GetTSMItemPrice(itemID) or 0
-    local batchValue   = pricePerUnit * qty
+    local pricePerUnit       = GetTSMItemPrice(itemID) or 0
+    local batchValue         = pricePerUnit * qty
     local highValueThreshold = tonumber(db.highValueThreshold) or 0
-    local isHighValue = highValueThreshold > 0 and batchValue >= highValueThreshold
+    local isHighValue        = highValueThreshold > 0 and batchValue >= highValueThreshold
 
     -- Update session items
-    local sess = self.session
-    local entry = sess.items[itemID]
-    local isNewEntry = entry == nil
+    local sess               = self.session
+    local entry              = sess.items[itemID]
+    local isNewEntry         = entry == nil
     if not entry then
         sess.items[itemID] = {
             itemLink    = itemLink,
@@ -1077,7 +1016,7 @@ function Gathering:OnItemGained(itemID, qty)
     else
         entry.qty        = entry.qty + qty
         entry.totalValue = entry.totalValue + batchValue
-        entry.itemLink   = itemLink  -- refresh link (may have gotten quality)
+        entry.itemLink   = itemLink -- refresh link (may have gotten quality)
     end
     self.pendingTrackerAnimations = self.pendingTrackerAnimations or {}
     self.pendingTrackerAnimations[itemID] = isNewEntry and "new" or "update"
@@ -1118,7 +1057,7 @@ end
 function Gathering:SendGatherNotification(data)
     local NM = GetNotificationModule()
     if not NM then return end
-    local db  = GetDB()
+    local db     = GetDB()
 
     ---@diagnostic disable-next-line: param-type-mismatch
     local widget = AceGUI:Create("TwichUI_GatheringNotification")
@@ -1268,22 +1207,23 @@ function Gathering:EnableHUD()
 
     -- Save current state so we can restore
     local point, relativeTo, relPoint, x, y = mm:GetPoint()
-    self.hud.savedParent      = mm:GetParent()
-    self.hud.savedFrameStrata = mm:GetFrameStrata()
-    self.hud.savedFrameLevel  = mm:GetFrameLevel()
-    self.hud.savedPoint       = point      or "TOPRIGHT"
-    self.hud.savedRelativeTo  = relativeTo or UIParent
-    self.hud.savedRelPoint    = relPoint   or "TOPRIGHT"
-    self.hud.savedX           = x          or -20
-    self.hud.savedY           = y          or -20
-    self.hud.savedScale       = mm:GetScale()
-    self.hud.savedAlpha       = mm:GetAlpha()
-    self.hud.savedMouseEnabled = mm:IsMouseEnabled()
-    self.hud.savedMouseMotionEnabled = mm.IsMouseMotionEnabled and mm:IsMouseMotionEnabled() or nil
-    self.hud.savedClusterMouseEnabled = _G.MinimapCluster and _G.MinimapCluster:IsMouseEnabled() or nil
-    self.hud.savedClusterMouseMotionEnabled = _G.MinimapCluster and _G.MinimapCluster.IsMouseMotionEnabled and _G.MinimapCluster:IsMouseMotionEnabled() or nil
-    self.hud.savedRotateMinimap = _G.GetCVar and _G.GetCVar("rotateMinimap") or nil
-    self.hud.savedGetMinimapShape = _G.GetMinimapShape
+    self.hud.savedParent                    = mm:GetParent()
+    self.hud.savedFrameStrata               = mm:GetFrameStrata()
+    self.hud.savedFrameLevel                = mm:GetFrameLevel()
+    self.hud.savedPoint                     = point or "TOPRIGHT"
+    self.hud.savedRelativeTo                = relativeTo or UIParent
+    self.hud.savedRelPoint                  = relPoint or "TOPRIGHT"
+    self.hud.savedX                         = x or -20
+    self.hud.savedY                         = y or -20
+    self.hud.savedScale                     = mm:GetScale()
+    self.hud.savedAlpha                     = mm:GetAlpha()
+    self.hud.savedMouseEnabled              = mm:IsMouseEnabled()
+    self.hud.savedMouseMotionEnabled        = mm.IsMouseMotionEnabled and mm:IsMouseMotionEnabled() or nil
+    self.hud.savedClusterMouseEnabled       = _G.MinimapCluster and _G.MinimapCluster:IsMouseEnabled() or nil
+    self.hud.savedClusterMouseMotionEnabled = _G.MinimapCluster and _G.MinimapCluster.IsMouseMotionEnabled and
+    _G.MinimapCluster:IsMouseMotionEnabled() or nil
+    self.hud.savedRotateMinimap             = _G.GetCVar and _G.GetCVar("rotateMinimap") or nil
+    self.hud.savedGetMinimapShape           = _G.GetMinimapShape
 
     -- Ensure Blizzard base size before scaling (mirrors HorizonSuite's approach)
     mm:SetSize(HUD_MINIMAP_SIZE, HUD_MINIMAP_SIZE)
@@ -1355,7 +1295,7 @@ function Gathering:EnableHUD()
     -- Create ring decoration using Options getters for color
     local ringR, ringG, ringB, ringA = 0.0, 0.85, 1.0, 1.0
     if opts then ringR, ringG, ringB, ringA = opts:GetHudRingColor() end
-    self:CreateHUDRing(hudSize, { r=ringR, g=ringG, b=ringB, a=ringA })
+    self:CreateHUDRing(hudSize, { r = ringR, g = ringG, b = ringB, a = ringA })
 
     -- Let external minimap overlay addons recalc against the resized/rotated HUD minimap.
     ScheduleExternalOverlayRefreshes(self)
@@ -1391,11 +1331,11 @@ function Gathering:DisableHUD()
         end
         proxy.ClearAllPoints(mm)
         proxy.SetPoint(mm,
-            self.hud.savedPoint    or "TOPRIGHT",
+            self.hud.savedPoint or "TOPRIGHT",
             self.hud.savedRelativeTo or UIParent,
             self.hud.savedRelPoint or "TOPRIGHT",
-            self.hud.savedX        or -20,
-            self.hud.savedY        or -20)
+            self.hud.savedX or -20,
+            self.hud.savedY or -20)
         proxy.SetScale(mm, self.hud.savedScale or 1.0)
         mm:SetFrameStrata(self.hud.savedFrameStrata or "MEDIUM")
         mm:SetFrameLevel(self.hud.savedFrameLevel or 1)
@@ -1546,7 +1486,7 @@ local function GetBackdropColors()
     local E2 = _G.ElvUI and _G.ElvUI[1]
     if E2 and E2.media then
         if E2.media.backdropcolor then bgR, bgG, bgB = unpack(E2.media.backdropcolor) end
-        if E2.media.bordercolor   then borderR, borderG, borderB = unpack(E2.media.bordercolor) end
+        if E2.media.bordercolor then borderR, borderG, borderB = unpack(E2.media.bordercolor) end
     end
     return bgR, bgG, bgB, bgA, borderR, borderG, borderB
 end
@@ -1557,7 +1497,7 @@ local function CreateBackdrop(frame)
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
-        insets   = { left=0, right=0, top=0, bottom=0 },
+        insets   = { left = 0, right = 0, top = 0, bottom = 0 },
     })
     frame:SetBackdropColor(bgR, bgG, bgB, bgA)
     frame:SetBackdropBorderColor(borderR, borderG, borderB, 0.6)
@@ -1583,14 +1523,14 @@ function Gathering:CreateTrackerFrame()
 
     -- --------- Title bar ---------
     local titleBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    titleBar:SetPoint("TOPLEFT",  frame, "TOPLEFT",  1, -1)
+    titleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
     titleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
     titleBar:SetHeight(32)
     titleBar:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
-        insets   = { left=0, right=0, top=0, bottom=1 },
+        insets   = { left = 0, right = 0, top = 0, bottom = 1 },
     })
     titleBar:SetBackdropColor(bgR * 0.75, bgG * 0.75, bgB * 0.75, 0.98)
     titleBar:SetBackdropBorderColor(borderR, borderG, borderB, 0.35)
@@ -1609,10 +1549,11 @@ function Gathering:CreateTrackerFrame()
 
     -- Gold accent strip
     local titleAccent = titleBar:CreateTexture(nil, "ARTWORK")
-    titleAccent:SetPoint("TOPLEFT",  titleBar, "TOPLEFT",  0, 0)
+    titleAccent:SetPoint("TOPLEFT", titleBar, "TOPLEFT", 0, 0)
     titleAccent:SetPoint("TOPRIGHT", titleBar, "TOPRIGHT", 0, 0)
     titleAccent:SetHeight(2)
-    titleAccent:SetColorTexture(trackerSettings.accent.r, trackerSettings.accent.g, trackerSettings.accent.b, trackerSettings.accent.a)
+    titleAccent:SetColorTexture(trackerSettings.accent.r, trackerSettings.accent.g, trackerSettings.accent.b,
+        trackerSettings.accent.a)
     frame.titleAccent = titleAccent
 
     -- Icon
@@ -1645,20 +1586,20 @@ function Gathering:CreateTrackerFrame()
 
     -- --------- Summary bar ---------
     local summaryBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    summaryBar:SetPoint("TOPLEFT",  frame, "TOPLEFT",  4, -36)
+    summaryBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -36)
     summaryBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -36)
     summaryBar:SetHeight(28)
     summaryBar:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
-        insets   = { left=0, right=0, top=0, bottom=0 },
+        insets   = { left = 0, right = 0, top = 0, bottom = 0 },
     })
     summaryBar:SetBackdropColor(0.12, 0.12, 0.14, 0.95)
     summaryBar:SetBackdropBorderColor(borderR, borderG, borderB, 0.3)
 
     local totalValueLabel = summaryBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    totalValueLabel:SetPoint("LEFT",  summaryBar, "LEFT",  8, 0)
+    totalValueLabel:SetPoint("LEFT", summaryBar, "LEFT", 8, 0)
     totalValueLabel:SetJustifyH("LEFT")
     totalValueLabel:SetTextColor(0.9, 0.78, 0.2, 1)
     frame.totalValueLabel = totalValueLabel
@@ -1671,7 +1612,7 @@ function Gathering:CreateTrackerFrame()
 
     -- --------- Column headers ---------
     local hdrs = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    hdrs:SetPoint("TOPLEFT",  frame, "TOPLEFT",  4, -68)
+    hdrs:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -68)
     hdrs:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -68)
     hdrs:SetHeight(20)
     hdrs:SetBackdropColor(0, 0, 0, 0)
@@ -1735,26 +1676,26 @@ function Gathering:CreateTrackerFrame()
 
     -- Divider line
     local divider = frame:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOPLEFT",  frame, "TOPLEFT",  4, -88)
+    divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -88)
     divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -88)
     divider:SetHeight(1)
     divider:SetColorTexture(0.25, 0.25, 0.30, 0.8)
 
     -- --------- Scroll area ---------
     local contentInset = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    contentInset:SetPoint("TOPLEFT",     frame, "TOPLEFT",     4, -92)
+    contentInset:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -92)
     contentInset:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 38)
     contentInset:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
-        insets   = { left=0, right=0, top=0, bottom=0 },
+        insets   = { left = 0, right = 0, top = 0, bottom = 0 },
     })
     contentInset:SetBackdropColor(bgR * 0.82, bgG * 0.82, bgB * 0.82, 0.98)
     contentInset:SetBackdropBorderColor(borderR, borderG, borderB, 0.45)
 
     local scrollFrame = CreateFrame("ScrollFrame", nil, contentInset, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT",     contentInset, "TOPLEFT",     8, -8)
+    scrollFrame:SetPoint("TOPLEFT", contentInset, "TOPLEFT", 8, -8)
     scrollFrame:SetPoint("BOTTOMRIGHT", contentInset, "BOTTOMRIGHT", -20, 8)
     T.Tools.UI.SkinScrollBar(scrollFrame)
 
@@ -1766,12 +1707,12 @@ function Gathering:CreateTrackerFrame()
         scrollChild:SetWidth(contentWidth)
     end)
 
-    frame.scrollFrame  = scrollFrame
-    frame.scrollChild  = scrollChild
-    frame.rows         = {}
+    frame.scrollFrame = scrollFrame
+    frame.scrollChild = scrollChild
+    frame.rows        = {}
 
     -- --------- Footer actions ---------
-    local footerBar = CreateFrame("Frame", nil, frame)
+    local footerBar   = CreateFrame("Frame", nil, frame)
     footerBar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 8, 8)
     footerBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -28, 8)
     footerBar:SetHeight(24)
@@ -1865,18 +1806,18 @@ local function EnsureTrackerRow(scrollChild, rows, index)
     local row = CreateFrame("Frame", nil, scrollChild, "BackdropTemplate")
     row:SetHeight(ROW_HEIGHT)
     if index == 1 then
-        row:SetPoint("TOPLEFT",  scrollChild, "TOPLEFT",  0, 0)
+        row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
         row:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, 0)
     else
         local prev = rows[index - 1]
-        row:SetPoint("TOPLEFT",  prev, "BOTTOMLEFT",  0, -2)
+        row:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -2)
         row:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, -2)
     end
     row:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
-        insets   = { left=0, right=0, top=0, bottom=0 },
+        insets   = { left = 0, right = 0, top = 0, bottom = 0 },
     })
     -- alternate row shading
     if index % 2 == 0 then
@@ -1895,7 +1836,7 @@ local function EnsureTrackerRow(scrollChild, rows, index)
 
     -- Item link label
     local itemLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    itemLabel:SetPoint("LEFT",  icon, "RIGHT", 4, 0)
+    itemLabel:SetPoint("LEFT", icon, "RIGHT", 4, 0)
     itemLabel:SetWidth(170)
     ConfigureTrackerLabel(itemLabel, "LEFT")
     row.itemLabel = itemLabel
@@ -1935,8 +1876,8 @@ local function EnsureTrackerRow(scrollChild, rows, index)
             gt:AddLine(entry.name or "Unknown Item")
         end
         gt:AddLine(" ")
-        gt:AddDoubleLine("Quantity", tostring(entry.qty or 0), 0.82,0.87,0.94, 1,1,1)
-        gt:AddDoubleLine("Total Value", FormatCopper(entry.totalValue or 0), 0.82,0.87,0.94, 1,1,1)
+        gt:AddDoubleLine("Quantity", tostring(entry.qty or 0), 0.82, 0.87, 0.94, 1, 1, 1)
+        gt:AddDoubleLine("Total Value", FormatCopper(entry.totalValue or 0), 0.82, 0.87, 0.94, 1, 1, 1)
         gt:Show()
         row:SetBackdropBorderColor(0.2, 0.75, 0.3, 0.45)
     end)
@@ -1988,7 +1929,8 @@ function Gathering:ApplyTrackerFrameStyle()
 
     frame:SetBackdropColor(bgR, bgG, bgB, trackerSettings.backgroundAlpha)
     if frame.titleBar then
-        frame.titleBar:SetBackdropColor(bgR * 0.75, bgG * 0.75, bgB * 0.75, min(1, trackerSettings.backgroundAlpha + 0.02))
+        frame.titleBar:SetBackdropColor(bgR * 0.75, bgG * 0.75, bgB * 0.75,
+            min(1, trackerSettings.backgroundAlpha + 0.02))
     end
     if frame.titleAccent then
         frame.titleAccent:SetColorTexture(accent.r, accent.g, accent.b, accent.a)
@@ -2000,10 +1942,12 @@ function Gathering:ApplyTrackerFrameStyle()
     ApplyFontObject(frame.sessionTimeLabel, fontPath, trackerSettings.fontSize, trackerSettings.outline)
     ApplyFontObject(frame.emptyText, fontPath, trackerSettings.fontSize, trackerSettings.outline)
     if frame.sessionToggleButton and frame.sessionToggleButton.GetFontString then
-        ApplyFontObject(frame.sessionToggleButton:GetFontString(), fontPath, trackerSettings.fontSize - 1, trackerSettings.outline)
+        ApplyFontObject(frame.sessionToggleButton:GetFontString(), fontPath, trackerSettings.fontSize - 1,
+            trackerSettings.outline)
     end
     if frame.resetSessionButton and frame.resetSessionButton.GetFontString then
-        ApplyFontObject(frame.resetSessionButton:GetFontString(), fontPath, trackerSettings.fontSize - 1, trackerSettings.outline)
+        ApplyFontObject(frame.resetSessionButton:GetFontString(), fontPath, trackerSettings.fontSize - 1,
+            trackerSettings.outline)
     end
 
     local iconLeft = 4
@@ -2015,7 +1959,8 @@ function Gathering:ApplyTrackerFrameStyle()
     local itemValueLeft = qtyRight + 8
     local headerFrame = frame.headerFrame
     local headerWidth = headerFrame and headerFrame:GetWidth() or 0
-    local totalValueLeft = max(itemValueLeft + trackerSettings.itemValueColumnWidth + 8, headerWidth - trackerSettings.totalValueColumnWidth)
+    local totalValueLeft = max(itemValueLeft + trackerSettings.itemValueColumnWidth + 8,
+        headerWidth - trackerSettings.totalValueColumnWidth)
 
     if frame.headerItemButton and headerFrame then
         frame.headerItemButton:ClearAllPoints()
@@ -2209,9 +2154,9 @@ function Gathering:RefreshTrackerFrame()
     local frame = self.trackerFrame
     if not frame then return end
 
-    local sess       = self.session
+    local sess        = self.session
     local scrollChild = frame.scrollChild
-    local rows       = frame.rows
+    local rows        = frame.rows
     if frame.scrollFrame then
         scrollChild:SetWidth(max(1, frame.scrollFrame:GetWidth() - 26))
     end
@@ -2261,11 +2206,11 @@ function Gathering:RefreshTrackerFrame()
 
     -- Build rows
     for i, item in ipairs(sorted) do
-        local row   = EnsureTrackerRow(scrollChild, rows, i)
-        local entry = item.entry
+        local row       = EnsureTrackerRow(scrollChild, rows, i)
+        local entry     = item.entry
         local rowItemID = item.itemID
-        row.entryData = entry
-        row.itemID = rowItemID
+        row.entryData   = entry
+        row.itemID      = rowItemID
         row.icon:SetTexture(entry.iconTexture)
         row.itemLabel:SetText(entry.itemLink or entry.name or "Unknown")
 
@@ -2303,7 +2248,7 @@ function Gathering:RefreshTrackerFrame()
     -- GPH in title bar
     local gphText = sess.goldPerHour > 0
         and (FormatCopper(sess.goldPerHour) .. "/hr")
-        or  "|cffaaaaaa--/hr|r"
+        or "|cffaaaaaa--/hr|r"
     frame.gphLabel:SetText(gphText)
 
     -- Session time
@@ -2343,10 +2288,10 @@ function Gathering:SaveTrackerPosition()
     local db = GetDB()
     if not self.trackerFrame then return end
     local point, _, relPoint, x, y = self.trackerFrame:GetPoint()
-    db.trackerPoint    = point    or "CENTER"
-    db.trackerRelPoint = relPoint or "CENTER"
-    db.trackerX        = x        or 0
-    db.trackerY        = y        or 0
+    db.trackerPoint                = point or "CENTER"
+    db.trackerRelPoint             = relPoint or "CENTER"
+    db.trackerX                    = x or 0
+    db.trackerY                    = y or 0
 end
 
 function Gathering:SaveTrackerSize()
@@ -2361,7 +2306,8 @@ function Gathering:RestoreTrackerPosition()
     if not self.trackerFrame then return end
     if db.trackerPoint then
         self.trackerFrame:ClearAllPoints()
-        self.trackerFrame:SetPoint(db.trackerPoint, UIParent, db.trackerRelPoint or "CENTER", db.trackerX or 0, db.trackerY or 0)
+        self.trackerFrame:SetPoint(db.trackerPoint, UIParent, db.trackerRelPoint or "CENTER", db.trackerX or 0,
+            db.trackerY or 0)
     else
         self.trackerFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     end
@@ -2410,7 +2356,6 @@ function Gathering:OnEnable()
     self:RegisterEvent("BAG_UPDATE_DELAYED", "OnBAGUpdate")
     self:RegisterEvent("PLAYER_LOGOUT", "OnPlayerLogout")
     self.bagSnapshot = TakeBagSnapshot()
-    self.debugLines = self.debugLines or {}
     self:RestoreSessionState()
     self:StartGPHTicker()
     self:RefreshDatatext()
@@ -2437,4 +2382,20 @@ function Gathering:OnDisable()
     end
     self:LogHUDDebug("Gathering module disabled")
     self.isLoggingOut = nil
+end
+
+if DebugConsole and DebugConsole.RegisterSource then
+    DebugConsole:RegisterSource(DEBUG_SOURCE_KEY, {
+        title = "Gathering",
+        order = 20,
+        aliases = { "gather", "gatheringhud", "gatherhud" },
+        maxLines = DEBUG_LOG_LIMIT,
+        isEnabled = function()
+            local options = GetOptions()
+            return options and options.GetDebugEnabled and options:GetDebugEnabled() or false
+        end,
+        buildReport = function()
+            return Gathering:BuildDebugReport()
+        end,
+    })
 end

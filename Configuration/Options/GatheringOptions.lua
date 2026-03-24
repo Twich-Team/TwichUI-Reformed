@@ -2,38 +2,38 @@
 --[[
     Configuration options for the Gathering module.
 ]]
-local TwichRx = _G.TwichRx
+local TwichRx                                  = _G.TwichRx
 ---@type TwichUI
-local T = unpack(TwichRx)
+local T                                        = unpack(TwichRx)
 
 ---@type ConfigurationModule
-local ConfigurationModule = T:GetModule("Configuration")
+local ConfigurationModule                      = T:GetModule("Configuration")
 
 ---@class GatheringConfigurationOptions
-local Options = ConfigurationModule.Options.Gathering or {}
-ConfigurationModule.Options.Gathering = Options
+local Options                                  = ConfigurationModule.Options.Gathering or {}
+ConfigurationModule.Options.Gathering          = Options
 
-local DEFAULT_PRICE_SOURCE          = "DBMarket"
-local DEFAULT_NOTIFICATION_DURATION = 6
-local DEFAULT_NOTIFICATION_SOUND    = "__none"
-local DEFAULT_HIGH_VALUE_SOUND      = "__none"
-local DEFAULT_HIGH_VALUE_THRESHOLD  = 0
-local DEFAULT_HUD_SIZE              = 400
-local DEFAULT_HUD_TERRAIN_ALPHA     = 0.50
-local DEFAULT_RING_COLOR            = { r = 0.0, g = 0.85, b = 1.0, a = 1.0 }
-local DEFAULT_RING_WIDTH            = 15
-local DEFAULT_TRACKER_FONT          = "Friz Quadrata TT"
-local DEFAULT_TRACKER_FONT_SIZE     = 12
-local DEFAULT_TRACKER_FONT_OUTLINE  = ""
-local DEFAULT_TRACKER_BACKGROUND_ALPHA = 0.96
-local DEFAULT_TRACKER_ACCENT_COLOR  = { r = 0.2, g = 0.75, b = 0.3, a = 0.95 }
-local DEFAULT_TRACKER_ITEM_COLUMN_WIDTH = 170
-local DEFAULT_TRACKER_QTY_COLUMN_WIDTH = 50
-local DEFAULT_TRACKER_ITEM_VALUE_COLUMN_WIDTH = 80
+local DEFAULT_PRICE_SOURCE                     = "DBMarket"
+local DEFAULT_NOTIFICATION_DURATION            = 6
+local DEFAULT_NOTIFICATION_SOUND               = "__none"
+local DEFAULT_HIGH_VALUE_SOUND                 = "__none"
+local DEFAULT_HIGH_VALUE_THRESHOLD             = 0
+local DEFAULT_HUD_SIZE                         = 400
+local DEFAULT_HUD_TERRAIN_ALPHA                = 0.50
+local DEFAULT_RING_COLOR                       = { r = 0.0, g = 0.85, b = 1.0, a = 1.0 }
+local DEFAULT_RING_WIDTH                       = 15
+local DEFAULT_TRACKER_FONT                     = "Friz Quadrata TT"
+local DEFAULT_TRACKER_FONT_SIZE                = 12
+local DEFAULT_TRACKER_FONT_OUTLINE             = ""
+local DEFAULT_TRACKER_BACKGROUND_ALPHA         = 0.96
+local DEFAULT_TRACKER_ACCENT_COLOR             = { r = 0.2, g = 0.75, b = 0.3, a = 0.95 }
+local DEFAULT_TRACKER_ITEM_COLUMN_WIDTH        = 170
+local DEFAULT_TRACKER_QTY_COLUMN_WIDTH         = 50
+local DEFAULT_TRACKER_ITEM_VALUE_COLUMN_WIDTH  = 80
 local DEFAULT_TRACKER_TOTAL_VALUE_COLUMN_WIDTH = 90
-local DEFAULT_GPH_UPDATE_INTERVAL = 5
-local floor                         = math.floor
-local tonumber                      = tonumber
+local DEFAULT_GPH_UPDATE_INTERVAL              = 5
+local floor                                    = math.floor
+local tonumber                                 = tonumber
 
 -- ============================================================
 -- DB accessor
@@ -57,8 +57,30 @@ function Options:SetEnabled(info, value)
     self:GetDB().enabled = value == true
     local mod = T:GetModule("QualityOfLife"):GetModule("Gathering", true)
     if mod then
-        if value then  mod:Enable()
-        else           mod:Disable() end
+        if value then
+            mod:Enable()
+        else
+            mod:Disable()
+        end
+    end
+end
+
+function Options:GetDebugEnabled(info)
+    return self:GetDB().debugEnabled == true
+end
+
+function Options:SetDebugEnabled(info, value)
+    self:GetDB().debugEnabled = value == true
+
+    if value ~= true and T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole then
+        T.Tools.UI.DebugConsole:ClearLogs("gathering")
+    end
+end
+
+function Options:OpenDebugConsole()
+    local console = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+    if console and console.Show then
+        console:Show("gathering")
     end
 end
 
@@ -323,9 +345,9 @@ function Options:GetPriceSources()
     if not next(sources) then
         -- TSM not loaded; provide sensible defaults
         sources = {
-            DBMarket   = "DBMarket — AuctionDB Market Value",
-            DBMinBuyout= "DBMinBuyout — AuctionDB Min Buyout",
-            VendorSell = "VendorSell — Vendor Sell Price",
+            DBMarket    = "DBMarket — AuctionDB Market Value",
+            DBMinBuyout = "DBMinBuyout — AuctionDB Min Buyout",
+            VendorSell  = "VendorSell — Vendor Sell Price",
         }
     end
     return sources

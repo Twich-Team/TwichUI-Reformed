@@ -216,6 +216,29 @@ local function BuildMythicPlusToolsTab()
                 get = "GetEnabled",
                 set = "SetEnabled",
             },
+            debugGroup = W.IGroup(5, "Debugging", {
+                desc = W.Description(1,
+                    "Capture optional Mythic+ Tools debug output in the shared /tui debug console. Leave this disabled during normal play to avoid extra logging overhead."),
+                enableDebug = {
+                    type = "toggle",
+                    name = "Enable Debug Capture",
+                    desc = "Record Mythic+ Tools runtime debug lines into the shared TwichUI debug console.",
+                    order = 1,
+                    width = 1.75,
+                    disabled = function() return not MPTOptions:GetEnabled() end,
+                    handler = MPTOptions,
+                    get = "GetDebugEnabled",
+                    set = "SetDebugEnabled",
+                },
+                openDebug = {
+                    type = "execute",
+                    name = "Open Debug Console",
+                    desc = "Open the shared TwichUI debug console focused on Mythic+ Tools.",
+                    order = 2,
+                    handler = MPTOptions,
+                    func = "OpenDebugConsole",
+                },
+            }),
             keystoneHelpers = W.IGroup(10, "Keystone Helpers", {
                 autoSlot = {
                     type = "toggle",
@@ -2133,6 +2156,20 @@ local function BuildChoresTab()
                             handler = ChoresOptions,
                             get = "GetTrackBountifulDelves",
                             set = "SetTrackBountifulDelves",
+                        },
+                        bountifulDelvesWithKeyOnly = {
+                            type = "toggle",
+                            name = "Only Track With Key",
+                            desc =
+                            "Only include the Bountiful Delves tracker section when you have at least one Restored Coffer Key.",
+                            order = 4,
+                            width = 1.5,
+                            disabled = function()
+                                return not ChoresOptions:GetTrackBountifulDelves()
+                            end,
+                            handler = ChoresOptions,
+                            get = "GetOnlyTrackBountifulDelvesWithKey",
+                            set = "SetOnlyTrackBountifulDelvesWithKey",
                         },
                     }),
                     countTowardTotal = W.IGroup(6, "Count Toward Total", {

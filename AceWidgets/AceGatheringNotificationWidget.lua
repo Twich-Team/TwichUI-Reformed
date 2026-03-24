@@ -3,27 +3,27 @@
     AceGUI widget for Gathering item loot notifications.
     Shows: item icon, item link, quantity, item value, bag total, bag value, price source label.
 ]]
-local TwichRx = _G["TwichRx"]
+local TwichRx                 = _G["TwichRx"]
 ---@type TwichUI
-local T = TwichRx and unpack(TwichRx) or nil
+local T                       = TwichRx and unpack(TwichRx) or nil
 
-local AceGUI = LibStub("AceGUI-3.0")
+local AceGUI                  = LibStub("AceGUI-3.0")
 
-local WIDGET_TYPE = "TwichUI_GatheringNotification"
-local Type, Version = WIDGET_TYPE, 2
+local WIDGET_TYPE             = "TwichUI_GatheringNotification"
+local Type, Version           = WIDGET_TYPE, 2
 
-local FRAME_WIDTH  = 360
-local FRAME_HEIGHT = 98
-local ICON_SIZE    = 44
-local TEXT_LEFT    = 62
-local ACCENT_COLOR = { 0.2, 0.75, 0.3, 1 }
+local FRAME_WIDTH             = 360
+local FRAME_HEIGHT            = 98
+local ICON_SIZE               = 44
+local TEXT_LEFT               = 62
+local ACCENT_COLOR            = { 0.2, 0.75, 0.3, 1 }
 local HIGH_VALUE_ACCENT_COLOR = { 1.0, 0.76, 0.28, 1 }
 
-local GOLD_COLOR   = "|cffffd24a"
-local SILVER_COLOR = "|cffd7e0ea"
-local COPPER_COLOR = "|cffd08a43"
+local GOLD_COLOR              = "|cffffd24a"
+local SILVER_COLOR            = "|cffd7e0ea"
+local COPPER_COLOR            = "|cffd08a43"
 
-local format = string.format
+local format                  = string.format
 
 local function FormatCopperValue(copper)
     if not copper or copper <= 0 then return "|cffaaaaaa0g|r" end
@@ -50,14 +50,14 @@ local function Constructor()
 
     -- Left accent bar
     local accent = frame:CreateTexture(nil, "ARTWORK")
-    accent:SetPoint("TOPLEFT",    frame, "TOPLEFT",    0, 0)
+    accent:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
     accent:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
     accent:SetWidth(4)
     accent:SetColorTexture(unpack(ACCENT_COLOR))
 
     -- Icon backdrop
     local iconBackdrop = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    iconBackdrop:SetPoint("LEFT",  frame, "LEFT", 12, 0)
+    iconBackdrop:SetPoint("LEFT", frame, "LEFT", 12, 0)
     iconBackdrop:SetSize(ICON_SIZE + 4, ICON_SIZE + 4)
     if iconBackdrop.SetTemplate then
         iconBackdrop:SetTemplate("Default")
@@ -71,7 +71,7 @@ local function Constructor()
 
     -- Status label (top-left, e.g. "ITEM GATHERED")
     local status = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    status:SetPoint("TOPLEFT",  frame, "TOPLEFT", TEXT_LEFT, -8)
+    status:SetPoint("TOPLEFT", frame, "TOPLEFT", TEXT_LEFT, -8)
     status:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -106, -8)
     status:SetJustifyH("LEFT")
     status:SetTextColor(0.2, 0.75, 0.3, 1)
@@ -87,7 +87,7 @@ local function Constructor()
 
     -- Item value (loot batch value)
     local lootValue = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    lootValue:SetPoint("TOPLEFT",  itemLine, "BOTTOMLEFT", 0, -4)
+    lootValue:SetPoint("TOPLEFT", itemLine, "BOTTOMLEFT", 0, -4)
     lootValue:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -106, 0)
     lootValue:SetJustifyH("LEFT")
     lootValue:SetWordWrap(false)
@@ -95,7 +95,7 @@ local function Constructor()
 
     -- Bag total line
     local bagLine = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    bagLine:SetPoint("TOPLEFT",  lootValue, "BOTTOMLEFT", 0, -2)
+    bagLine:SetPoint("TOPLEFT", lootValue, "BOTTOMLEFT", 0, -2)
     bagLine:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -106, 0)
     bagLine:SetJustifyH("LEFT")
     bagLine:SetWordWrap(false)
@@ -118,17 +118,17 @@ local function Constructor()
 
     ---@class TwichUI_GatheringNotificationWidget : AceGUIWidget
     local widget = {
-        type           = Type,
-        frame          = frame,
-        accent         = accent,
-        icon           = icon,
-        iconBackdrop   = iconBackdrop,
-        status         = status,
-        itemLine       = itemLine,
-        lootValue      = lootValue,
-        bagLine        = bagLine,
-        priceSource    = priceSource,
-        priceSourceBg  = priceSourceBg,
+        type            = Type,
+        frame           = frame,
+        accent          = accent,
+        icon            = icon,
+        iconBackdrop    = iconBackdrop,
+        status          = status,
+        itemLine        = itemLine,
+        lootValue       = lootValue,
+        bagLine         = bagLine,
+        priceSource     = priceSource,
+        priceSourceBg   = priceSourceBg,
         dismissCallback = nil,
     }
 
@@ -159,13 +159,13 @@ local function Constructor()
     function methods:SetGatherData(data)
         if not data then return end
 
-        local itemLink = data.itemLink or "Unknown Item"
-        local qty      = data.quantity or 1
-        local price    = data.itemValue or 0
-        local batchValue = data.batchValue or (price * qty)
-        local bagCount = data.bagCount or 0
-        local bagValue = data.bagValue or 0
-        local src      = data.priceSource or "--"
+        local itemLink    = data.itemLink or "Unknown Item"
+        local qty         = data.quantity or 1
+        local price       = data.itemValue or 0
+        local batchValue  = data.batchValue or (price * qty)
+        local bagCount    = data.bagCount or 0
+        local bagValue    = data.bagValue or 0
+        local src         = data.priceSource or "--"
         local isHighValue = data.isHighValue == true
 
         if isHighValue then

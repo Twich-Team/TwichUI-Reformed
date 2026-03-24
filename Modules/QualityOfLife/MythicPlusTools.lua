@@ -75,6 +75,7 @@ local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 local LSM = T.Libs and T.Libs.LSM or LibStub("LibSharedMedia-3.0", true)
 local Textures = T.Tools and T.Tools.Textures
 local Colors = T.Tools and T.Tools.Colors
+local DebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
 local FindAuraBySpellID = AuraUtil and (AuraUtil.FindAuraBySpellId or AuraUtil.FindAuraBySpellID)
 
 local MYTHIC_KEYSTONE_ITEM_IDS = {
@@ -92,6 +93,7 @@ local WARNING_COLOR = { 0.93, 0.51, 0.2 }
 local ALERT_COLOR = { 0.85, 0.25, 0.25 }
 local MUTED_SOUND_VALUE = "__none"
 local DEBUG_LOG_LIMIT = 120
+local DEBUG_SOURCE_KEY = "mythicplustools"
 local RECENT_INTERRUPT_CAST_WINDOW = 0.35
 local OBSERVED_INTERRUPT_DEDUPE_WINDOW = 0.08
 
@@ -202,6 +204,14 @@ local function ClampNumber(value, minValue, maxValue, fallback)
     end
 
     return value
+end
+
+local function CountTableEntries(value)
+    local count = 0
+    for _ in pairs(value or {}) do
+        count = count + 1
+    end
+    return count
 end
 
 local function HasSecretValues(...)
@@ -1104,7 +1114,6 @@ function MPT:EnsureRuntime()
     self.interruptOrder = self.interruptOrder or {}
     self.inspectQueue = self.inspectQueue or {}
     self.pendingHostedEvents = self.pendingHostedEvents or {}
-    self.debugLines = self.debugLines or {}
     self.lastHostedEventAt = self.lastHostedEventAt or {}
     self.partyDeathState = self.partyDeathState or {}
     self.lastRosterRefreshAt = self.lastRosterRefreshAt or 0
@@ -1140,7 +1149,6 @@ end
 function MPT:OnEnable()
     self:EnsureRuntime()
     self:EnsureFrames()
-    self:EnsureDebugFrame()
     self:EnsureEventFrames()
     self:RegisterDirectEvents()
     self:EnsureHooks()
@@ -1177,46 +1185,6 @@ function MPT:RefreshModuleState()
     end
 
     self:RefreshAllState()
-end
-
-function MPT:EnsureDebugFrame()
-    if self.debugFrame then
-        return self.debugFrame
-    end
-
-    local frame = CreateFrame("Frame", "TwichUIMythicPlusToolsDebugFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(760, 360)
-    frame:SetPoint("CENTER")
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-    frame:Hide()
-
-    frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    frame.title:SetPoint("LEFT", frame.TitleBg, "LEFT", 8, 0)
-    frame.title:SetText("TwichUI Mythic+ Tools Debug")
-
-    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -28)
-    scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -30, 10)
-
-    local editBox = CreateFrame("EditBox", nil, scroll)
-    editBox:SetMultiLine(true)
-    editBox:SetAutoFocus(false)
-    editBox:SetFontObject(ChatFontNormal)
-    editBox:SetWidth(700)
-    editBox:SetScript("OnEscapePressed", function()
-        frame:Hide()
-    end)
-
-    scroll:SetScrollChild(editBox)
-
-    frame.scroll = scroll
-    frame.editBox = editBox
-    self.debugFrame = frame
-    return frame
 end
 
 local function SafeDebugString(value)
@@ -1256,48 +1224,78 @@ local function SafeDebugString(value)
     return "<" .. valueType .. ">"
 end
 
-function MPT:RefreshDebugFrame()
-    if not self.debugFrame then
-        return
-    end
-
-    local safeLines = {}
-    for index, line in ipairs(self.debugLines or {}) do
-        safeLines[index] = SafeDebugString(line)
-    end
-
-    local text = table.concat(safeLines, "\n")
-    self.debugFrame.editBox:SetText(text)
-    self.debugFrame.editBox:SetCursorPosition(0)
-    self.debugFrame.scroll:SetVerticalScroll(0)
-end
-
-function MPT:ShowDebugFrame()
-    local frame = self:EnsureDebugFrame()
-    self:RefreshDebugFrame()
-    frame.editBox:HighlightText()
-    frame:Show()
+function MPT:IsDebugEnabled()
+    local options = GetOptions()
+    return options and options.GetDebugEnabled and options:GetDebugEnabled() or false
 end
 
 function MPT:LogDebug(message, shouldShow)
+    if not DebugConsole or type(DebugConsole.Log) ~= "function" then
+        return false
+    end
+
+    return DebugConsole:Log(DEBUG_SOURCE_KEY, SafeDebugString(message), shouldShow)
+end
+
+function MPT:LogDebugf(shouldShow, messageFormat, ...)
+    if not DebugConsole or type(DebugConsole.Logf) ~= "function" then
+        return false
+    end
+
+    return DebugConsole:Logf(DEBUG_SOURCE_KEY, shouldShow, messageFormat, ...)
+end
+
+function MPT:BuildDebugReport()
     self:EnsureRuntime()
 
-    local prefix = date and type(date) == "function" and date("%H:%M:%S") or format("%.3f", GetTime())
-    self.debugLines[#self.debugLines + 1] = "[" .. SafeDebugString(prefix) .. "] " .. SafeDebugString(message)
-    while #self.debugLines > DEBUG_LOG_LIMIT do
-        table.remove(self.debugLines, 1)
+    local db = self:GetDB()
+    local instanceName, instanceType, difficultyID, _, _, _, _, instanceID = GetInstanceInfo()
+    local lines = {
+        "TwichUI Mythic+ Tools Debug",
+        format("Timestamp: %s", date and type(date) == "function" and date("%Y-%m-%d %H:%M:%S") or format("%.3f", GetTime())),
+        "",
+        "Runtime",
+        format("enabled=%s debugCapture=%s directEvents=%s previewInterrupts=%s",
+            tostring(db.enabled == true),
+            tostring(self:IsDebugEnabled()),
+            tostring(self.directEventsRegistered == true),
+            tostring(self.preview and self.preview.interrupts == true)),
+        format("deathNotifications=%s interruptTracker=%s started=%s updateTicker=%s",
+            tostring(self:IsFeatureEnabled("deathNotifications")),
+            tostring(self:IsFeatureEnabled("interruptTracker")),
+            tostring(self.started == true),
+            tostring(self.updateTicker ~= nil)),
+        format("instance=%s type=%s diff=%s instanceID=%s challengeActive=%s",
+            SafeDebugString(instanceName),
+            SafeDebugString(instanceType),
+            SafeDebugString(difficultyID),
+            SafeDebugString(instanceID),
+            tostring(IsChallengeModeActive())),
+        format("interruptMembers=%d queue=%d pendingEvents=%d deathCount=%d",
+            CountTableEntries(self.interruptMembers),
+            #(self.inspectQueue or {}),
+            #(self.pendingHostedEvents or {}),
+            tonumber(self.deathCount) or 0),
+        "",
+        "Recent Log",
+    }
+
+    local debugLines = DebugConsole and DebugConsole.GetLines and DebugConsole:GetLines(DEBUG_SOURCE_KEY) or nil
+    if debugLines and #debugLines > 0 then
+        for _, line in ipairs(debugLines) do
+            lines[#lines + 1] = line
+        end
+    else
+        lines[#lines + 1] = "<no log entries yet>"
     end
 
-    self:RefreshDebugFrame()
-    if shouldShow == true then
-        self:ShowDebugFrame()
-    end
+    return table.concat(lines, "\n")
 end
 
 function MPT:LogStartupSnapshot(reason)
     local db = self:GetDB()
     local instanceName, instanceType, difficultyID, _, _, _, _, instanceID = GetInstanceInfo()
-    self:LogDebug(format(
+    self:LogDebugf(false,
         "startup=%s enabled=%s challengeActive=%s instance=%s type=%s diff=%s instanceID=%s slotted=%s ownedMap=%s",
         tostring(reason or "unknown"),
         tostring(db.enabled == true),
@@ -1308,9 +1306,9 @@ function MPT:LogStartupSnapshot(reason)
         tostring(instanceID or "nil"),
         tostring(HasSlottedKeystone()),
         tostring(GetOwnedKeystoneMapID())
-    ), false)
+    )
     self:LogDebug("event host=hook/piggyback mode; runtime is plain Lua inside TwichUI", false)
-    self:LogDebug(format(
+    self:LogDebugf(false,
         "hooks active: DirectEvents=%s TimerTracker=%s ToastsPEW=%s ToastsRoster=%s ElvUIMiscCL=%s ElvUINameplatesCL=%s ElvUINPPostInterrupted=%s",
         tostring(self.directEventsRegistered == true),
         tostring(self.hookedTimerTracker == true),
@@ -1319,7 +1317,7 @@ function MPT:LogStartupSnapshot(reason)
         tostring(self.hookedElvUIMiscCombatLog == true),
         tostring(self.hookedElvUINameplatesCombatLog == true),
         tostring(self.hookedElvUINameplatesPostCastInterrupted == true)
-    ), false)
+    )
 end
 
 function MPT:HandleHostedEvent(event, ...)
@@ -1336,7 +1334,7 @@ function MPT:HandleHostedEvent(event, ...)
     end
 
     if event == "PLAYER_ENTERING_WORLD" or event == "GROUP_ROSTER_UPDATE" then
-        self:LogDebug(format("forwarded event=%s", tostring(event)), false)
+        self:LogDebugf(false, "forwarded event=%s", tostring(event))
     end
 
     local handler = self[event]
@@ -1366,7 +1364,7 @@ function MPT:FlushPendingHostedEvents()
         local handler = self[event]
 
         if event == "PLAYER_ENTERING_WORLD" or event == "GROUP_ROSTER_UPDATE" then
-            self:LogDebug(format("forwarded event=%s", tostring(event)), false)
+            self:LogDebugf(false, "forwarded event=%s", tostring(event))
         end
 
         if type(handler) == "function" then
@@ -2156,7 +2154,7 @@ function MPT:COMBAT_LOG_EVENT_UNFILTERED()
 
     if subEvent == "SPELL_INTERRUPT" or subEvent == "SPELL_CAST_SUCCESS" then
         if self:IsSourceInCurrentParty(sourceGUID, sourceName) or subEvent == "SPELL_INTERRUPT" then
-            self:LogDebug(format(
+            self:LogDebugf(false,
                 "combatlog event=%s source=%s guid=%s spellID=%s dest=%s destGUID=%s",
                 tostring(subEvent),
                 tostring(sourceName),
@@ -2164,7 +2162,7 @@ function MPT:COMBAT_LOG_EVENT_UNFILTERED()
                 tostring(spellID),
                 tostring(destName),
                 tostring(destGUID)
-            ), false)
+            )
         end
         self:HandlePossibleInterrupt(subEvent, sourceGUID, sourceName, spellID)
         return
@@ -2210,25 +2208,24 @@ end
 function MPT:HandleMobInterrupted(interruptedUnit)
     local now = GetTime()
     if self:IsDuplicateObservedInterrupt(interruptedUnit, now) then
-        self:LogDebug(format("interrupt dedupe unit-event unit=%s", SafeDebugString(interruptedUnit)), false)
+        self:LogDebugf(false, "interrupt dedupe unit-event unit=%s", SafeDebugString(interruptedUnit))
         return false
     end
 
     local member, record = self:GetRecentPartyCastMember(now, 1.0)
     if not member then
-        self:LogDebug(
-        format("interrupt drop event=UNIT_SPELLCAST_INTERRUPTED unit=%s reason=no-recent-cast",
-            SafeDebugString(interruptedUnit)), false)
+        self:LogDebugf(false, "interrupt drop event=UNIT_SPELLCAST_INTERRUPTED unit=%s reason=no-recent-cast",
+            SafeDebugString(interruptedUnit))
         return false
     end
 
-    self:LogDebug(format(
+    self:LogDebugf(false,
         "interrupt correlate unit-event unit=%s member=%s age=%.3f spellID=%s",
         SafeDebugString(interruptedUnit),
         tostring(member.name),
         now - (tonumber(record and record.at) or now),
         tostring(record and record.spellID)
-    ), false)
+    )
 
     if tonumber(member.readyAt) and member.readyAt > now then
         self:ClearRecentPartyCast(member.name)
@@ -2277,7 +2274,7 @@ function MPT:TryResolvePendingInspect()
     if member and type(specID) == "number" and specID > 0 then
         member.specID = specID
         self:ApplyInterruptSpellData(member)
-        self:LogDebug(format("inspect resolved member=%s specID=%d", tostring(member.name), specID), false)
+        self:LogDebugf(false, "inspect resolved member=%s specID=%d", tostring(member.name), specID)
         self.activeInspectUnit = nil
         self.activeInspectName = nil
         self.activeInspectRequestedAt = nil
@@ -2290,7 +2287,7 @@ function MPT:TryResolvePendingInspect()
     end
 
     if self.activeInspectRequestedAt and (GetTime() - self.activeInspectRequestedAt) >= 2 then
-        self:LogDebug(format("inspect timeout member=%s", tostring(self.activeInspectName)), false)
+        self:LogDebugf(false, "inspect timeout member=%s", tostring(self.activeInspectName))
         self.activeInspectUnit = nil
         self.activeInspectName = nil
         self.activeInspectRequestedAt = nil
@@ -2348,7 +2345,7 @@ function MPT:TryAutoSlotKeystone()
             local isKeystone = MYTHIC_KEYSTONE_ITEM_IDS[itemID or 0] == true or
                 (type(itemLink) == "string" and itemLink:find("|Hkeystone:", 1, true) ~= nil)
             if isKeystone and type(C_Container.UseContainerItem) == "function" then
-                self:LogDebug(format("attempting keystone bag use bag=%d slot=%d", bagIndex, slotIndex), false)
+                self:LogDebugf(false, "attempting keystone bag use bag=%d slot=%d", bagIndex, slotIndex)
                 C_Container.UseContainerItem(bagIndex, slotIndex)
                 if C_Timer and type(C_Timer.After) == "function" then
                     C_Timer.After(0.1, function()
@@ -2495,8 +2492,7 @@ function MPT:ProcessInspectQueue()
             self.activeInspectUnit = member.unit
             self.activeInspectName = member.name
             self.activeInspectRequestedAt = GetTime()
-            self:LogDebug(format("inspect request unit=%s member=%s", tostring(member.unit), tostring(member.name)),
-                false)
+            self:LogDebugf(false, "inspect request unit=%s member=%s", tostring(member.unit), tostring(member.name))
             NotifyInspect(member.unit)
             return
         end
@@ -2534,8 +2530,7 @@ function MPT:PollPlayerSpecChanges(now)
     local playerMember = playerName and self.interruptMembers[playerName] or nil
     local currentSpecID = self:GetPlayerSpecID()
     if playerMember and currentSpecID and playerMember.specID ~= currentSpecID then
-        self:LogDebug(
-        format("player spec refresh old=%s new=%s", tostring(playerMember.specID), tostring(currentSpecID)), false)
+        self:LogDebugf(false, "player spec refresh old=%s new=%s", tostring(playerMember.specID), tostring(currentSpecID))
         self:RefreshInterruptRoster()
         self:RefreshInterruptFrame()
     end
@@ -2616,9 +2611,8 @@ function MPT:ResolvePartyUnitBySource(sourceGUID, sourceName)
         if UnitExists(unit) then
             local unitGUID = UnitGUID(unit)
             if SafeStringsEqual(sourceGUID, unitGUID) then
-                self:LogDebug(
-                format("interrupt resolve unit=%s via=guid source=%s guid=%s", tostring(unit), tostring(sourceName),
-                    tostring(sourceGUID)), false)
+                self:LogDebugf(false, "interrupt resolve unit=%s via=guid source=%s guid=%s", tostring(unit), tostring(sourceName),
+                    tostring(sourceGUID))
                 return unit
             end
 
@@ -2626,17 +2620,15 @@ function MPT:ResolvePartyUnitBySource(sourceGUID, sourceName)
             local shortName = fullName and GetShortName(fullName) or nil
             local rawName = type(UnitName) == "function" and UnitName(unit) or nil
             if SafeStringsEqual(sourceName, fullName) or SafeStringsEqual(sourceName, shortName) or SafeStringsEqual(sourceName, rawName) then
-                self:LogDebug(
-                format("interrupt resolve unit=%s via=name source=%s guid=%s", tostring(unit), tostring(sourceName),
-                    tostring(sourceGUID)), false)
+                self:LogDebugf(false, "interrupt resolve unit=%s via=name source=%s guid=%s", tostring(unit), tostring(sourceName),
+                    tostring(sourceGUID))
                 return unit
             end
         end
     end
 
     if sourceGUID or sourceName then
-        self:LogDebug(format("interrupt resolve failed source=%s guid=%s", tostring(sourceName), tostring(sourceGUID)),
-            false)
+        self:LogDebugf(false, "interrupt resolve failed source=%s guid=%s", tostring(sourceName), tostring(sourceGUID))
     end
 
     return nil
@@ -2776,9 +2768,7 @@ end
 
 function MPT:ApplyInterruptToMember(member, subEvent, sourceName, spellID, isSupportedInterruptSpell)
     if subEvent == "SPELL_INTERRUPT" and not isSupportedInterruptSpell and not member.spellID then
-        self:LogDebug(
-        format("interrupt ignored member=%s spellID=%s reason=no tracked spell", tostring(member.name), tostring(spellID)),
-            false)
+        self:LogDebugf(false, "interrupt ignored member=%s spellID=%s reason=no tracked spell", tostring(member.name), tostring(spellID))
         return false
     end
 
@@ -2786,7 +2776,7 @@ function MPT:ApplyInterruptToMember(member, subEvent, sourceName, spellID, isSup
     local trackedSpellID = isSupportedInterruptSpell and spellID or member.spellID
     local cooldown = GetInterruptCooldownForSpell(trackedSpellID, member.cooldown)
 
-    self:LogDebug(format(
+    self:LogDebugf(false,
         "interrupt apply event=%s member=%s source=%s rawSpellID=%s trackedSpellID=%s cooldown=%.1f readyAt=%.1f supported=%s",
         tostring(subEvent),
         tostring(member.name),
@@ -2796,7 +2786,7 @@ function MPT:ApplyInterruptToMember(member, subEvent, sourceName, spellID, isSup
         tonumber(cooldown) or 0,
         now + cooldown,
         tostring(isSupportedInterruptSpell)
-    ), false)
+    )
 
     -- If this is a recognised interrupt spell that differs from the member's
     -- registered primary, track it as a separate secondary cooldown instead
@@ -2986,11 +2976,11 @@ function MPT:HandleObservedInterruptFromCastbar(host, castbar, interruptedUnit, 
 
     local now = GetTime()
     if self:IsDuplicateObservedInterrupt(interruptedUnit, now) then
-        self:LogDebug(format(
+        self:LogDebugf(false,
             "interrupt dedupe host=%s unit=%s",
             SafeDebugString(host),
             SafeDebugString(interruptedUnit)
-        ), false)
+        )
         return
     end
 
@@ -3016,7 +3006,7 @@ function MPT:HandleObservedInterruptFromCastbar(host, castbar, interruptedUnit, 
         end
     end
 
-    self:LogDebug(format(
+    self:LogDebugf(false,
         "observed interrupt host=%s unit=%s interruptedSpellID=%s sourceGUID=%s rawToken=%s sourceUnit=%s source=%s text=%s",
         SafeDebugString(host),
         SafeDebugString(interruptedUnit),
@@ -3026,7 +3016,7 @@ function MPT:HandleObservedInterruptFromCastbar(host, castbar, interruptedUnit, 
         SafeDebugString(sourceUnit),
         SafeDebugString(sourceName),
         SafeDebugString(castbarText)
-    ), false)
+    )
 
     local member = sourceUnit and self:EnsureInterruptMemberForUnit(sourceUnit, sourceName) or
     self:GetMemberBySource(nil, sourceName)
@@ -3037,12 +3027,12 @@ function MPT:HandleObservedInterruptFromCastbar(host, castbar, interruptedUnit, 
             member = recentMember
             resolutionMethod = "recent-cast"
             sourceName = sourceName or recentMember.name
-            self:LogDebug(format(
+            self:LogDebugf(false,
                 "interrupt correlate recent member=%s age=%.3f spellID=%s",
                 tostring(recentMember.name),
                 now - (tonumber(recentRecord.at) or now),
                 tostring(recentRecord.spellID)
-            ), false)
+            )
         end
     end
 
@@ -3053,37 +3043,37 @@ function MPT:HandleObservedInterruptFromCastbar(host, castbar, interruptedUnit, 
             resolutionMethod = "single-ready"
             sourceName = sourceName or singleReadyMember.name
         else
-            self:LogDebug(format(
+            self:LogDebugf(false,
                 "interrupt opaque drop reason=ambiguous-ready readyCount=%s",
                 tostring(readyCount or 0)
-            ), false)
+            )
         end
     end
 
     if not member then
-        self:LogDebug(format(
+        self:LogDebugf(false,
             "interrupt drop event=SPELL_INTERRUPT unit=%s source=%s reason=no-member",
             SafeDebugString(sourceUnit),
             SafeDebugString(sourceName)
-        ), false)
+        )
         return
     end
 
-    self:LogDebug(format(
+    self:LogDebugf(false,
         "interrupt member match=%s via=%s unit=%s source=%s",
         tostring(member.name),
         tostring(resolutionMethod or "unknown"),
         SafeDebugString(sourceUnit),
         SafeDebugString(sourceName)
-    ), false)
+    )
 
     if resolutionMethod == "recent-cast" and tonumber(member.readyAt) and member.readyAt > now then
         self:ClearRecentPartyCast(member.name)
-        self:LogDebug(format(
+        self:LogDebugf(false,
             "interrupt confirm member=%s via=recent-cast existingReadyAt=%.1f",
             tostring(member.name),
             tonumber(member.readyAt) or 0
-        ), false)
+        )
         return
     end
 
@@ -3177,7 +3167,7 @@ function MPT:HandleUnitDeath(destGUID, destName)
     self.deathCount = (self.deathCount or 0) + 1
     tinsert(self.deathWindow, now)
     if self:ShouldSuppressWipeSpam(now) then
-        self:LogDebug(format("death suppressed name=%s total=%d", tostring(destName), self.deathCount), false)
+        self:LogDebugf(false, "death suppressed name=%s total=%d", tostring(destName), self.deathCount)
         return
     end
 
@@ -3206,7 +3196,7 @@ function MPT:SendDeathNotification(member, totalDeaths)
     local widget = CreateWidget(AceGUI, "TwichUI_MythicPlusAlertNotification")
     widget:SetAlert(notification.status, notification.title, notification.detail, notification.icon, notification.color)
 
-    self:LogDebug(format("death notification name=%s total=%d", tostring(member.name), tonumber(totalDeaths) or 0), false)
+    self:LogDebugf(false, "death notification name=%s total=%d", tostring(member.name), tonumber(totalDeaths) or 0)
 
     if NotificationModule and type(NotificationModule.TWICH_NOTIFICATION) == "function" then
         NotificationModule:TWICH_NOTIFICATION("TWICH_NOTIFICATION", widget, {
@@ -3225,6 +3215,22 @@ function MPT:TestDeathNotification()
         unit = "player",
     }
     self:SendDeathNotification(member, (self.deathCount or 0) + 1)
+end
+
+if DebugConsole and DebugConsole.RegisterSource then
+    DebugConsole:RegisterSource(DEBUG_SOURCE_KEY, {
+        title = "Mythic+ Tools",
+        order = 30,
+        aliases = { "mythicplus", "mythic", "mpt", "keystone" },
+        maxLines = DEBUG_LOG_LIMIT,
+        isEnabled = function()
+            local options = GetOptions()
+            return options and options.GetDebugEnabled and options:GetDebugEnabled() or false
+        end,
+        buildReport = function()
+            return MPT:BuildDebugReport()
+        end,
+    })
 end
 
 function MPT:GetInterruptRowState(member, now)

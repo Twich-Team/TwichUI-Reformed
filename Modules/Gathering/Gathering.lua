@@ -19,29 +19,30 @@ Gathering:SetEnabledState(false)
 -- ============================================================
 -- Localised WoW API
 -- ============================================================
-local AceGUI            = LibStub("AceGUI-3.0")
-local C_Item            = _G.C_Item
-local C_Container       = _G.C_Container
+local AceGUI               = LibStub("AceGUI-3.0")
+local C_Item               = _G.C_Item
+local C_Container          = _G.C_Container
 local GetContainerNumSlots = _G.C_Container and _G.C_Container.GetContainerNumSlots or _G.GetContainerNumSlots
-local GetContainerItemInfo = _G.C_Container and function(bag, slot) return _G.C_Container.GetContainerItemInfo(bag, slot) end or _G.GetContainerItemInfo
-local GetTime           = _G.GetTime
-local UIParent          = _G.UIParent
-local CreateFrame       = _G.CreateFrame
-local IsControlKeyDown  = _G.IsControlKeyDown
-local IsShiftKeyDown    = _G.IsShiftKeyDown
-local GetItemInfo       = _G.GetItemInfo
-local format            = string.format
-local floor             = math.floor
-local max               = math.max
-local min               = math.min
+local GetContainerItemInfo = _G.C_Container and
+function(bag, slot) return _G.C_Container.GetContainerItemInfo(bag, slot) end or _G.GetContainerItemInfo
+local GetTime              = _G.GetTime
+local UIParent             = _G.UIParent
+local CreateFrame          = _G.CreateFrame
+local IsControlKeyDown     = _G.IsControlKeyDown
+local IsShiftKeyDown       = _G.IsShiftKeyDown
+local GetItemInfo          = _G.GetItemInfo
+local format               = string.format
+local floor                = math.floor
+local max                  = math.max
+local min                  = math.min
 
 -- ============================================================
 -- Constants
 -- ============================================================
-local NUM_BAGS          = 5  -- 0..4
-local HUD_DEFAULT_SIZE  = 400
-local HUD_MINIMAP_SIZE  = 256  -- HorizonSuite always uses 256 physical, we drive via scale
-local GPS_TICKER_INTERVAL = 5.0
+local NUM_BAGS             = 5 -- 0..4
+local HUD_DEFAULT_SIZE     = 400
+local HUD_MINIMAP_SIZE     = 256 -- HorizonSuite always uses 256 physical, we drive via scale
+local GPS_TICKER_INTERVAL  = 5.0
 
 -- ============================================================
 -- Module config helpers
@@ -63,32 +64,32 @@ end
 -- Session state
 -- ============================================================
 Gathering.session = {
-    active         = false,
-    startTime      = nil,
-    pausedAt       = nil,
-    activeSeconds  = 0,        -- total seconds the session was unpaused
-    items          = {},       -- [itemID] = { itemLink, name, qty, totalValue, iconTexture }
-    totalValue     = 0,        -- copper
-    goldPerHour    = 0,        -- copper
-    lastGPHUpdate  = nil,
+    active        = false,
+    startTime     = nil,
+    pausedAt      = nil,
+    activeSeconds = 0,   -- total seconds the session was unpaused
+    items         = {},  -- [itemID] = { itemLink, name, qty, totalValue, iconTexture }
+    totalValue    = 0,   -- copper
+    goldPerHour   = 0,   -- copper
+    lastGPHUpdate = nil,
 }
 
 -- ============================================================
 -- Minimap / HUD state
 -- ============================================================
 Gathering.hud = {
-    active                  = false,
-    savedParent             = nil,
-    savedScale              = nil,
-    savedPoint              = nil,
-    savedRelPoint           = nil,
-    savedX                  = nil,
-    savedY                  = nil,
-    savedAlpha              = nil,
-    savedMouseEnabled       = nil,
-    savedRotateMinimap      = nil,
-    ringFrame               = nil,
-    gpsTicker               = nil,
+    active             = false,
+    savedParent        = nil,
+    savedScale         = nil,
+    savedPoint         = nil,
+    savedRelPoint      = nil,
+    savedX             = nil,
+    savedY             = nil,
+    savedAlpha         = nil,
+    savedMouseEnabled  = nil,
+    savedRotateMinimap = nil,
+    ringFrame          = nil,
+    gpsTicker          = nil,
 }
 
 -- ============================================================
@@ -163,10 +164,10 @@ function Gathering:StartSession()
     if sess.active then return end
     sess.active = true
     if not sess.startTime then
-        sess.startTime = GetTime()
-        sess.items     = {}
-        sess.totalValue = 0
-        sess.goldPerHour = 0
+        sess.startTime     = GetTime()
+        sess.items         = {}
+        sess.totalValue    = 0
+        sess.goldPerHour   = 0
         sess.activeSeconds = 0
     else
         -- Resuming from pause
@@ -192,16 +193,16 @@ function Gathering:PauseSession()
 end
 
 function Gathering:ResetSession()
-    local sess = self.session
-    local wasActive = sess.active
-    sess.active         = false
-    sess.startTime      = nil
-    sess.pausedAt       = nil
-    sess.activeSeconds  = 0
-    sess.items          = {}
-    sess.totalValue     = 0
-    sess.goldPerHour    = 0
-    sess.lastGPHUpdate  = nil
+    local sess         = self.session
+    local wasActive    = sess.active
+    sess.active        = false
+    sess.startTime     = nil
+    sess.pausedAt      = nil
+    sess.activeSeconds = 0
+    sess.items         = {}
+    sess.totalValue    = 0
+    sess.goldPerHour   = 0
+    sess.lastGPHUpdate = nil
     if wasActive then
         self:StartSession()
     end
@@ -239,7 +240,7 @@ end
 -- ============================================================
 -- Bag scanning & loot detection
 -- ============================================================
-Gathering.bagSnapshot = nil  -- [bag][slot] = { itemID, count }
+Gathering.bagSnapshot = nil -- [bag][slot] = { itemID, count }
 
 local function TakeBagSnapshot()
     local snap = {}
@@ -261,7 +262,7 @@ end
 local function DiffBagSnapshots(old, new)
     -- Returns table of {itemID, delta (positive = gained)}
     local changes = {}
-    local delta   = {}  -- [itemID] = delta
+    local delta   = {} -- [itemID] = delta
 
     for bag = 0, NUM_BAGS - 1 do
         local oldBag = old[bag] or {}
@@ -341,8 +342,8 @@ function Gathering:OnItemGained(itemID, qty)
     local batchValue   = pricePerUnit * qty
 
     -- Update session items
-    local sess = self.session
-    local entry = sess.items[itemID]
+    local sess         = self.session
+    local entry        = sess.items[itemID]
     if not entry then
         sess.items[itemID] = {
             itemLink    = itemLink,
@@ -354,7 +355,7 @@ function Gathering:OnItemGained(itemID, qty)
     else
         entry.qty        = entry.qty + qty
         entry.totalValue = entry.totalValue + batchValue
-        entry.itemLink   = itemLink  -- refresh link (may have gotten quality)
+        entry.itemLink   = itemLink -- refresh link (may have gotten quality)
     end
     sess.totalValue = sess.totalValue + batchValue
 
@@ -390,7 +391,7 @@ end
 function Gathering:SendGatherNotification(data)
     local NM = GetNotificationModule()
     if not NM then return end
-    local db  = GetDB()
+    local db     = GetDB()
 
     local widget = AceGUI:Create("TwichUI_GatheringNotification")
     if not widget then return end
@@ -410,26 +411,26 @@ end
 -- ============================================================
 function Gathering:EnableHUD()
     if self.hud.active then return end
-    local db  = GetDB()
-    local mm  = _G.Minimap
+    local db = GetDB()
+    local mm = _G.Minimap
     if not mm then return end
 
     -- Save current state so we can restore
     local point, _, relPoint, x, y = mm:GetPoint()
-    self.hud.savedPoint    = point    or "TOPRIGHT"
-    self.hud.savedRelPoint = relPoint or "TOPRIGHT"
-    self.hud.savedX        = x        or -20
-    self.hud.savedY        = y        or -20
-    self.hud.savedScale    = mm:GetScale()
-    self.hud.savedAlpha    = mm:GetAlpha()
+    self.hud.savedPoint            = point or "TOPRIGHT"
+    self.hud.savedRelPoint         = relPoint or "TOPRIGHT"
+    self.hud.savedX                = x or -20
+    self.hud.savedY                = y or -20
+    self.hud.savedScale            = mm:GetScale()
+    self.hud.savedAlpha            = mm:GetAlpha()
 
     -- Move minimap to center using HorizonSuite's taint-free proxy.
     -- NOTE: Do NOT call SetFrameStrata here — HorizonSuite locks Minimap strata to "LOW"
     -- via SetFixedFrameStrata(true) in Vista.Init().  Any SetFrameStrata call is silently
     -- ignored, so we leave it alone and instead draw our ring at "BACKGROUND" strata,
     -- which is always behind the Minimap regardless of its strata.
-    local hudSize = (db.hudSize or HUD_DEFAULT_SIZE)
-    local newScale = hudSize / HUD_MINIMAP_SIZE
+    local hudSize                  = (db.hudSize or HUD_DEFAULT_SIZE)
+    local newScale                 = hudSize / HUD_MINIMAP_SIZE
 
     proxy.ClearAllPoints(mm)
     proxy.SetPoint(mm, "CENTER", UIParent, "CENTER", 0, 0)
@@ -450,7 +451,7 @@ function Gathering:EnableHUD()
 
     -- Disable mouse on minimap so the player can click through to control their character.
     -- Save current state so we can restore on DisableHUD.
-    self.hud.savedMouseEnabled  = mm:IsMouseEnabled()
+    self.hud.savedMouseEnabled = mm:IsMouseEnabled()
     mm:EnableMouse(false)
 
     -- Enable minimap rotation so the map rotates with the character heading.
@@ -473,11 +474,11 @@ function Gathering:DisableHUD()
     if mm then
         proxy.ClearAllPoints(mm)
         proxy.SetPoint(mm,
-            self.hud.savedPoint    or "TOPRIGHT",
+            self.hud.savedPoint or "TOPRIGHT",
             UIParent,
             self.hud.savedRelPoint or "TOPRIGHT",
-            self.hud.savedX        or -20,
-            self.hud.savedY        or -20)
+            self.hud.savedX or -20,
+            self.hud.savedY or -20)
         proxy.SetScale(mm, self.hud.savedScale or 1.0)
         mm:SetAlpha(self.hud.savedAlpha or 1.0)
         -- Restore mouse enablement
@@ -518,7 +519,7 @@ function Gathering:CreateHUDRing(hudSize, colorTable)
 
     local db        = GetDB()
     local ringWidth = db.hudRingWidth or 15
-    local radius    = hudSize / 2           -- visual radius in UIParent coordinate space
+    local radius    = hudSize / 2 -- visual radius in UIParent coordinate space
     local r         = colorTable.r or 0.0
     local g         = colorTable.g or 0.85
     local b         = colorTable.b or 1.0
@@ -530,9 +531,9 @@ function Gathering:CreateHUDRing(hudSize, colorTable)
         local ring = self.hud.ringFrame
         for i, line in ipairs(ring._lines) do
             local a1 = ((i - 1) / HUD_RING_SEGMENTS) * HUD_PI2
-            local a2 = (i       / HUD_RING_SEGMENTS) * HUD_PI2
+            local a2 = (i / HUD_RING_SEGMENTS) * HUD_PI2
             line:SetStartPoint("CENTER", mm, math.cos(a1) * radius, math.sin(a1) * radius)
-            line:SetEndPoint  ("CENTER", mm, math.cos(a2) * radius, math.sin(a2) * radius)
+            line:SetEndPoint("CENTER", mm, math.cos(a2) * radius, math.sin(a2) * radius)
             line:SetThickness(ringWidth)
             line:SetColorTexture(r, g, b, a)
         end
@@ -555,7 +556,7 @@ function Gathering:CreateHUDRing(hudSize, colorTable)
     local lines = {}
     for i = 1, HUD_RING_SEGMENTS do
         local a1 = ((i - 1) / HUD_RING_SEGMENTS) * HUD_PI2
-        local a2 = (i       / HUD_RING_SEGMENTS) * HUD_PI2
+        local a2 = (i / HUD_RING_SEGMENTS) * HUD_PI2
         local line = ring:CreateLine(nil, "OVERLAY")
         line:SetColorTexture(r, g, b, a)
         line:SetThickness(ringWidth)
@@ -563,7 +564,7 @@ function Gathering:CreateHUDRing(hudSize, colorTable)
         -- Offsets are in UIParent (unscaled) coordinate space, so hudSize/2 == the visual
         -- radius of the minimap when scaled to hudSize logical pixels.
         line:SetStartPoint("CENTER", mm, math.cos(a1) * radius, math.sin(a1) * radius)
-        line:SetEndPoint  ("CENTER", mm, math.cos(a2) * radius, math.sin(a2) * radius)
+        line:SetEndPoint("CENTER", mm, math.cos(a2) * radius, math.sin(a2) * radius)
         lines[i] = line
     end
 
@@ -574,21 +575,21 @@ end
 
 function Gathering:RefreshHUDRing()
     if not self.hud.active or not self.hud.ringFrame then return end
-    local db     = GetDB()
-    local opts   = GetOptions()
+    local db             = GetDB()
+    local opts           = GetOptions()
     local cr, cg, cb, ca = opts:GetHudRingColor()
-    local rw     = db.hudRingWidth or 15
-    local hudSize = db.hudSize or HUD_DEFAULT_SIZE
-    local radius  = hudSize / 2
-    local mm      = _G.Minimap
+    local rw             = db.hudRingWidth or 15
+    local hudSize        = db.hudSize or HUD_DEFAULT_SIZE
+    local radius         = hudSize / 2
+    local mm             = _G.Minimap
     if not mm then return end
     for i, line in ipairs(self.hud.ringFrame._lines) do
         local a1 = ((i - 1) / HUD_RING_SEGMENTS) * HUD_PI2
-        local a2 = (i       / HUD_RING_SEGMENTS) * HUD_PI2
+        local a2 = (i / HUD_RING_SEGMENTS) * HUD_PI2
         line:SetColorTexture(cr, cg, cb, ca)
         line:SetThickness(rw)
         line:SetStartPoint("CENTER", mm, math.cos(a1) * radius, math.sin(a1) * radius)
-        line:SetEndPoint  ("CENTER", mm, math.cos(a2) * radius, math.sin(a2) * radius)
+        line:SetEndPoint("CENTER", mm, math.cos(a2) * radius, math.sin(a2) * radius)
     end
 end
 
@@ -608,7 +609,7 @@ local function GetBackdropColors()
     local E2 = _G.ElvUI and _G.ElvUI[1]
     if E2 and E2.media then
         if E2.media.backdropcolor then bgR, bgG, bgB = unpack(E2.media.backdropcolor) end
-        if E2.media.bordercolor   then borderR, borderG, borderB = unpack(E2.media.bordercolor) end
+        if E2.media.bordercolor then borderR, borderG, borderB = unpack(E2.media.bordercolor) end
     end
     return bgR, bgG, bgB, bgA, borderR, borderG, borderB
 end
@@ -619,7 +620,7 @@ local function CreateBackdrop(frame)
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
-        insets   = { left=0, right=0, top=0, bottom=0 },
+        insets   = { left = 0, right = 0, top = 0, bottom = 0 },
     })
     frame:SetBackdropColor(bgR, bgG, bgB, bgA)
     frame:SetBackdropBorderColor(borderR, borderG, borderB, 0.6)
@@ -655,21 +656,21 @@ function Gathering:CreateTrackerFrame()
 
     -- --------- Title bar ---------
     local titleBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    titleBar:SetPoint("TOPLEFT",  frame, "TOPLEFT",  1, -1)
+    titleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
     titleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
     titleBar:SetHeight(32)
     titleBar:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
-        insets   = { left=0, right=0, top=0, bottom=1 },
+        insets   = { left = 0, right = 0, top = 0, bottom = 1 },
     })
     titleBar:SetBackdropColor(bgR * 0.75, bgG * 0.75, bgB * 0.75, 0.98)
     titleBar:SetBackdropBorderColor(borderR, borderG, borderB, 0.35)
 
     -- Gold accent strip
     local titleAccent = titleBar:CreateTexture(nil, "ARTWORK")
-    titleAccent:SetPoint("TOPLEFT",  titleBar, "TOPLEFT",  0, 0)
+    titleAccent:SetPoint("TOPLEFT", titleBar, "TOPLEFT", 0, 0)
     titleAccent:SetPoint("TOPRIGHT", titleBar, "TOPRIGHT", 0, 0)
     titleAccent:SetHeight(2)
     titleAccent:SetColorTexture(0.2, 0.75, 0.3, 0.95)
@@ -702,20 +703,20 @@ function Gathering:CreateTrackerFrame()
 
     -- --------- Summary bar ---------
     local summaryBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    summaryBar:SetPoint("TOPLEFT",  frame, "TOPLEFT",  4, -36)
+    summaryBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -36)
     summaryBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -36)
     summaryBar:SetHeight(28)
     summaryBar:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
-        insets   = { left=0, right=0, top=0, bottom=0 },
+        insets   = { left = 0, right = 0, top = 0, bottom = 0 },
     })
     summaryBar:SetBackdropColor(0.12, 0.12, 0.14, 0.95)
     summaryBar:SetBackdropBorderColor(borderR, borderG, borderB, 0.3)
 
     local totalValueLabel = summaryBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    totalValueLabel:SetPoint("LEFT",  summaryBar, "LEFT",  8, 0)
+    totalValueLabel:SetPoint("LEFT", summaryBar, "LEFT", 8, 0)
     totalValueLabel:SetJustifyH("LEFT")
     totalValueLabel:SetTextColor(0.9, 0.78, 0.2, 1)
     frame.totalValueLabel = totalValueLabel
@@ -728,7 +729,7 @@ function Gathering:CreateTrackerFrame()
 
     -- --------- Column headers ---------
     local hdrs = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    hdrs:SetPoint("TOPLEFT",  frame, "TOPLEFT",  4, -68)
+    hdrs:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -68)
     hdrs:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -68)
     hdrs:SetHeight(20)
     hdrs:SetBackdropColor(0, 0, 0, 0)
@@ -741,33 +742,33 @@ function Gathering:CreateTrackerFrame()
         fs:SetText(text)
         return fs
     end
-    MkHdr("Item",         "LEFT",   "LEFT",   8)
-    MkHdr("Qty",          "CENTER", "CENTER", -60)
-    MkHdr("Item Value",   "CENTER", "CENTER",  20)
-    MkHdr("Total Value",  "RIGHT",  "RIGHT",  -8)
+    MkHdr("Item", "LEFT", "LEFT", 8)
+    MkHdr("Qty", "CENTER", "CENTER", -60)
+    MkHdr("Item Value", "CENTER", "CENTER", 20)
+    MkHdr("Total Value", "RIGHT", "RIGHT", -8)
 
     -- Divider line
     local divider = frame:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOPLEFT",  frame, "TOPLEFT",  4, -88)
+    divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -88)
     divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -88)
     divider:SetHeight(1)
     divider:SetColorTexture(0.25, 0.25, 0.30, 0.8)
 
     -- --------- Scroll area ---------
     local contentInset = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    contentInset:SetPoint("TOPLEFT",     frame, "TOPLEFT",     4, -92)
+    contentInset:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -92)
     contentInset:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 28)
     contentInset:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
-        insets   = { left=0, right=0, top=0, bottom=0 },
+        insets   = { left = 0, right = 0, top = 0, bottom = 0 },
     })
     contentInset:SetBackdropColor(bgR * 0.82, bgG * 0.82, bgB * 0.82, 0.98)
     contentInset:SetBackdropBorderColor(borderR, borderG, borderB, 0.45)
 
     local scrollFrame = CreateFrame("ScrollFrame", nil, contentInset, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT",     contentInset, "TOPLEFT",     8, -8)
+    scrollFrame:SetPoint("TOPLEFT", contentInset, "TOPLEFT", 8, -8)
     scrollFrame:SetPoint("BOTTOMRIGHT", contentInset, "BOTTOMRIGHT", -20, 8)
     T.Tools.UI.SkinScrollBar(scrollFrame)
 
@@ -814,18 +815,18 @@ local function EnsureTrackerRow(scrollChild, rows, index)
     local row = CreateFrame("Frame", nil, scrollChild, "BackdropTemplate")
     row:SetHeight(ROW_HEIGHT)
     if index == 1 then
-        row:SetPoint("TOPLEFT",  scrollChild, "TOPLEFT",  0, 0)
+        row:SetPoint("TOPLEFT", scrollChild, "TOPLEFT", 0, 0)
         row:SetPoint("TOPRIGHT", scrollChild, "TOPRIGHT", 0, 0)
     else
         local prev = rows[index - 1]
-        row:SetPoint("TOPLEFT",  prev, "BOTTOMLEFT",  0, -2)
+        row:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, -2)
         row:SetPoint("TOPRIGHT", prev, "BOTTOMRIGHT", 0, -2)
     end
     row:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
         edgeSize = 1,
-        insets   = { left=0, right=0, top=0, bottom=0 },
+        insets   = { left = 0, right = 0, top = 0, bottom = 0 },
     })
     -- alternate row shading
     if index % 2 == 0 then
@@ -844,7 +845,7 @@ local function EnsureTrackerRow(scrollChild, rows, index)
 
     -- Item link label
     local itemLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    itemLabel:SetPoint("LEFT",  icon, "RIGHT", 4, 0)
+    itemLabel:SetPoint("LEFT", icon, "RIGHT", 4, 0)
     itemLabel:SetWidth(130)
     itemLabel:SetJustifyH("LEFT")
     itemLabel:SetWordWrap(false)
@@ -881,12 +882,12 @@ function Gathering:RefreshTrackerFrame()
     local frame = self.trackerFrame
     if not frame then return end
 
-    local sess       = self.session
+    local sess        = self.session
     local scrollChild = frame.scrollChild
-    local rows       = frame.rows
+    local rows        = frame.rows
 
     -- Build sorted item list
-    local sorted = {}
+    local sorted      = {}
     for itemID, entry in pairs(sess.items) do
         table.insert(sorted, { itemID = itemID, entry = entry })
     end
@@ -933,7 +934,7 @@ function Gathering:RefreshTrackerFrame()
     -- GPH in title bar
     local gphText = sess.goldPerHour > 0
         and (FormatCopper(sess.goldPerHour) .. "/hr")
-        or  "|cffaaaaaa--/hr|r"
+        or "|cffaaaaaa--/hr|r"
     frame.gphLabel:SetText(gphText)
 
     -- Session time
@@ -972,10 +973,10 @@ function Gathering:SaveTrackerPosition()
     local db = GetDB()
     if not self.trackerFrame then return end
     local point, _, relPoint, x, y = self.trackerFrame:GetPoint()
-    db.trackerPoint    = point    or "CENTER"
-    db.trackerRelPoint = relPoint or "CENTER"
-    db.trackerX        = x        or 0
-    db.trackerY        = y        or 0
+    db.trackerPoint                = point or "CENTER"
+    db.trackerRelPoint             = relPoint or "CENTER"
+    db.trackerX                    = x or 0
+    db.trackerY                    = y or 0
 end
 
 function Gathering:SaveTrackerSize()
@@ -990,7 +991,8 @@ function Gathering:RestoreTrackerPosition()
     if not self.trackerFrame then return end
     if db.trackerPoint then
         self.trackerFrame:ClearAllPoints()
-        self.trackerFrame:SetPoint(db.trackerPoint, UIParent, db.trackerRelPoint or "CENTER", db.trackerX or 0, db.trackerY or 0)
+        self.trackerFrame:SetPoint(db.trackerPoint, UIParent, db.trackerRelPoint or "CENTER", db.trackerX or 0,
+            db.trackerY or 0)
     else
         self.trackerFrame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     end

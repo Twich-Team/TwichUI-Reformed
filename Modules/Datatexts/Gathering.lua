@@ -8,12 +8,12 @@
     Ctrl-click    → Reset session
     Right-click   → Menu (open tracker, toggle HUD, session controls)
 ]]
-local TwichRx = _G.TwichRx
+local TwichRx          = _G.TwichRx
 ---@type TwichUI
-local T = unpack(TwichRx)
+local T                = unpack(TwichRx)
 
 ---@type DataTextModule
-local DataTextModule = T:GetModule("Datatexts")
+local DataTextModule   = T:GetModule("Datatexts")
 
 local IsControlKeyDown = _G.IsControlKeyDown
 local IsShiftKeyDown   = _G.IsShiftKeyDown
@@ -21,14 +21,14 @@ local floor            = math.floor
 local format           = string.format
 local min              = math.min
 
-local GOLD_COLOR   = "|cffffd24a"
-local SILVER_COLOR = "|cffd7e0ea"
-local COPPER_COLOR = "|cffd08a43"
+local GOLD_COLOR       = "|cffffd24a"
+local SILVER_COLOR     = "|cffd7e0ea"
+local COPPER_COLOR     = "|cffd08a43"
 
 ---@class GatheringDataText : AceModule
-local GDT = DataTextModule:NewModule("GatheringDataText")
+local GDT              = DataTextModule:NewModule("GatheringDataText")
 
-local DATATEXT_NAME = "TwichUI: Gathering"
+local DATATEXT_NAME    = "TwichUI: Gathering"
 
 local function GetGatheringModule()
     ---@type QualityOfLifeGatheringModule
@@ -150,26 +150,26 @@ end
 -- Click handler
 -- ============================================================
 local function OnClick(panel, button)
-    local mod  = GetGatheringModule()
+    local mod = GetGatheringModule()
     if not mod then return end
 
     if button == "RightButton" then
         -- Right click → menu
         local menuList = {
             {
-                text    = "Gathering",
-                isTitle = true,
+                text         = "Gathering",
+                isTitle      = true,
                 notCheckable = true,
             },
             {
-                text    = mod.hud and mod.hud.active and "Disable Farm HUD" or "Enable Farm HUD",
+                text         = mod.hud and mod.hud.active and "Disable Farm HUD" or "Enable Farm HUD",
                 notCheckable = true,
-                func    = function() mod:ToggleHUD() end,
+                func         = function() mod:ToggleHUD() end,
             },
             { text = " ", notCheckable = true, disabled = true },
             {
-                text    = "Session",
-                isTitle = true,
+                text         = "Session",
+                isTitle      = true,
                 notCheckable = true,
             },
         }
@@ -252,7 +252,8 @@ local function OnEnter(panel)
 
     local sess = mod.session
     gt:AddLine("|cff19c9c7Status|r")
-    gt:AddDoubleLine("HUD", mod.hud and mod.hud.active and "|cff20bf4fActive|r" or "|cff7f8c9bInactive|r", 0.9,0.93,0.97, 1,1,1)
+    gt:AddDoubleLine("HUD", mod.hud and mod.hud.active and "|cff20bf4fActive|r" or "|cff7f8c9bInactive|r", 0.9, 0.93,
+        0.97, 1, 1, 1)
 
     local status
     if not sess.startTime then
@@ -262,16 +263,16 @@ local function OnEnter(panel)
     else
         status = "|cff20bf4fActive|r"
     end
-    gt:AddDoubleLine("Session", status, 0.9,0.93,0.97, 1,1,1)
+    gt:AddDoubleLine("Session", status, 0.9, 0.93, 0.97, 1, 1, 1)
 
     if sess.startTime then
-        local secs    = mod:GetActiveSessionSeconds()
-        local mins    = floor(secs / 60)
-        local secRem  = secs % 60
-        gt:AddDoubleLine("Duration", format("%dm %02ds", mins, secRem), 0.9,0.93,0.97, 0.86,0.9,0.96)
-        gt:AddDoubleLine("Total Value", FormatCopperColored(sess.totalValue), 0.9,0.93,0.97, 1,1,1)
+        local secs   = mod:GetActiveSessionSeconds()
+        local mins   = floor(secs / 60)
+        local secRem = secs % 60
+        gt:AddDoubleLine("Duration", format("%dm %02ds", mins, secRem), 0.9, 0.93, 0.97, 0.86, 0.9, 0.96)
+        gt:AddDoubleLine("Total Value", FormatCopperColored(sess.totalValue), 0.9, 0.93, 0.97, 1, 1, 1)
         if sess.goldPerHour > 0 then
-            gt:AddDoubleLine("Gold / Hour", FormatCopperColored(sess.goldPerHour), 0.9,0.93,0.97, 1,1,1)
+            gt:AddDoubleLine("Gold / Hour", FormatCopperColored(sess.goldPerHour), 0.9, 0.93, 0.97, 1, 1, 1)
         end
 
         gt:AddLine(" ")
@@ -285,8 +286,8 @@ local function OnEnter(panel)
                 gt:AddDoubleLine(
                     format("%s |cff9aa5b1x%d|r", entry.itemLink or (entry.name or "Unknown"), entry.qty or 0),
                     FormatCopperColored(entry.totalValue or 0),
-                    0.82,0.87,0.94,
-                    1,1,1
+                    0.82, 0.87, 0.94,
+                    1, 1, 1
                 )
             end
         end
@@ -310,11 +311,11 @@ end
 -- Register
 -- ============================================================
 DataTextModule:Inform({
-    name          = DATATEXT_NAME,
-    prettyName    = "Gathering",
-    onUpdateFunc  = OnUpdate,
-    onClickFunc   = OnClick,
-    onEnterFunc   = OnEnter,
-    onLeaveFunc   = OnLeave,
-    module        = GDT,
+    name         = DATATEXT_NAME,
+    prettyName   = "Gathering",
+    onUpdateFunc = OnUpdate,
+    onClickFunc  = OnClick,
+    onEnterFunc  = OnEnter,
+    onLeaveFunc  = OnLeave,
+    module       = GDT,
 })

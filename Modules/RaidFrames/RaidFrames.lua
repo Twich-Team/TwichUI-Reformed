@@ -24,10 +24,17 @@ local INNER_GLOW_PADDING = 0
 local BORDER_THICKNESS = 2
 local SPARK_SIZE = 7
 local SPARK_CYCLE_SECONDS = 2.15
-local CLASSIC_CHASER_THICKNESS = 2
-local CLASSIC_CHASER_LENGTH = 12
 local CLASSIC_CHASER_FADE_SECONDS = 0.05
 local CLASSIC_CHASER_CYCLE_SECONDS = 1.85
+local DEFAULT_CLASSIC_SPARK_COUNT = 1
+local DEFAULT_CLASSIC_SPARK_WIDTH = 12
+local DEFAULT_CLASSIC_SPARK_HEIGHT = 2
+local DEFAULT_CLASSIC_SPARK_COLOR = {
+    r = 1,
+    g = 0.88,
+    b = 0.34,
+    a = 0.95,
+}
 local STYLE_CLASSIC = "classic"
 local STYLE_BUTTON = "button"
 
@@ -74,6 +81,42 @@ local function GetGlowStyle()
     end
 
     return NormalizeGlowStyle(options:GetGlowStyle())
+end
+
+local function GetClassicSparkSettings()
+    local options = GetOptions()
+    local count = DEFAULT_CLASSIC_SPARK_COUNT
+    local width = DEFAULT_CLASSIC_SPARK_WIDTH
+    local height = DEFAULT_CLASSIC_SPARK_HEIGHT
+    local r = DEFAULT_CLASSIC_SPARK_COLOR.r
+    local g = DEFAULT_CLASSIC_SPARK_COLOR.g
+    local b = DEFAULT_CLASSIC_SPARK_COLOR.b
+    local a = DEFAULT_CLASSIC_SPARK_COLOR.a
+
+    if options then
+        if type(options.GetSparkCount) == "function" then
+            count = math_max(1, math_min(6, options:GetSparkCount() or DEFAULT_CLASSIC_SPARK_COUNT))
+        end
+        if type(options.GetSparkWidth) == "function" then
+            width = math_max(4, math_min(32, options:GetSparkWidth() or DEFAULT_CLASSIC_SPARK_WIDTH))
+        end
+        if type(options.GetSparkHeight) == "function" then
+            height = math_max(1, math_min(8, options:GetSparkHeight() or DEFAULT_CLASSIC_SPARK_HEIGHT))
+        end
+        if type(options.GetSparkColor) == "function" then
+            r, g, b, a = options:GetSparkColor()
+        end
+    end
+
+    return {
+        count = count,
+        width = width,
+        height = height,
+        r = r,
+        g = g,
+        b = b,
+        a = a,
+    }
 end
 
 local function GetElvUIEngine()
@@ -231,117 +274,113 @@ local function AddAnimationGroup(glow, animation)
     glow.animations[#glow.animations + 1] = animation
 end
 
-local function UpdatePerimeterSparkAnimationLayout(glow)
-    if not glow or not glow.sparkTop then
+local function EnsureSparkTextures(glow, count)
+    glow.sparkSegments = glow.sparkSegments or {}
+
+    for index = 1, count do
+        local segment = glow.sparkSegments[index]
+        if not segment then
+            segment = glow:CreateTexture(nil, "OVERLAY")
+            segment:SetTexture(glow.sparkTexture or "Interface\\Buttons\\WHITE8X8")
+            segment:SetBlendMode("ADD")
+            glow.sparkSegments[index] = segment
+        end
+
+        segment:Show()
+    end
+
+    for index = count + 1, #glow.sparkSegments do
+        local segment = glow.sparkSegments[index]
+        if segment then
+            segment:Hide()
+        end
+    end
+end
+
+local function PositionClassicSparkSegment(segment, glow, distance)
+    if not segment or not glow then
         return
     end
 
-    local width = math_max(glow:GetWidth(), CLASSIC_CHASER_LENGTH + 4)
-    local height = math_max(glow:GetHeight(), CLASSIC_CHASER_LENGTH + 4)
-    local horizontalDistance = math_max(0, width - CLASSIC_CHASER_LENGTH)
-    local verticalDistance = math_max(0, height - CLASSIC_CHASER_LENGTH)
-    local perimeter = math_max(1, (horizontalDistance * 2) + (verticalDistance * 2))
-    local travelBudget = math_max(0.4, CLASSIC_CHASER_CYCLE_SECONDS - (CLASSIC_CHASER_FADE_SECONDS * 4))
-    local topDuration = math_max(0.12, travelBudget * (horizontalDistance / perimeter))
-    local rightDuration = math_max(0.1, travelBudget * (verticalDistance / perimeter))
-    local bottomDuration = math_max(0.12, travelBudget * (horizontalDistance / perimeter))
-    local leftDuration = math_max(0.1, travelBudget * (verticalDistance / perimeter))
-    local totalDuration = topDuration + rightDuration + bottomDuration + leftDuration + (CLASSIC_CHASER_FADE_SECONDS * 4)
+    local horizontalDistance = glow.sparkHorizontalDistance or 0
+    local verticalDistance = glow.sparkVerticalDistance or 0
+    local sparkWidth = glow.sparkWidth or DEFAULT_CLASSIC_SPARK_WIDTH
+    local sparkHeight = glow.sparkHeight or DEFAULT_CLASSIC_SPARK_HEIGHT
+    local topEnd = horizontalDistance
+    local rightEnd = topEnd + verticalDistance
+    local bottomEnd = rightEnd + horizontalDistance
 
-    glow.sparkTop:ClearAllPoints()
-    glow.sparkTop:SetPoint("TOPLEFT", glow, "TOPLEFT", 0, 0)
-    glow.sparkTop:SetSize(CLASSIC_CHASER_LENGTH, CLASSIC_CHASER_THICKNESS)
+    segment:ClearAllPoints()
 
-    glow.sparkRight:ClearAllPoints()
-    glow.sparkRight:SetPoint("TOPRIGHT", glow, "TOPRIGHT", 0, 0)
-    glow.sparkRight:SetSize(CLASSIC_CHASER_THICKNESS, CLASSIC_CHASER_LENGTH)
+    if distance <= topEnd then
+        segment:SetPoint("TOPLEFT", glow, "TOPLEFT", distance, 0)
+        segment:SetSize(sparkWidth, sparkHeight)
+        return
+    end
 
-    glow.sparkBottom:ClearAllPoints()
-    glow.sparkBottom:SetPoint("BOTTOMRIGHT", glow, "BOTTOMRIGHT", 0, 0)
-    glow.sparkBottom:SetSize(CLASSIC_CHASER_LENGTH, CLASSIC_CHASER_THICKNESS)
+    if distance <= rightEnd then
+        segment:SetPoint("TOPRIGHT", glow, "TOPRIGHT", 0, -(distance - topEnd))
+        segment:SetSize(sparkHeight, sparkWidth)
+        return
+    end
 
-    glow.sparkLeft:ClearAllPoints()
-    glow.sparkLeft:SetPoint("BOTTOMLEFT", glow, "BOTTOMLEFT", 0, 0)
-    glow.sparkLeft:SetSize(CLASSIC_CHASER_THICKNESS, CLASSIC_CHASER_LENGTH)
+    if distance <= bottomEnd then
+        segment:SetPoint("BOTTOMRIGHT", glow, "BOTTOMRIGHT", -(distance - rightEnd), 0)
+        segment:SetSize(sparkWidth, sparkHeight)
+        return
+    end
 
-    glow.sparkTopMove:SetOffset(horizontalDistance, 0)
-    glow.sparkTopMove:SetDuration(topDuration)
-    glow.sparkTopPause:SetDuration(0)
-    glow.sparkTopOn:SetDuration(0.001)
-    glow.sparkTopFade:SetDuration(CLASSIC_CHASER_FADE_SECONDS)
-    glow.sparkTopRest:SetDuration(math_max(0.001, totalDuration - topDuration - CLASSIC_CHASER_FADE_SECONDS))
-
-    glow.sparkRightMove:SetOffset(0, -verticalDistance)
-    glow.sparkRightMove:SetDuration(rightDuration)
-    glow.sparkRightPause:SetDuration(topDuration + CLASSIC_CHASER_FADE_SECONDS)
-    glow.sparkRightOn:SetDuration(0.001)
-    glow.sparkRightFade:SetDuration(CLASSIC_CHASER_FADE_SECONDS)
-    glow.sparkRightRest:SetDuration(math_max(0.001, totalDuration - (topDuration + CLASSIC_CHASER_FADE_SECONDS) - rightDuration - CLASSIC_CHASER_FADE_SECONDS))
-
-    glow.sparkBottomMove:SetOffset(-horizontalDistance, 0)
-    glow.sparkBottomMove:SetDuration(bottomDuration)
-    glow.sparkBottomPause:SetDuration(topDuration + rightDuration + (CLASSIC_CHASER_FADE_SECONDS * 2))
-    glow.sparkBottomOn:SetDuration(0.001)
-    glow.sparkBottomFade:SetDuration(CLASSIC_CHASER_FADE_SECONDS)
-    glow.sparkBottomRest:SetDuration(math_max(0.001, totalDuration - (topDuration + rightDuration + (CLASSIC_CHASER_FADE_SECONDS * 2)) - bottomDuration - CLASSIC_CHASER_FADE_SECONDS))
-
-    glow.sparkLeftMove:SetOffset(0, verticalDistance)
-    glow.sparkLeftMove:SetDuration(leftDuration)
-    glow.sparkLeftPause:SetDuration(topDuration + rightDuration + bottomDuration + (CLASSIC_CHASER_FADE_SECONDS * 3))
-    glow.sparkLeftOn:SetDuration(0.001)
-    glow.sparkLeftFade:SetDuration(CLASSIC_CHASER_FADE_SECONDS)
-    glow.sparkLeftRest:SetDuration(math_max(0.001, totalDuration - (topDuration + rightDuration + bottomDuration + (CLASSIC_CHASER_FADE_SECONDS * 3)) - leftDuration - CLASSIC_CHASER_FADE_SECONDS))
+    segment:SetPoint("BOTTOMLEFT", glow, "BOTTOMLEFT", 0, distance - bottomEnd)
+    segment:SetSize(sparkHeight, sparkWidth)
 end
 
-local function CreateChaserSegment(glow, name, width, height)
-    local texture = glow:CreateTexture(nil, "OVERLAY")
-    texture:SetTexture("Interface\\Buttons\\WHITE8X8")
-    texture:SetBlendMode("ADD")
-    texture:SetSize(width, height)
-    texture:SetAlpha(0)
-    glow[name] = texture
+local function UpdateClassicSparkPositions(glow, elapsed)
+    if not glow or not glow.sparkSegments or (glow.sparkCount or 0) <= 0 then
+        return
+    end
 
-    local anim = texture:CreateAnimationGroup()
-    anim:SetLooping("REPEAT")
+    glow.sparkElapsed = (glow.sparkElapsed or 0) + (elapsed or 0)
 
-    local pause = anim:CreateAnimation("Alpha")
-    pause:SetOrder(1)
-    pause:SetFromAlpha(0)
-    pause:SetToAlpha(0)
+    local perimeter = glow.sparkPerimeter or 0
+    if perimeter <= 0 then
+        return
+    end
 
-    local on = anim:CreateAnimation("Alpha")
-    on:SetOrder(2)
-    on:SetFromAlpha(0)
-    on:SetToAlpha(1)
+    local progress = (glow.sparkElapsed % CLASSIC_CHASER_CYCLE_SECONDS) / CLASSIC_CHASER_CYCLE_SECONDS
 
-    local move = anim:CreateAnimation("Translation")
-    move:SetOrder(2)
-    move:SetSmoothing("NONE")
+    for index = 1, glow.sparkCount do
+        local segment = glow.sparkSegments[index]
+        if segment then
+            local offsetProgress = (progress + ((index - 1) / glow.sparkCount)) % 1
+            PositionClassicSparkSegment(segment, glow, offsetProgress * perimeter)
+            segment:Show()
+        end
+    end
+end
 
-    local fade = anim:CreateAnimation("Alpha")
-    fade:SetOrder(3)
-    fade:SetFromAlpha(1)
-    fade:SetToAlpha(0)
+local function UpdatePerimeterSparkAnimationLayout(glow)
+    if not glow then
+        return
+    end
 
-    local rest = anim:CreateAnimation("Alpha")
-    rest:SetOrder(4)
-    rest:SetFromAlpha(0)
-    rest:SetToAlpha(0)
+    local sparkSettings = GetClassicSparkSettings()
+    local width = math_max(glow:GetWidth(), sparkSettings.width + 4)
+    local height = math_max(glow:GetHeight(), sparkSettings.width + 4)
 
-    glow[name .. "Anim"] = anim
-    glow[name .. "Pause"] = pause
-    glow[name .. "On"] = on
-    glow[name .. "Move"] = move
-    glow[name .. "Fade"] = fade
-    glow[name .. "Rest"] = rest
-    AddAnimationGroup(glow, anim)
+    glow.sparkCount = sparkSettings.count
+    glow.sparkWidth = sparkSettings.width
+    glow.sparkHeight = sparkSettings.height
+    glow.sparkHorizontalDistance = math_max(0, width - sparkSettings.width)
+    glow.sparkVerticalDistance = math_max(0, height - sparkSettings.width)
+    glow.sparkPerimeter = math_max(1, (glow.sparkHorizontalDistance * 2) + (glow.sparkVerticalDistance * 2))
+
+    EnsureSparkTextures(glow, sparkSettings.count)
+    UpdateClassicSparkPositions(glow, 0)
 end
 
 local function CreateSparkAnimation(glow)
-    CreateChaserSegment(glow, "sparkTop", CLASSIC_CHASER_LENGTH, CLASSIC_CHASER_THICKNESS)
-    CreateChaserSegment(glow, "sparkRight", CLASSIC_CHASER_THICKNESS, CLASSIC_CHASER_LENGTH)
-    CreateChaserSegment(glow, "sparkBottom", CLASSIC_CHASER_LENGTH, CLASSIC_CHASER_THICKNESS)
-    CreateChaserSegment(glow, "sparkLeft", CLASSIC_CHASER_THICKNESS, CLASSIC_CHASER_LENGTH)
+    glow.sparkSegments = {}
+    glow.sparkElapsed = 0
 end
 
 local function CreateClassicGlow(frame)
@@ -365,6 +404,7 @@ local function CreateClassicGlow(frame)
     holder.nativeHighlight = frame.AuraHighlight
     holder.shadowFrames = {}
     holder.animations = {}
+    holder.sparkTexture = blankTexture
 
     if holder.CreateShadow then
         holder.shadow = holder:CreateShadow(4, true)
@@ -505,15 +545,16 @@ local function SetClassicGlowColor(glow, r, g, b, a)
     if glow.left then glow.left:SetVertexColor(r, g, b, math_max(0.42, a * 0.72)) end
     if glow.right then glow.right:SetVertexColor(r, g, b, math_max(0.42, a * 0.72)) end
 
-    local chaseR = math_min(1, r * 0.82 + 0.26)
-    local chaseG = math_min(1, g * 0.9 + 0.22)
-    local chaseB = math_min(1, b * 0.55 + 0.08)
-    local chaseA = math_max(0.8, a)
-
-    if glow.sparkTop then glow.sparkTop:SetVertexColor(chaseR, chaseG, chaseB, chaseA) end
-    if glow.sparkRight then glow.sparkRight:SetVertexColor(chaseR, chaseG, chaseB, chaseA) end
-    if glow.sparkBottom then glow.sparkBottom:SetVertexColor(chaseR, chaseG, chaseB, chaseA) end
-    if glow.sparkLeft then glow.sparkLeft:SetVertexColor(chaseR, chaseG, chaseB, chaseA) end
+    local sparkSettings = GetClassicSparkSettings()
+    local sparkAlpha = math_max(0.15, math_min(1, sparkSettings.a * a))
+    if glow.sparkSegments then
+        for index = 1, #glow.sparkSegments do
+            local segment = glow.sparkSegments[index]
+            if segment then
+                segment:SetVertexColor(sparkSettings.r, sparkSettings.g, sparkSettings.b, sparkAlpha)
+            end
+        end
+    end
 
     glow:SetAlpha(a)
 end
@@ -635,6 +676,12 @@ local function StartGlowAnimations(glow)
             animation:Play()
         end
     end
+
+    if glow.style == STYLE_CLASSIC then
+        glow.sparkElapsed = 0
+        UpdateClassicSparkPositions(glow, 0)
+        glow:SetScript("OnUpdate", UpdateClassicSparkPositions)
+    end
 end
 
 local function StopGlowAnimations(glow)
@@ -651,6 +698,18 @@ local function StopGlowAnimations(glow)
         local animation = animations[index]
         if animation then
             animation:Stop()
+        end
+    end
+
+    if glow.style == STYLE_CLASSIC then
+        glow:SetScript("OnUpdate", nil)
+        if glow.sparkSegments then
+            for index = 1, #glow.sparkSegments do
+                local segment = glow.sparkSegments[index]
+                if segment then
+                    segment:Hide()
+                end
+            end
         end
     end
 end
@@ -767,9 +826,8 @@ function RaidFrames:ShowGlow(frame, allowCreate)
     end
 
     local r, g, b, a = GetOptions():GetGlowColor()
-    SetGlowColor(glow, r, g, b, a)
-
     UpdateGlowAnimationLayout(glow)
+    SetGlowColor(glow, r, g, b, a)
 
     if glow.nativeShadow then
         glow.nativeShadow:Hide()

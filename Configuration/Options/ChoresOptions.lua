@@ -115,6 +115,15 @@ function Options:SetTrackBountifulDelves(info, value)
     RefreshChores()
 end
 
+function Options:GetOnlyTrackBountifulDelvesWithKey(info)
+    return self:GetDB().onlyTrackBountifulDelvesWithKey == true
+end
+
+function Options:SetOnlyTrackBountifulDelvesWithKey(info, value)
+    self:GetDB().onlyTrackBountifulDelvesWithKey = value == true
+    RefreshChores()
+end
+
 function Options:GetTrackPrey(info)
     local enabled = self:GetDB().trackPrey
     if enabled == nil then
