@@ -1,6 +1,6 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Include file='QualityOfLife.lua' />
-    <!-- Gathering.lua removed -->
+    <Include file='Gathering.lua' />
     <Include file='QuestAutomation.lua' />
     <Include file='QuestLogCleaner.lua' />
     <Include file='GossipHotkeys.lua' />

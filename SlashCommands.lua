@@ -136,3 +136,16 @@ local function ShowMPTDebugPanel()
 end
 
 T:RegisterChatCommand("tuimptdebug", ShowMPTDebugPanel)
+
+local function ShowGatheringDebugPanel()
+    local qol = T:GetModule("QualityOfLife", true)
+    local gathering = qol and qol.GetModule and qol:GetModule("Gathering", true) or nil
+    if not gathering or type(gathering.ShowDebugFrame) ~= "function" then
+        T:Print("[TwichUI] Gathering debug is unavailable")
+        return
+    end
+
+    gathering:ShowDebugFrame()
+end
+
+T:RegisterChatCommand("tuigatherdebug", ShowGatheringDebugPanel)

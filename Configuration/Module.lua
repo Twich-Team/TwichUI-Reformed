@@ -29,6 +29,7 @@ local ReloadUI = ReloadUI
 --- @field NotificationPanel NotificationPanelConfigurationOptions
 --- @field About AboutConfigurationOptions
 --- @field SatchelWatch SatchelWatchConfigurationOptions
+--- @field Gathering GatheringConfigurationOptions
 local Options = {}
 
 

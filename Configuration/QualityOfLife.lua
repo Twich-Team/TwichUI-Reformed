@@ -40,6 +40,9 @@ local ChoresOptions = ConfigurationModule.Options.Chores
 local PreyIcon =
 "Interface\\AddOns\\TwichUI_Redux\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
 
+---@type GatheringConfigurationOptions
+local GatheringOptions = ConfigurationModule.Options.Gathering
+
 ---@type EasyFishConfigurationOptions
 local EasyFishOptions = ConfigurationModule.Options.EasyFish
 
@@ -2304,7 +2307,7 @@ local function BuildConfiguration()
         choresTab = BuildChoresTab(),
         dungeonTrackingTab = BuildDungeonTrackingTab(),
         mythicPlusToolsTab = BuildMythicPlusToolsTab(),
-        -- gatheringTab removed
+        gatheringTab = ConfigurationModule.BuildGatheringTab and ConfigurationModule.BuildGatheringTab() or nil,
         easyFishTab = BuildEasyFishTab(),
         gossipHotkeysTab = BuildGossipHotkeysTab(),
         preyTweaksTab = BuildPreyTweaksTab(),

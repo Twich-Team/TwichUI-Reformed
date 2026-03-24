@@ -14,6 +14,7 @@
     <Include file='TeleportsOptions.lua' />
     <Include file='GossipHotkeysOptions.lua' />
     <Include file='BestInSlotOptions.lua' />
+    <Include file='GatheringOptions.lua' />
     <Include file='NotificationPanelOptions.lua' />
     <Include file='SatchelWatchOptions.lua' />
 </Ui>

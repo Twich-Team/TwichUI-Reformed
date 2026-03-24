@@ -90,6 +90,7 @@ function T:OnInitialize()
         { module = self:GetModule("Datatexts"),                                enabled = CM.Options.Datatext:IsModuleEnabled() },
         { module = self:GetModule("RaidFrames"),                               enabled = CM.Options.RaidFrames:GetEnabled() },
         { module = self:GetModule("BestInSlot"),                               enabled = CM.Options.BestInSlot:IsBestInSlotModuleEnabled() },
+        { module = self:GetModule("QualityOfLife"):GetModule("Gathering"),        enabled = CM.Options.Gathering:GetEnabled() },
     }
 
     for _, entry in ipairs(moduleRegistry) do

@@ -5,4 +5,5 @@
     <Include file='MythicPlus.lua' />
     <Include file='Portals.lua' />
     <Include file='Goblin.lua' />
+    <Include file='Gathering.lua' />
 </Ui>
