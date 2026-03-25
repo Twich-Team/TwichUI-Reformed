@@ -2385,9 +2385,9 @@ end
 
 function CDT:OnClick(panel, button)
     if button == "LeftButton" then
-        DataTextModule:ShowMenu(panel, self:GetMenuList())
-    elseif button == "RightButton" then
         self:ToggleTrackerFrame(panel)
+    elseif button == "RightButton" then
+        DataTextModule:ShowMenu(panel, self:GetMenuList())
     end
 end
 
@@ -2417,7 +2417,7 @@ function CDT:OnEnter(panel)
     if not state or not state.enabled then
         tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Enable Quality of Life > Chores to start tracking."))
         ApplyTooltipLineFont(tooltip, tooltip:NumLines(), fontSettings.entryFont, fontSettings.entryFontSize)
-        tooltip:Show()
+        DataTextModule:ShowDatatextTooltip(tooltip)
         return
     end
 
@@ -2425,7 +2425,7 @@ function CDT:OnEnter(panel)
         tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY,
             "No tracked chores are active for this character right now."))
         ApplyTooltipLineFont(tooltip, tooltip:NumLines(), fontSettings.entryFont, fontSettings.entryFontSize)
-        tooltip:Show()
+        DataTextModule:ShowDatatextTooltip(tooltip)
         return
     end
 
@@ -2462,14 +2462,16 @@ function CDT:OnEnter(panel)
     tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY,
         "Left-click for tracking options. Right-click to pin or close the tracker."))
     ApplyTooltipLineFont(tooltip, tooltip:NumLines(), fontSettings.entryFont, fontSettings.entryFontSize)
-    tooltip:Show()
+    DataTextModule:ShowDatatextTooltip(tooltip)
 end
 
 function CDT:OnLeave()
-    local tooltip = DataTextModule:GetElvUITooltip()
+    local tooltip = DataTextModule:GetActiveDatatextTooltip()
     if tooltip and tooltip.Hide then
-        self:RestoreTooltipFonts(tooltip)
-        tooltip:Hide()
+        if DataTextModule.tooltipOwner == self.panel then
+            self:RestoreTooltipFonts(tooltip)
+        end
+        DataTextModule:HideDatatextTooltip(tooltip)
     end
 end
 
@@ -2481,11 +2483,12 @@ function CDT:OnInitialize()
             DataTextModule.CommonEvents.ELVUI_FORCE_UPDATE,
             "PLAYER_ENTERING_WORLD",
         },
-        onEventFunc = function(...) self:OnEvent(...) end,
+        onEventFunc = DataTextModule:CreateBoundCallback(self, "OnEvent"),
         onUpdateFunc = nil,
-        onClickFunc = function(...) self:OnClick(...) end,
-        onEnterFunc = function(...) self:OnEnter(...) end,
-        onLeaveFunc = function() self:OnLeave() end,
+        onClickFunc = DataTextModule:CreateBoundCallback(self, "OnClick"),
+        onEnterFunc = DataTextModule:CreateBoundCallback(self, "OnEnter"),
+        onLeaveFunc = DataTextModule:CreateBoundCallback(self, "OnLeave"),
+        module = self,
     }
 
     DataTextModule:Inform(self.definition)

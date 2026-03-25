@@ -248,7 +248,7 @@ function DebugConsole:BuildSourceText(key)
         local ok, report = pcall(source.buildReport)
         if ok and type(report) == "string" and report ~= "" then
             lines[#lines + 1] = report
-            return table.concat(lines, "\n")
+            lines[#lines + 1] = ""
         end
 
         if not ok then
@@ -262,6 +262,8 @@ function DebugConsole:BuildSourceText(key)
     if #buffer == 0 then
         lines[#lines + 1] = "No debug lines recorded yet."
     else
+        lines[#lines + 1] = "Live Log"
+        lines[#lines + 1] = ""
         for _, line in ipairs(buffer) do
             lines[#lines + 1] = line
         end

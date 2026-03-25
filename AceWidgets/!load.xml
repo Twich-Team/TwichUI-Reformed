@@ -10,6 +10,7 @@
     <Include file='AceKeystoneNotificationWidget.lua' />
     <Include file='AceDungeonTrackingNotificationWidget.lua' />
     <Include file='AceMythicPlusAlertNotificationWidget.lua' />
+    <Include file='AcePreyNotificationWidget.lua' />
     <Include file='AceSatchelNotificationWidget.lua' />
     <Include file='AceGatheringNotificationWidget.lua' />
     <Include file='AceEmptyPanelWidget.lua' />

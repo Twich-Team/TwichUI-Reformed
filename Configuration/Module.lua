@@ -6,6 +6,7 @@ local TwichRx = _G.TwichRx
 local T = unpack(TwichRx)
 
 local E = unpack(ElvUI)
+local AceConfig = LibStub("AceConfig-3.0", true)
 
 -- local AceConfig = LibStub("AceConfig-3.0")
 -- local AceConfigDialog = LibStub("AceConfigDialog-3.0")
@@ -27,6 +28,8 @@ local ReloadUI = ReloadUI
 --- @field GossipHotkeys GossipHotkeysConfigurationOptions
 --- @field BestInSlot BestInSlotConfigurationOptions
 --- @field NotificationPanel NotificationPanelConfigurationOptions
+--- @field RaidFrames RaidFramesConfigurationOptions
+--- @field MythicPlusTools MythicPlusToolsConfigurationOptions
 --- @field About AboutConfigurationOptions
 --- @field SatchelWatch SatchelWatchConfigurationOptions
 --- @field Gathering GatheringConfigurationOptions
@@ -39,10 +42,12 @@ local Options = {}
 ---@field registeredConfigurationFunctions table<string, fun():table>
 ---@field DeveloperConfiguration DeveloperConfiguration
 ---@field Options ConfigurationOptions
+---@field StandaloneUI table|nil
 local ConfigurationModule = T:NewModule("Configuration")
 ConfigurationModule:SetEnabledState(true)
 ConfigurationModule.registeredConfigurationFunctions = {}
 ConfigurationModule.Options = Options
+ConfigurationModule.standaloneOptionsAppName = "TwichUIReduxStandalone"
 
 --- Convenience function to find the proper AceConfigRegistry, preferring ElvUI-patched versions.
 local function GetAceConfigRegistry()
@@ -71,20 +76,54 @@ function ConfigurationModule:OnInitialize()
     }
     self.optionsTable.args.profile.order = -1
 
-
-    -- Build registered configuration sections
-    for name, func in pairs(self.registeredConfigurationFunctions) do
-        local section = func()
-        self.optionsTable.args[name] = section
-    end
+    self:RebuildOptionsTableSections()
 
     -- Register with ElvUI instead
-    E.Options.args.TwichUIRx = self.optionsTable
+    if E and E.Options and E.Options.args then
+        E.Options.args.TwichUIRx = self.optionsTable
+    end
+
+    self:RegisterStandaloneOptionsTable()
     self:SetChoresTrackerConfigKeybinding()
+end
+
+function ConfigurationModule:GetStandaloneOptionsAppName()
+    return self.standaloneOptionsAppName or "TwichUIReduxStandalone"
+end
+
+function ConfigurationModule:RegisterStandaloneOptionsTable()
+    if not AceConfig or type(AceConfig.RegisterOptionsTable) ~= "function" or not self.optionsTable then
+        return
+    end
+
+    AceConfig:RegisterOptionsTable(self:GetStandaloneOptionsAppName(), self.optionsTable)
 end
 
 function ConfigurationModule:RegisterConfigurationFunction(name, func)
     self.registeredConfigurationFunctions[name] = func
+end
+
+function ConfigurationModule:RebuildOptionsTableSections()
+    if not self.optionsTable then
+        return
+    end
+
+    self.optionsTable.args = self.optionsTable.args or {}
+    if not self.optionsTable.args.profile then
+        self.optionsTable.args.profile = AceDBOptions:GetOptionsTable(T.db)
+        self.optionsTable.args.profile.order = -1
+    end
+
+    for name in pairs(self.optionsTable.args) do
+        if name ~= "profile" and not self.registeredConfigurationFunctions[name] then
+            self.optionsTable.args[name] = nil
+        end
+    end
+
+    for name, func in pairs(self.registeredConfigurationFunctions) do
+        local section = func()
+        self.optionsTable.args[name] = section
+    end
 end
 
 function ConfigurationModule:GetProfileDB()
@@ -129,6 +168,8 @@ function ConfigurationModule:ShowGenericConfirmationDialog(content, onAcceptFunc
 end
 
 function ConfigurationModule:Refresh()
+    self:RebuildOptionsTableSections()
+
     local ACR = GetAceConfigRegistry()
     if ACR and ACR.NotifyChange then
         pcall(ACR.NotifyChange, ACR, "ElvUI")
@@ -138,6 +179,21 @@ function ConfigurationModule:Refresh()
     if E and type(E.RefreshOptions) == "function" then
         pcall(E.RefreshOptions, E)
     end
+
+    if self.StandaloneUI and type(self.StandaloneUI.GetFrame) == "function" then
+        local frame = self.StandaloneUI:GetFrame()
+        if frame and frame.IsShown and frame:IsShown() then
+            if type(self.StandaloneUI.RefreshSidebar) == "function" then
+                self.StandaloneUI:RefreshSidebar()
+            end
+
+            if self.StandaloneUI.currentPageId == "dashboard" and type(self.StandaloneUI.RefreshDashboard) == "function" then
+                self.StandaloneUI:RefreshDashboard()
+            elseif type(self.StandaloneUI.RequestRenderCurrentPage) == "function" then
+                self.StandaloneUI:RequestRenderCurrentPage()
+            end
+        end
+    end
 end
 
 function ConfigurationModule:OpenChoresTrackerOptions()
@@ -145,7 +201,7 @@ function ConfigurationModule:OpenChoresTrackerOptions()
 end
 
 --- Open the configuration interface inside of the ElvUI configuration.
-function ConfigurationModule:ToggleOptionsUI(...)
+function ConfigurationModule:OpenLegacyOptionsUI(...)
     local groupPath = { ... }
     local opened
     if E and type(E.ToggleOptionsUI) == "function" then
@@ -198,6 +254,16 @@ function ConfigurationModule:ToggleOptionsUI(...)
             trySelect()
         end
     end
+end
+
+function ConfigurationModule:ToggleOptionsUI(...)
+    if self.StandaloneUI and type(self.StandaloneUI.IsAvailable) == "function" and self.StandaloneUI:IsAvailable()
+        and type(self.StandaloneUI.Toggle) == "function" then
+        self.StandaloneUI:Toggle(...)
+        return
+    end
+
+    self:OpenLegacyOptionsUI(...)
 end
 
 function ConfigurationModule:EnsureChoresTrackerConfigButton()

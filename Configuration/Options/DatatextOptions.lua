@@ -1,3 +1,4 @@
+---@diagnostic disable: undefined-field
 --[[
     Options for the ChatEnhancement module.
 ]]
@@ -12,6 +13,122 @@ local ConfigurationModule = T:GetModule("Configuration")
 local Options = ConfigurationModule.Options.Datatext or {}
 ConfigurationModule.Options.Datatext = Options
 
+local MAX_STANDALONE_PANELS = 8
+local MIN_STANDALONE_PANEL_WIDTH = 80
+local MAX_STANDALONE_PANEL_WIDTH = 4000
+
+local DEFAULT_STANDALONE_STYLE = {
+    font = "Friz Quadrata TT",
+    fontSize = 12,
+    textAlign = "CENTER",
+    tooltipFont = "Friz Quadrata TT",
+    tooltipFontSize = 11,
+    menuFont = "Friz Quadrata TT",
+    menuFontSize = 12,
+    fontOutline = false,
+    showDragHandle = true,
+    textShadowAlpha = 0.85,
+    backgroundColor = { 0.05, 0.06, 0.08, 1 },
+    backgroundAlpha = 0.94,
+    borderColor = { 0.24, 0.26, 0.32, 1 },
+    borderAlpha = 0.9,
+    accentColor = { 0.96, 0.76, 0.24, 1 },
+    accentAlpha = 0.95,
+    dividerAlpha = 0.28,
+}
+
+local function GetDatatextModule()
+    return T:GetModule("Datatexts", true)
+end
+
+local function RefreshStandalonePanels()
+    local datatextModule = GetDatatextModule()
+    if datatextModule and datatextModule.RefreshStandalonePanels then
+        datatextModule:RefreshStandalonePanels()
+    end
+end
+
+local function CopyTable(source)
+    if type(source) ~= "table" then
+        return source
+    end
+
+    local copy = {}
+    for key, value in pairs(source) do
+        copy[key] = CopyTable(value)
+    end
+    return copy
+end
+
+local function MergeDefaults(target, defaults)
+    for key, value in pairs(defaults or {}) do
+        if type(value) == "table" then
+            if type(target[key]) ~= "table" then
+                target[key] = {}
+            end
+            MergeDefaults(target[key], value)
+        elseif target[key] == nil then
+            target[key] = value
+        end
+    end
+end
+
+local function BuildDefaultStandalonePanel(panelID, orderIndex)
+    local baseYOffset = 6 + ((math.max(1, orderIndex) - 1) * 34)
+    return {
+        id = panelID,
+        name = orderIndex == 1 and "Primary Panel" or ("Panel " .. tostring(orderIndex)),
+        enabled = true,
+        point = "BOTTOM",
+        relativePoint = "BOTTOM",
+        x = 0,
+        y = baseYOffset,
+        width = 420,
+        height = 28,
+        segments = 3,
+        slot1 = orderIndex == 1 and "TwichUI: Chores" or "NONE",
+        slot2 = orderIndex == 1 and "TwichUI: Mythic+" or "NONE",
+        slot3 = orderIndex == 1 and "TwichUI: Portals" or "NONE",
+        slot4 = "NONE",
+        slot5 = "NONE",
+    }
+end
+
+local function NormalizeStandalonePanel(panel, panelID, orderIndex)
+    local defaults = BuildDefaultStandalonePanel(panelID, orderIndex)
+    MergeDefaults(panel, defaults)
+    panel.id = panelID
+    if panel.useStyleOverrides == nil then
+        panel.useStyleOverrides = false
+    end
+    if panel.style ~= nil and type(panel.style) ~= "table" then
+        panel.style = {}
+    end
+    panel.width = math.min(MAX_STANDALONE_PANEL_WIDTH, math.max(MIN_STANDALONE_PANEL_WIDTH, tonumber(panel.width) or defaults.width))
+    panel.height = math.min(80, math.max(20, tonumber(panel.height) or defaults.height))
+    panel.segments = math.min(5, math.max(1, tonumber(panel.segments) or defaults.segments))
+    panel.x = tonumber(panel.x) or defaults.x
+    panel.y = tonumber(panel.y) or defaults.y
+end
+
+function Options:GetResolvedStandaloneStyle(panelID)
+    local standalone = self:GetStandaloneDB()
+    local resolved = CopyTable(standalone.style or DEFAULT_STANDALONE_STYLE)
+    local panel = type(panelID) == "string" and self:GetStandalonePanel(panelID) or nil
+
+    if panel and panel.useStyleOverrides == true and type(panel.style) == "table" then
+        MergeDefaults(panel.style, {})
+        for key, value in pairs(panel.style) do
+            if value ~= nil then
+                resolved[key] = CopyTable(value)
+            end
+        end
+    end
+
+    MergeDefaults(resolved, DEFAULT_STANDALONE_STYLE)
+    return resolved
+end
+
 function Options:GetDB()
     if not ConfigurationModule:GetProfileDB().datatext then
         ConfigurationModule:GetProfileDB().datatext = {}
@@ -25,6 +142,129 @@ function Options:GetDatatextDB(datatextName)
         db[datatextName] = {}
     end
     return db[datatextName]
+end
+
+function Options:GetStandaloneDB()
+    local db = self:GetDB()
+    if type(db.standalone) ~= "table" then
+        db.standalone = {}
+    end
+
+    local standalone = db.standalone
+    if standalone.enabled == nil then
+        standalone.enabled = false
+    end
+    if standalone.locked == nil then
+        standalone.locked = true
+    end
+
+    if type(standalone.style) ~= "table" then
+        standalone.style = {}
+    end
+    MergeDefaults(standalone.style, DEFAULT_STANDALONE_STYLE)
+
+    if type(standalone.panels) ~= "table" then
+        standalone.panels = {}
+    end
+
+    local panelIDs = {}
+    for panelID in pairs(standalone.panels) do
+        panelIDs[#panelIDs + 1] = panelID
+    end
+
+    if #panelIDs == 0 then
+        standalone.panels.panel1 = BuildDefaultStandalonePanel("panel1", 1)
+    else
+        table.sort(panelIDs, function(left, right)
+            return tostring(left) < tostring(right)
+        end)
+        for index, panelID in ipairs(panelIDs) do
+            NormalizeStandalonePanel(standalone.panels[panelID], panelID, index)
+        end
+    end
+
+    return standalone
+end
+
+function Options:GetStandalonePanel(panelID)
+    local standalone = self:GetStandaloneDB()
+    if type(panelID) ~= "string" or panelID == "" then
+        return nil
+    end
+
+    if type(standalone.panels[panelID]) ~= "table" then
+        return nil
+    end
+
+    local sortedIDs = self:GetStandalonePanelIDs()
+    local orderIndex = 1
+    for index, currentPanelID in ipairs(sortedIDs) do
+        if currentPanelID == panelID then
+            orderIndex = index
+            break
+        end
+    end
+
+    NormalizeStandalonePanel(standalone.panels[panelID], panelID, orderIndex)
+    return standalone.panels[panelID]
+end
+
+function Options:GetStandalonePanelIDs()
+    local standalone = self:GetStandaloneDB()
+    local panelIDs = {}
+    for panelID in pairs(standalone.panels or {}) do
+        panelIDs[#panelIDs + 1] = panelID
+    end
+
+    table.sort(panelIDs, function(left, right)
+        return tostring(left) < tostring(right)
+    end)
+
+    return panelIDs
+end
+
+function Options:GetStandaloneDatatextChoices()
+    local datatextModule = GetDatatextModule()
+    if datatextModule and datatextModule.GetStandaloneDatatextChoices then
+        return datatextModule:GetStandaloneDatatextChoices()
+    end
+
+    return {
+        NONE = "None",
+    }
+end
+
+function Options:CreateStandalonePanel()
+    local standalone = self:GetStandaloneDB()
+    for index = 1, MAX_STANDALONE_PANELS do
+        local panelID = "panel" .. tostring(index)
+        if not standalone.panels[panelID] then
+            standalone.panels[panelID] = BuildDefaultStandalonePanel(panelID, index)
+            ConfigurationModule:Refresh()
+            RefreshStandalonePanels()
+            return panelID
+        end
+    end
+
+    return nil
+end
+
+function Options:DeleteStandalonePanel(panelID)
+    local standalone = self:GetStandaloneDB()
+    if standalone.panels and standalone.panels[panelID] then
+        standalone.panels[panelID] = nil
+    end
+
+    if next(standalone.panels) == nil then
+        standalone.panels.panel1 = BuildDefaultStandalonePanel("panel1", 1)
+    end
+
+    ConfigurationModule:Refresh()
+    RefreshStandalonePanels()
+end
+
+function Options:RefreshStandalonePanels()
+    RefreshStandalonePanels()
 end
 
 function Options:IsModuleEnabled(info)
@@ -47,6 +287,347 @@ local function RefreshDatatext(datatextName)
     ---@type DataTextModule
     local dtModule = T:GetModule("Datatexts")
     dtModule:RefreshDataText(datatextName)
+end
+
+local DEFAULT_CUSTOM_CURRENCY_SETTINGS = {
+    showIcon = true,
+    nameStyle = "abbr",
+    showMax = true,
+    includeInTooltip = true,
+}
+
+local function GetCurrencyModule()
+    local datatextModule = GetDatatextModule()
+    return datatextModule and datatextModule.GetModule and datatextModule:GetModule("CurrencyDataText", true) or nil
+end
+
+local function GetCurrenciesDB(options)
+    local db = options:GetDatatextDB("currencies")
+    if type(db.tooltipCurrencyIDs) ~= "table" then
+        db.tooltipCurrencyIDs = {}
+    end
+    if type(db.customDatatexts) ~= "table" then
+        db.customDatatexts = {}
+    end
+    if type(db.displayedCurrency) ~= "string" or db.displayedCurrency == "" then
+        db.displayedCurrency = "GOLD"
+    end
+    if type(db.displayStyle) ~= "string" or db.displayStyle == "" then
+        db.displayStyle = "ICON_TEXT_ABBR"
+    end
+    if db.showMax == nil then
+        db.showMax = true
+    end
+    return db
+end
+
+local function SyncCurrencyDatatexts(refreshConfig)
+    local currencyModule = GetCurrencyModule()
+    if currencyModule and currencyModule.SyncCustomDatatexts then
+        currencyModule:SyncCustomDatatexts()
+    end
+
+    RefreshDatatext("TwichUI: Currencies")
+    RefreshStandalonePanels()
+    if refreshConfig == true then
+        ConfigurationModule:Refresh()
+    end
+end
+
+local function FindCurrencyInfo(currencyID)
+    if type(C_CurrencyInfo) ~= "table" or type(C_CurrencyInfo.GetCurrencyInfo) ~= "function" then
+        return nil
+    end
+
+    local info = C_CurrencyInfo.GetCurrencyInfo(currencyID)
+    if type(info) ~= "table" or not info.name then
+        return nil
+    end
+
+    return info
+end
+
+local function TooltipHide()
+    if _G.GameTooltip and _G.GameTooltip.Hide then
+        _G.GameTooltip:Hide()
+    end
+end
+
+local function BuildCurrencyTooltipCallback(currencyID)
+    return function(row)
+        if not (_G.GameTooltip and _G.GameTooltip.SetOwner) then
+            return
+        end
+
+        _G.GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+        if _G.GameTooltip.SetCurrencyByID then
+            _G.GameTooltip:SetCurrencyByID(currencyID)
+        else
+            local info = FindCurrencyInfo(currencyID)
+            if info and info.name then
+                _G.GameTooltip:AddLine(info.name)
+            end
+        end
+        _G.GameTooltip:Show()
+    end
+end
+
+local function InsertCurrencyCandidate(collected, seen, currencyID)
+    local numericCurrencyID = tonumber(currencyID)
+    if not numericCurrencyID or numericCurrencyID <= 0 or seen[numericCurrencyID] then
+        return
+    end
+
+    local info = FindCurrencyInfo(numericCurrencyID)
+    if not info or not info.name then
+        return
+    end
+
+    seen[numericCurrencyID] = true
+    collected[#collected + 1] = {
+        value = numericCurrencyID,
+        name = tostring(info.name),
+        icon = info.iconFileID,
+        search = tostring(info.name),
+        onEnter = BuildCurrencyTooltipCallback(numericCurrencyID),
+        onLeave = TooltipHide,
+    }
+end
+
+function Options:GetCurrencySelectorCandidates()
+    local db = GetCurrenciesDB(self)
+    local candidates = {}
+    local seen = {}
+
+    if type(C_CurrencyInfo) == "table" and type(C_CurrencyInfo.GetCurrencyListSize) == "function" and
+        type(C_CurrencyInfo.GetCurrencyListInfo) == "function" then
+        local listSize = C_CurrencyInfo.GetCurrencyListSize() or 0
+        for index = 1, listSize do
+            local listInfo = C_CurrencyInfo.GetCurrencyListInfo(index)
+            local currencyID = listInfo and (listInfo.currencyTypesID or listInfo.currencyID) or nil
+            local isHeader = listInfo and (listInfo.isHeader == true or listInfo.header == true) or false
+            if not isHeader and currencyID then
+                InsertCurrencyCandidate(candidates, seen, currencyID)
+            end
+        end
+    end
+
+    for _, currencyID in ipairs(db.tooltipCurrencyIDs) do
+        InsertCurrencyCandidate(candidates, seen, currencyID)
+    end
+
+    for currencyID in pairs(db.customDatatexts) do
+        InsertCurrencyCandidate(candidates, seen, currencyID)
+    end
+
+    table.sort(candidates, function(left, right)
+        return tostring(left.name or "") < tostring(right.name or "")
+    end)
+
+    return candidates
+end
+
+function Options:GetCurrencyDisplayChoices()
+    local values = {
+        GOLD = "Gold",
+    }
+
+    for _, candidate in ipairs(self:GetCurrencySelectorCandidates()) do
+        values[tostring(candidate.value)] = candidate.name
+    end
+
+    return values
+end
+
+function Options:GetCurrenciesDisplaySource(info)
+    return tostring(GetCurrenciesDB(self).displayedCurrency or "GOLD")
+end
+
+function Options:SetCurrenciesDisplaySource(info, value)
+    local db = GetCurrenciesDB(self)
+    db.displayedCurrency = tostring(value or "GOLD")
+    SyncCurrencyDatatexts(false)
+end
+
+function Options:GetCurrenciesDisplayStyle(info)
+    return GetCurrenciesDB(self).displayStyle or "ICON_TEXT_ABBR"
+end
+
+function Options:SetCurrenciesDisplayStyle(info, value)
+    local db = GetCurrenciesDB(self)
+    db.displayStyle = value or "ICON_TEXT_ABBR"
+    SyncCurrencyDatatexts(false)
+end
+
+function Options:GetCurrenciesShowMax(info)
+    return GetCurrenciesDB(self).showMax ~= false
+end
+
+function Options:SetCurrenciesShowMax(info, value)
+    local db = GetCurrenciesDB(self)
+    db.showMax = value == true
+    SyncCurrencyDatatexts(false)
+end
+
+function Options:GetCurrenciesUseCustomColor(info)
+    return GetCurrenciesDB(self).customColor == true
+end
+
+function Options:SetCurrenciesUseCustomColor(info, value)
+    local db = GetCurrenciesDB(self)
+    db.customColor = value == true
+    SyncCurrencyDatatexts(false)
+end
+
+function Options:GetCurrenciesTextColor(info)
+    local db = GetCurrenciesDB(self)
+    if type(db.textColor) ~= "table" then
+        db.textColor = { 1, 1, 1, 1 }
+    end
+    return unpack(db.textColor)
+end
+
+function Options:SetCurrenciesTextColor(info, r, g, b, a)
+    local db = GetCurrenciesDB(self)
+    db.textColor = { r, g, b, a }
+    SyncCurrencyDatatexts(false)
+end
+
+function Options:GetTooltipCurrencyEntries()
+    local db = GetCurrenciesDB(self)
+    local entries = {}
+    for _, currencyID in ipairs(db.tooltipCurrencyIDs) do
+        local info = FindCurrencyInfo(currencyID)
+        if info and info.name then
+            entries[#entries + 1] = {
+                id = currencyID,
+                name = info.name,
+                icon = info.iconFileID,
+            }
+        end
+    end
+    return entries
+end
+
+function Options:AddTooltipCurrency(currencyID)
+    local numericCurrencyID = tonumber(currencyID)
+    if not numericCurrencyID or numericCurrencyID <= 0 then
+        return
+    end
+
+    local db = GetCurrenciesDB(self)
+    for _, existingID in ipairs(db.tooltipCurrencyIDs) do
+        if tonumber(existingID) == numericCurrencyID then
+            return
+        end
+    end
+
+    db.tooltipCurrencyIDs[#db.tooltipCurrencyIDs + 1] = numericCurrencyID
+    if db.displayedCurrency == "GOLD" then
+        db.displayedCurrency = tostring(numericCurrencyID)
+    end
+
+    SyncCurrencyDatatexts(true)
+end
+
+function Options:RemoveTooltipCurrency(currencyID)
+    local numericCurrencyID = tonumber(currencyID)
+    if not numericCurrencyID then
+        return
+    end
+
+    local db = GetCurrenciesDB(self)
+    for index = #db.tooltipCurrencyIDs, 1, -1 do
+        if tonumber(db.tooltipCurrencyIDs[index]) == numericCurrencyID then
+            table.remove(db.tooltipCurrencyIDs, index)
+        end
+    end
+
+    if tostring(db.displayedCurrency) == tostring(numericCurrencyID) then
+        db.displayedCurrency = "GOLD"
+    end
+
+    SyncCurrencyDatatexts(true)
+end
+
+function Options:AddCustomCurrencyDatatext(currencyID)
+    local numericCurrencyID = tonumber(currencyID)
+    if not numericCurrencyID or numericCurrencyID <= 0 then
+        return
+    end
+
+    local db = GetCurrenciesDB(self)
+    if type(db.customDatatexts[numericCurrencyID]) ~= "table" then
+        db.customDatatexts[numericCurrencyID] = CopyTable(DEFAULT_CUSTOM_CURRENCY_SETTINGS)
+    end
+
+    SyncCurrencyDatatexts(true)
+end
+
+function Options:RemoveCustomCurrencyDatatext(currencyID)
+    local numericCurrencyID = tonumber(currencyID)
+    if not numericCurrencyID then
+        return
+    end
+
+    local db = GetCurrenciesDB(self)
+    db.customDatatexts[numericCurrencyID] = nil
+    SyncCurrencyDatatexts(true)
+end
+
+function Options:GetCustomCurrencyDatatextEntries()
+    local db = GetCurrenciesDB(self)
+    local entries = {}
+
+    for currencyID, settings in pairs(db.customDatatexts) do
+        local info = FindCurrencyInfo(currencyID)
+        if info and info.name then
+            MergeDefaults(settings, DEFAULT_CUSTOM_CURRENCY_SETTINGS)
+            entries[#entries + 1] = {
+                id = tonumber(currencyID),
+                name = info.name,
+                icon = info.iconFileID,
+                settings = settings,
+            }
+        end
+    end
+
+    table.sort(entries, function(left, right)
+        return tostring(left.name or "") < tostring(right.name or "")
+    end)
+
+    return entries
+end
+
+function Options:GetCustomCurrencyDatatextSetting(currencyID, key, fallback)
+    local db = GetCurrenciesDB(self)
+    local numericCurrencyID = tonumber(currencyID)
+    local settings = numericCurrencyID and db.customDatatexts[numericCurrencyID] or nil
+    if type(settings) ~= "table" then
+        return fallback
+    end
+
+    if settings[key] == nil then
+        return DEFAULT_CUSTOM_CURRENCY_SETTINGS[key] ~= nil and DEFAULT_CUSTOM_CURRENCY_SETTINGS[key] or fallback
+    end
+
+    return settings[key]
+end
+
+function Options:SetCustomCurrencyDatatextSetting(currencyID, key, value)
+    local db = GetCurrenciesDB(self)
+    local numericCurrencyID = tonumber(currencyID)
+    if not numericCurrencyID then
+        return
+    end
+
+    if type(db.customDatatexts[numericCurrencyID]) ~= "table" then
+        db.customDatatexts[numericCurrencyID] = CopyTable(DEFAULT_CUSTOM_CURRENCY_SETTINGS)
+    end
+
+    db.customDatatexts[numericCurrencyID][key] = value
+    SyncCurrencyDatatexts(false)
+    RefreshDatatext(string.format("TwichUI: Currency: %d", numericCurrencyID))
 end
 
 --------- MOUNTS DATATEXT OPTIONS ---------
@@ -300,46 +881,78 @@ function Options:SetChoresDoneTextColor(info, r, g, b, a)
 end
 
 function Options:GetChoresTooltipHeaderFont(info)
-    local db = self:GetDatatextDB("chores")
-    return db.tooltipHeaderFont or "Friz Quadrata TT"
+    local style = self:GetStandaloneDB().style
+    return style.tooltipFont or "Friz Quadrata TT"
 end
 
 function Options:SetChoresTooltipHeaderFont(info, value)
     local db = self:GetDatatextDB("chores")
+    local style = self:GetStandaloneDB().style
     db.tooltipHeaderFont = value
+    style.tooltipFont = value
     RefreshDatatext("TwichUI: Chores")
 end
 
 function Options:GetChoresTooltipHeaderFontSize(info)
-    local db = self:GetDatatextDB("chores")
-    return db.tooltipHeaderFontSize or 12
+    local style = self:GetStandaloneDB().style
+    return style.tooltipFontSize or 11
 end
 
 function Options:SetChoresTooltipHeaderFontSize(info, value)
     local db = self:GetDatatextDB("chores")
+    local style = self:GetStandaloneDB().style
     db.tooltipHeaderFontSize = value
+    style.tooltipFontSize = value
     RefreshDatatext("TwichUI: Chores")
 end
 
 function Options:GetChoresTooltipEntryFont(info)
-    local db = self:GetDatatextDB("chores")
-    return db.tooltipEntryFont or "Friz Quadrata TT"
+    local style = self:GetStandaloneDB().style
+    return style.tooltipFont or "Friz Quadrata TT"
 end
 
 function Options:SetChoresTooltipEntryFont(info, value)
     local db = self:GetDatatextDB("chores")
+    local style = self:GetStandaloneDB().style
     db.tooltipEntryFont = value
+    style.tooltipFont = value
     RefreshDatatext("TwichUI: Chores")
 end
 
 function Options:GetChoresTooltipEntryFontSize(info)
-    local db = self:GetDatatextDB("chores")
-    return db.tooltipEntryFontSize or 11
+    local style = self:GetStandaloneDB().style
+    return style.tooltipFontSize or 11
 end
 
 function Options:SetChoresTooltipEntryFontSize(info, value)
     local db = self:GetDatatextDB("chores")
+    local style = self:GetStandaloneDB().style
     db.tooltipEntryFontSize = value
+    style.tooltipFontSize = value
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetSharedTooltipFont(info)
+    local style = self:GetStandaloneDB().style
+    return style.tooltipFont or style.font or "Friz Quadrata TT"
+end
+
+function Options:SetSharedTooltipFont(info, value)
+    local style = self:GetStandaloneDB().style
+    style.tooltipFont = value
+    RefreshStandalonePanels()
+    RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetSharedTooltipFontSize(info)
+    local style = self:GetStandaloneDB().style
+    return style.tooltipFontSize or 11
+end
+
+function Options:SetSharedTooltipFontSize(info, value)
+    local style = self:GetStandaloneDB().style
+    style.tooltipFontSize = math.min(24, math.max(8, tonumber(value) or 11))
+    RefreshStandalonePanels()
     RefreshDatatext("TwichUI: Chores")
 end
 

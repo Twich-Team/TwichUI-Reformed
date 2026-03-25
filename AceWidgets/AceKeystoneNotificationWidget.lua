@@ -9,6 +9,14 @@ local ICON_SIZE = 36
 local TEXT_LEFT_OFFSET = 58
 local FALLBACK_ICON_TEXTURE = "Interface\\Icons\\INV_Misc_ShadowEgg"
 
+local function GetHyperlinkType(link)
+    if type(link) ~= "string" then
+        return nil
+    end
+
+    return link:match("|H([^:|]+):")
+end
+
 local function Constructor()
     local frame = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
     frame:Hide()
@@ -75,7 +83,7 @@ local function Constructor()
     ---@field keyName FontString
     ---@field dungeon FontString
     ---@field affixes FontString
-    ---@field itemRef number|string|nil
+    ---@field itemID number|nil
     ---@field itemLink string|nil
     local widget = {
         type = Type,
@@ -87,7 +95,7 @@ local function Constructor()
         keyName = keyName,
         dungeon = dungeon,
         affixes = affixes,
-        itemRef = nil,
+        itemID = nil,
         itemLink = nil,
     }
     frame.obj = widget
@@ -95,25 +103,22 @@ local function Constructor()
     local methods = {}
 
     local function ApplyItemInfo(self)
-        local itemRef = self.itemRef
-        if not itemRef then
+        local itemSource = self.itemID or self.itemLink
+        if not itemSource then
             self.icon:SetTexture(FALLBACK_ICON_TEXTURE)
             self.keyName:SetText("Mythic Keystone")
             self.keyName:SetTextColor(1, 1, 1)
-            self.itemLink = nil
             return
         end
 
-        local itemName, itemLink, itemQuality, _, _, _, _, _, _, itemTexture = C_Item.GetItemInfo(itemRef)
+        local itemName, _, itemQuality, _, _, _, _, _, _, itemTexture = C_Item.GetItemInfo(itemSource)
         if not itemName then
             self.icon:SetTexture(FALLBACK_ICON_TEXTURE)
             self.keyName:SetText("Mythic Keystone")
             self.keyName:SetTextColor(1, 1, 1)
-            self.itemLink = nil
             return
         end
 
-        self.itemLink = itemLink
         self.icon:SetTexture(itemTexture or FALLBACK_ICON_TEXTURE)
 
         local r, g, b = 1, 1, 1
@@ -132,14 +137,14 @@ local function Constructor()
             self:SetFullWidth(true)
         end
 
-        self:SetKeystoneNotification(nil, "Unknown Dungeon", 0, "Affixes unavailable")
+        self:SetKeystoneNotification(nil, nil, "Unknown Dungeon", 0, "Affixes unavailable")
         self.frame:Show()
     end
 
     function methods:OnRelease()
         self.frame:ClearAllPoints()
         self.frame:Hide()
-        self.itemRef = nil
+        self.itemID = nil
         self.itemLink = nil
         self.icon:SetTexture(FALLBACK_ICON_TEXTURE)
         self.keyName:SetText("")
@@ -147,31 +152,33 @@ local function Constructor()
         self.affixes:SetText("")
     end
 
-    ---@param itemRef number|string|nil
+    ---@param itemID number|nil
+    ---@param itemLink string|nil
     ---@param dungeonName string|nil
     ---@param level number|nil
     ---@param affixText string|nil
-    function methods:SetKeystoneNotification(itemRef, dungeonName, level, affixText)
-        self.itemRef = itemRef
-        self.itemLink = nil
+    function methods:SetKeystoneNotification(itemID, itemLink, dungeonName, level, affixText)
+        self.itemID = itemID
+        self.itemLink = itemLink
 
         self.dungeon:SetText(("%s +%d"):format(dungeonName or "Unknown Dungeon", level or 0))
         self.affixes:SetText(affixText ~= "" and (affixText or "") or "Affixes unavailable")
 
         ApplyItemInfo(self)
 
-        if itemRef and Item then
-            if type(itemRef) == "string" and Item.CreateFromItemLink and not C_Item.GetItemInfo(itemRef) then
-                local itemObj = Item:CreateFromItemLink(itemRef)
+        local itemSource = itemID or itemLink
+        if itemSource and Item then
+            if type(itemSource) == "string" and Item.CreateFromItemLink and GetHyperlinkType(itemSource) == "item" and not C_Item.GetItemInfo(itemSource) then
+                local itemObj = Item:CreateFromItemLink(itemSource)
                 itemObj:ContinueOnItemLoad(function()
-                    if self.itemRef == itemRef then
+                    if self.itemID == itemID and self.itemLink == itemLink then
                         ApplyItemInfo(self)
                     end
                 end)
-            elseif type(itemRef) == "number" and Item.CreateFromItemID and not C_Item.GetItemInfo(itemRef) then
-                local itemObj = Item:CreateFromItemID(itemRef)
+            elseif type(itemSource) == "number" and Item.CreateFromItemID and not C_Item.GetItemInfo(itemSource) then
+                local itemObj = Item:CreateFromItemID(itemSource)
                 itemObj:ContinueOnItemLoad(function()
-                    if self.itemRef == itemRef then
+                    if self.itemID == itemID and self.itemLink == itemLink then
                         ApplyItemInfo(self)
                     end
                 end)
@@ -185,15 +192,15 @@ local function Constructor()
 
     frame:SetScript("OnEnter", function(self)
         local obj = self.obj
-        if not obj or not obj.itemRef then
+        if not obj or (not obj.itemID and not obj.itemLink) then
             return
         end
 
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         if obj.itemLink then
             GameTooltip:SetHyperlink(obj.itemLink)
-        elseif type(obj.itemRef) == "number" then
-            GameTooltip:SetItemByID(obj.itemRef)
+        elseif type(obj.itemID) == "number" then
+            GameTooltip:SetItemByID(obj.itemID)
         end
         GameTooltip:Show()
     end)

@@ -32,7 +32,7 @@ local function BuildAboutConfiguration()
                 "• Mythic+ season progress: track progress to milestones, show rewards, current rating, etc."),
             e = W.Description(5, "• Dungeon teleports added to the Portals datatext."),
             f = W.Description(5,
-                "• More ABUNDANCE! Shards of DunDun tracking, Abundant Harvest location tracking added to Gold Goblin datatext."),
+                "• More ABUNDANCE! Shards of DunDun tracking, Abundant Harvest location tracking added to Gold datatext."),
             g = W.Description(5, "• Easy Fishing: Cast and Reel with a single keybind; mute other sounds while fishing."),
             h = W.Description(5, "• Calculator: Perform basic math operations with slash commands."),
             i = W.Description(5,

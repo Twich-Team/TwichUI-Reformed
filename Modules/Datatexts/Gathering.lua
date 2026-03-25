@@ -24,6 +24,7 @@ local min              = math.min
 local GOLD_COLOR       = "|cffffd24a"
 local SILVER_COLOR     = "|cffd7e0ea"
 local COPPER_COLOR     = "|cffd08a43"
+local UPDATE_INTERVAL  = 0.25
 
 ---@class GatheringDataText : AceModule
 local GDT              = DataTextModule:NewModule("GatheringDataText")
@@ -104,45 +105,72 @@ end
 -- Panel update
 -- ============================================================
 local function OnUpdate(panel, elapsed)
+    panel.__twichuiGatheringElapsed = (panel.__twichuiGatheringElapsed or 0) + (elapsed or 0)
+    if panel.__twichuiGatheringElapsed < UPDATE_INTERVAL then
+        return
+    end
+    panel.__twichuiGatheringElapsed = 0
+
     local opts = GetOptions()
     -- Show HUD status regardless of module enabled state; only hide if datatext itself disabled.
     if opts and not opts:GetDatatextEnabled() then
-        panel.text:SetText("|cffaaaaaa[Gathering]|r")
+        local disabledText = "|cffaaaaaa[Gathering]|r"
+        if panel.__twichuiGatheringLastText ~= disabledText then
+            panel.text:SetText(disabledText)
+            panel.__twichuiGatheringLastText = disabledText
+        end
         return
     end
 
     local mod   = GetGatheringModule()
-    local parts = {}
+    local parts = panel.__twichuiGatheringParts or {}
+    panel.__twichuiGatheringParts = parts
+    local count = 0
+
+    local function PushPart(text)
+        count = count + 1
+        parts[count] = text
+    end
 
     -- HUD status indicator (avoid Unicode symbols — not all WoW fonts render them)
     if mod and mod.hud and mod.hud.active then
-        table.insert(parts, "|cff20bf4f[HUD]|r")
+        PushPart("|cff20bf4f[HUD]|r")
     else
-        table.insert(parts, "|cff666666[HUD]|r")
+        PushPart("|cff666666[HUD]|r")
     end
 
     if mod and mod.session then
         local sess = mod.session
 
         if sess.startTime and not sess.active then
-            table.insert(parts, "|cffd4a017Paused|r")
+            PushPart("|cffd4a017Paused|r")
         end
 
         if sess.startTime then
             local gphStr = (sess.goldPerHour and sess.goldPerHour > 0)
                 and (FormatGoldOnlyColored(sess.goldPerHour) .. "/hr")
                 or "|cffaaaaaa0g/hr|r"
-            table.insert(parts, gphStr)
+            PushPart(gphStr)
 
             local totalStr = FormatCopperColored(sess.totalValue or 0)
-            table.insert(parts, "|cffd4a017Total:|r " .. totalStr)
+            PushPart("|cffd4a017Total:|r " .. totalStr)
         end
     end
 
-    if #parts == 0 then
-        panel.text:SetText("[Gathering]")
+    for index = count + 1, #parts do
+        parts[index] = nil
+    end
+
+    local nextText
+    if count == 0 then
+        nextText = "[Gathering]"
     else
-        panel.text:SetText(table.concat(parts, "  "))
+        nextText = table.concat(parts, "  ", 1, count)
+    end
+
+    if panel.__twichuiGatheringLastText ~= nextText then
+        panel.text:SetText(nextText)
+        panel.__twichuiGatheringLastText = nextText
     end
 end
 
@@ -237,8 +265,6 @@ local function OnEnter(panel)
     local gt = DataTextModule:GetElvUITooltip()
     if not gt then return end
 
-    gt:SetOwner(panel, "ANCHOR_NONE")
-    gt:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", 0, 4)
     gt:ClearLines()
     gt:AddLine("|cff19c9c7TwichUI|r |cffd7e0eaGathering|r")
     gt:AddLine("|cff7f8c9bFarm session overview and quick controls|r")
@@ -246,7 +272,7 @@ local function OnEnter(panel)
 
     if not mod then
         gt:AddLine("|cffff4444Module not loaded.|r")
-        gt:Show()
+        DataTextModule:ShowDatatextTooltip(gt)
         return
     end
 
@@ -299,12 +325,12 @@ local function OnEnter(panel)
     gt:AddLine("|cff7f8c9bShift-click: Pause or resume session|r")
     gt:AddLine("|cff7f8c9bCtrl-click: Reset session|r")
     gt:AddLine("|cff7f8c9bRight-click: Open actions menu|r")
-    gt:Show()
+    DataTextModule:ShowDatatextTooltip(gt)
 end
 
 local function OnLeave(panel)
-    local gt = DataTextModule:GetElvUITooltip()
-    if gt then gt:Hide() end
+    local gt = DataTextModule:GetActiveDatatextTooltip()
+    if gt then DataTextModule:HideDatatextTooltip(gt) end
 end
 
 -- ============================================================
@@ -315,7 +341,15 @@ DataTextModule:Inform({
     prettyName   = "Gathering",
     onUpdateFunc = OnUpdate,
     onClickFunc  = OnClick,
-    onEnterFunc  = OnEnter,
-    onLeaveFunc  = OnLeave,
+    onEnterFunc  = function(panel)
+        DataTextModule:SetTooltipOwner(panel)
+        return OnEnter(panel)
+    end,
+    onLeaveFunc  = function(panel)
+        DataTextModule:RunDeferredPanelLeave(panel, function()
+            OnLeave(panel)
+            DataTextModule:ClearTooltipOwner(panel)
+        end)
+    end,
     module       = GDT,
 })

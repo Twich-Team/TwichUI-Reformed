@@ -129,6 +129,9 @@ end
 
 function MDT:OnEnter(panel)
     local tt = DataTextModule:GetElvUITooltip()
+    if not tt then
+        return
+    end
     tt:ClearLines()
 
     ---@type MountUtilityModule
@@ -163,7 +166,14 @@ function MDT:OnEnter(panel)
         tt:AddLine(ColorGray("Shift+Right-click: Summon auction mount"))
     end
 
-    tt:Show()
+    DataTextModule:ShowDatatextTooltip(tt)
+end
+
+function MDT:OnLeave()
+    local tt = DataTextModule:GetActiveDatatextTooltip()
+    if tt and tt.Hide then
+        DataTextModule:HideDatatextTooltip(tt)
+    end
 end
 
 --- Handles click events for the datatext
@@ -196,12 +206,14 @@ end
 function MDT:OnInitialize()
     self.definition = {
         name = "TwichUI: Mount",
+        prettyName = "Mounts",
         events = nil,
-        onEventFunc = function(...) self:OnEvent(...) end,
+        onEventFunc = DataTextModule:CreateBoundCallback(self, "OnEvent"),
         onUpdateFunc = nil,
-        onClickFunc = function(...) self:OnClick(...) end,
-        onEnterFunc = function(...) self:OnEnter(...) end,
-        onLeaveFunc = nil,
+        onClickFunc = DataTextModule:CreateBoundCallback(self, "OnClick"),
+        onEnterFunc = DataTextModule:CreateBoundCallback(self, "OnEnter"),
+        onLeaveFunc = DataTextModule:CreateBoundCallback(self, "OnLeave"),
+        module = self,
     }
     DataTextModule:Inform(self.definition)
 end

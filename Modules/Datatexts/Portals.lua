@@ -81,7 +81,39 @@ local function OnEnter(panel)
         tt:AddLine(ColorGray("Right-click: Hearthstone"))
     end
     tt:AddLine(ColorGray("Shift+Right-Click: Dalaran Hearthstone"))
-    tt:Show()
+    DataTextModule:ShowDatatextTooltip(tt)
+end
+
+local function OnLeave()
+    local tt = DataTextModule:GetActiveDatatextTooltip()
+    if tt then
+        DataTextModule:HideDatatextTooltip(tt)
+    end
+end
+
+function PDT:ReleaseStandaloneResources()
+    local button = self.clickButton
+    if not button then
+        return
+    end
+
+    button:Hide()
+    button:EnableMouse(false)
+    button:SetAttribute("type", nil)
+    button:SetAttribute("type1", nil)
+    button:SetAttribute("type2", nil)
+    button:SetAttribute("macrotext", nil)
+    button:SetAttribute("macrotext1", nil)
+    button:SetAttribute("macrotext2", nil)
+    button:SetAttribute("shift-type2", nil)
+    button:SetAttribute("shift-macrotext2", nil)
+    button:SetScript("OnEnter", nil)
+    button:SetScript("OnMouseUp", nil)
+    button:SetScript("OnLeave", nil)
+    button:SetScript("PreClick", nil)
+    button:ClearAllPoints()
+    button:SetParent(_G.UIParent)
+    self.clickButton = nil
 end
 
 local function PortalOnClick(self, button)
@@ -170,12 +202,22 @@ end
 function PDT:OnInitialize()
     self.definition = {
         name = "TwichUI: Portals",
+        prettyName = "Portals",
         events = nil,
-        onEventFunc = function(...) PDT:OnEvent(...) end,
+        onEventFunc = DataTextModule:CreateBoundCallback(self, "OnEvent"),
         onUpdateFunc = nil,
         onClickFunc = PortalOnClick,
-        onEnterFunc = OnEnter,
-
+        onEnterFunc = function(panel)
+            DataTextModule:SetTooltipOwner(panel)
+            return OnEnter(panel)
+        end,
+        onLeaveFunc = function(panel)
+            DataTextModule:RunDeferredPanelLeave(panel, function()
+                OnLeave()
+                DataTextModule:ClearTooltipOwner(panel)
+            end)
+        end,
+        module = self,
     }
     DataTextModule:Inform(PDT.definition)
 end

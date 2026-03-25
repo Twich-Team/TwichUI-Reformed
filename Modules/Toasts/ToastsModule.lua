@@ -835,7 +835,7 @@ function TM:CreateKeystoneNotificationWidget(keystoneInfo)
     ---@diagnostic disable-next-line: param-type-mismatch
     local widget = AceGUI:Create("TwichUI_KeystoneNotification")
     ---@diagnostic disable-next-line: undefined-field
-    widget:SetKeystoneNotification(keystoneInfo.itemLink or keystoneInfo.itemID, keystoneInfo.dungeonName,
+    widget:SetKeystoneNotification(keystoneInfo.itemID, keystoneInfo.itemLink, keystoneInfo.dungeonName,
         keystoneInfo.level,
         keystoneInfo.affixText)
     return widget
@@ -1030,6 +1030,10 @@ function TM:CreatePreyNotificationWidget(preyInfo)
     ---@type TwichUI_PreyNotificationWidget
     ---@diagnostic disable-next-line: param-type-mismatch
     local widget = AceGUI:Create("TwichUI_PreyNotification")
+    if not widget then
+        return nil
+    end
+
     local callback = nil
 
     if preyInfo and (preyInfo.questID or (preyInfo.mapID and preyInfo.x and preyInfo.y)) then
@@ -1052,6 +1056,10 @@ function TM:SendPreyNotification(preyInfo)
     end
 
     local widget = self:CreatePreyNotificationWidget(preyInfo)
+    if not widget then
+        return
+    end
+
     self:SendMessage("TWICH_NOTIFICATION", widget, {
         displayDuration = self:GetPreyNotificationDisplayTime(),
         soundKey = self:GetPreyNotificationSound(),

@@ -2,6 +2,7 @@
     <Include file='Module.lua' />
     <Include file='Widgets.lua' />
     <Include file='Options\!load.xml' />
+    <Include file='ModernUI.lua' />
 
     <Include file='Media.lua' />
     <Include file='ChatEnhancements.lua' />

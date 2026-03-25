@@ -473,15 +473,15 @@ function MPDT:OnEnter(panel)
     end
 
     tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Click: Open Mythic+ menu"))
-    tooltip:Show()
+    DataTextModule:ShowDatatextTooltip(tooltip)
 end
 
 function MPDT:OnLeave()
     self:ReleaseTooltipBars()
 
-    local tooltip = DataTextModule:GetElvUITooltip()
+    local tooltip = DataTextModule:GetActiveDatatextTooltip()
     if tooltip and tooltip.Hide then
-        tooltip:Hide()
+        DataTextModule:HideDatatextTooltip(tooltip)
     end
 end
 
@@ -493,12 +493,12 @@ function MPDT:OnClick(panel)
             notCheckable = true,
         },
         {
-            text = "Open Best in Slot",
+            text = "Best in Slot",
             notCheckable = true,
             func = OpenBestInSlotWindow,
         },
         {
-            text = "Open Great Vault Rewards",
+            text = "Great Vault",
             notCheckable = true,
             func = OpenGreatVaultRewards,
         },
@@ -519,11 +519,12 @@ function MPDT:OnInitialize()
             "MYTHIC_PLUS_CURRENT_AFFIX_UPDATE",
             "WEEKLY_REWARDS_UPDATE",
         },
-        onEventFunc = function(...) self:OnEvent(...) end,
+        onEventFunc = DataTextModule:CreateBoundCallback(self, "OnEvent"),
         onUpdateFunc = nil,
-        onClickFunc = function(...) self:OnClick(...) end,
-        onEnterFunc = function(...) self:OnEnter(...) end,
-        onLeaveFunc = function() self:OnLeave() end,
+        onClickFunc = DataTextModule:CreateBoundCallback(self, "OnClick"),
+        onEnterFunc = DataTextModule:CreateBoundCallback(self, "OnEnter"),
+        onLeaveFunc = DataTextModule:CreateBoundCallback(self, "OnLeave"),
+        module = self,
     }
 
     DataTextModule:Inform(self.definition)

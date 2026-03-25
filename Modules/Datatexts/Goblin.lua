@@ -204,6 +204,9 @@ end
 
 function GDT:OnEnter()
     local tt = DatatextModule:GetElvUITooltip()
+    if not tt then
+        return
+    end
     tt:ClearLines()
 
     local addSpaceBeforeHelperText = false
@@ -223,7 +226,14 @@ function GDT:OnEnter()
     if Options:GetGoblinAddonShortcutsEnabled() then
         tt:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Right-Click: AddOns menu"))
     end
-    tt:Show()
+    DatatextModule:ShowDatatextTooltip(tt)
+end
+
+function GDT:OnLeave()
+    local tt = DatatextModule:GetActiveDatatextTooltip()
+    if tt and tt.Hide then
+        DatatextModule:HideDatatextTooltip(tt)
+    end
 end
 
 local function OpenProfessionByIndex(idx)
@@ -341,13 +351,16 @@ end
 function GDT:OnInitialize()
     self.definition = {
         name = "TwichUI: Gold Goblin",
+        prettyName = "Gold",
         events = { 'ACCOUNT_MONEY', 'PLAYER_MONEY', 'SEND_MAIL_MONEY_CHANGED', 'SEND_MAIL_COD_CHANGED',
             'PLAYER_TRADE_MONEY',
             'TRADE_MONEY_CHANGED', 'CURRENCY_DISPLAY_UPDATE', 'PERKS_PROGRAM_CURRENCY_REFRESH', 'PLAYER_LOGIN',
             'SKILL_LINES_CHANGED', 'CHAT_MSG_SKILL' },
-        onEventFunc = function(...) self:OnEvent(...) end,
-        onEnterFunc = function(...) self:OnEnter(...) end,
-        onClickFunc = function(...) self:OnClick(...) end,
+        onEventFunc = DatatextModule:CreateBoundCallback(self, "OnEvent"),
+        onEnterFunc = DatatextModule:CreateBoundCallback(self, "OnEnter"),
+        onLeaveFunc = DatatextModule:CreateBoundCallback(self, "OnLeave"),
+        onClickFunc = DatatextModule:CreateBoundCallback(self, "OnClick"),
+        module = self,
     }
     DatatextModule:Inform(self.definition)
 end
