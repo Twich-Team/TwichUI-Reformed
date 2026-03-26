@@ -2006,21 +2006,25 @@ function ChatStylingModule:OpenCopyFrame(frame)
     copyFrame.EditBox:HighlightText()
     copyFrame:Show()
     copyFrame.EditBox:SetFocus()
-    -- Also push to the system clipboard; strip markup since it's raw chat text.
-    pcall(_G.CopyToClipboard, text, true)
     PlayMenuSound("TwichUI-Menu-Click")
 end
 
 --- Opens the copy frame pre-filled with an arbitrary raw text string.
---- Used by the right-click context menu as a reliable clipboard fallback when
---- C_Clipboard.SetText is unavailable or restricted.
+--- Focus is deferred by one tick so any calling menu's close/hide cycle
+--- completes before we claim focus, preventing it being immediately stolen.
 function ChatStylingModule:ShowRawTextCopyFrame(text)
     local copyFrame = self:EnsureCopyFrame()
     self:RefreshCopyFrame()
     copyFrame.EditBox:SetText(text or "")
     copyFrame.EditBox:HighlightText()
     copyFrame:Show()
-    copyFrame.EditBox:SetFocus()
+    -- Defer focus so menu teardown can't steal it back.
+    C_Timer.After(0.05, function()
+        if copyFrame:IsShown() then
+            copyFrame.EditBox:SetFocus()
+            copyFrame.EditBox:HighlightText()
+        end
+    end)
 end
 
 function ChatStylingModule:GetFramesForProxyBar(frame)

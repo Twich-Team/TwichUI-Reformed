@@ -1627,19 +1627,14 @@ function ChatRendererModule:ShowMessageContextMenu(row, entry)
             text = "Copy to Clipboard",
             func = function()
                 PlayMenuSound("TwichUI-Menu-Confirm")
-                -- rawText is already markup-stripped; pass false to skip redundant stripping.
-                local ok, err = pcall(_G.CopyToClipboard, rawText, false)
-                if ok then
-                    print("|cff80dfff[TwichUI]|r Copied to clipboard (" .. #rawText .. " chars)")
-                else
-                    -- Fallback: open the copy frame pre-filled so the user can Ctrl+C.
-                    if err then
-                        print("|cffffaa44[TwichUI]|r CopyToClipboard failed: " .. tostring(err))
-                    end
-                    local stylingModule = GetStylingModule()
-                    if stylingModule and stylingModule.ShowRawTextCopyFrame then
+                -- CopyToClipboard is a protected function; the copy frame is the
+                -- only available path. Defer by one tick so the menu's PostClick
+                -- hide cycle completes before we claim keyboard focus.
+                local stylingModule = GetStylingModule()
+                if stylingModule and stylingModule.ShowRawTextCopyFrame then
+                    C_Timer.After(0.05, function()
                         stylingModule:ShowRawTextCopyFrame(rawText)
-                    end
+                    end)
                 end
             end,
         }
