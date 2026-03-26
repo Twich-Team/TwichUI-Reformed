@@ -213,6 +213,21 @@ local function BuildChatEnhancementConfiguration()
                     get = "IsClassIconsEnabled",
                     set = "SetClassIconsEnabled",
                 },
+                classIconStyle = {
+                    type = "select",
+                    name = "Icon Style",
+                    desc = "Artwork used for class icons. Default uses Blizzard's built-in class icons; Fabled and Pixel use TwichUI custom atlas textures.",
+                    order = 4.6,
+                    width = "half",
+                    handler = Options,
+                    get = "GetClassIconStyle",
+                    set = "SetClassIconStyle",
+                    values = {
+                        ["default"] = "Default",
+                        ["fabled"]  = "Fabled",
+                        ["pixel"]   = "Pixel",
+                    },
+                },
                 chatFont = {
                     type = "select",
                     dialogControl = "LSM30_Font",

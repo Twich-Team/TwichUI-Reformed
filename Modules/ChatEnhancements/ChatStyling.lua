@@ -517,12 +517,9 @@ function ChatStylingModule:ApplyPositionOverride()
     if type(w) == "number" and type(h) == "number" and w > 50 and h > 50 then
         frame:SetSize(w, h)
     end
-    if (type(x) == "number" and type(y) == "number") or
-       (type(w) == "number" and type(h) == "number") then
-        if type(FCF_SavePositionAndDimensions) == "function" then
-            pcall(FCF_SavePositionAndDimensions, frame)
-        end
-    end
+    -- Do NOT call FCF_SavePositionAndDimensions here: doing so would snapshot
+    -- the frame's position at lifecycle-timer time into Blizzard's own storage,
+    -- potentially overwriting a more recent drag-stop position with a stale value.
 end
 
 --- Gets the current BOTTOMLEFT position of ChatFrame1 as x, y integers.
@@ -852,6 +849,13 @@ function ChatStylingModule:ForwardDragStop(frame)
                 local db = opts:GetChatEnhancementDB()
                 db.chatPositionX = x
                 db.chatPositionY = y
+                -- Keep cached settings in sync so any lifecycle refresh (UPDATE_CHAT_WINDOWS
+                -- etc.) doesn't call ApplyPositionOverride with stale old values and
+                -- overwrite the freshly dragged position.
+                if self.settings then
+                    self.settings.positionX = x
+                    self.settings.positionY = y
+                end
             end
         end
     end
@@ -1391,8 +1395,14 @@ function ChatStylingModule:EnsureFrameChrome(frame)
                     local w = targetFrame:GetWidth()
                     local h = targetFrame:GetHeight()
                     local db = opts:GetChatEnhancementDB()
-                    if w and w > 50 then db.chatWidth  = math.floor(w + 0.5) end
-                    if h and h > 50 then db.chatHeight = math.floor(h + 0.5) end
+                    if w and w > 50 then
+                        db.chatWidth = math.floor(w + 0.5)
+                        if ChatStylingModule.settings then ChatStylingModule.settings.chatWidth = db.chatWidth end
+                    end
+                    if h and h > 50 then
+                        db.chatHeight = math.floor(h + 0.5)
+                        if ChatStylingModule.settings then ChatStylingModule.settings.chatHeight = db.chatHeight end
+                    end
                 end
             end
         end

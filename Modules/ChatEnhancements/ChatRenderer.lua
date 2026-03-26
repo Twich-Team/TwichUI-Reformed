@@ -302,6 +302,8 @@ function ChatRendererModule:RefreshSettings()
         keywords = options:GetParsedKeywords(),
         headerDatatextEnabled = options:IsHeaderDatatextEnabled(),
         showClassIcons = options:IsClassIconsEnabled(),
+        classIconStyle = options:GetClassIconStyle(),
+        tabStyle = options:GetTabStyle(),
     }
 end
 
@@ -348,6 +350,13 @@ function ChatRendererModule:MessageMatchesKeyword(message)
 end
 
 function ChatRendererModule:GetViewportTopInset()
+    local isUnified = self.settings and self.settings.tabStyle == "unified"
+    if isUnified then
+        -- In unified mode the tab bar floats above the frame in chrome space.
+        -- No header drag zone lives inside the frame, and the datatext bar is
+        -- anchored in the chrome area — not at the frame top — so no inset needed.
+        return 2
+    end
     if self.settings and self.settings.hideHeader then
         -- Even when the header bar is hidden, the datatext bar still occupies the
         -- top inset zone in non-unified mode.  Reserve that space so messages
@@ -357,9 +366,8 @@ function ChatRendererModule:GetViewportTopInset()
         end
         return 2
     end
-    -- The header datatext bar occupies exactly the header inset zone
-    -- (HEADER_DATATEXT_BAR_TOP=4 + HEADER_DATATEXT_BAR_HEIGHT=22 = 26 = VIEWPORT_TOP_INSET),
-    -- so no additional offset is required here.
+    -- Non-unified with visible header: header drag zone + optional datatext bar
+    -- occupies exactly the VIEWPORT_TOP_INSET (26px) at the frame top.
     return VIEWPORT_TOP_INSET
 end
 
@@ -945,13 +953,30 @@ function ChatRendererModule:EnsureRow(renderer, index)
         end
     end)
 
-    -- Hyperlink hover: show GameTooltip for item/spell/achievement links.
+    -- Hyperlink hover: show GameTooltip for link types that support it.
+    -- Guild links, calendar links, player links etc. have no hover tooltip
+    -- in standard WoW either; attempting SetHyperlink on them produces blank
+    -- or erroring tooltips, so we only attempt it for known informational types.
+    local TOOLTIP_LINK_TYPES = {
+        item = true, spell = true, achievement = true, quest = true,
+        enchant = true, trade = true, battlepet = true, instancelockout = true,
+        transmogappearance = true, garrmission = true, talent = true,
+        currency = true, glyph = true, dungeonScore = true,
+    }
     row:SetScript("OnHyperlinkEnter", function(selfRow, link)
-        local gt = _G.GameTooltip
-        if gt and link and link ~= "" then
-            gt:SetOwner(selfRow, "ANCHOR_CURSOR")
-            pcall(gt.SetHyperlink, gt, link)
-            gt:Show()
+        if not link or link == "" then return end
+        local linkType = link:match("^([^:]+)")
+        if linkType and TOOLTIP_LINK_TYPES[linkType:lower()] then
+            local gt = _G.GameTooltip
+            if gt then
+                gt:SetOwner(selfRow, "ANCHOR_CURSOR")
+                local ok = pcall(gt.SetHyperlink, gt, link)
+                if ok then
+                    gt:Show()
+                else
+                    gt:Hide()
+                end
+            end
         end
     end)
     row:SetScript("OnHyperlinkLeave", function()
@@ -959,16 +984,17 @@ function ChatRendererModule:EnsureRow(renderer, index)
         if gt then gt:Hide() end
     end)
 
-    -- Hyperlink clicks: route all hyperlinks through WoW's standard SetItemRef so
-    -- player name popups, item tooltips, achievements etc. all work natively.
-    -- For whisper-tab enabled, a right-click player link opens a direct whisper instead.
+    -- Hyperlink clicks: use ChatFrame_OnHyperlinkShow which is WoW's full handler
+    -- for ALL hyperlink types including guild recruitment, calendar events, items,
+    -- achievements, quests, player context menus, URL dialogs and more.
+    -- Falls back to SetItemRef if the full handler is unavailable.
     row:SetScript("OnHyperlinkClick", function(selfRow, link, text, button)
         selfRow._twichHyperlinkHandled = true
-        -- Always use WoW's canonical handler — it opens the player context menu for
-        -- player: links (Whisper, Invite, Inspect, etc.) and the correct UI for all
-        -- other link types (items, achievements, quests, spells ...).
-        if _G.SetItemRef then
-            _G.SetItemRef(link, text, button)
+        local chatFrame = renderer:GetParent()
+        if _G.ChatFrame_OnHyperlinkShow then
+            _G.ChatFrame_OnHyperlinkShow(chatFrame or _G.ChatFrame1, link, text, button)
+        elseif _G.SetItemRef then
+            _G.SetItemRef(link, text, button, chatFrame)
         end
     end)
 
@@ -1076,7 +1102,7 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
                 local iconY = -8 - (CLASS_ICON_SIZE - (self.settings.chatFontSize or 13)) * 0.5
                 row.ClassIcon:SetPoint("TOPLEFT", row, "TOPLEFT", timestampWidth + 14, iconY)
                 row.ClassIcon:SetSize(CLASS_ICON_SIZE, CLASS_ICON_SIZE)
-                TwichTextures:ApplyClassTexture(row.ClassIcon, classToken)
+                TwichTextures:ApplyClassTexture(row.ClassIcon, classToken, ChatRendererModule.settings and ChatRendererModule.settings.classIconStyle)
                 row.ClassIcon:Show()
                 labelOffsetX = timestampWidth + 14 + CLASS_ICON_LABEL_OFFSET
             else

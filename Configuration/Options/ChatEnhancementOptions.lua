@@ -925,6 +925,15 @@ function Options:SetClassIconsEnabled(info, value)
     self:RefreshChatStylingModule()
 end
 
+function Options:GetClassIconStyle()
+    return self:GetChatEnhancementDB().classIconStyle or "default"
+end
+
+function Options:SetClassIconStyle(info, value)
+    self:GetChatEnhancementDB().classIconStyle = value
+    self:RefreshChatStylingModule()
+end
+
 function Options:IsRealmHidden()
     return self:GetChatEnhancementDB().hideRealm == true
 end
