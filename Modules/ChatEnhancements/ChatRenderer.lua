@@ -43,11 +43,23 @@ local LIVE_BUTTON_BOTTOM_INSET = 8
 local SCROLL_STEP = 42
 local SCROLLBAR_WIDTH = 8
 local LIVE_BUTTON_WIDTH = 58
+local CLASS_ICON_SIZE = 14
+local CLASS_ICON_LABEL_OFFSET = 18  -- horizontal space reserved for the class icon
 local BORDER = { 0.10, 0.72, 0.74 }
 local ACCENT = { 0.95, 0.76, 0.26 }
 local TEXT_MUTED = { 0.57, 0.66, 0.74 }
 local TEXT_ACTIVE = { 0.96, 0.93, 0.88 }
 local DebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole or nil
+
+-- Events that carry a player GUID we can use to cache sender class tokens.
+local CLASS_CACHE_EVENTS = {
+    "CHAT_MSG_SAY", "CHAT_MSG_YELL",
+    "CHAT_MSG_GUILD", "CHAT_MSG_OFFICER",
+    "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER",
+    "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER",
+    "CHAT_MSG_WHISPER",
+    "CHAT_MSG_INSTANCE_CHAT", "CHAT_MSG_INSTANCE_CHAT_LEADER",
+}
 
 -- Maps a resolved channel key to the slash command used to open that channel in the edit box.
 -- Whisper entries are handled separately (need the target player name).
@@ -273,6 +285,8 @@ function ChatRendererModule:RefreshSettings()
         chatFontSize = options:GetChatFontSize(),
         channelColors = options:GetResolvedChannelColors(),
         hideHeader = options:IsHeaderHidden(),
+        hideRealm = options:IsRealmHidden(),
+        historyLimit = options:GetChatHistoryLimit(),
         messageFadeDelay = options:GetMessageFadeDelay(),
         messageFadeDuration = options:GetMessageFadeDuration(),
         messageFadeMinAlpha = options:GetMessageFadeMinAlpha(),
@@ -287,22 +301,60 @@ function ChatRendererModule:RefreshSettings()
         keywordHighlightColor = options:GetResolvedKeywordHighlightColor(),
         keywords = options:GetParsedKeywords(),
         headerDatatextEnabled = options:IsHeaderDatatextEnabled(),
+        showClassIcons = options:IsClassIconsEnabled(),
     }
 end
 
---- Returns true if the message contains one of the configured alert keywords.
+--- Cache the class token for a message sender using the event GUID.
+function ChatRendererModule:CacheClassFromEvent(chatEvent, message, sender, language, channelString, target, flags, _, channelNumber, channelName, _, counter, guid)
+    if not sender or sender == "" then return end
+    if not guid or guid == "" then return end
+    local _, classToken = GetPlayerInfoByGUID(guid)
+    if not classToken then return end
+    self.classCache = self.classCache or {}
+    local key = sender:lower()
+    self.classCache[key] = classToken
+    -- Also index by short name (without realm) for hyperlink lookups.
+    local shortKey = key:match("^([^%-]+)")
+    if shortKey and shortKey ~= key then
+        self.classCache[shortKey] = classToken
+    end
+end
+
+--- Returns the class token for a speaker key, or nil if unknown.
+function ChatRendererModule:GetSpeakerClassToken(speakerKey)
+    if not speakerKey or not self.classCache then return nil end
+    local token = self.classCache[speakerKey]
+    if token then return token end
+    -- Fallback: strip realm and retry (speakerKey may be "name-realm").
+    local shortKey = speakerKey:match("^([^%-]+)")
+    return shortKey and self.classCache[shortKey] or nil
+end
+
+--- Returns true if the message body (excluding the sender name) contains a keyword.
 function ChatRendererModule:MessageMatchesKeyword(message)
     local keywords = self.settings and self.settings.keywords
     if not self.settings.keywordHighlightEnabled or not keywords then return false end
-    local stripped = (message or ""):lower()
+    -- Strip WoW markup to obtain plain text, then remove the sender prefix so
+    -- keywords are only matched against the message body and not the player name.
+    local plain = StripMarkup(message or ""):lower()
+    -- Sender prefix ends at the first ": " (colon + space).
+    local bodyStart = plain:find(":%s")
+    local body = bodyStart and plain:sub(bodyStart + 2) or plain
     for _, kw in ipairs(keywords) do
-        if stripped:find(kw, 1, true) then return true end
+        if body:find(kw, 1, true) then return true end
     end
     return false
 end
 
 function ChatRendererModule:GetViewportTopInset()
     if self.settings and self.settings.hideHeader then
+        -- Even when the header bar is hidden, the datatext bar still occupies the
+        -- top inset zone in non-unified mode.  Reserve that space so messages
+        -- don't render underneath the bar.
+        if self.settings.headerDatatextEnabled then
+            return VIEWPORT_TOP_INSET
+        end
         return 2
     end
     -- The header datatext bar occupies exactly the header inset zone
@@ -575,6 +627,15 @@ function ChatRendererModule:DecorateMessage(message)
         return message
     end
 
+    if self.settings.hideRealm then
+        -- Strip the realm suffix from the display name inside |Hplayer:...|h[Name-Realm]|h
+        -- while keeping the full qualified name in the hyperlink target intact.
+        message = message:gsub("|Hplayer:([^|]+)|h%[([^%]]+)%]|h", function(target, display)
+            local shortDisplay = display:match("^([^%-]+)") or display
+            return string.format("|Hplayer:%s|h[%s]|h", target, shortDisplay)
+        end)
+    end
+
     if not self.settings.abbreviationsEnabled then
         return message
     end
@@ -721,7 +782,11 @@ function ChatRendererModule:EnsureRow(renderer, index)
     CreateBackdrop(row)
     row:SetBackdropColor(0.03, 0.05, 0.07, 0.72)
     row:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.08)
-    row:RegisterForClicks("LeftButtonUp")
+    row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    row.isKeywordMatch = false
+    -- Required for the frame to fire OnHyperlinkEnter / OnHyperlinkLeave /
+    -- OnHyperlinkClick events from FontStrings it contains.
+    row:SetHyperlinksEnabled(true)
 
     row.Fill = row:CreateTexture(nil, "BACKGROUND")
     row.Fill:SetAllPoints(row)
@@ -748,6 +813,10 @@ function ChatRendererModule:EnsureRow(renderer, index)
     row.Label:SetPoint("TOPLEFT", row, "TOPLEFT", DEFAULT_TIMESTAMP_WIDTH + 14, -8)
     row.Label:SetJustifyH("LEFT")
     row.Label:SetJustifyV("TOP")
+
+    row.ClassIcon = row:CreateTexture(nil, "OVERLAY")
+    row.ClassIcon:SetSize(CLASS_ICON_SIZE, CLASS_ICON_SIZE)
+    row.ClassIcon:Hide()
 
     row.FadeIn = row:CreateAnimationGroup()
     row.FadeIn:SetScript("OnPlay", function(selfGroup)
@@ -813,7 +882,14 @@ function ChatRendererModule:EnsureRow(renderer, index)
 
     row:SetScript("OnEnter", function(selfRow)
         selfRow.Highlight:SetAlpha(0.08)
-        selfRow:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.18)
+        -- Keyword-matched rows keep a tinted border on hover; others use the standard accent.
+        if selfRow.isKeywordMatch then
+            local hc = ChatRendererModule.settings and ChatRendererModule.settings.keywordHighlightColor or {}
+            local hR, hG, hB = hc.r or 0.95, hc.g or 0.76, hc.b or 0.26
+            selfRow:SetBackdropBorderColor(hR, hG, hB, 0.90)
+        else
+            selfRow:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.18)
+        end
         -- Animate faded rows back to full visibility on hover.
         if selfRow:GetAlpha() < 0.99 then
             selfRow.HoverFadeOut:Stop()
@@ -823,7 +899,14 @@ function ChatRendererModule:EnsureRow(renderer, index)
     end)
     row:SetScript("OnLeave", function(selfRow)
         selfRow.Highlight:SetAlpha(0)
-        selfRow:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.08)
+        -- Restore border: keyword rows keep a subtle tinted border; others revert to default.
+        if selfRow.isKeywordMatch then
+            local hc = ChatRendererModule.settings and ChatRendererModule.settings.keywordHighlightColor or {}
+            local hR, hG, hB = hc.r or 0.95, hc.g or 0.76, hc.b or 0.26
+            selfRow:SetBackdropBorderColor(hR, hG, hB, 0.60)
+        else
+            selfRow:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.08)
+        end
         selfRow.HoverFadeIn:Stop()
         selfRow.HoverFadeOut:Stop()
         -- If the pointer moved to another row inside the same renderer, the renderer
@@ -862,6 +945,20 @@ function ChatRendererModule:EnsureRow(renderer, index)
         end
     end)
 
+    -- Hyperlink hover: show GameTooltip for item/spell/achievement links.
+    row:SetScript("OnHyperlinkEnter", function(selfRow, link)
+        local gt = _G.GameTooltip
+        if gt and link and link ~= "" then
+            gt:SetOwner(selfRow, "ANCHOR_CURSOR")
+            pcall(gt.SetHyperlink, gt, link)
+            gt:Show()
+        end
+    end)
+    row:SetScript("OnHyperlinkLeave", function()
+        local gt = _G.GameTooltip
+        if gt then gt:Hide() end
+    end)
+
     -- Hyperlink clicks: route all hyperlinks through WoW's standard SetItemRef so
     -- player name popups, item tooltips, achievements etc. all work natively.
     -- For whisper-tab enabled, a right-click player link opens a direct whisper instead.
@@ -875,10 +972,14 @@ function ChatRendererModule:EnsureRow(renderer, index)
         end
     end)
 
-    -- Row click: open the edit box in the message's channel (unless a hyperlink was clicked).
+    -- Row click: left-click opens the edit box; right-click shows the TwichUI context menu.
     row:SetScript("OnClick", function(selfRow, clickButton)
         if selfRow._twichHyperlinkHandled then
             selfRow._twichHyperlinkHandled = nil
+            return
+        end
+        if clickButton == "RightButton" and selfRow.entry then
+            ChatRendererModule:ShowMessageContextMenu(selfRow, selfRow.entry)
             return
         end
         if clickButton ~= "LeftButton" then
@@ -928,15 +1029,19 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
         0.02, 0.03, 0.05, grouped and 0.52 or 0.84)
 
     -- Keyword match highlight: override the row background and accent bar with a warm tint.
+    -- Also change the row border to the keyword color so it stands out more clearly.
     local kwMatch = self:MessageMatchesKeyword(entry.message)
+    row.isKeywordMatch = kwMatch
     if kwMatch then
         local hc = self.settings.keywordHighlightColor or {}
         local hR, hG, hB = hc.r or 0.95, hc.g or 0.76, hc.b or 0.26
         row:SetBackdropColor(hR * 0.14, hG * 0.06, hB * 0.02, grouped and 0.5 or 0.82)
+        row:SetBackdropBorderColor(hR, hG, hB, 0.60)
         row.Bar:SetColorTexture(hR, hG, hB, grouped and 0.6 or 1.0)
         row.Bar:Show()
     else
         row:SetBackdropColor(0.03, 0.05, 0.07, grouped and 0.4 or 0.68)
+        row:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.08)
         row.Bar:SetShown(self.settings.showAccentBar)
         row.Bar:SetColorTexture(accentR, accentG, accentB, grouped and 0.52 or 0.96)
     end
@@ -959,7 +1064,32 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
     end
 
     row.Label:ClearAllPoints()
-    row.Label:SetPoint("TOPLEFT", row, "TOPLEFT", timestampWidth + 14, -8)
+    local labelOffsetX = timestampWidth + 14
+    local showIcon = self.settings.showClassIcons and entry.speakerKey ~= nil
+    if showIcon then
+        local classToken = self:GetSpeakerClassToken(entry.speakerKey)
+        if classToken then
+            local TwichTextures = T.Tools and T.Tools.Textures
+            if TwichTextures and TwichTextures.ApplyClassTexture then
+                row.ClassIcon:ClearAllPoints()
+                -- Vertically center the icon in the row's text area (8px padding + half icon)
+                local iconY = -8 - (CLASS_ICON_SIZE - (self.settings.chatFontSize or 13)) * 0.5
+                row.ClassIcon:SetPoint("TOPLEFT", row, "TOPLEFT", timestampWidth + 14, iconY)
+                row.ClassIcon:SetSize(CLASS_ICON_SIZE, CLASS_ICON_SIZE)
+                TwichTextures:ApplyClassTexture(row.ClassIcon, classToken)
+                row.ClassIcon:Show()
+                labelOffsetX = timestampWidth + 14 + CLASS_ICON_LABEL_OFFSET
+            else
+                row.ClassIcon:Hide()
+            end
+        else
+            row.ClassIcon:Hide()
+            labelOffsetX = timestampWidth + 14 + CLASS_ICON_LABEL_OFFSET
+        end
+    else
+        row.ClassIcon:Hide()
+    end
+    row.Label:SetPoint("TOPLEFT", row, "TOPLEFT", labelOffsetX, -8)
     row.Label:SetWidth(bodyWidth)
     ApplyResolvedFont(row.Label, self.settings.chatFont, self.settings.chatFontSize, entry.r, entry.g, entry.b, "")
     row.Label:SetText(entry.text or "")
@@ -989,7 +1119,8 @@ function ChatRendererModule:RelayoutRenderer(renderer)
 
     local timestampWidth = self.settings.timestampsEnabled and (self.settings.timestampWidth or DEFAULT_TIMESTAMP_WIDTH) or
     0
-    local bodyWidth = mathMax(70, width - timestampWidth - 18)
+    local classIconReserve = self.settings.showClassIcons and CLASS_ICON_LABEL_OFFSET or 0
+    local bodyWidth = mathMax(70, width - timestampWidth - 18 - classIconReserve)
     local offsetY = CONTENT_TOP_PADDING
     local previousEntry = nil
     local rowGap = self.settings.rowGap or DEFAULT_ROW_GAP
@@ -1068,7 +1199,8 @@ function ChatRendererModule:PushMessage(frame, message, r, g, b, accessID)
         previousEntry.speakerKey == entry.speakerKey
     renderer.entries[#renderer.entries + 1] = entry
 
-    if #renderer.entries > ROW_CAP then
+    local cap = (self.settings and self.settings.historyLimit) or ROW_CAP
+    if #renderer.entries > cap then
         table.remove(renderer.entries, 1)
         self:RebuildGrouping(renderer)
     end
@@ -1107,7 +1239,8 @@ function ChatRendererModule:SeedFromChatFrame(frame)
     end
 
     renderer.entries = {}
-    local startIndex = mathMax(1, count - ROW_CAP + 1)
+    local cap = (self.settings and self.settings.historyLimit) or ROW_CAP
+    local startIndex = mathMax(1, count - cap + 1)
     for index = startIndex, count do
         local text, red, green, blue, accessID = frame:GetMessageInfo(index)
         if text then
@@ -1178,6 +1311,28 @@ function ChatRendererModule:EnsureRenderer(frame)
     renderer.ScrollThumb:SetBackdropColor(BORDER[1], BORDER[2], BORDER[3], 0.3)
     renderer.ScrollThumb:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.45)
 
+    -- Scrollbar fade: start hidden (alpha 0) and reveal on renderer hover.
+    renderer.ScrollTrack:SetAlpha(0)
+    do
+        local sbFadeIn = renderer.ScrollTrack:CreateAnimationGroup()
+        local sbFadeInAlpha = sbFadeIn:CreateAnimation("Alpha")
+        sbFadeInAlpha:SetOrder(1)
+        sbFadeInAlpha:SetFromAlpha(0)
+        sbFadeInAlpha:SetToAlpha(1)
+        sbFadeInAlpha:SetDuration(0.20)
+        sbFadeIn:SetToFinalAlpha(true)
+        renderer.ScrollTrack.__sbFadeIn = sbFadeIn
+
+        local sbFadeOut = renderer.ScrollTrack:CreateAnimationGroup()
+        local sbFadeOutAlpha = sbFadeOut:CreateAnimation("Alpha")
+        sbFadeOutAlpha:SetOrder(1)
+        sbFadeOutAlpha:SetFromAlpha(1)
+        sbFadeOutAlpha:SetToAlpha(0)
+        sbFadeOutAlpha:SetDuration(0.50)
+        sbFadeOut:SetToFinalAlpha(true)
+        renderer.ScrollTrack.__sbFadeOut = sbFadeOut
+    end
+
     renderer.LiveButton = CreateFrame("Button", nil, renderer, "BackdropTemplate")
     renderer.LiveButton:SetPoint("BOTTOMRIGHT", renderer.Viewport, "BOTTOMRIGHT", -18, LIVE_BUTTON_BOTTOM_INSET)
     renderer.LiveButton:SetSize(LIVE_BUTTON_WIDTH, 22)
@@ -1204,14 +1359,33 @@ function ChatRendererModule:EnsureRenderer(frame)
     renderer.Viewport:HookScript("OnEnter", function()
         renderer.unhoveredAt = nil
         ChatRendererModule:RefreshAllRowOpacities(renderer)
+        -- Reveal scrollbar.
+        if renderer.ScrollTrack then
+            if renderer.ScrollTrack.__sbFadeOut then renderer.ScrollTrack.__sbFadeOut:Stop() end
+            if renderer.ScrollTrack.__sbFadeIn and not renderer.ScrollTrack.__sbFadeIn:IsPlaying() then
+                renderer.ScrollTrack.__sbFadeIn:Play()
+            end
+        end
         local stylingModule = GetStylingModule()
         if stylingModule and frame.TwichUIControlStrip then
             stylingModule:UpdateControlStripVisibility(frame, true)
         end
     end)
     renderer.Viewport:HookScript("OnLeave", function()
+        -- When the mouse moves from the Viewport to a child row, WoW fires OnLeave
+        -- on the Viewport even though the cursor is still within the renderer bounds.
+        -- Guard against this so the scrollbar and row-opacity state are only reset
+        -- when the cursor truly leaves the chat frame area.
+        if renderer:IsMouseOver() then return end
         renderer.unhoveredAt = GetTime()
         ChatRendererModule:RefreshAllRowOpacities(renderer)
+        -- Fade out scrollbar when pointer leaves the viewport.
+        if renderer.ScrollTrack then
+            if renderer.ScrollTrack.__sbFadeIn then renderer.ScrollTrack.__sbFadeIn:Stop() end
+            if renderer.ScrollTrack.__sbFadeOut and not renderer.ScrollTrack.__sbFadeOut:IsPlaying() then
+                renderer.ScrollTrack.__sbFadeOut:Play()
+            end
+        end
         local stylingModule = GetStylingModule()
         if stylingModule and frame.TwichUIControlStrip then
             stylingModule:UpdateControlStripVisibility(frame, false)
@@ -1266,6 +1440,76 @@ function ChatRendererModule:EnsureRenderer(frame)
     end)
 
     return renderer
+end
+
+--- Reusable TwichUI context menu for right-clicking a chat message row.
+local chatContextMenu = nil
+local function GetChatContextMenu()
+    if not chatContextMenu then
+        chatContextMenu = T.Tools.UI.CreateSecureMenu("TwichUIChatContextMenu")
+    end
+    return chatContextMenu
+end
+
+--- Extracts the full player link target (e.g. "Name-Realm") from a message, or nil.
+local function ExtractPlayerTarget(message)
+    if type(message) ~= "string" then return nil end
+    return message:match("|Hplayer:([^:|]+)")
+end
+
+--- Shows a context menu for the given message row and entry.
+function ChatRendererModule:ShowMessageContextMenu(row, entry)
+    local menu = GetChatContextMenu()
+    if not (menu and entry) then return end
+
+    local playerTarget = ExtractPlayerTarget(entry.message)
+    local shortName    = playerTarget and (playerTarget:match("^([^%-]+)") or playerTarget) or nil
+    local rawText      = entry.message and _G.string.gsub(entry.message, "|[cC]%x+", ""):gsub("|r", ""):gsub("|H[^|]+|h%[([^%]]*)%]|h", "%1"):gsub("|[TR][^|]+|", "") or ""
+
+    local entries = {}
+
+    -- Section title: player name or generic
+    entries[#entries + 1] = {
+        text = shortName and shortName or "Message",
+        isTitle = true,
+    }
+
+    if shortName then
+        entries[#entries + 1] = {
+            text = "Whisper",
+            func = function()
+                local eb = _G.ChatFrame1EditBox
+                if eb then
+                    eb:SetText("/w " .. shortName .. " ")
+                    eb:Show()
+                    eb:SetFocus()
+                end
+            end,
+        }
+        entries[#entries + 1] = {
+            text = "Invite to Party",
+            macrotext = "/invite " .. (playerTarget or shortName),
+        }
+        entries[#entries + 1] = {
+            text = "Ignore Player",
+            macrotext = "/ignore " .. shortName,
+        }
+    end
+
+    -- Copy message text to the system clipboard
+    if rawText and rawText ~= "" then
+        entries[#entries + 1] = {
+            text = "Copy to Clipboard",
+            func = function()
+                if _G.C_Clipboard and _G.C_Clipboard.SetText then
+                    _G.C_Clipboard.SetText(rawText)
+                end
+            end,
+        }
+    end
+
+    menu:SetEntries(entries)
+    menu:Toggle(row, "TOPLEFT", "BOTTOMLEFT", 0, -4)
 end
 
 function ChatRendererModule:RefreshFrame(frame)
@@ -1487,11 +1731,15 @@ function ChatRendererModule:InstallFrameHooks()
 end
 
 function ChatRendererModule:OnEnable()
+    self.classCache = self.classCache or {}
     self:RefreshSettings()
     self:InstallFrameHooks()
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "HandleLifecycleRefresh")
     self:RegisterEvent("UPDATE_CHAT_WINDOWS", "HandleLifecycleRefresh")
     self:RegisterEvent("UPDATE_FLOATING_CHAT_WINDOWS", "HandleLifecycleRefresh")
+    for _, eventName in ipairs(CLASS_CACHE_EVENTS) do
+        self:RegisterEvent(eventName, "CacheClassFromEvent")
+    end
     self:HookAllFrames()
     self:RefreshAllFrames()
     self:LogDebug("chat renderer enabled", false)
@@ -1524,6 +1772,9 @@ function ChatRendererModule:OnDisable()
     self:UnregisterEvent("PLAYER_ENTERING_WORLD")
     self:UnregisterEvent("UPDATE_CHAT_WINDOWS")
     self:UnregisterEvent("UPDATE_FLOATING_CHAT_WINDOWS")
+    for _, eventName in ipairs(CLASS_CACHE_EVENTS) do
+        self:UnregisterEvent(eventName)
+    end
     if self.addonFilterRegistered and type(ChatFrame_RemoveMessageEventFilter) == "function" then
         self.addonFilterRegistered = false
         ChatFrame_RemoveMessageEventFilter("CHAT_MSG_ADDON", self.addonFilterHandler)

@@ -479,6 +479,8 @@ function ChatStylingModule:RefreshSettings()
         headerBgColor = options:GetResolvedHeaderBgColor(),
         hideHeader = options:IsHeaderHidden(),
         locked = options:IsChatLocked(),
+        chatBgColor = options:GetResolvedChatBgColor(),
+        chatBorderColor = options:GetResolvedChatBorderColor(),
         shellAccent = options:GetResolvedShellAccentColor(),
         showAccentBar = options:ShouldShowAccentBar(),
         tabAccentColor = options:GetResolvedTabAccentColor(),
@@ -491,23 +493,32 @@ function ChatStylingModule:RefreshSettings()
         whisperTabsEnabled = options:IsWhisperTabEnabled(),
         positionX = options:GetChatPositionX(),
         positionY = options:GetChatPositionY(),
+        chatWidth = options:GetChatWidth(),
+        chatHeight = options:GetChatHeight(),
         timestampFormat = options:GetTimestampFormat(),
         timestampsEnabled = options:AreTimestampsEnabled(),
         headerDatatext = options:GetHeaderDatatextSettings(),
     }
 end
 
---- Applies a saved X/Y position override to ChatFrame1 if one is configured.
+--- Applies a saved X/Y position and optional size override to ChatFrame1.
 --- Uses BOTTOMLEFT → UIParent BOTTOMLEFT so 0,0 = bottom-left of screen.
 function ChatStylingModule:ApplyPositionOverride()
     local s = self.settings or {}
     local x, y = s.positionX, s.positionY
+    local w, h = s.chatWidth, s.chatHeight
     local frame = _G.ChatFrame1
     if not frame then return end
     if type(x) == "number" and type(y) == "number" then
         frame:ClearAllPoints()
         frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
         frame:SetUserPlaced(true)
+    end
+    if type(w) == "number" and type(h) == "number" and w > 50 and h > 50 then
+        frame:SetSize(w, h)
+    end
+    if (type(x) == "number" and type(y) == "number") or
+       (type(w) == "number" and type(h) == "number") then
         if type(FCF_SavePositionAndDimensions) == "function" then
             pcall(FCF_SavePositionAndDimensions, frame)
         end
@@ -580,8 +591,8 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
     local isUnified = self.settings and self.settings.tabStyle == "unified"
     local hideHeader = self.settings and self.settings.hideHeader or false
 
-    -- Hide when disabled, or when header is hidden in non-unified mode.
-    if not (hdt and hdt.enabled) or (not isUnified and hideHeader) then
+    -- Hide when the datatext bar is disabled.
+    if not (hdt and hdt.enabled) then
         DataTextMod:HideEmbeddedBar(barID)
         return
     end
@@ -619,6 +630,9 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
         bar:ClearAllPoints()
         bar:SetPoint("TOPLEFT",  frame, "TOPLEFT",  4,  -HEADER_DATATEXT_BAR_TOP)
         bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -HEADER_DATATEXT_BAR_TOP)
+        -- Explicitly set the width so RefreshEmbeddedBar (which calls bar:GetWidth() immediately)
+        -- receives a non-zero value even before WoW resolves the two-anchor layout pass.
+        bar:SetWidth(math.max(1, (frame:GetWidth() or 400) - 8))
         bar:SetHeight(HEADER_DATATEXT_BAR_HEIGHT)
         bar:SetFrameStrata("MEDIUM")
         bar:SetFrameLevel(barLevel)
@@ -825,6 +839,20 @@ function ChatStylingModule:ForwardDragStop(frame)
         end
         if type(FCF_SavePositionAndDimensions) == "function" then
             pcall(FCF_SavePositionAndDimensions, targetFrame)
+        end
+    end
+
+    -- Auto-persist the new position directly into our DB so ApplyPositionOverride
+    -- restores it correctly on the next reload (no "Capture Position" click required).
+    if targetFrame == _G.ChatFrame1 then
+        local opts = self:GetOptions()
+        if opts then
+            local x, y = self:CaptureCurrentPosition()
+            if x and y then
+                local db = opts:GetChatEnhancementDB()
+                db.chatPositionX = x
+                db.chatPositionY = y
+            end
         end
     end
 
@@ -1352,6 +1380,21 @@ function ChatStylingModule:EnsureFrameChrome(frame)
             targetFrame:StopMovingOrSizing()
             ChatStylingModule:LogDebugf(true, "resize stop frame=%s size=%.0fx%.0f", tostring(targetFrame:GetName()),
                 targetFrame:GetWidth() or 0, targetFrame:GetHeight() or 0)
+            -- Persist the new size via WoW's FCF system so it survives /reload.
+            if type(FCF_SavePositionAndDimensions) == "function" then
+                pcall(FCF_SavePositionAndDimensions, targetFrame)
+            end
+            -- Also store size in our own DB so ApplyPositionOverride can restore it.
+            if targetFrame == _G.ChatFrame1 then
+                local opts = ChatStylingModule:GetOptions()
+                if opts then
+                    local w = targetFrame:GetWidth()
+                    local h = targetFrame:GetHeight()
+                    local db = opts:GetChatEnhancementDB()
+                    if w and w > 50 then db.chatWidth  = math.floor(w + 0.5) end
+                    if h and h > 50 then db.chatHeight = math.floor(h + 0.5) end
+                end
+            end
         end
     end)
 end
@@ -1378,8 +1421,24 @@ function ChatStylingModule:ApplyFrameChrome(frame)
         frame.TwichUIChrome:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 8, -8)
 
         frame.TwichUIChrome:Show()
-        frame.TwichUIChrome:SetBackdropColor(0.03, 0.04, 0.06, 0.9)
-        frame.TwichUIChrome:SetBackdropBorderColor(PRIMARY_BORDER[1], PRIMARY_BORDER[2], PRIMARY_BORDER[3], 0.2)
+        -- Apply configurable background and border colors.
+        local bg = self.settings and self.settings.chatBgColor or nil
+        local bgR = bg and bg.r or 0.03
+        local bgG = bg and bg.g or 0.04
+        local bgB = bg and bg.b or 0.06
+        local bgA = bg and bg.a or 0.9
+        frame.TwichUIChrome:SetBackdropColor(bgR, bgG, bgB, bgA)
+        if frame.TwichUIChrome.Fill then
+            SetVerticalGradient(frame.TwichUIChrome.Fill,
+                bgR * 1.5, bgG * 1.5, bgB * 1.5, bgA,
+                bgR * 0.5, bgG * 0.5, bgB * 0.5, bgA)
+        end
+        local bd = self.settings and self.settings.chatBorderColor or nil
+        local bdR = bd and bd.r or PRIMARY_BORDER[1]
+        local bdG = bd and bd.g or PRIMARY_BORDER[2]
+        local bdB = bd and bd.b or PRIMARY_BORDER[3]
+        local bdA = bd and bd.a or 0.55
+        frame.TwichUIChrome:SetBackdropBorderColor(bdR, bdG, bdB, bdA)
         frame.TwichUIChrome.LeftAccent:SetColorTexture(accentR, accentG, accentB, 0.92)
         if frame.TwichUIChrome.DragHint then
             frame.TwichUIChrome.DragHint:SetTextColor(accentR, accentG, accentB)

@@ -203,6 +203,16 @@ local function BuildChatEnhancementConfiguration()
                     get = "ShouldShowAccentBar",
                     set = "SetShowAccentBar",
                 },
+                showClassIcons = {
+                    type = "toggle",
+                    name = "Class Icons",
+                    desc = "Show a class icon next to each player message. Icons are populated as messages arrive in the current session.",
+                    order = 4.5,
+                    width = "half",
+                    handler = Options,
+                    get = "IsClassIconsEnabled",
+                    set = "SetClassIconsEnabled",
+                },
                 chatFont = {
                     type = "select",
                     dialogControl = "LSM30_Font",
@@ -426,8 +436,8 @@ local function BuildChatEnhancementConfiguration()
                     order = 20.4,
                     width = "half",
                     func = function()
-                        local stylingModule = TwichUI_Redux:GetModule("ChatEnhancements", true)
-                            and TwichUI_Redux:GetModule("ChatEnhancements"):GetModule("ChatStyling", true)
+                        local stylingModule = T:GetModule("ChatEnhancements", true)
+                            and T:GetModule("ChatEnhancements"):GetModule("ChatStyling", true)
                         local x, y = stylingModule and stylingModule:CaptureCurrentPosition()
                         if x and y then
                             Options:SetChatPositionX(nil, x)
@@ -444,6 +454,28 @@ local function BuildChatEnhancementConfiguration()
                     func = function()
                         Options:ClearChatPosition()
                     end,
+                },
+                chatBgColor = {
+                    type = "color",
+                    name = "Background",
+                    desc = "Fill color and opacity of the chat frame chrome background. Defaults to the addon-wide background color when not overridden.",
+                    order = 20.6,
+                    width = "half",
+                    hasAlpha = true,
+                    handler = Options,
+                    get = "GetChatBgColor",
+                    set = "SetChatBgColor",
+                },
+                chatBorderColor = {
+                    type = "color",
+                    name = "Border",
+                    desc = "Color and opacity of the chat frame chrome border. Defaults to the addon-wide border color when not overridden.",
+                    order = 20.7,
+                    width = "half",
+                    hasAlpha = true,
+                    handler = Options,
+                    get = "GetChatBorderColor",
+                    set = "SetChatBorderColor",
                 },
             },
         },
@@ -1031,6 +1063,74 @@ local function BuildChatEnhancementConfiguration()
                     values = function() return Options:GetHeaderDatatextChoices() end,
                     get = function() return Options:GetHeaderDatatextSlot(3) end,
                     set = function(_, value) Options:SetHeaderDatatextSlot(3, value) end,
+                },
+            },
+        },
+        messagesGroup = {
+            type = "group",
+            name = "Messages",
+            order = 10,
+            inline = true,
+            args = {
+                msgNote = {
+                    type = "description",
+                    order = 0,
+                    width = "full",
+                    name = "Configure how chat messages are displayed and retained.",
+                },
+                hideRealm = {
+                    type = "toggle",
+                    name = "Hide Realm Name",
+                    desc = "Strip the -RealmName suffix from player names in chat messages. The hyperlink target is kept intact so right-clicking still works.",
+                    order = 1,
+                    width = "full",
+                    handler = Options,
+                    get = "IsRealmHidden",
+                    set = "SetRealmHidden",
+                },
+                historyLimit = {
+                    type = "range",
+                    name = "History Limit",
+                    desc = "Maximum number of messages to retain per chat frame. Older messages are trimmed when the limit is reached.",
+                    order = 2,
+                    width = "full",
+                    min = 50,
+                    max = 500,
+                    step = 10,
+                    handler = Options,
+                    get = "GetChatHistoryLimit",
+                    set = "SetChatHistoryLimit",
+                },
+            },
+        },
+        debuggingGroup = {
+            type = "group",
+            name = "Debugging",
+            order = 99,
+            inline = true,
+            args = {
+                debugNote = {
+                    type = "description",
+                    order = 0,
+                    width = "full",
+                    name = "Diagnostic tools for testing chat renderer features.",
+                },
+                testItemLink = {
+                    type = "execute",
+                    name = "Send Item Link",
+                    desc = "Inserts a test item link into the chat to verify hyperlink and tooltip handling. Hover the link in chat after clicking.",
+                    order = 1,
+                    width = "half",
+                    func = function()
+                        local frame = _G.ChatFrame1
+                        if frame and frame.AddMessage then
+                            -- Hearthstone: always available, safe test item link.
+                            frame:AddMessage(
+                                "Hyperlink test: |Hitem:6948:0:0:0:0:0:0:0:0|h[Hearthstone]|h — hover to preview tooltip.",
+                                1, 0.8, 0.2
+                            )
+                        end
+                    end,
                 },
             },
         },

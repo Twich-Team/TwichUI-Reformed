@@ -774,6 +774,14 @@ function Options:ClearChatPosition()
     db.chatPositionY = nil
     self:RefreshChatStylingModule()
 end
+
+function Options:GetChatWidth()
+    return self:GetChatEnhancementDB().chatWidth
+end
+
+function Options:GetChatHeight()
+    return self:GetChatEnhancementDB().chatHeight
+end
 function Options:IsTabNameFadeEnabled()
     return self:GetChatEnhancementDB().tabNameFade == true
 end
@@ -901,4 +909,129 @@ function Options:GetHeaderDatatextChoices()
         return DataTextMod:GetStandaloneDatatextChoices()
     end
     return { NONE = "None" }
+end
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- Realm stripping
+-- ────────────────────────────────────────────────────────────────────────────
+
+function Options:IsClassIconsEnabled()
+    local db = self:GetChatEnhancementDB()
+    return db.showClassIcons == true
+end
+
+function Options:SetClassIconsEnabled(info, value)
+    self:GetChatEnhancementDB().showClassIcons = value == true
+    self:RefreshChatStylingModule()
+end
+
+function Options:IsRealmHidden()
+    return self:GetChatEnhancementDB().hideRealm == true
+end
+
+function Options:SetRealmHidden(info, value)
+    self:GetChatEnhancementDB().hideRealm = value == true
+    self:RefreshChatStylingModule()
+end
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- Chat history limit (max messages retained per frame)
+-- ────────────────────────────────────────────────────────────────────────────
+
+local DEFAULT_HISTORY_LIMIT = 350
+
+function Options:GetChatHistoryLimit()
+    return tonumber(self:GetChatEnhancementDB().chatHistoryLimit) or DEFAULT_HISTORY_LIMIT
+end
+
+function Options:SetChatHistoryLimit(info, value)
+    local n = math.max(50, math.min(500, tonumber(value) or DEFAULT_HISTORY_LIMIT))
+    self:GetChatEnhancementDB().chatHistoryLimit = n
+    self:RefreshChatStylingModule()
+end
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- Frame (chrome) background and border colors
+-- ────────────────────────────────────────────────────────────────────────────
+
+-- Resolves the addon-wide theme background color+alpha, used as the chat bg
+-- default so it follows the global appearance setting until overridden.
+local function GetGlobalThemeBg()
+    local theme = T:GetModule("Theme", true)
+    if theme then
+        local c = theme:GetColor("backgroundColor")
+        local a = theme:Get("backgroundAlpha") or 0.94
+        return { r = c[1] or 0.05, g = c[2] or 0.06, b = c[3] or 0.08, a = a }
+    end
+    return { r = 0.05, g = 0.06, b = 0.08, a = 0.94 }
+end
+
+-- Resolves the addon-wide theme border color+alpha, used as the chat border
+-- default so it follows the global appearance setting until overridden.
+local function GetGlobalThemeBorder()
+    local theme = T:GetModule("Theme", true)
+    if theme then
+        local c = theme:GetColor("borderColor")
+        local a = theme:Get("borderAlpha") or 0.85
+        return { r = c[1] or 0.24, g = c[2] or 0.26, b = c[3] or 0.32, a = a }
+    end
+    return { r = 0.24, g = 0.26, b = 0.32, a = 0.85 }
+end
+
+function Options:GetChatBgColor()
+    local db = self:GetChatEnhancementDB()
+    local c = db.chatBgColor
+    if c then
+        return c.r or 0.05, c.g or 0.06, c.b or 0.08, c.a ~= nil and c.a or 0.94
+    end
+    local def = GetGlobalThemeBg()
+    return def.r, def.g, def.b, def.a
+end
+
+function Options:SetChatBgColor(info, r, g, b, a)
+    self:GetChatEnhancementDB().chatBgColor = { r = r, g = g, b = b, a = a ~= nil and a or 0.94 }
+    self:RefreshChatStylingModule()
+end
+
+function Options:GetResolvedChatBgColor()
+    local db = self:GetChatEnhancementDB()
+    if db.chatBgColor then
+        local c = db.chatBgColor
+        return {
+            r = c.r or 0.05,
+            g = c.g or 0.06,
+            b = c.b or 0.08,
+            a = c.a ~= nil and c.a or 0.94,
+        }
+    end
+    return GetGlobalThemeBg()
+end
+
+function Options:GetChatBorderColor()
+    local db = self:GetChatEnhancementDB()
+    local c = db.chatBorderColor
+    if c then
+        return c.r or 0.24, c.g or 0.26, c.b or 0.32, c.a ~= nil and c.a or 0.85
+    end
+    local def = GetGlobalThemeBorder()
+    return def.r, def.g, def.b, def.a
+end
+
+function Options:SetChatBorderColor(info, r, g, b, a)
+    self:GetChatEnhancementDB().chatBorderColor = { r = r, g = g, b = b, a = a ~= nil and a or 0.85 }
+    self:RefreshChatStylingModule()
+end
+
+function Options:GetResolvedChatBorderColor()
+    local db = self:GetChatEnhancementDB()
+    if db.chatBorderColor then
+        local c = db.chatBorderColor
+        return {
+            r = c.r or 0.24,
+            g = c.g or 0.26,
+            b = c.b or 0.32,
+            a = c.a ~= nil and c.a or 0.85,
+        }
+    end
+    return GetGlobalThemeBorder()
 end
