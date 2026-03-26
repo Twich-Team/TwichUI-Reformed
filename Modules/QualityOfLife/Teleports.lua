@@ -902,6 +902,45 @@ function Teleports:BuildSections(mode)
     return sections
 end
 
+function Teleports:BuildDatatextQuickCastSections()
+    local sections = {}
+
+    local function CollectKnown(source, kind)
+        local collected = self:CollectSectionEntries(source, kind)
+        local knownEntries = {}
+
+        for _, entry in ipairs(collected) do
+            if entry.known then
+                table.insert(knownEntries, entry)
+            end
+        end
+
+        return knownEntries
+    end
+
+    local function AddSection(title, entries)
+        if entries and #entries > 0 then
+            table.insert(sections, {
+                title = title,
+                entries = entries,
+            })
+        end
+    end
+
+    AddSection("Current Season", CollectKnown(CURRENT_SEASON_DUNGEONS, "spell"))
+
+    local hearthstones = {
+        self:GetFavoriteHearthstoneEntry(),
+        HEARTHSTONE_ENTRIES[2],
+        HEARTHSTONE_ENTRIES[3],
+    }
+
+    AddSection("Hearthstones", CollectKnown(hearthstones, "item"))
+    AddSection("Other", CollectKnown(OTHER_ITEM_ENTRIES, "item"))
+
+    return sections
+end
+
 function Teleports:RenderBrowser(frame, mode)
     if not frame then
         return

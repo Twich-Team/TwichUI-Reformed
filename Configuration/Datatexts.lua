@@ -100,6 +100,14 @@ local function OpenHearthstoneSelector()
     })
 end
 
+local function TriggerDatatextFlash(datatextName, dbKey)
+    ---@type DataTextModule|nil
+    local datatextModule = T:GetModule("Datatexts", true)
+    if datatextModule and datatextModule.TestDatatextFlash then
+        datatextModule:TestDatatextFlash(datatextName, dbKey)
+    end
+end
+
 local function BuildGoldGoblinConfiguration()
     local W = ConfigurationModule.Widgets
     local goldGoblin = {
@@ -123,7 +131,29 @@ local function BuildGoldGoblinConfiguration()
                     handler = Options,
                     get = "GetGoblinGoldDisplayMode",
                     set = "SetGoblinGoldDisplayMode",
-                }
+                },
+                flashOnUpdate = {
+                    type = "toggle",
+                    name = "Flash on Update",
+                    desc = "Play a short highlight pulse when your displayed gold amount changes.",
+                    order = 2,
+                    get = function()
+                        return Options:GetDatatextDB("goblin").flashOnUpdate == true
+                    end,
+                    set = function(_, value)
+                        Options:GetDatatextDB("goblin").flashOnUpdate = value == true
+                    end,
+                },
+                testFlash = {
+                    type = "execute",
+                    name = "Test Flash",
+                    desc = "Preview the gold datatext flash on any visible panel using it.",
+                    order = 3,
+                    width = 1,
+                    func = function()
+                        TriggerDatatextFlash("TwichUI: Gold Goblin", "goblin")
+                    end,
+                },
             }),
             tooltipOptions = W.IGroup(10, "Professions", {
                 showProfessions = {
@@ -247,11 +277,33 @@ local function BuildPortalsConfiguration()
                     set = "SetPortalsUseCustomColor",
                     order = 1,
                 },
+                flashOnUpdate = {
+                    type = "toggle",
+                    name = "Flash on Update",
+                    desc = "Play a short highlight pulse when the portals datatext value changes.",
+                    order = 2,
+                    get = function()
+                        return Options:GetDatatextDB("portals").flashOnUpdate == true
+                    end,
+                    set = function(_, value)
+                        Options:GetDatatextDB("portals").flashOnUpdate = value == true
+                    end,
+                },
+                testFlash = {
+                    type = "execute",
+                    name = "Test Flash",
+                    desc = "Preview the portals datatext flash on any visible panel using it.",
+                    order = 3,
+                    width = 1,
+                    func = function()
+                        TriggerDatatextFlash("TwichUI: Portals", "portals")
+                    end,
+                },
                 textColor = {
                     type = "color",
                     name = "Text Color",
                     desc = "Color of the text.",
-                    order = 2,
+                    order = 4,
                     disabled = function()
                         return not Options:GetDatatextDB("portals").customColor
                     end,
@@ -276,7 +328,7 @@ local function BuildPortalsConfiguration()
                         local _, name, icon = C_ToyBox.GetToyInfo(itemID)
                         local label = tostring(name or ("Item " .. itemID))
                         if icon and T.Tools and T.Tools.Text and T.Tools.Text.Icon then
-                                return T.Tools.Text.Icon(tostring(icon)) .. " " .. label
+                            return T.Tools.Text.Icon(tostring(icon)) .. " " .. label
                         end
                         return label
                     end,
@@ -312,11 +364,33 @@ local function BuildMythicPlusConfiguration()
                     set = "SetMythicPlusUseCustomColor",
                     order = 1,
                 },
+                flashOnUpdate = {
+                    type = "toggle",
+                    name = "Flash on Update",
+                    desc = "Play a short highlight pulse when the Mythic+ datatext value changes.",
+                    order = 2,
+                    get = function()
+                        return Options:GetDatatextDB("mythicplus").flashOnUpdate == true
+                    end,
+                    set = function(_, value)
+                        Options:GetDatatextDB("mythicplus").flashOnUpdate = value == true
+                    end,
+                },
+                testFlash = {
+                    type = "execute",
+                    name = "Test Flash",
+                    desc = "Preview the Mythic+ datatext flash on any visible panel using it.",
+                    order = 3,
+                    width = 1,
+                    func = function()
+                        TriggerDatatextFlash("TwichUI: Mythic+", "mythicplus")
+                    end,
+                },
                 textColor = {
                     type = "color",
                     name = "Text Color",
                     desc = "Color of the Mythic+ datatext.",
-                    order = 2,
+                    order = 4,
                     disabled = function()
                         return not Options:GetDatatextDB("mythicplus").customColor
                     end,
@@ -385,11 +459,33 @@ local function BuildChoresConfiguration()
                     get = "GetChoresUseCustomColor",
                     set = "SetChoresUseCustomColor",
                 },
+                flashOnUpdate = {
+                    type = "toggle",
+                    name = "Flash on Update",
+                    desc = "Play a short highlight pulse when the chores summary changes.",
+                    order = 2,
+                    get = function()
+                        return Options:GetDatatextDB("chores").flashOnUpdate == true
+                    end,
+                    set = function(_, value)
+                        Options:GetDatatextDB("chores").flashOnUpdate = value == true
+                    end,
+                },
+                testFlash = {
+                    type = "execute",
+                    name = "Test Flash",
+                    desc = "Preview the chores datatext flash on any visible panel using it.",
+                    order = 3,
+                    width = 1,
+                    func = function()
+                        TriggerDatatextFlash("TwichUI: Chores", "chores")
+                    end,
+                },
                 textColor = {
                     type = "color",
                     name = "Text Color",
                     desc = "Color of the chore count.",
-                    order = 2,
+                    order = 4,
                     hasAlpha = true,
                     disabled = function()
                         return not Options:GetDatatextDB("chores").customColor
@@ -402,7 +498,7 @@ local function BuildChoresConfiguration()
                     type = "toggle",
                     name = "Custom Done Color",
                     desc = "Override the default green color used when all tracked chores are complete.",
-                    order = 3,
+                    order = 5,
                     handler = Options,
                     get = "GetChoresUseCustomDoneColor",
                     set = "SetChoresUseCustomDoneColor",
@@ -411,7 +507,7 @@ local function BuildChoresConfiguration()
                     type = "color",
                     name = "Done Color",
                     desc = "Color used for the datatext when all tracked chores are complete.",
-                    order = 4,
+                    order = 6,
                     hasAlpha = true,
                     disabled = function()
                         return not Options:GetDatatextDB("chores").customDoneColor
@@ -494,11 +590,33 @@ local function BuildGatheringConfiguration()
                     get = "GetGatheringUseCustomColor",
                     set = "SetGatheringUseCustomColor",
                 },
+                flashOnUpdate = {
+                    type = "toggle",
+                    name = "Flash on Update",
+                    desc = "Play a short highlight pulse when the gathering summary changes.",
+                    order = 2,
+                    get = function()
+                        return Options:GetDatatextDB("gathering").flashOnUpdate == true
+                    end,
+                    set = function(_, value)
+                        Options:GetDatatextDB("gathering").flashOnUpdate = value == true
+                    end,
+                },
+                testFlash = {
+                    type = "execute",
+                    name = "Test Flash",
+                    desc = "Preview the gathering datatext flash on any visible panel using it.",
+                    order = 3,
+                    width = 1,
+                    func = function()
+                        TriggerDatatextFlash("TwichUI: Gathering", "gathering")
+                    end,
+                },
                 textColor = {
                     type = "color",
                     name = "Text Color",
                     desc = "Color of the gathering datatext.",
-                    order = 2,
+                    order = 4,
                     hasAlpha = true,
                     disabled = function()
                         return not Options:GetDatatextDB("gathering").customColor
@@ -564,11 +682,35 @@ local function BuildInlineColorGroup(W, order, dbKey, datatextName, label, defau
                 RefreshNamedDatatext(datatextName)
             end,
         },
+        flashOnUpdate = {
+            type = "toggle",
+            name = "Flash on Update",
+            desc = "Play a short highlight pulse when the displayed datatext value changes.",
+            order = 2,
+            get = function()
+                local db = Options:GetDatatextDB(dbKey)
+                return db.flashOnUpdate == true
+            end,
+            set = function(_, value)
+                local db = Options:GetDatatextDB(dbKey)
+                db.flashOnUpdate = value == true
+            end,
+        },
+        testFlash = {
+            type = "execute",
+            name = "Test Flash",
+            desc = "Preview the flash animation on any visible panel using this datatext.",
+            order = 3,
+            width = 1,
+            func = function()
+                TriggerDatatextFlash(datatextName, dbKey)
+            end,
+        },
         textColor = {
             type = "color",
             name = "Text Color",
             desc = "Color of the datatext.",
-            order = 2,
+            order = 4,
             hasAlpha = true,
             disabled = function()
                 local db = Options:GetDatatextDB(dbKey)
@@ -591,7 +733,8 @@ local currencySelector
 
 local function OpenCurrencySelector(mode)
     if not currencySelector then
-        currencySelector = T.Tools.UI.CreateSearchSelector("TwichUICurrencySelector", { hint = "Search currencies" }) or nil
+        currencySelector = T.Tools.UI.CreateSearchSelector("TwichUICurrencySelector", { hint = "Search currencies" }) or
+            nil
     end
 
     if not currencySelector then
@@ -624,7 +767,8 @@ local function BuildTimeConfiguration()
         order = 5,
         args = {
             title = W.TitleWidget(0, "Time"),
-            desc = W.Description(1, "Displays a lightweight clock with reset timers in the tooltip and quick access to the calendar."),
+            desc = W.Description(1,
+                "Displays a lightweight clock with reset timers in the tooltip and quick access to the calendar."),
             display = W.IGroup(10, "Display", {
                 localTime = {
                     type = "toggle",
@@ -798,7 +942,8 @@ local function BuildSystemConfiguration()
         order = 6,
         args = {
             title = W.TitleWidget(0, "FPS / Latency"),
-            desc = W.Description(1, "Shows framerate and your preferred latency source with a compact tooltip for connection health."),
+            desc = W.Description(1,
+                "Shows framerate and your preferred latency source with a compact tooltip for connection health."),
             display = W.IGroup(10, "Display", {
                 latencySource = {
                     type = "select",
@@ -902,8 +1047,10 @@ local function BuildDurabilityConfiguration()
         order = 9,
         args = {
             title = W.TitleWidget(0, "Durability"),
-            desc = W.Description(1, "Tracks your lowest equipped durability and lists worn item durability in the tooltip."),
-            colors = BuildInlineColorGroup(W, 10, "durability", "TwichUI: Durability", "Custom Tint", { 1, 0.84, 0.28, 1 }),
+            desc = W.Description(1,
+                "Tracks your lowest equipped durability and lists worn item durability in the tooltip."),
+            colors = BuildInlineColorGroup(W, 10, "durability", "TwichUI: Durability", "Custom Tint",
+                { 1, 0.84, 0.28, 1 }),
         },
     }
 end
@@ -922,7 +1069,8 @@ local function BuildSpecializationConfiguration()
                 displayStyle = {
                     type = "select",
                     name = "Display Style",
-                    desc = "Choose whether the datatext shows your spec only, adds loot specialization, adds loadout, or shows all available details.",
+                    desc =
+                    "Choose whether the datatext shows your spec only, adds loot specialization, adds loadout, or shows all available details.",
                     order = 1,
                     values = {
                         SPEC = "Spec Only",
@@ -1015,7 +1163,8 @@ local function BuildCurrenciesConfiguration()
     }
 
     if #tooltipEntries == 0 then
-        tooltipArgs.empty = W.Description(5, T.Tools.Text.Color(T.Tools.Colors.GRAY, "No extra currencies are pinned to the tooltip yet."))
+        tooltipArgs.empty = W.Description(5,
+            T.Tools.Text.Color(T.Tools.Colors.GRAY, "No extra currencies are pinned to the tooltip yet."))
     else
         for index, entry in ipairs(tooltipEntries) do
             tooltipArgs["tooltipCurrency" .. tostring(entry.id)] = {
@@ -1167,6 +1316,15 @@ local function BuildCurrenciesConfiguration()
                     get = "GetCurrenciesShowMax",
                     set = "SetCurrenciesShowMax",
                 },
+                showGoldInTooltip = {
+                    type = "toggle",
+                    name = "Show Gold in Tooltip",
+                    desc = "Include your current gold total in the currencies tooltip.",
+                    order = 4,
+                    handler = Options,
+                    get = "GetCurrenciesShowGoldInTooltip",
+                    set = "SetCurrenciesShowGoldInTooltip",
+                },
             }),
             colors = {
                 type = "group",
@@ -1183,11 +1341,33 @@ local function BuildCurrenciesConfiguration()
                         get = "GetCurrenciesUseCustomColor",
                         set = "SetCurrenciesUseCustomColor",
                     },
+                    flashOnUpdate = {
+                        type = "toggle",
+                        name = "Flash on Update",
+                        desc = "Play a short highlight pulse when the displayed currency value changes.",
+                        order = 2,
+                        get = function()
+                            return Options:GetDatatextDB("currencies").flashOnUpdate == true
+                        end,
+                        set = function(_, value)
+                            Options:GetDatatextDB("currencies").flashOnUpdate = value == true
+                        end,
+                    },
+                    testFlash = {
+                        type = "execute",
+                        name = "Test Flash",
+                        desc = "Preview the currencies datatext flash on any visible panel using it.",
+                        order = 3,
+                        width = 1,
+                        func = function()
+                            TriggerDatatextFlash("TwichUI: Currencies", "currencies")
+                        end,
+                    },
                     textColor = {
                         type = "color",
                         name = "Text Color",
                         desc = "Color of the base currencies datatext.",
-                        order = 2,
+                        order = 4,
                         hasAlpha = true,
                         disabled = function()
                             return not Options:GetCurrenciesUseCustomColor()
@@ -1377,6 +1557,7 @@ local function BuildStandaloneDatatextConfiguration()
                             [4] = "Four Slots",
                             [5] = "Five Slots",
                         },
+                        sorting = { 1, 2, 3, 4, 5 },
                         get = function()
                             return GetPanelValue("segments", 3)
                         end,
@@ -1535,7 +1716,7 @@ local function BuildStandaloneDatatextConfiguration()
                     },
                     slot4 = {
                         type = "select",
-                        name = "Slot 4",
+                        name = "Fourth Slot",
                         order = 4,
                         width = 1.5,
                         hidden = function()
@@ -1558,7 +1739,7 @@ local function BuildStandaloneDatatextConfiguration()
                     },
                     slot5 = {
                         type = "select",
-                        name = "Slot 5",
+                        name = "Fifth Slot",
                         order = 5,
                         width = 1.5,
                         hidden = function()
@@ -1643,7 +1824,8 @@ local function BuildStandaloneDatatextConfiguration()
                         values = textAlignValues,
                         disabled = IsPanelStyleDisabled,
                         get = function()
-                            return tostring(GetPanelStyleValue("textAlign", Options:GetStandaloneDB().style.textAlign or "CENTER"))
+                            return tostring(GetPanelStyleValue("textAlign",
+                                Options:GetStandaloneDB().style.textAlign or "CENTER"))
                         end,
                         set = function(_, value)
                             SetPanelStyleValue("textAlign", value)
@@ -1658,7 +1840,8 @@ local function BuildStandaloneDatatextConfiguration()
                         step = 1,
                         disabled = IsPanelStyleDisabled,
                         get = function()
-                            return tonumber(GetPanelStyleValue("fontSize", Options:GetStandaloneDB().style.fontSize)) or 12
+                            return tonumber(GetPanelStyleValue("fontSize", Options:GetStandaloneDB().style.fontSize)) or
+                                12
                         end,
                         set = function(_, value)
                             SetPanelStyleValue("fontSize", value)
@@ -1689,7 +1872,8 @@ local function BuildStandaloneDatatextConfiguration()
                         step = 1,
                         disabled = IsPanelStyleDisabled,
                         get = function()
-                            return tonumber(GetPanelStyleValue("tooltipFontSize", Options:GetStandaloneDB().style.tooltipFontSize)) or 11
+                            return tonumber(GetPanelStyleValue("tooltipFontSize",
+                                Options:GetStandaloneDB().style.tooltipFontSize)) or 11
                         end,
                         set = function(_, value)
                             SetPanelStyleValue("tooltipFontSize", value)
@@ -1720,7 +1904,8 @@ local function BuildStandaloneDatatextConfiguration()
                         step = 1,
                         disabled = IsPanelStyleDisabled,
                         get = function()
-                            return tonumber(GetPanelStyleValue("menuFontSize", Options:GetStandaloneDB().style.menuFontSize)) or 12
+                            return tonumber(GetPanelStyleValue("menuFontSize",
+                                Options:GetStandaloneDB().style.menuFontSize)) or 12
                         end,
                         set = function(_, value)
                             SetPanelStyleValue("menuFontSize", value)
@@ -1760,7 +1945,8 @@ local function BuildStandaloneDatatextConfiguration()
                         isPercent = true,
                         disabled = IsPanelStyleDisabled,
                         get = function()
-                            return tonumber(GetPanelStyleValue("textShadowAlpha", Options:GetStandaloneDB().style.textShadowAlpha)) or 0.85
+                            return tonumber(GetPanelStyleValue("textShadowAlpha",
+                                Options:GetStandaloneDB().style.textShadowAlpha)) or 0.85
                         end,
                         set = function(_, value)
                             SetPanelStyleValue("textShadowAlpha", value)
@@ -1776,7 +1962,8 @@ local function BuildStandaloneDatatextConfiguration()
                         isPercent = true,
                         disabled = IsPanelStyleDisabled,
                         get = function()
-                            return tonumber(GetPanelStyleValue("dividerAlpha", Options:GetStandaloneDB().style.dividerAlpha)) or 0.28
+                            return tonumber(GetPanelStyleValue("dividerAlpha",
+                                Options:GetStandaloneDB().style.dividerAlpha)) or 0.28
                         end,
                         set = function(_, value)
                             SetPanelStyleValue("dividerAlpha", value)
@@ -1789,8 +1976,11 @@ local function BuildStandaloneDatatextConfiguration()
                         hasAlpha = true,
                         disabled = IsPanelStyleDisabled,
                         get = function()
-                            local color = GetPanelStyleValue("backgroundColor", Options:GetStandaloneDB().style.backgroundColor)
-                            return color[1], color[2], color[3], tonumber(GetPanelStyleValue("backgroundAlpha", Options:GetStandaloneDB().style.backgroundAlpha)) or 0.94
+                            local color = GetPanelStyleValue("backgroundColor",
+                                Options:GetStandaloneDB().style.backgroundColor)
+                            return color[1], color[2], color[3],
+                                tonumber(GetPanelStyleValue("backgroundAlpha",
+                                    Options:GetStandaloneDB().style.backgroundAlpha)) or 0.94
                         end,
                         set = function(_, r, g, b, a)
                             SetPanelColorValue("backgroundColor", "backgroundAlpha", r, g, b, a)
@@ -1804,7 +1994,9 @@ local function BuildStandaloneDatatextConfiguration()
                         disabled = IsPanelStyleDisabled,
                         get = function()
                             local color = GetPanelStyleValue("borderColor", Options:GetStandaloneDB().style.borderColor)
-                            return color[1], color[2], color[3], tonumber(GetPanelStyleValue("borderAlpha", Options:GetStandaloneDB().style.borderAlpha)) or 0.9
+                            return color[1], color[2], color[3],
+                                tonumber(GetPanelStyleValue("borderAlpha", Options:GetStandaloneDB().style.borderAlpha)) or
+                                0.9
                         end,
                         set = function(_, r, g, b, a)
                             SetPanelColorValue("borderColor", "borderAlpha", r, g, b, a)
@@ -1818,10 +2010,50 @@ local function BuildStandaloneDatatextConfiguration()
                         disabled = IsPanelStyleDisabled,
                         get = function()
                             local color = GetPanelStyleValue("accentColor", Options:GetStandaloneDB().style.accentColor)
-                            return color[1], color[2], color[3], tonumber(GetPanelStyleValue("accentAlpha", Options:GetStandaloneDB().style.accentAlpha)) or 0.95
+                            return color[1], color[2], color[3],
+                                tonumber(GetPanelStyleValue("accentAlpha", Options:GetStandaloneDB().style.accentAlpha)) or
+                                0.95
                         end,
                         set = function(_, r, g, b, a)
                             SetPanelColorValue("accentColor", "accentAlpha", r, g, b, a)
+                        end,
+                    },
+                    hoverGlowColor = {
+                        type = "color",
+                        name = "Hover Glow Color",
+                        desc = "Per-panel override for the hover glow color.",
+                        order = 24,
+                        hasAlpha = true,
+                        disabled = IsPanelStyleDisabled,
+                        get = function()
+                            local sharedStyle = Options:GetStandaloneDB().style
+                            local fallback = sharedStyle.hoverGlowColor or sharedStyle.accentColor
+                            local fallbackAlpha = sharedStyle.hoverGlowAlpha or 0.09
+                            local color = GetPanelStyleValue("hoverGlowColor", fallback)
+                            return color[1], color[2], color[3],
+                                tonumber(GetPanelStyleValue("hoverGlowAlpha", fallbackAlpha)) or 0.09
+                        end,
+                        set = function(_, r, g, b, a)
+                            SetPanelColorValue("hoverGlowColor", "hoverGlowAlpha", r, g, b, a)
+                        end,
+                    },
+                    hoverBarColor = {
+                        type = "color",
+                        name = "Hover Underline Color",
+                        desc = "Per-panel override for the hover underline bar color.",
+                        order = 25,
+                        hasAlpha = true,
+                        disabled = IsPanelStyleDisabled,
+                        get = function()
+                            local sharedStyle = Options:GetStandaloneDB().style
+                            local fallback = sharedStyle.hoverBarColor or sharedStyle.accentColor
+                            local fallbackAlpha = sharedStyle.hoverBarAlpha or 0.92
+                            local color = GetPanelStyleValue("hoverBarColor", fallback)
+                            return color[1], color[2], color[3],
+                                tonumber(GetPanelStyleValue("hoverBarAlpha", fallbackAlpha)) or 0.92
+                        end,
+                        set = function(_, r, g, b, a)
+                            SetPanelColorValue("hoverBarColor", "hoverBarAlpha", r, g, b, a)
                         end,
                     },
                 }),
@@ -2112,6 +2344,26 @@ local function BuildStandaloneDatatextConfiguration()
                                 style.accentAlpha = a
                                 RefreshStandalone()
                             end,
+                        },
+                        hoverGlowColor = {
+                            type = "color",
+                            name = "Hover Glow Color",
+                            desc = "Color of the full-slot glow when hovering a datatext slot.",
+                            order = 12,
+                            hasAlpha = true,
+                            handler = Options,
+                            get = "GetSharedHoverGlowColor",
+                            set = "SetSharedHoverGlowColor",
+                        },
+                        hoverBarColor = {
+                            type = "color",
+                            name = "Hover Underline Color",
+                            desc = "Color of the bottom underline bar when hovering a datatext slot.",
+                            order = 13,
+                            hasAlpha = true,
+                            handler = Options,
+                            get = "GetSharedHoverBarColor",
+                            set = "SetSharedHoverBarColor",
                         },
                     }),
                 },

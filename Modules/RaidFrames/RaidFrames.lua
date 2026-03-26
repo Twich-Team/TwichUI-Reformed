@@ -1115,6 +1115,11 @@ function RaidFrames:DebugUnit(unit)
 end
 
 function RaidFrames:GetDefaultColor()
+    local theme = T:GetModule("Theme", true)
+    if theme then
+        local c = theme:GetColor("accentColor")
+        return c[1], c[2], c[3], 0.9
+    end
     return DEFAULT_COLOR.r, DEFAULT_COLOR.g, DEFAULT_COLOR.b, DEFAULT_COLOR.a
 end
 

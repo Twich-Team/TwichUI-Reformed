@@ -504,6 +504,306 @@ function DataTextModule:GetElvUIValueColor()
     return nil
 end
 
+function DataTextModule:MaybeFlashPanel(panel, dbKey, previousText, nextText)
+    if not (panel and dbKey) then
+        return
+    end
+
+    if previousText == nil or previousText == nextText then
+        panel.__twichuiLastFlashText = nextText
+        return
+    end
+
+    local options = self.GetOptions and self.GetOptions()
+    local db = options and options.GetDatatextDB and options:GetDatatextDB(dbKey) or nil
+    if not db or db.flashOnUpdate ~= true then
+        panel.__twichuiLastFlashText = nextText
+        return
+    end
+
+    self:PlayPanelFlash(panel)
+    panel.__twichuiLastFlashText = nextText
+end
+
+function DataTextModule:PlayPanelFlash(panel)
+    if not panel then
+        return false
+    end
+
+    if not panel.__twichuiFlashAnimation then
+        local flashLayer = CreateFrame("Frame", nil, panel)
+        flashLayer:SetAllPoints(panel)
+        flashLayer:SetFrameStrata(panel:GetFrameStrata() or "MEDIUM")
+        flashLayer:SetFrameLevel(math.max((panel.GetFrameLevel and panel:GetFrameLevel() or 1) + 1, 1))
+        if flashLayer.EnableMouse then
+            flashLayer:EnableMouse(false)
+        end
+
+        local flashFill = flashLayer:CreateTexture(nil, "OVERLAY", nil, 1)
+        flashFill:SetAllPoints(flashLayer)
+        flashFill:SetColorTexture(0.98, 0.82, 0.24, 0)
+        flashFill:SetBlendMode("ADD")
+
+        local flashBloom = flashLayer:CreateTexture(nil, "OVERLAY", nil, 2)
+        flashBloom:SetPoint("TOPLEFT", flashLayer, "TOPLEFT", 4, -2)
+        flashBloom:SetPoint("BOTTOMRIGHT", flashLayer, "BOTTOMRIGHT", -4, 2)
+        flashBloom:SetColorTexture(1, 0.9, 0.42, 0)
+        flashBloom:SetBlendMode("ADD")
+
+        local flashBorder = flashLayer:CreateTexture(nil, "OVERLAY", nil, 3)
+        flashBorder:SetPoint("TOPLEFT", flashLayer, "TOPLEFT", -1, 1)
+        flashBorder:SetPoint("BOTTOMRIGHT", flashLayer, "BOTTOMRIGHT", 1, -1)
+        flashBorder:SetColorTexture(0.98, 0.82, 0.24, 0)
+        flashBorder:SetBlendMode("ADD")
+
+        local flashSheen = flashLayer:CreateTexture(nil, "OVERLAY", nil, 4)
+        flashSheen:SetPoint("TOPLEFT", flashLayer, "TOPLEFT", 0, 0)
+        flashSheen:SetPoint("BOTTOMLEFT", flashLayer, "BOTTOMLEFT", 0, 0)
+        flashSheen:SetWidth(math.max(18, (panel.GetWidth and panel:GetWidth() or 80) * 0.24))
+        flashSheen:SetColorTexture(1, 0.96, 0.82, 0)
+        flashSheen:SetBlendMode("ADD")
+
+        local flashText = nil
+        if panel.text and panel.text.GetParent then
+            flashText = panel:CreateFontString(nil, "OVERLAY", nil, 8)
+            flashText:SetAllPoints(panel.text)
+            if panel.text.GetFont and flashText.SetFont then
+                local fontPath, fontSize, fontFlags = panel.text:GetFont()
+                if fontPath then
+                    flashText:SetFont(fontPath, fontSize or 12, fontFlags or "")
+                end
+            elseif panel.text.GetFontObject and flashText.SetFontObject then
+                local fontObject = panel.text:GetFontObject()
+                if fontObject then
+                    flashText:SetFontObject(fontObject)
+                end
+            end
+            if panel.text.GetJustifyH and flashText.SetJustifyH then
+                flashText:SetJustifyH(panel.text:GetJustifyH() or "CENTER")
+            end
+            if panel.text.GetJustifyV and flashText.SetJustifyV then
+                flashText:SetJustifyV(panel.text:GetJustifyV() or "MIDDLE")
+            end
+            if panel.text.GetWordWrap and flashText.SetWordWrap then
+                flashText:SetWordWrap(panel.text:GetWordWrap())
+            end
+            flashText:SetText("")
+            flashText:SetTextColor(1, 0.94, 0.72, 0)
+            flashText:SetShadowColor(1, 0.78, 0.2, 0)
+            flashText:SetShadowOffset(0, 0)
+        end
+
+        local animationGroup = panel:CreateAnimationGroup()
+
+        local fillFadeIn = animationGroup:CreateAnimation("Alpha")
+        fillFadeIn:SetTarget(flashFill)
+        fillFadeIn:SetOrder(1)
+        fillFadeIn:SetDuration(0.08)
+        fillFadeIn:SetFromAlpha(0)
+        fillFadeIn:SetToAlpha(0.22)
+
+        local bloomFadeIn = animationGroup:CreateAnimation("Alpha")
+        bloomFadeIn:SetTarget(flashBloom)
+        bloomFadeIn:SetOrder(1)
+        bloomFadeIn:SetDuration(0.10)
+        bloomFadeIn:SetFromAlpha(0)
+        bloomFadeIn:SetToAlpha(0.48)
+
+        local borderFadeIn = animationGroup:CreateAnimation("Alpha")
+        borderFadeIn:SetTarget(flashBorder)
+        borderFadeIn:SetOrder(1)
+        borderFadeIn:SetDuration(0.08)
+        borderFadeIn:SetFromAlpha(0)
+        borderFadeIn:SetToAlpha(0.95)
+
+        local sheenFadeIn = animationGroup:CreateAnimation("Alpha")
+        sheenFadeIn:SetTarget(flashSheen)
+        sheenFadeIn:SetOrder(1)
+        sheenFadeIn:SetDuration(0.06)
+        sheenFadeIn:SetFromAlpha(0)
+        sheenFadeIn:SetToAlpha(0.72)
+
+        local fadeIn = animationGroup:CreateAnimation("Alpha")
+        fadeIn:SetTarget(panel.text)
+        fadeIn:SetOrder(1)
+        fadeIn:SetDuration(0.08)
+        fadeIn:SetFromAlpha(1)
+        fadeIn:SetToAlpha(1)
+
+        local fillFadeOut = animationGroup:CreateAnimation("Alpha")
+        fillFadeOut:SetTarget(flashFill)
+        fillFadeOut:SetOrder(2)
+        fillFadeOut:SetDuration(0.30)
+        fillFadeOut:SetFromAlpha(0.22)
+        fillFadeOut:SetToAlpha(0)
+
+        local bloomFadeOut = animationGroup:CreateAnimation("Alpha")
+        bloomFadeOut:SetTarget(flashBloom)
+        bloomFadeOut:SetOrder(2)
+        bloomFadeOut:SetDuration(0.34)
+        bloomFadeOut:SetFromAlpha(0.48)
+        bloomFadeOut:SetToAlpha(0)
+
+        local borderFadeOut = animationGroup:CreateAnimation("Alpha")
+        borderFadeOut:SetTarget(flashBorder)
+        borderFadeOut:SetOrder(2)
+        borderFadeOut:SetDuration(0.34)
+        borderFadeOut:SetFromAlpha(0.95)
+        borderFadeOut:SetToAlpha(0)
+
+        local sheenFadeOut = animationGroup:CreateAnimation("Alpha")
+        sheenFadeOut:SetTarget(flashSheen)
+        sheenFadeOut:SetOrder(2)
+        sheenFadeOut:SetDuration(0.22)
+        sheenFadeOut:SetFromAlpha(0.72)
+        sheenFadeOut:SetToAlpha(0)
+
+        local sheenSweep = animationGroup:CreateAnimation("Translation")
+        sheenSweep:SetTarget(flashSheen)
+        sheenSweep:SetOrder(2)
+        sheenSweep:SetDuration(0.26)
+        sheenSweep:SetOffset((panel.GetWidth and panel:GetWidth() or 80) * 0.62, 0)
+
+        if flashText then
+            local textFadeIn = animationGroup:CreateAnimation("Alpha")
+            textFadeIn:SetTarget(flashText)
+            textFadeIn:SetOrder(1)
+            textFadeIn:SetDuration(0.06)
+            textFadeIn:SetFromAlpha(0)
+            textFadeIn:SetToAlpha(1)
+
+            local textFadeOut = animationGroup:CreateAnimation("Alpha")
+            textFadeOut:SetTarget(flashText)
+            textFadeOut:SetOrder(2)
+            textFadeOut:SetDuration(0.28)
+            textFadeOut:SetFromAlpha(1)
+            textFadeOut:SetToAlpha(0)
+        end
+
+        animationGroup:SetScript("OnPlay", function()
+            if flashLayer and flashLayer.SetFrameLevel then
+                flashLayer:SetFrameLevel(math.max((panel.GetFrameLevel and panel:GetFrameLevel() or 1) + 1, 1))
+            end
+            if flashSheen then
+                local sweepWidth = math.max(18, (panel.GetWidth and panel:GetWidth() or 80) * 0.24)
+                flashSheen:SetWidth(sweepWidth)
+                flashSheen:ClearAllPoints()
+                flashSheen:SetPoint("TOPLEFT", flashLayer, "TOPLEFT", -sweepWidth, 0)
+                flashSheen:SetPoint("BOTTOMLEFT", flashLayer, "BOTTOMLEFT", -sweepWidth, 0)
+            end
+            if flashText and panel.text then
+                if panel.text.GetFont and flashText.SetFont then
+                    local fontPath, fontSize, fontFlags = panel.text:GetFont()
+                    if fontPath then
+                        flashText:SetFont(fontPath, fontSize or 12, fontFlags or "")
+                    end
+                elseif panel.text.GetFontObject and flashText.SetFontObject then
+                    local fontObject = panel.text:GetFontObject()
+                    if fontObject then
+                        flashText:SetFontObject(fontObject)
+                    end
+                end
+
+                flashText:SetText(panel.text:GetText() or "")
+                local textR, textG, textB, textA = 1, 1, 1, 1
+                if panel.text.GetTextColor then
+                    textR, textG, textB, textA = panel.text:GetTextColor()
+                end
+                panel.__twichuiFlashOriginalTextColor = { textR or 1, textG or 1, textB or 1, textA or 1 }
+                panel.text:SetTextColor(1, 0.96, 0.84, math.max(textA or 1, 0.95))
+                if panel.text.SetShadowColor then
+                    panel.__twichuiFlashOriginalShadowColor = { panel.text:GetShadowColor() }
+                    panel.text:SetShadowColor(1, 0.78, 0.2, 0.95)
+                end
+                if panel.text.SetShadowOffset and panel.text.GetShadowOffset then
+                    panel.__twichuiFlashOriginalShadowOffset = { panel.text:GetShadowOffset() }
+                    panel.text:SetShadowOffset(0, 0)
+                end
+            end
+        end)
+
+        animationGroup:SetScript("OnFinished", function()
+            flashFill:SetAlpha(0)
+            flashBloom:SetAlpha(0)
+            flashBorder:SetAlpha(0)
+            flashSheen:SetAlpha(0)
+            if flashText then
+                flashText:SetAlpha(0)
+                flashText:SetText("")
+            end
+
+            if panel.text and panel.__twichuiFlashOriginalTextColor and panel.text.SetTextColor then
+                panel.text:SetTextColor(unpack(panel.__twichuiFlashOriginalTextColor))
+            end
+            if panel.text and panel.__twichuiFlashOriginalShadowColor and panel.text.SetShadowColor then
+                panel.text:SetShadowColor(unpack(panel.__twichuiFlashOriginalShadowColor))
+            end
+            if panel.text and panel.__twichuiFlashOriginalShadowOffset and panel.text.SetShadowOffset then
+                panel.text:SetShadowOffset(unpack(panel.__twichuiFlashOriginalShadowOffset))
+            end
+        end)
+
+        panel.__twichuiFlashLayer = flashLayer
+        panel.__twichuiFlashFill = flashFill
+        panel.__twichuiFlashBloom = flashBloom
+        panel.__twichuiFlashBorder = flashBorder
+        panel.__twichuiFlashSheen = flashSheen
+        panel.__twichuiFlashText = flashText
+        panel.__twichuiFlashAnimation = animationGroup
+    end
+
+    if panel.__twichuiFlashAnimation then
+        panel.__twichuiFlashAnimation:Stop()
+        if panel.__twichuiFlashFill then
+            panel.__twichuiFlashFill:SetAlpha(0)
+        end
+        if panel.__twichuiFlashBloom then
+            panel.__twichuiFlashBloom:SetAlpha(0)
+        end
+        if panel.__twichuiFlashBorder then
+            panel.__twichuiFlashBorder:SetAlpha(0)
+        end
+        if panel.__twichuiFlashSheen then
+            panel.__twichuiFlashSheen:SetAlpha(0)
+        end
+        if panel.__twichuiFlashText then
+            panel.__twichuiFlashText:SetAlpha(0)
+        end
+        panel.__twichuiFlashAnimation:Play()
+    end
+
+    return true
+end
+
+function DataTextModule:TestDatatextFlash(datatextName, dbKey)
+    if type(datatextName) ~= "string" or datatextName == "" then
+        return
+    end
+
+    local flashed = false
+    local definition = self.DatatextRegistry and self.DatatextRegistry[datatextName] or nil
+    local module = definition and definition.module or nil
+    local panel = module and module.panel or nil
+
+    if panel then
+        flashed = self:PlayPanelFlash(panel) or flashed
+    end
+
+    for _, frame in pairs(self.standalonePanels or {}) do
+        for slotIndex = 1, 5 do
+            local slot = frame.slots and frame.slots[slotIndex] or nil
+            local slotDefinition = slot and slot.datatextDefinition or nil
+            if slot and slotDefinition and slotDefinition.name == datatextName then
+                flashed = self:PlayPanelFlash(slot) or flashed
+            end
+        end
+    end
+
+    if not flashed and panel and dbKey then
+        self:MaybeFlashPanel(panel, dbKey, "__twichui_flash_test_prev", "__twichui_flash_test_next")
+    end
+end
+
 function DataTextModule:GetStandaloneTooltip()
     if not self.standaloneTooltip then
         local tooltip = CreateFrame("GameTooltip", "TwichUIDatatextTooltip", UIParent, "GameTooltipTemplate")
@@ -613,7 +913,8 @@ function DataTextModule:ShowDatatextTooltip(tooltip)
     if owner then
         ApplySmartTooltipAnchor(tooltip, owner, false)
     end
-    LogTooltipDebug("Post-show tooltip frame=%s shown=%s lines=%s owner=%s point=%s size=%s", GetTooltipDebugLabel(tooltip),
+    LogTooltipDebug("Post-show tooltip frame=%s shown=%s lines=%s owner=%s point=%s size=%s",
+        GetTooltipDebugLabel(tooltip),
         tooltip and tooltip.IsShown and tooltip:IsShown() and "true" or "false",
         tooltip and tooltip.NumLines and tooltip:NumLines() or 0,
         owner and (owner.GetName and owner:GetName() or tostring(owner)) or "nil",

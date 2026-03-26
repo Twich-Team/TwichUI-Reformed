@@ -2093,7 +2093,10 @@ function CDT:Refresh()
     local choresModule = GetChoresModule()
     local state = choresModule and choresModule:GetState() or nil
     if not state or not state.enabled then
-        self.panel.text:SetText(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Chores: Off"))
+        local nextText = T.Tools.Text.Color(T.Tools.Colors.GRAY, "Chores: Off")
+        local previousText = self.panel.text:GetText()
+        self.panel.text:SetText(nextText)
+        DataTextModule:MaybeFlashPanel(self.panel, "chores", previousText, nextText)
         if self.trackerFrame and self.trackerFrame:IsShown() then
             self:RenderTrackerFrame()
         end
@@ -2103,7 +2106,10 @@ function CDT:Refresh()
     local count = state.totalRemaining or 0
     if count == 0 then
         local doneR, doneG, doneB = GetDoneValueColor()
-        self.panel.text:SetText("Chores " .. T.Tools.Text.ColorRGB(doneR, doneG, doneB, "Done"))
+        local nextText = "Chores " .. T.Tools.Text.ColorRGB(doneR, doneG, doneB, "Done")
+        local previousText = self.panel.text:GetText()
+        self.panel.text:SetText(nextText)
+        DataTextModule:MaybeFlashPanel(self.panel, "chores", previousText, nextText)
         if self.trackerFrame and self.trackerFrame:IsShown() then
             self:RenderTrackerFrame()
         end
@@ -2112,14 +2118,20 @@ function CDT:Refresh()
 
     local r, g, b = GetValueColor()
     if r and g and b then
-        self.panel.text:SetText("Chores: " .. T.Tools.Text.ColorRGB(r, g, b, tostring(count)))
+        local nextText = "Chores: " .. T.Tools.Text.ColorRGB(r, g, b, tostring(count))
+        local previousText = self.panel.text:GetText()
+        self.panel.text:SetText(nextText)
+        DataTextModule:MaybeFlashPanel(self.panel, "chores", previousText, nextText)
         if self.trackerFrame and self.trackerFrame:IsShown() then
             self:RenderTrackerFrame()
         end
         return
     end
 
-    self.panel.text:SetText("Chores: " .. tostring(count))
+    local nextText = "Chores: " .. tostring(count)
+    local previousText = self.panel.text:GetText()
+    self.panel.text:SetText(nextText)
+    DataTextModule:MaybeFlashPanel(self.panel, "chores", previousText, nextText)
 
     if self.trackerFrame and self.trackerFrame:IsShown() then
         self:RenderTrackerFrame()

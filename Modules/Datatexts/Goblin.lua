@@ -116,7 +116,9 @@ function GDT:Refresh()
         display = T.Tools.Text.FormatCopperShort(copper)
     end
 
+    local previousText = self.panel.text:GetText()
     self.panel.text:SetText(display)
+    DatatextModule:MaybeFlashPanel(self.panel, "goblin", previousText, display)
 end
 
 function GDT:OnEvent(panel, event, ...)

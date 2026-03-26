@@ -34,7 +34,7 @@ local function GetMountsFromMountJournal()
         local creatureName, spellID, icon, _, _, _, _, _, _, _, isCollected, mountID =
             GetDisplayedMountInfo(displayIndex)
 
-        local isFavorite = GetIsFavorite(displayIndex) or false
+        local isFavorite = mountID and GetIsFavorite(mountID) or false
 
         if isCollected and mountID and creatureName and spellID then
             tinsert(entries, {

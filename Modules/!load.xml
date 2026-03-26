@@ -1,4 +1,5 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Include file='Theme\!load.xml' />
     <Include file='Media\!load.xml' />
     <Include file='Data\!load.xml' />
     <Include file='Notification\!load.xml' />

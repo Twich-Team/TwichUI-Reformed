@@ -4,6 +4,7 @@
 local TwichRx = _G.TwichRx
 ---@type TwichUI
 local T = unpack(TwichRx)
+local IsShiftKeyDown = _G.IsShiftKeyDown
 
 ---@type DataTextModule
 local DataTextModule = T:GetModule("Datatexts")
@@ -19,13 +20,20 @@ local function GetOptions()
     return DataTextModule.GetOptions()
 end
 
+---@class TeleportsModule
+---@field ToggleDatatextPopup fun(self: TeleportsModule, anchorFrame: Frame|nil)
+---@field BuildDatatextQuickCastSections fun(self: TeleportsModule): table
+
+---@return TeleportsModule|nil
 local function GetTeleportsModule()
     local qualityOfLife = T:GetModule("QualityOfLife", true)
     if not qualityOfLife then
         return nil
     end
 
-    return qualityOfLife:GetModule("Teleports", true)
+    ---@type TeleportsModule|nil
+    local teleports = qualityOfLife:GetModule("Teleports", true)
+    return teleports
 end
 
 local function GetHearthstoneDestination(itemID)
@@ -127,79 +135,8 @@ local function PortalOnClick(self, button)
     end
 end
 
-function PDT:GetMenuList()
-    if self.menuList and not self.flaggedForRebuild then
-        return self.menuList
-    end
-
-    local menuList = {}
-    self.menuList = menuList
-
-    tinsert(menuList, {
-        text = "Hearthstones",
-        isTitle = true,
-        notCheckable = true,
-    })
-    local Options = GetOptions()
-
-    local function AddHearthEntry(itemID)
-        if not itemID or itemID == 0 then
-            return
-        end
-
-        local name, icon
-
-        if C_ToyBox and C_ToyBox.GetToyInfo then
-            local _, toyName, toyIcon = C_ToyBox.GetToyInfo(itemID)
-            name = toyName or name
-            icon = toyIcon or icon
-        end
-
-        if (not name) and C_Item and C_Item.GetItemInfo then
-            local itemName, _, _, _, _, _, _, _, _, itemTexture = C_Item.GetItemInfo(itemID)
-            name = itemName or name
-            icon = itemTexture or icon
-        end
-
-        if not name then
-            return
-        end
-
-        local label = tostring(name)
-        if icon and T.Tools and T.Tools.Text and T.Tools.Text.Icon then
-            label = T.Tools.Text.Icon(icon) .. " " .. label
-        end
-
-        tinsert(menuList, {
-            text = label,
-            notCheckable = true,
-            func = function()
-                UseHearthstone(itemID)
-            end,
-        })
-    end
-
-    -- Favorite hearthstone (falls back to normal Hearthstone if none selected)
-    local favoriteHearthstone = Options.GetFavoriteHearthstone and (Options:GetFavoriteHearthstone() or 0) or 0
-    if favoriteHearthstone == 0 then
-        favoriteHearthstone = 6948 -- regular Hearthstone item
-    end
-    AddHearthEntry(favoriteHearthstone)
-
-    -- Dalaran Hearthstone toy
-    local dalaranHearthstoneID = 140192
-    AddHearthEntry(dalaranHearthstoneID)
-
-    -- Garrison Hearthstone item
-    local garrisonHearthstoneID = 110560
-    AddHearthEntry(garrisonHearthstoneID)
-
-
-    self.flaggedForRebuild = false
-    return menuList
-end
-
 function PDT:OnInitialize()
+    self.flaggedForRebuild = true
     self.definition = {
         name = "TwichUI: Portals",
         prettyName = "Portals",
@@ -364,6 +301,7 @@ function PDT:Refresh()
         r, g, b = Options:GetPortalsTextColor()
     end
 
+    self.flaggedForRebuild = true
     self.panel.text:SetText(T.Tools.Text.ColorRGB(r, g, b, "Portals"))
 
     -- Ensure the secure click button is configured after the label text is set,

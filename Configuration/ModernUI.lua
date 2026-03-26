@@ -72,10 +72,17 @@ local NAV_ITEMS = {
     },
     {
         id = "media",
-        title = "Theme and Media",
-        description = "Fonts, textures, and shared presentation settings.",
+        title = "Fonts & Media",
+        description = "Add supplemental fonts, textures, and sounds to other addons.",
         accent = { 0.95, 0.58, 0.76 },
         path = { "Media" },
+    },
+    {
+        id = "theme",
+        title = "Appearance",
+        description = "Shared color palette, surface opacity, and config sound profile.",
+        accent = { 0.10, 0.72, 0.74 },
+        path = { "Theme" },
     },
     {
         id = "bestInSlot",
@@ -114,7 +121,7 @@ local FEATURE_CARDS = {
             end
 
             local keybinding = options.GetTrackerFrameConfigKeybinding and options:GetTrackerFrameConfigKeybinding() or
-            ""
+                ""
             return ("Toggle: %s"):format(keybinding ~= "" and keybinding or "Not bound")
         end,
         actionLabel = "Preview",
@@ -320,7 +327,19 @@ local function SkinActionButton(button, color)
         self:SetBackdropColor(r * 0.32, g * 0.32, b * 0.32, 1)
     end)
     button:SetScript("OnMouseUp", function(self)
+        if self:IsMouseOver() then
+            self:SetBackdropColor(r * 0.30, g * 0.30, b * 0.30, 0.98)
+        else
+            self:SetBackdropColor(r * 0.22, g * 0.22, b * 0.22, 0.98)
+        end
+    end)
+    button:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(r * 0.30, g * 0.30, b * 0.30, 0.98)
+        self:SetBackdropBorderColor(r, g, b, 0.78)
+    end)
+    button:SetScript("OnLeave", function(self)
         self:SetBackdropColor(r * 0.22, g * 0.22, b * 0.22, 0.98)
+        self:SetBackdropBorderColor(r, g, b, 0.42)
     end)
 end
 
@@ -1329,7 +1348,7 @@ function UI:EnsureFrame()
     frame.HeroText:SetJustifyH("LEFT")
     frame.HeroText:SetTextColor(0.74, 0.76, 0.82)
     frame.HeroText:SetText(
-    "Use the left rail to move between systems, then use the top tabs inside each page for deeper areas. The new view renders its own controls and shuts down cleanly when hidden, so you do not keep the old Ace dialog tree alive in the background.")
+        "Use the left rail to move between systems, then use the top tabs inside each page for deeper areas. The new view renders its own controls and shuts down cleanly when hidden, so you do not keep the old Ace dialog tree alive in the background.")
 
     frame.HeroMeta = frame.Hero:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.HeroMeta:SetPoint("BOTTOMLEFT", frame.Hero, "BOTTOMLEFT", 18, 16)
@@ -1479,6 +1498,7 @@ function UI:RefreshSidebar()
             button.LeftAccent:SetColorTexture(accent[1], accent[2], accent[3], selected and 1 or 0)
             button.Title:SetTextColor(selected and 1 or 0.92, selected and 0.95 or 0.92, selected and 0.84 or 0.92)
             button:SetScript("OnMouseUp", function()
+                self:PlayThemeSound("navigate")
                 self:OpenPage(item.id, item.path)
             end)
             button:Show()
@@ -1575,6 +1595,44 @@ function UI:PlayConfiguredSound(soundKey)
 
     if soundPath and type(PlaySoundFile) == "function" then
         PlaySoundFile(soundPath, "Master")
+    end
+end
+
+--- Plays a themed UI interaction sound based on the current sound profile.
+--- event: "toggle_on" | "toggle_off" | "click" | "navigate"
+function UI:PlayThemeSound(event)
+    local theme = T:GetModule("Theme", true)
+    if not theme then return end
+    local db = theme:GetDB()
+    if db.uiSoundsEnabled == false then return end
+
+    local profile = db.soundProfile or "Subtle"
+    if profile == "None" then return end
+
+    local PlaySound = _G.PlaySound
+    local SOUNDKIT = _G.SOUNDKIT
+
+    if profile == "Subtle" then
+        -- Use built-in WoW UI sounds — perfectly calibrated for UI interactions.
+        if not PlaySound or not SOUNDKIT then return end
+        if event == "toggle_on" then
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON, "Master", false)
+        elseif event == "toggle_off" then
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_OFF, "Master", false)
+        elseif event == "click" then
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON, "Master", false)
+        elseif event == "navigate" then
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPEN, "Master", false)
+        end
+    elseif profile == "Standard" then
+        -- Use TwichUI's own registered sounds for a more distinct feel.
+        if event == "toggle_on" or event == "click" then
+            self:PlayConfiguredSound("Game-Ping")
+        elseif event == "toggle_off" then
+            self:PlayConfiguredSound("Game-Success")
+        elseif event == "navigate" then
+            self:PlayConfiguredSound("Ping")
+        end
     end
 end
 
@@ -1862,13 +1920,13 @@ local function GetChoresPreviewFontSettings()
 
     if datatextOptions then
         local headerFontKey = datatextOptions.GetChoresTooltipHeaderFont and datatextOptions:GetChoresTooltipHeaderFont() or
-        nil
+            nil
         local entryFontKey = datatextOptions.GetChoresTooltipEntryFont and datatextOptions:GetChoresTooltipEntryFont() or
-        nil
+            nil
         headerFontSize = datatextOptions.GetChoresTooltipHeaderFontSize and
-        datatextOptions:GetChoresTooltipHeaderFontSize() or 12
+            datatextOptions:GetChoresTooltipHeaderFontSize() or 12
         entryFontSize = datatextOptions.GetChoresTooltipEntryFontSize and datatextOptions:GetChoresTooltipEntryFontSize() or
-        11
+            11
 
         if LSM and headerFontKey and headerFontKey ~= "" then
             headerFont = LSM:Fetch("font", headerFontKey, true) or headerFont
@@ -2211,7 +2269,7 @@ local function PopulateChoresPreviewShell(shell)
     shell.Title:SetFont(fonts.headerFont, math.max(fonts.headerFontSize + 2, 12), "")
     shell.TitleStatus:SetFont(fonts.headerFont, math.max(fonts.headerFontSize - 1, 10), "")
     shell.TitleStatus:SetText(state and state.enabled and string.format("%d remaining", state.totalRemaining or 0) or
-    "Paused")
+        "Paused")
 
     local emptyText = GetChoresPreviewEmptyText(state, #sections)
     shell.EmptyText:SetShown(emptyText ~= nil)
@@ -2474,7 +2532,7 @@ function UI:RenderPreviewStrip(parent, y, path, width)
             selfPreview.elapsed = (selfPreview.elapsed or 0) + elapsed
             local previewRuntime = GetMythicPreviewRuntime()
             local previewAppearance = previewRuntime and previewRuntime.GetTrackerAppearance and
-            previewRuntime:GetTrackerAppearance() or appearance
+                previewRuntime:GetTrackerAppearance() or appearance
             if previewRuntime and previewRuntime.ApplyTrackerFrameStyle then
                 previewRuntime:ApplyTrackerFrameStyle(shell)
             end
@@ -2707,6 +2765,7 @@ function UI:RenderToggle(parent, y, width, option, path, key)
         if disabled then
             return
         end
+        self:PlayThemeSound(value and "toggle_off" or "toggle_on")
         ResolveOptionMethod(option, info, not value)
         self:RequestRenderCurrentPage()
     end)
@@ -2730,6 +2789,7 @@ function UI:RenderExecute(parent, y, width, option, path, key)
         if disabled then
             return
         end
+        self:PlayThemeSound("click")
         local handler = option.handler
         local func = option.func
         if type(func) == "function" then

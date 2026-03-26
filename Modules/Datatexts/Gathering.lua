@@ -116,16 +116,18 @@ local function OnUpdate(panel, elapsed)
     if opts and not opts:GetDatatextEnabled() then
         local disabledText = "|cffaaaaaa[Gathering]|r"
         if panel.__twichuiGatheringLastText ~= disabledText then
+            local previousText = panel.text:GetText()
             panel.text:SetText(disabledText)
+            DataTextModule:MaybeFlashPanel(panel, "gathering", previousText, disabledText)
             panel.__twichuiGatheringLastText = disabledText
         end
         return
     end
 
-    local mod   = GetGatheringModule()
-    local parts = panel.__twichuiGatheringParts or {}
+    local mod                     = GetGatheringModule()
+    local parts                   = panel.__twichuiGatheringParts or {}
     panel.__twichuiGatheringParts = parts
-    local count = 0
+    local count                   = 0
 
     local function PushPart(text)
         count = count + 1
@@ -169,7 +171,9 @@ local function OnUpdate(panel, elapsed)
     end
 
     if panel.__twichuiGatheringLastText ~= nextText then
+        local previousText = panel.text:GetText()
         panel.text:SetText(nextText)
+        DataTextModule:MaybeFlashPanel(panel, "gathering", previousText, nextText)
         panel.__twichuiGatheringLastText = nextText
     end
 end

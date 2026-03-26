@@ -17,6 +17,8 @@ local MAX_STANDALONE_PANELS = 8
 local MIN_STANDALONE_PANEL_WIDTH = 80
 local MAX_STANDALONE_PANEL_WIDTH = 4000
 
+-- Static structural defaults — non-color properties that don't derive from the theme.
+-- Color-keyed properties are overridden at resolve-time by GetThemeBasedDefaults().
 local DEFAULT_STANDALONE_STYLE = {
     font = "Friz Quadrata TT",
     fontSize = 12,
@@ -35,6 +37,10 @@ local DEFAULT_STANDALONE_STYLE = {
     accentColor = { 0.96, 0.76, 0.24, 1 },
     accentAlpha = 0.95,
     dividerAlpha = 0.28,
+    hoverGlowColor = { 0.96, 0.76, 0.24, 1 },
+    hoverGlowAlpha = 0.09,
+    hoverBarColor = { 0.96, 0.76, 0.24, 1 },
+    hoverBarAlpha = 0.92,
 }
 
 local function GetDatatextModule()
@@ -104,16 +110,38 @@ local function NormalizeStandalonePanel(panel, panelID, orderIndex)
     if panel.style ~= nil and type(panel.style) ~= "table" then
         panel.style = {}
     end
-    panel.width = math.min(MAX_STANDALONE_PANEL_WIDTH, math.max(MIN_STANDALONE_PANEL_WIDTH, tonumber(panel.width) or defaults.width))
+    panel.width = math.min(MAX_STANDALONE_PANEL_WIDTH,
+        math.max(MIN_STANDALONE_PANEL_WIDTH, tonumber(panel.width) or defaults.width))
     panel.height = math.min(80, math.max(20, tonumber(panel.height) or defaults.height))
     panel.segments = math.min(5, math.max(1, tonumber(panel.segments) or defaults.segments))
     panel.x = tonumber(panel.x) or defaults.x
     panel.y = tonumber(panel.y) or defaults.y
 end
 
+local function GetThemeBasedDefaults()
+    local theme = T:GetModule("Theme", true)
+    local base = CopyTable(DEFAULT_STANDALONE_STYLE)
+    if theme then
+        local ac             = theme:GetColor("accentColor")
+        local bg             = theme:GetColor("backgroundColor")
+        local bd             = theme:GetColor("borderColor")
+        base.accentColor     = { ac[1], ac[2], ac[3], 1 }
+        base.accentAlpha     = theme:Get("backgroundAlpha") and 0.95 or 0.95
+        base.backgroundColor = { bg[1], bg[2], bg[3], 1 }
+        base.backgroundAlpha = theme:Get("backgroundAlpha") or 0.94
+        base.borderColor     = { bd[1], bd[2], bd[3], 1 }
+        base.borderAlpha     = theme:Get("borderAlpha") or 0.9
+        -- Hover colors derive from accent by default
+        base.hoverGlowColor  = base.hoverGlowColor or base.accentColor
+        base.hoverBarColor   = base.hoverBarColor or base.accentColor
+    end
+    return base
+end
+
 function Options:GetResolvedStandaloneStyle(panelID)
     local standalone = self:GetStandaloneDB()
-    local resolved = CopyTable(standalone.style or DEFAULT_STANDALONE_STYLE)
+    local themeDefaults = GetThemeBasedDefaults()
+    local resolved = CopyTable(standalone.style or themeDefaults)
     local panel = type(panelID) == "string" and self:GetStandalonePanel(panelID) or nil
 
     if panel and panel.useStyleOverrides == true and type(panel.style) == "table" then
@@ -125,7 +153,7 @@ function Options:GetResolvedStandaloneStyle(panelID)
         end
     end
 
-    MergeDefaults(resolved, DEFAULT_STANDALONE_STYLE)
+    MergeDefaults(resolved, themeDefaults)
     return resolved
 end
 
@@ -161,7 +189,7 @@ function Options:GetStandaloneDB()
     if type(standalone.style) ~= "table" then
         standalone.style = {}
     end
-    MergeDefaults(standalone.style, DEFAULT_STANDALONE_STYLE)
+    MergeDefaults(standalone.style, GetThemeBasedDefaults())
 
     if type(standalone.panels) ~= "table" then
         standalone.panels = {}
@@ -466,6 +494,16 @@ end
 function Options:SetCurrenciesShowMax(info, value)
     local db = GetCurrenciesDB(self)
     db.showMax = value == true
+    SyncCurrencyDatatexts(false)
+end
+
+function Options:GetCurrenciesShowGoldInTooltip(info)
+    return GetCurrenciesDB(self).showGoldInTooltip ~= false
+end
+
+function Options:SetCurrenciesShowGoldInTooltip(info, value)
+    local db = GetCurrenciesDB(self)
+    db.showGoldInTooltip = value == true
     SyncCurrencyDatatexts(false)
 end
 
@@ -930,6 +968,32 @@ function Options:SetChoresTooltipEntryFontSize(info, value)
     db.tooltipEntryFontSize = value
     style.tooltipFontSize = value
     RefreshDatatext("TwichUI: Chores")
+end
+
+function Options:GetSharedHoverGlowColor(info)
+    local style = self:GetStandaloneDB().style
+    local c = style.hoverGlowColor or style.accentColor or { 0.96, 0.76, 0.24, 1 }
+    return c[1], c[2], c[3], style.hoverGlowAlpha or 0.09
+end
+
+function Options:SetSharedHoverGlowColor(info, r, g, b, a)
+    local style = self:GetStandaloneDB().style
+    style.hoverGlowColor = { r, g, b, 1 }
+    style.hoverGlowAlpha = a
+    RefreshStandalonePanels()
+end
+
+function Options:GetSharedHoverBarColor(info)
+    local style = self:GetStandaloneDB().style
+    local c = style.hoverBarColor or style.accentColor or { 0.96, 0.76, 0.24, 1 }
+    return c[1], c[2], c[3], style.hoverBarAlpha or 0.92
+end
+
+function Options:SetSharedHoverBarColor(info, r, g, b, a)
+    local style = self:GetStandaloneDB().style
+    style.hoverBarColor = { r, g, b, 1 }
+    style.hoverBarAlpha = a
+    RefreshStandalonePanels()
 end
 
 function Options:GetSharedTooltipFont(info)

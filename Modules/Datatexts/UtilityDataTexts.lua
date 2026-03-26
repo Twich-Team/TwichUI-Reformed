@@ -31,6 +31,8 @@ local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
 local GetTime = _G.GetTime
 local HasNewMail = _G.HasNewMail
+local C_Mail = _G.C_Mail
+local C_Timer = _G.C_Timer
 local IsControlKeyDown = _G.IsControlKeyDown
 local InCombatLockdown = _G.InCombatLockdown
 local IsShiftKeyDown = _G.IsShiftKeyDown
@@ -58,7 +60,8 @@ local TIMEMANAGER_TOOLTIP_LOCALTIME = _G.TIMEMANAGER_TOOLTIP_LOCALTIME or "Local
 local TIMEMANAGER_TOOLTIP_REALMTIME = _G.TIMEMANAGER_TOOLTIP_REALMTIME or "Realm Time"
 local UIParent = _G.UIParent
 local collectgarbage = collectgarbage
-local STARTER_BUILD_CONFIG_ID = _G.Constants and _G.Constants.TraitConsts and _G.Constants.TraitConsts.STARTER_BUILD_TRAIT_CONFIG_ID or nil
+local STARTER_BUILD_CONFIG_ID = _G.Constants and _G.Constants.TraitConsts and
+    _G.Constants.TraitConsts.STARTER_BUILD_TRAIT_CONFIG_ID or nil
 
 local UPDATE_FAST = 1
 local UPDATE_SLOW = 5
@@ -68,13 +71,13 @@ local SYSTEM_MEMORY_FRAME_WIDTH = 500
 local SYSTEM_MEMORY_FRAME_HEIGHT = 480
 local SYSTEM_MEMORY_ROW_HEIGHT = 20
 local DURABILITY_SLOTS = {
-    { id = 1, label = _G.INVTYPE_HEAD },
-    { id = 3, label = _G.INVTYPE_SHOULDER },
-    { id = 5, label = _G.INVTYPE_CHEST },
-    { id = 6, label = _G.INVTYPE_WAIST },
-    { id = 7, label = _G.INVTYPE_LEGS },
-    { id = 8, label = _G.INVTYPE_FEET },
-    { id = 9, label = _G.INVTYPE_WRIST },
+    { id = 1,  label = _G.INVTYPE_HEAD },
+    { id = 3,  label = _G.INVTYPE_SHOULDER },
+    { id = 5,  label = _G.INVTYPE_CHEST },
+    { id = 6,  label = _G.INVTYPE_WAIST },
+    { id = 7,  label = _G.INVTYPE_LEGS },
+    { id = 8,  label = _G.INVTYPE_FEET },
+    { id = 9,  label = _G.INVTYPE_WRIST },
     { id = 10, label = _G.INVTYPE_HAND },
     { id = 16, label = _G.INVTYPE_WEAPONMAINHAND },
     { id = 17, label = _G.INVTYPE_WEAPONOFFHAND },
@@ -131,14 +134,17 @@ local function SetPanelText(panel, text, key, defaultR, defaultG, defaultB, defa
         return
     end
 
+    local previousText = panel.text:GetText()
     panel.text:SetText(text or "")
     local r, g, b, a = GetColorOverride(key)
     if r then
         panel.text:SetTextColor(r, g, b, a or 1)
+        DataTextModule:MaybeFlashPanel(panel, key, previousText, text or "")
         return
     end
 
     panel.text:SetTextColor(defaultR or 1, defaultG or 1, defaultB or 1, defaultA or 1)
+    DataTextModule:MaybeFlashPanel(panel, key, previousText, text or "")
 end
 
 local function AddTooltipHintLine(tooltip, text)
@@ -281,7 +287,7 @@ local function GetActiveLoadoutName(currentSpecInfo)
     end
 
     if not (C_ClassTalents and type(C_ClassTalents.GetLastSelectedSavedConfigID) == "function" and C_Traits and
-        type(C_Traits.GetConfigInfo) == "function") then
+            type(C_Traits.GetConfigInfo) == "function") then
         return nil
     end
 
@@ -494,7 +500,8 @@ local function BuildSpecMenuList()
                     return currentSpec and currentSpec.index == specIndex
                 end,
                 func = function()
-                    local setSpec = (C_SpecializationInfo and C_SpecializationInfo.SetSpecialization) or _G.SetSpecialization
+                    local setSpec = (C_SpecializationInfo and C_SpecializationInfo.SetSpecialization) or
+                        _G.SetSpecialization
                     if type(setSpec) == "function" then
                         setSpec(specIndex)
                     end
@@ -511,7 +518,8 @@ local function BuildLootSpecMenuList()
     local menuList = {
         { text = _G.SELECT_LOOT_SPECIALIZATION or "Loot Specialization", isTitle = true, notCheckable = true },
         {
-            text = currentSpec and format(_G.LOOT_SPECIALIZATION_DEFAULT or "Default (%s)", currentSpec.name) or "Default",
+            text = currentSpec and format(_G.LOOT_SPECIALIZATION_DEFAULT or "Default (%s)", currentSpec.name) or
+                "Default",
             checked = function()
                 return type(GetLootSpecialization) == "function" and (GetLootSpecialization() or 0) == 0
             end,
@@ -550,17 +558,17 @@ local function SetSpecializationPanelText(panel)
 end
 
 
-    local function FormatMemoryUsage(value)
-        local memory = tonumber(value) or 0
-        if memory >= 1024 then
-            if memory >= 10240 then
-                return format("%.1f MB", memory / 1024)
-            end
-            return format("%.2f MB", memory / 1024)
+local function FormatMemoryUsage(value)
+    local memory = tonumber(value) or 0
+    if memory >= 1024 then
+        if memory >= 10240 then
+            return format("%.1f MB", memory / 1024)
         end
-
-        return format("%.0f KB", memory)
+        return format("%.2f MB", memory / 1024)
     end
+
+    return format("%.0f KB", memory)
+end
 local function GetTimeParts(useLocal, showSeconds)
     local hour, minute, second
     if useLocal then
@@ -1148,11 +1156,15 @@ local function MailSettings()
 end
 
 local function SetMailPanelText(panel)
-    local hasMail = HasNewMail and HasNewMail() or false
+    -- C_Mail.HasNewMail is available in newer WoW builds; fall back to global HasNewMail
+    local hasMail = (C_Mail and C_Mail.HasNewMail and C_Mail.HasNewMail())
+        or (HasNewMail and HasNewMail())
+        or false
     local settings = MailSettings()
     local label
     if settings.iconOnly then
-        label = hasMail and T.Tools.Text.Color(T.Tools.Colors.WARNING, "Mail") or T.Tools.Text.Color(T.Tools.Colors.GRAY, "Mail")
+        label = hasMail and T.Tools.Text.Color(T.Tools.Colors.WARNING, "Mail") or
+            T.Tools.Text.Color(T.Tools.Colors.GRAY, "Mail")
     else
         label = hasMail and "New Mail" or "Mail"
     end
@@ -1325,6 +1337,9 @@ local function GetCurrencyDB()
     if db.showMax == nil then
         db.showMax = true
     end
+    if db.showGoldInTooltip == nil then
+        db.showGoldInTooltip = true
+    end
     return db
 end
 
@@ -1361,7 +1376,10 @@ local function CurrencyDisplayText(currencyID, style, showMax)
     end
 
     if showMax and type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
-        text = text .. T.Tools.Text.Color(T.Tools.Colors.GRAY, format(" / %s", BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity)))
+        text = text ..
+            T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                format(" / %s",
+                    BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity)))
     end
 
     return text, info
@@ -1409,7 +1427,8 @@ function CurrencyDT:SyncCustomDatatexts()
 
                     local icon = settings.showIcon ~= false and info.iconFileID and
                         (T.Tools.Text.Icon(tostring(info.iconFileID)) .. " ") or ""
-                    local quantity = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or tostring(info.quantity or 0)
+                    local quantity = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or
+                        tostring(info.quantity or 0)
                     local nameStyle = settings.nameStyle or "abbr"
                     local text
                     if nameStyle == "none" then
@@ -1421,7 +1440,9 @@ function CurrencyDT:SyncCustomDatatexts()
 
                     if settings.showMax ~= false and type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
                         text = text .. T.Tools.Text.Color(T.Tools.Colors.GRAY,
-                            format(" / %s", BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity)))
+                            format(" / %s",
+                                BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or
+                                tostring(info.maxQuantity)))
                     end
 
                     SetPanelText(panel, text, "currencies")
@@ -1511,7 +1532,8 @@ function CurrencyDT:OnEnter()
         if info then
             shownCurrencyIDs[currencyID] = true
             local icon = info.iconFileID and T.Tools.Text.Icon(tostring(info.iconFileID)) or ""
-            local rightText = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or tostring(info.quantity or 0)
+            local rightText = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or
+                tostring(info.quantity or 0)
             if db.showMax and type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
                 rightText = format("%s / %s", rightText,
                     BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity))
@@ -1526,7 +1548,8 @@ function CurrencyDT:OnEnter()
             local info = GetCurrencyInfoByID(numericCurrencyID)
             if info then
                 local icon = info.iconFileID and T.Tools.Text.Icon(tostring(info.iconFileID)) or ""
-                local rightText = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or tostring(info.quantity or 0)
+                local rightText = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or
+                    tostring(info.quantity or 0)
                 if settings.showMax ~= false and type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
                     rightText = format("%s / %s", rightText,
                         BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity))
@@ -1540,7 +1563,9 @@ function CurrencyDT:OnEnter()
         tooltip:AddLine(" ")
     end
 
-    tooltip:AddDoubleLine("Gold", T.Tools.Text.FormatCopper(_G.GetMoney and _G.GetMoney() or 0), 1, 1, 1, 1, 1, 1)
+    if db.showGoldInTooltip ~= false then
+        tooltip:AddDoubleLine("Gold", T.Tools.Text.FormatCopper(_G.GetMoney and _G.GetMoney() or 0), 1, 1, 1, 1, 1, 1)
+    end
     AddTooltipHintLine(tooltip, "Click: Open currencies")
     DataTextModule:ShowDatatextTooltip(tooltip)
 end
@@ -1596,7 +1621,8 @@ function TimeDT:OnUpdate(panel, elapsed)
         return
     end
     panel.__twichuiTimeUpdate = 0
-    SetPanelText(panel, FormatClockText(settings.localTime, settings.twentyFourHour, settings.showSeconds, settings.showAmPm), "time")
+    SetPanelText(panel,
+        FormatClockText(settings.localTime, settings.twentyFourHour, settings.showSeconds, settings.showAmPm), "time")
 end
 
 function TimeDT:OnClick(_, button)
@@ -1624,7 +1650,8 @@ function TimeDT:OnEnter()
     tooltip:AddDoubleLine(settings.localTime and TIMEMANAGER_TOOLTIP_LOCALTIME or TIMEMANAGER_TOOLTIP_REALMTIME,
         FormatClockText(settings.localTime, settings.twentyFourHour, true, settings.showAmPm), 1, 1, 1, 1, 1, 1)
     tooltip:AddDoubleLine(settings.localTime and TIMEMANAGER_TOOLTIP_REALMTIME or TIMEMANAGER_TOOLTIP_LOCALTIME,
-        FormatClockText(not settings.localTime, settings.twentyFourHour, true, settings.showAmPm), 0.75, 0.78, 0.84, 1, 1, 1)
+        FormatClockText(not settings.localTime, settings.twentyFourHour, true, settings.showAmPm), 0.75, 0.78, 0.84, 1, 1,
+        1)
 
     if settings.showDailyReset and C_DateAndTime and type(C_DateAndTime.GetSecondsUntilDailyReset) == "function" then
         local resetText = ToResetText(C_DateAndTime.GetSecondsUntilDailyReset())
@@ -1721,15 +1748,18 @@ function SpecializationDT:OnEnter()
             local info = GetSpecInfoByIndex(specIndex)
             if info then
                 local marker = (currentSpec.index == specIndex) and
-                    T.Tools.Text.ColorRGB(0.4, 0.86, 0.52, "Active") or T.Tools.Text.Color(T.Tools.Colors.GRAY, "Inactive")
-                tooltip:AddDoubleLine((info.icon and (IconText(info.icon, 14) .. " ") or "") .. info.name, marker, 1, 1, 1, 1,
+                    T.Tools.Text.ColorRGB(0.4, 0.86, 0.52, "Active") or
+                    T.Tools.Text.Color(T.Tools.Colors.GRAY, "Inactive")
+                tooltip:AddDoubleLine((info.icon and (IconText(info.icon, 14) .. " ") or "") .. info.name, marker, 1, 1,
+                    1, 1,
                     1, 1)
             end
         end
 
         tooltip:AddLine(" ")
         tooltip:AddDoubleLine("Talent Spec", currentSpec.name, 1, 1, 1, 1, 1, 1)
-        tooltip:AddDoubleLine("Loot Spec", isDefaultLoot and format(_G.LOOT_SPECIALIZATION_DEFAULT or "Default (%s)", currentSpec.name) or
+        tooltip:AddDoubleLine("Loot Spec",
+            isDefaultLoot and format(_G.LOOT_SPECIALIZATION_DEFAULT or "Default (%s)", currentSpec.name) or
             (lootSpec and lootSpec.name or "Unknown"), 1, 1, 1, 1, 1, 1)
         if type(loadoutName) == "string" and loadoutName ~= "" then
             tooltip:AddDoubleLine("Loadout", loadoutName, 1, 1, 1, 1, 1, 1)
@@ -1956,8 +1986,16 @@ end
 ---@class MailDataText : AceModule
 local MailDT = DataTextModule:NewModule("MailDataText")
 
-function MailDT:OnEvent(panel)
+function MailDT:OnEvent(panel, event)
     SetMailPanelText(panel)
+    -- UPDATE_PENDING_MAIL fires when the server notifies new mail is incoming, but
+    -- HasNewMail() may not reflect the new state until the next frame. Re-check once
+    -- after a short delay to catch that case.
+    if event == "UPDATE_PENDING_MAIL" and C_Timer and C_Timer.After then
+        C_Timer.After(0.1, function()
+            SetMailPanelText(panel)
+        end)
+    end
 end
 
 function MailDT:OnEnter()
@@ -1967,7 +2005,9 @@ function MailDT:OnEnter()
     end
 
     tooltip:ClearLines()
-    local hasMail = HasNewMail and HasNewMail() or false
+    local hasMail = (C_Mail and C_Mail.HasNewMail and C_Mail.HasNewMail())
+        or (HasNewMail and HasNewMail())
+        or false
     tooltip:AddLine(hasMail and "New Mail" or "Mail")
 
     local senders = { GetLatestThreeSenders() }

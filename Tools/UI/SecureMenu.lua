@@ -9,6 +9,7 @@ local Tools = T.Tools
 ---@class UISecure
 local UI = Tools.UI or {}
 Tools.UI = UI
+local DebugConsole = UI.DebugConsole or nil
 
 local _G = _G
 local tinsert = tinsert
@@ -31,6 +32,14 @@ local MENU_FADE_IN_DURATION = 0.08
 local MENU_FADE_OUT_DURATION = 0.07
 local TOOLTIP_OFFSET = 8
 local TOOLTIP_EDGE_PADDING = 16
+
+local function LogSecureMenuDebug(message, ...)
+    if not (DebugConsole and DebugConsole.Logf) then
+        return
+    end
+
+    pcall(DebugConsole.Logf, DebugConsole, "datatexts", false, "SecureMenu: " .. message, ...)
+end
 
 local function ProcessPendingMacros()
     if #pendingMacros == 0 then
@@ -258,7 +267,8 @@ local function GetMenuTypography(menu)
         fontPath = LSM:Fetch("font", fontName, true) or STANDARD_TEXT_FONT
     end
 
-    return fontPath, math.max(8, math.min(20, tonumber(style and style.menuFontSize) or tonumber(style and style.fontSize) or 12)),
+    return fontPath,
+        math.max(8, math.min(20, tonumber(style and style.menuFontSize) or tonumber(style and style.fontSize) or 12)),
         style and style.fontOutline == true and "OUTLINE" or ""
 end
 
@@ -279,7 +289,8 @@ local function CreateRow(menu, index)
     end
 
     button:EnableMouse(true)
-    button:RegisterForClicks("LeftButtonUp")
+    button:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonDown", "RightButtonUp")
+    button:SetAttribute("pressAndHoldAction", true)
     SkinBackdrop(button)
 
     local label = button:CreateFontString(nil, "OVERLAY")
@@ -354,6 +365,17 @@ local function CreateRow(menu, index)
 
     button:SetScript("PostClick", function(self)
         local entry = self.__twichuiEntry
+        LogSecureMenuDebug("PostClick text=%s type=%s type1=%s macro=%s macro1=%s item=%s item1=%s spell=%s spell1=%s",
+            entry and entry.text or "<nil>",
+            tostring(self:GetAttribute("type")),
+            tostring(self:GetAttribute("type1")),
+            tostring(self:GetAttribute("macrotext")),
+            tostring(self:GetAttribute("macrotext1")),
+            tostring(self:GetAttribute("item")),
+            tostring(self:GetAttribute("item1")),
+            tostring(self:GetAttribute("spell")),
+            tostring(self:GetAttribute("spell1")))
+
         if entry and type(entry.func) == "function" and not entry.disabled and not entry.isTitle then
             entry.func(self)
         end
@@ -438,7 +460,8 @@ function UI.CreateSecureMenu(key)
                 local rowWidth = tonumber(entry.width) or 0
                 if rowWidth <= 0 then
                     local indicatorWidth = (row.__twichuiIndicator and row.__twichuiIndicator:IsShown()) and 28 or 0
-                    local labelWidth = row.__twichuiLabel and row.__twichuiLabel.GetStringWidth and row.__twichuiLabel:GetStringWidth() or 0
+                    local labelWidth = row.__twichuiLabel and row.__twichuiLabel.GetStringWidth and
+                        row.__twichuiLabel:GetStringWidth() or 0
                     rowWidth = labelWidth + indicatorWidth + 28
                 end
 
@@ -488,21 +511,39 @@ function UI.CreateSecureMenu(key)
 
                 -- Clear previous attributes
                 row:SetAttribute("type", nil)
+                row:SetAttribute("type1", nil)
                 row:SetAttribute("item", nil)
+                row:SetAttribute("item1", nil)
                 row:SetAttribute("spell", nil)
+                row:SetAttribute("spell1", nil)
                 row:SetAttribute("macrotext", nil)
+                row:SetAttribute("macrotext1", nil)
 
                 -- Set secure attributes based on entry type
                 if entry.item then
                     row:SetAttribute("type", "item")
+                    row:SetAttribute("type1", "item")
                     row:SetAttribute("item", entry.item)
+                    row:SetAttribute("item1", entry.item)
                 elseif entry.spell then
                     row:SetAttribute("type", "spell")
+                    row:SetAttribute("type1", "spell")
                     row:SetAttribute("spell", entry.spell)
+                    row:SetAttribute("spell1", entry.spell)
                 elseif entry.macrotext then
                     row:SetAttribute("type", "macro")
+                    row:SetAttribute("type1", "macro")
                     row:SetAttribute("macrotext", entry.macrotext)
+                    row:SetAttribute("macrotext1", entry.macrotext)
                 end
+
+                LogSecureMenuDebug("Bind entry text=%s type=%s macro=%s item=%s spell=%s disabled=%s",
+                    tostring(entry.text),
+                    tostring(row:GetAttribute("type1") or row:GetAttribute("type")),
+                    tostring(row:GetAttribute("macrotext1") or row:GetAttribute("macrotext")),
+                    tostring(row:GetAttribute("item1") or row:GetAttribute("item")),
+                    tostring(row:GetAttribute("spell1") or row:GetAttribute("spell")),
+                    tostring(entry.disabled == true))
 
                 if entry.isTitle then
                     local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop()
@@ -706,19 +747,34 @@ local function ShowSecureDropdown(entries, anchor)
         table.insert(menu, info)
     end
     -- Ensure Blizzard's UIDropDownMenu is loaded (modern WoW API)
-    if not EasyMenu then
+    if not _G.EasyMenu then
         local loaded = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Blizzard_UIDropDownMenu")
-        if not loaded then
-            if C_AddOns and C_AddOns.LoadAddOn then
-                local loadedNow = C_AddOns.LoadAddOn("Blizzard_UIDropDownMenu")
-                if not loadedNow and not C_AddOns.IsAddOnLoaded("Blizzard_UIDropDownMenu") then
-                    return
-                end
-            else
-                return
-            end
+        if not loaded and C_AddOns and C_AddOns.LoadAddOn then
+            C_AddOns.LoadAddOn("Blizzard_UIDropDownMenu")
         end
     end
-    EasyMenu(menu, dropdown, anchor or UIParent, "cursor", 0, 0, "MENU")
+    if _G.EasyMenu then
+        _G.EasyMenu(menu, dropdown, anchor or UIParent, 0, 0, "MENU")
+    elseif _G.MenuUtil and _G.MenuUtil.CreateContextMenu then
+        -- Dragonflight+ / WoW 10.0+ fallback: use the new context-menu API.
+        _G.MenuUtil.CreateContextMenu(anchor or UIParent, function(_, rootDescription)
+            for _, entry in ipairs(entries) do
+                local e = entry
+                if e.isTitle then
+                    rootDescription:CreateTitle(e.text or "")
+                elseif e.disabled then
+                    local btn = rootDescription:CreateButton(e.text or "")
+                    if btn and btn.SetEnabled then btn:SetEnabled(false) end
+                else
+                    rootDescription:CreateButton(e.text or "", function()
+                        if type(e.func) == "function" then
+                            e.func()
+                        end
+                        PlayMenuClickSound()
+                    end)
+                end
+            end
+        end)
+    end
 end
 UI.ShowSecureDropdown = ShowSecureDropdown

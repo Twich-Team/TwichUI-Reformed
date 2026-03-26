@@ -1,3 +1,4 @@
+---@diagnostic disable: undefined-field
 --[[
     Configuration for chat enhancements.
 ]]
@@ -9,12 +10,55 @@ local DEFAULT_SOUND = "TwichUI Chat Ping"
 
 ---@type ConfigurationModule
 local ConfigurationModule = T:GetModule("Configuration")
+local Widgets = ConfigurationModule.Widgets
 
 --- @type ChatEnhancementConfigurationOptions
 local Options = ConfigurationModule.Options.ChatEnhancement
 
 local function BuildChatEnhancementConfiguration()
     local channelSectionOrder = 0
+    ---@type ChatAlertsModule
+    local chatAlertsModule = T:GetModule("ChatEnhancements"):GetModule("ChatAlerts")
+
+    local function SetAbbreviationValue(key, value)
+        Options:SetAbbreviation(key, value)
+    end
+
+    local function GetAbbreviationValue(key)
+        return Options:GetAbbreviation(key)
+    end
+
+    local function CreateAbbreviationInput(order, label, key, description)
+        return {
+            type = "input",
+            name = label,
+            desc = description,
+            order = order,
+            width = "half",
+            get = function()
+                return GetAbbreviationValue(key)
+            end,
+            set = function(_, value)
+                SetAbbreviationValue(key, value)
+            end,
+        }
+    end
+
+    local function CreateChannelColorOption(order, label, key, description)
+        return {
+            type = "color",
+            name = label,
+            desc = description,
+            order = order,
+            width = "half",
+            get = function()
+                return Options:GetChannelColor(key)
+            end,
+            set = function(_, r, g, b)
+                Options:SetChannelColor(key, r, g, b)
+            end,
+        }
+    end
 
     local function CreateChannelConfigurationSection(channelInfo)
         channelSectionOrder = channelSectionOrder + 1
@@ -48,14 +92,7 @@ local function BuildChatEnhancementConfiguration()
                         Options:GetChatEnhancementDB()[channelInfo.name .. "ChatAlertEnabled"] =
                             value
 
-                        ---@type ChatAlertsModule
-                        local ChatAlertsModule = T:GetModule("ChatEnhancements"):GetModule("ChatAlerts")
-
-                        if value then
-                            ChatAlertsModule:RefreshEvents()
-                        else
-                            ChatAlertsModule:RefreshEvents()
-                        end
+                        chatAlertsModule:RefreshEvents()
                     end,
                 },
                 soundSelector = {
@@ -99,28 +136,689 @@ local function BuildChatEnhancementConfiguration()
             set = function(info, value)
                 Options:GetChatEnhancementDB()[channelInfo.name .. "KeywordMonitoring"] = value
 
-                ---@type ChatAlertsModule
-                local ChatAlertsModule = T:GetModule("ChatEnhancements"):GetModule("ChatAlerts")
-                ChatAlertsModule:RefreshKeywords()
+                chatAlertsModule:RefreshKeywords()
             end
         }
     end
 
-    local optionsTab = ConfigurationModule.Widgets.NewConfigurationSection(20, "Chat")
+    local optionsTab = Widgets.NewConfigurationSection(20, "Chat")
 
 
     optionsTab.args = {
-        title = ConfigurationModule.Widgets.TitleWidget(0, "Chat Enhancements"),
+        title = Widgets.TitleWidget(0, "Chat Module"),
         desc = {
             type = "description",
             name =
-            "Provides various enhancements to the chat interface.",
+            "TwichUI-owned chat chrome and message rendering with configurable accents, channel colors, fades, routing, and focused alerts.",
             order = 1,
         },
-        experimentalTab = {
+        visualsGroup = {
+            type = "group",
+            name = "Visuals",
+            order = 2,
+            inline = true,
+            args = {
+                enableStyling = {
+                    type = "toggle",
+                    name = "Enable Styling",
+                    desc = "Apply TwichUI formatting to Blizzard chat frames.",
+                    order = 1,
+                    width = "half",
+                    handler = Options,
+                    get = "IsStylingEnabled",
+                    set = "SetStylingEnabled",
+                },
+                timestampsEnabled = {
+                    type = "toggle",
+                    name = "Left Timestamps",
+                    desc = "Show a compact timestamp before each message.",
+                    order = 2,
+                    width = "half",
+                    handler = Options,
+                    get = "AreTimestampsEnabled",
+                    set = "SetTimestampsEnabled",
+                },
+                timestampFormat = {
+                    type = "select",
+                    name = "Timestamp Format",
+                    desc = "Choose the timestamp format used in chat.",
+                    order = 3,
+                    width = "half",
+                    handler = Options,
+                    get = "GetTimestampFormat",
+                    set = "SetTimestampFormat",
+                    values = {
+                        ["%H:%M"] = "24h, minutes",
+                        ["%H:%M:%S"] = "24h, seconds",
+                        ["%I:%M %p"] = "12h, minutes",
+                    },
+                },
+                accentBar = {
+                    type = "toggle",
+                    name = "Accent Separator",
+                    desc = "Add a colored separator before each message for a cleaner left edge.",
+                    order = 4,
+                    width = "half",
+                    handler = Options,
+                    get = "ShouldShowAccentBar",
+                    set = "SetShowAccentBar",
+                },
+                chatFont = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Chat Font",
+                    desc = "Font used for chat lines and the edit box.",
+                    order = 5,
+                    width = "half",
+                    handler = Options,
+                    get = "GetChatFont",
+                    set = "SetChatFont",
+                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("font") or {} end,
+                },
+                chatFontSize = {
+                    type = "range",
+                    name = "Chat Font Size",
+                    desc = "Font size used for chat lines and the edit box.",
+                    order = 6,
+                    width = "half",
+                    min = 10,
+                    max = 20,
+                    step = 1,
+                    handler = Options,
+                    get = "GetChatFontSize",
+                    set = "SetChatFontSize",
+                },
+                tabFont = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Tab Font",
+                    desc = "Font used for the bespoke TwichUI tab bar.",
+                    order = 7,
+                    width = "half",
+                    handler = Options,
+                    get = "GetTabFont",
+                    set = "SetTabFont",
+                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("font") or {} end,
+                },
+                tabFontSize = {
+                    type = "range",
+                    name = "Tab Font Size",
+                    desc = "Font size used for the bespoke TwichUI tab bar.",
+                    order = 8,
+                    width = "half",
+                    min = 10,
+                    max = 18,
+                    step = 1,
+                    handler = Options,
+                    get = "GetTabFontSize",
+                    set = "SetTabFontSize",
+                },
+                animationsEnabled = {
+                    type = "toggle",
+                    name = "Animations",
+                    desc = "Enable tab and control-strip fades for the bespoke chat shell.",
+                    order = 9,
+                    width = "half",
+                    handler = Options,
+                    get = "AreAnimationsEnabled",
+                    set = "SetAnimationsEnabled",
+                },
+                shellAccent = {
+                    type = "color",
+                    name = "Shell Accent",
+                    desc = "Primary accent used for tabs, borders, scroll chrome, and shell highlights.",
+                    order = 10,
+                    width = "half",
+                    handler = Options,
+                    get = "GetShellAccentColor",
+                    set = "SetShellAccentColor",
+                },
+                messageFadesEnabled = {
+                    type = "toggle",
+                    name = "Fade Messages",
+                    desc = "Fade old messages when the view is resting at the bottom.",
+                    order = 11,
+                    width = "half",
+                    handler = Options,
+                    get = "AreMessageFadesEnabled",
+                    set = "SetMessageFadesEnabled",
+                },
+                messageFadeDelay = {
+                    type = "range",
+                    name = "Fade Delay",
+                    desc = "Seconds to wait before old messages begin fading.",
+                    order = 12,
+                    width = "half",
+                    min = 10,
+                    max = 300,
+                    step = 1,
+                    handler = Options,
+                    get = "GetMessageFadeDelay",
+                    set = "SetMessageFadeDelay",
+                },
+                messageFadeDuration = {
+                    type = "range",
+                    name = "Fade Duration",
+                    desc = "Seconds the fade-out should take once it starts.",
+                    order = 13,
+                    width = "half",
+                    min = 1,
+                    max = 20,
+                    step = 1,
+                    handler = Options,
+                    get = "GetMessageFadeDuration",
+                    set = "SetMessageFadeDuration",
+                },
+                rowGap = {
+                    type = "range",
+                    name = "Message Gap",
+                    desc = "Vertical spacing between rendered chat entries.",
+                    order = 14,
+                    width = "half",
+                    min = 2,
+                    max = 20,
+                    step = 1,
+                    handler = Options,
+                    get = "GetRowGap",
+                    set = "SetRowGap",
+                },
+                timestampWidth = {
+                    type = "range",
+                    name = "Timestamp Width",
+                    desc = "Width of the timestamp column on the left edge.",
+                    order = 15,
+                    width = "half",
+                    min = 36,
+                    max = 120,
+                    step = 2,
+                    handler = Options,
+                    get = "GetTimestampWidth",
+                    set = "SetTimestampWidth",
+                },
+                preview = {
+                    type = "description",
+                    name = T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                        "Preview: [12:34] | [G] Twich: Pull in 10"),
+                    order = 16,
+                    width = "full",
+                },
+                note = {
+                    type = "description",
+                    name = T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                        "The renderer, shell, and controls are TwichUI-owned. Tune spacing, timestamps, and color here, then use the debug console when runtime behavior needs investigation."),
+                    order = 17,
+                    width = "full",
+                },
+                messageFadeMinAlpha = {
+                    type = "range",
+                    name = "Fade Min Alpha",
+                    desc = "The minimum opacity messages fade down to after the fade delay passes. 0 = fully invisible, 1 = fully opaque.",
+                    order = 18,
+                    width = "half",
+                    min = 0.0,
+                    max = 1.0,
+                    step = 0.05,
+                    handler = Options,
+                    get = "GetMessageFadeMinAlpha",
+                    set = "SetMessageFadeMinAlpha",
+                },
+                hideHeader = {
+                    type = "toggle",
+                    name = "Hide Header",
+                    desc = "Remove the header bar entirely so messages extend to the top edge of the frame.",
+                    order = 19,
+                    width = "half",
+                    handler = Options,
+                    get = "IsHeaderHidden",
+                    set = "SetHeaderHidden",
+                },
+                headerBgColor = {
+                    type = "color",
+                    name = "Header Background",
+                    desc = "Background fill of the header area behind the tab bar and control strip. Set alpha to 0 to hide it entirely.",
+                    order = 20,
+                    width = "half",
+                    hasAlpha = true,
+                    handler = Options,
+                    get = "GetHeaderBgColor",
+                    set = "SetHeaderBgColor",
+                },
+                chatLocked = {
+                    type = "toggle",
+                    name = "Lock Chat",
+                    desc = "Prevent the chat frame from being moved or resized and hide the drag and resize handles.",
+                    order = 1,
+                    width = "half",
+                    handler = Options,
+                    get = "IsChatLocked",
+                    set = "SetChatLocked",
+                },
+                positionNote = {
+                    type = "description",
+                    name = "Position Override — enter exact pixel coordinates to snap the chat frame to a precise location regardless of how WoW normally places it. 0, 0 = bottom-left of screen. Leave blank to let WoW manage position.",
+                    order = 20.1,
+                    width = "full",
+                },
+                positionX = {
+                    type = "input",
+                    name = "Position X",
+                    desc = "Horizontal offset in pixels from the left edge of the screen (BOTTOMLEFT anchor).",
+                    order = 20.2,
+                    width = "half",
+                    handler = Options,
+                    get = "GetChatPositionXStr",
+                    set = "SetChatPositionX",
+                },
+                positionY = {
+                    type = "input",
+                    name = "Position Y",
+                    desc = "Vertical offset in pixels from the bottom edge of the screen.",
+                    order = 20.3,
+                    width = "half",
+                    handler = Options,
+                    get = "GetChatPositionYStr",
+                    set = "SetChatPositionY",
+                },
+                positionCapture = {
+                    type = "execute",
+                    name = "Capture Current Position",
+                    desc = "Read the chat frame's current on-screen position and save it as the override.",
+                    order = 20.4,
+                    width = "half",
+                    func = function()
+                        local stylingModule = TwichUI_Redux:GetModule("ChatEnhancements", true)
+                            and TwichUI_Redux:GetModule("ChatEnhancements"):GetModule("ChatStyling", true)
+                        local x, y = stylingModule and stylingModule:CaptureCurrentPosition()
+                        if x and y then
+                            Options:SetChatPositionX(nil, x)
+                            Options:SetChatPositionY(nil, y)
+                        end
+                    end,
+                },
+                positionClear = {
+                    type = "execute",
+                    name = "Clear Override",
+                    desc = "Remove the position override and let WoW position the frame normally.",
+                    order = 20.5,
+                    width = "half",
+                    func = function()
+                        Options:ClearChatPosition()
+                    end,
+                },
+            },
+        },
+        tabsGroup = {
+            type = "group",
+            name = "Tabs",
+            order = 7,
+            inline = true,
+            args = {
+                tabStyle = {
+                    type = "select",
+                    name = "Tab Style",
+                    desc = "Visual style for chat tabs. Solid renders filled pill buttons; Transparent renders text-only with an accent underline.",
+                    order = 1,
+                    width = "half",
+                    handler = Options,
+                    get = "GetTabStyle",
+                    set = "SetTabStyle",
+                    values = {
+                        solid = "Solid",
+                        transparent = "Transparent",
+                        unified = "Unified",
+                    },
+                },
+                tabBgColor = {
+                    type = "color",
+                    name = "Tab Background",
+                    desc = "Base fill color for inactive tab buttons (solid style only).",
+                    order = 2,
+                    width = "half",
+                    handler = Options,
+                    get = "GetTabBgColor",
+                    set = "SetTabBgColor",
+                },
+                tabNameFade = {
+                    type = "toggle",
+                    name = "Fade Tab Names",
+                    desc = "Dim tab label text when the tab is not selected or hovered.",
+                    order = 1.5,
+                    width = "half",
+                    handler = Options,
+                    get = "IsTabNameFadeEnabled",
+                    set = "SetTabNameFadeEnabled",
+                },
+                tabBorderColor = {
+                    type = "color",
+                    name = "Tab Border",
+                    desc = "Border and hover accent color for tab buttons (solid style only).",
+                    order = 3,
+                    width = "half",
+                    handler = Options,
+                    get = "GetTabBorderColor",
+                    set = "SetTabBorderColor",
+                },
+                tabAccentColor = {
+                    type = "color",
+                    name = "Tab Accent",
+                    desc = "Accent bar color shown on the selected tab and in transparent underline mode.",
+                    order = 4,
+                    width = "half",
+                    handler = Options,
+                    get = "GetTabAccentColor",
+                    set = "SetTabAccentColor",
+                },
+            },
+        },
+        editBoxGroup = {
+            type = "group",
+            name = "Edit Box",
+            order = 8,
+            inline = true,
+            args = {
+                editBoxPosition = {
+                    type = "select",
+                    name = "Position",
+                    desc = "Whether the edit box sits above or below the chat frame.",
+                    order = 1,
+                    width = "half",
+                    handler = Options,
+                    get = "GetEditBoxPosition",
+                    set = "SetEditBoxPosition",
+                    values = {
+                        below = "Below (default)",
+                        above = "Above",
+                    },
+                },
+                editBoxHeight = {
+                    type = "range",
+                    name = "Height",
+                    desc = "Height of the chat input box in pixels. Width always matches the chat frame.",
+                    order = 2,
+                    width = "half",
+                    min = 20,
+                    max = 60,
+                    step = 1,
+                    handler = Options,
+                    get = "GetEditBoxHeight",
+                    set = "SetEditBoxHeight",
+                },
+                editBoxBgColor = {
+                    type = "color",
+                    name = "Background",
+                    desc = "Fill color and opacity of the edit box background.",
+                    order = 3,
+                    width = "half",
+                    hasAlpha = true,
+                    handler = Options,
+                    get = "GetEditBoxBgColor",
+                    set = "SetEditBoxBgColor",
+                },
+                editBoxPaddingH = {
+                    type = "range",
+                    name = "Horizontal Padding",
+                    desc = "Left and right text inset inside the edit box.",
+                    order = 4,
+                    width = "half",
+                    min = 2,
+                    max = 24,
+                    step = 1,
+                    handler = Options,
+                    get = "GetEditBoxPaddingH",
+                    set = "SetEditBoxPaddingH",
+                },
+                editBoxPaddingV = {
+                    type = "range",
+                    name = "Vertical Padding",
+                    desc = "Top and bottom text inset inside the edit box.",
+                    order = 5,
+                    width = "half",
+                    min = 0,
+                    max = 12,
+                    step = 1,
+                    handler = Options,
+                    get = "GetEditBoxPaddingV",
+                    set = "SetEditBoxPaddingV",
+                },
+                editBoxFont = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Font",
+                    desc = "Font used in the chat edit box. Leave blank to inherit the chat font.",
+                    order = 6,
+                    width = "half",
+                    handler = Options,
+                    get = "GetEditBoxFont",
+                    set = "SetEditBoxFont",
+                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("font") or {} end,
+                },
+                editBoxFontSize = {
+                    type = "range",
+                    name = "Font Size",
+                    desc = "Font size for the chat edit box. 0 inherits the chat font size.",
+                    order = 7,
+                    width = "half",
+                    min = 0,
+                    max = 20,
+                    step = 1,
+                    handler = Options,
+                    get = "GetEditBoxFontSize",
+                    set = "SetEditBoxFontSize",
+                },
+            },
+        },
+        controlsGroup = {
+            type = "group",
+            name = "Controls",
+            order = 3,
+            inline = true,
+            args = {
+                voiceButton = {
+                    type = "toggle",
+                    name = "Enable Voice Button",
+                    order = 1,
+                    width = "half",
+                    get = function()
+                        return Options:IsControlButtonEnabled("voice")
+                    end,
+                    set = function(_, value)
+                        Options:SetControlButtonEnabled("voice", value)
+                    end,
+                },
+                copyButton = {
+                    type = "toggle",
+                    name = "Enable Copy Button",
+                    order = 2,
+                    width = "half",
+                    get = function()
+                        return Options:IsControlButtonEnabled("copy")
+                    end,
+                    set = function(_, value)
+                        Options:SetControlButtonEnabled("copy", value)
+                    end,
+                },
+                menuButton = {
+                    type = "toggle",
+                    name = "Enable Menu Button",
+                    order = 3,
+                    width = "half",
+                    get = function()
+                        return Options:IsControlButtonEnabled("menu")
+                    end,
+                    set = function(_, value)
+                        Options:SetControlButtonEnabled("menu", value)
+                    end,
+                },
+                addonRedirect = {
+                    type = "toggle",
+                    name = "Redirect Addon Output",
+                    desc = "Suppress CHAT_MSG_ADDON traffic from appearing in your main chat and route it into a chat window named \"AddOns\". Create that window first via the + tab button and name it AddOns, then enable this.",
+                    order = 4,
+                    width = "half",
+                    handler = Options,
+                    get = "IsAddonRedirectEnabled",
+                    set = "SetAddonRedirectEnabled",
+                },
+            },
+        },
+        debugGroup = {
+            type = "group",
+            name = "Debugging",
+            order = 4,
+            inline = true,
+            args = {
+                description = {
+                    type = "description",
+                    name = "Capture optional chat renderer and shell diagnostics in the shared /tui debug console. Leave this disabled during normal play to avoid extra logging overhead.",
+                    order = 1,
+                    width = "full",
+                },
+                enableDebug = {
+                    type = "toggle",
+                    name = "Enable Debug Capture",
+                    desc = "Record chat tab, layout, drag, and scroll diagnostics in the shared TwichUI debug console.",
+                    order = 2,
+                    width = "half",
+                    disabled = function()
+                        return not Options:IsStylingEnabled()
+                    end,
+                    handler = Options,
+                    get = "GetDebugEnabled",
+                    set = "SetDebugEnabled",
+                },
+                openDebug = {
+                    type = "execute",
+                    name = "Open Debug Console",
+                    desc = "Open the shared TwichUI debug console focused on chat.",
+                    order = 3,
+                    width = "half",
+                    handler = Options,
+                    func = "OpenDebugConsole",
+                },
+            },
+        },
+        channelColorsGroup = {
+            type = "group",
+            name = "Channel Colors",
+            order = 5,
+            childGroups = "tab",
+            args = {
+                openWorld = {
+                    type = "group",
+                    name = "Open World",
+                    order = 1,
+                    args = {
+                        generalColor = CreateChannelColorOption(1, "General", "general",
+                            "Color used for General and World chat."),
+                        tradeColor = CreateChannelColorOption(2, "Trade", "trade", "Color used for Trade chat."),
+                        defenseColor = CreateChannelColorOption(3, "Local Defense", "localDefense",
+                            "Color used for Local Defense chat."),
+                        lfgColor = CreateChannelColorOption(4, "Looking For Group", "lookingForGroup",
+                            "Color used for Looking For Group chat."),
+                        servicesColor = CreateChannelColorOption(5, "Services", "services",
+                            "Color used for Services chat."),
+                        newcomerColor = CreateChannelColorOption(6, "Newcomer", "newcomer",
+                            "Color used for Newcomer chat."),
+                    },
+                },
+                groups = {
+                    type = "group",
+                    name = "Groups",
+                    order = 2,
+                    args = {
+                        guildColor = CreateChannelColorOption(1, "Guild", "guild",
+                            "Color used for guild chat and matching edit-box accents."),
+                        officerColor = CreateChannelColorOption(2, "Officer", "officer", "Color used for officer chat."),
+                        partyColor = CreateChannelColorOption(3, "Party", "party", "Color used for party chat."),
+                        partyLeaderColor = CreateChannelColorOption(4, "Party Leader", "partyLeader",
+                            "Color used for party leader chat."),
+                        raidColor = CreateChannelColorOption(5, "Raid", "raid", "Color used for raid chat."),
+                        raidLeaderColor = CreateChannelColorOption(6, "Raid Leader", "raidLeader",
+                            "Color used for raid leader chat."),
+                        instanceColor = CreateChannelColorOption(7, "Instance", "instance",
+                            "Color used for instance chat."),
+                        instanceLeaderColor = CreateChannelColorOption(8, "Instance Leader", "instanceLeader",
+                            "Color used for instance leader chat."),
+                    },
+                },
+                private = {
+                    type = "group",
+                    name = "Private",
+                    order = 3,
+                    args = {
+                        whisperColor = CreateChannelColorOption(1, "Whisper", "whisper",
+                            "Color used for whispers and tells."),
+                        addonColor = CreateChannelColorOption(2, "Addon Output", "addon",
+                            "Color used for redirected addon output."),
+                    },
+                },
+            },
+        },
+        abbreviationsGroup = {
+            type = "group",
+            name = "Abbreviations",
+            order = 6,
+            childGroups = "tab",
+            args = {
+                general = {
+                    type = "group",
+                    name = "Open World",
+                    order = 1,
+                    args = {
+                        enableAbbreviations = {
+                            type = "toggle",
+                            name = "Enable",
+                            desc = "Replace long chat channel labels with shorter versions.",
+                            order = 1,
+                            width = "half",
+                            handler = Options,
+                            get = "AreAbbreviationsEnabled",
+                            set = "SetAbbreviationsEnabled",
+                        },
+                        help = {
+                            type = "description",
+                            name = T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                                "Leave a field empty to fall back to TwichUI's default abbreviation."),
+                            order = 2,
+                            width = "full",
+                        },
+                        generalInput = CreateAbbreviationInput(3, "General", "general", "Used for General / World chat."),
+                        tradeInput = CreateAbbreviationInput(4, "Trade", "trade", "Used for Trade chat."),
+                        defenseInput = CreateAbbreviationInput(5, "Local Defense", "localDefense",
+                            "Used for Local Defense chat."),
+                        lfgInput = CreateAbbreviationInput(6, "Looking For Group", "lookingForGroup",
+                            "Used for Looking For Group chat."),
+                        servicesInput = CreateAbbreviationInput(7, "Services", "services",
+                            "Used for Services chat."),
+                        newcomerInput = CreateAbbreviationInput(8, "Newcomer", "newcomer",
+                            "Used for Newcomer chat."),
+                    },
+                },
+                group = {
+                    type = "group",
+                    name = "Groups",
+                    order = 2,
+                    args = {
+                        guildInput = CreateAbbreviationInput(1, "Guild", "guild", "Used for guild chat."),
+                        officerInput = CreateAbbreviationInput(2, "Officer", "officer", "Used for officer chat."),
+                        partyInput = CreateAbbreviationInput(3, "Party", "party", "Used for party chat."),
+                        partyLeaderInput = CreateAbbreviationInput(4, "Party Leader", "partyLeader",
+                            "Used for party leader chat."),
+                        raidInput = CreateAbbreviationInput(5, "Raid", "raid", "Used for raid chat."),
+                        raidLeaderInput = CreateAbbreviationInput(6, "Raid Leader", "raidLeader",
+                            "Used for raid leader chat."),
+                        instanceInput = CreateAbbreviationInput(7, "Instance", "instance",
+                            "Used for instance chat."),
+                        instanceLeaderInput = CreateAbbreviationInput(8, "Instance Leader", "instanceLeader",
+                            "Used for instance leader chat."),
+                    },
+                },
+            },
+        },
+        alertsGroup = {
             type = "group",
             name = "Alerts",
-            order = 2,
+            order = 6,
             childGroups = "tree",
             args = {
                 enable = {
@@ -147,7 +845,7 @@ local function BuildChatEnhancementConfiguration()
                 desc = {
                     type = "description",
                     name =
-                    "Configure alerts for various chat events.",
+                    "Channel and keyword-driven alerts inspired by the lower-overhead parts of ElvUI's chat tooling.",
                     order = 3,
                 },
                 wordsChatGroup = {
@@ -208,6 +906,26 @@ local function BuildChatEnhancementConfiguration()
                             order = 3,
                             width = "full",
                         },
+                        keywordHighlightEnabled = {
+                            type = "toggle",
+                            name = "Highlight Keyword Rows",
+                            desc = "Visually highlight chat rows whose message matches one of your keywords.",
+                            order = 3.5,
+                            width = "half",
+                            handler = Options,
+                            get = "IsKeywordHighlightEnabled",
+                            set = "SetKeywordHighlightEnabled",
+                        },
+                        keywordHighlightColor = {
+                            type = "color",
+                            name = "Highlight Color",
+                            desc = "Color used for the row tint and accent bar on keyword-matched messages.",
+                            order = 3.6,
+                            width = "half",
+                            handler = Options,
+                            get = "GetKeywordHighlightColor",
+                            set = "SetKeywordHighlightColor",
+                        },
                         monitoredChannelsGroup = {
                             type = "group",
                             name = "Monitored Channels",
@@ -216,8 +934,7 @@ local function BuildChatEnhancementConfiguration()
                             args = (function()
                                 local args = {}
 
-                                ---@type ChatAlertsModule
-                                for _, channel in pairs(T:GetModule("ChatEnhancements"):GetModule("ChatAlerts").SupportedChannels) do
+                                for _, channel in pairs(chatAlertsModule.SupportedChannels) do
                                     args[channel.name .. "Toggle"] = CreateChatChannelToggle(channel)
                                 end
                                 return args
@@ -226,11 +943,101 @@ local function BuildChatEnhancementConfiguration()
                     }
                 },
             }
-        }
+        },
+        routingGroup = {
+            type = "group",
+            name = "Routing",
+            order = 7,
+            inline = true,
+            args = {
+                whisperTabs = {
+                    type = "toggle",
+                    name = "Whisper Tabs",
+                    desc = "Automatically open a dedicated chat tab for each whisper sender so conversations stay grouped. Replies are mirrored there too.",
+                    order = 1,
+                    width = "half",
+                    handler = Options,
+                    get = "IsWhisperTabEnabled",
+                    set = "SetWhisperTabEnabled",
+                },
+                info = {
+                    type = "description",
+                    order = 2,
+                    width = "full",
+                    name =
+                    "Addon payload routing is now configurable from Controls. This section remains reserved for future per-window routing and capture rules.",
+                },
+            },
+        },
+        headerDatatextGroup = {
+            type = "group",
+            name = "Header Datatexts",
+            order = 8,
+            inline = true,
+            args = {
+                headerDatatextNote = {
+                    type = "description",
+                    order = 0,
+                    width = "full",
+                    name = "Display up to 3 datatext cells in the chat header area below the drag strip. Supports all datatexts registered in the Datatexts module.",
+                },
+                headerDatatextEnabled = {
+                    type = "toggle",
+                    name = "Enable Header Bar",
+                    desc = "Show a row of datatext cells inside the chat header.",
+                    order = 1,
+                    width = "half",
+                    handler = Options,
+                    get = "IsHeaderDatatextEnabled",
+                    set = "SetHeaderDatatextEnabled",
+                },
+                headerDatatextSlotCount = {
+                    type = "range",
+                    name = "Slot Count",
+                    desc = "Number of datatext cells to display (1-3).",
+                    order = 2,
+                    width = "half",
+                    min = 1, max = 3, step = 1,
+                    handler = Options,
+                    get = "GetHeaderDatatextSlotCount",
+                    set = "SetHeaderDatatextSlotCount",
+                },
+                headerDatatextSlot1 = {
+                    type = "select",
+                    name = "Slot 1",
+                    desc = "Datatext to display in the first slot.",
+                    order = 3,
+                    width = "half",
+                    values = function() return Options:GetHeaderDatatextChoices() end,
+                    get = function() return Options:GetHeaderDatatextSlot(1) end,
+                    set = function(_, value) Options:SetHeaderDatatextSlot(1, value) end,
+                },
+                headerDatatextSlot2 = {
+                    type = "select",
+                    name = "Slot 2",
+                    desc = "Datatext to display in the second slot.",
+                    order = 4,
+                    width = "half",
+                    values = function() return Options:GetHeaderDatatextChoices() end,
+                    get = function() return Options:GetHeaderDatatextSlot(2) end,
+                    set = function(_, value) Options:SetHeaderDatatextSlot(2, value) end,
+                },
+                headerDatatextSlot3 = {
+                    type = "select",
+                    name = "Slot 3",
+                    desc = "Datatext to display in the third slot.",
+                    order = 5,
+                    width = "half",
+                    values = function() return Options:GetHeaderDatatextChoices() end,
+                    get = function() return Options:GetHeaderDatatextSlot(3) end,
+                    set = function(_, value) Options:SetHeaderDatatextSlot(3, value) end,
+                },
+            },
+        },
     }
 
-    for _, channel in pairs(T:GetModule("ChatEnhancements"):GetModule("ChatAlerts").SupportedChannels) do
-        optionsTab.args.experimentalTab.args[channel.name .. "Group"] = CreateChannelConfigurationSection(channel)
+    for _, channel in pairs(chatAlertsModule.SupportedChannels) do
+        optionsTab.args.alertsGroup.args[channel.name .. "Group"] = CreateChannelConfigurationSection(channel)
     end
     return optionsTab
 end

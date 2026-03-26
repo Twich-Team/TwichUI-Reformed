@@ -395,12 +395,17 @@ function MPDT:Refresh()
     end
 
     if valueColorR and valueColorG and valueColorB then
-        self.panel.text:SetText("M+: " ..
-        T.Tools.Text.ColorRGB(valueColorR, valueColorG, valueColorB, FormatWholeNumber(score)))
+        local nextText = "M+: " .. T.Tools.Text.ColorRGB(valueColorR, valueColorG, valueColorB, FormatWholeNumber(score))
+        local previousText = self.panel.text:GetText()
+        self.panel.text:SetText(nextText)
+        DataTextModule:MaybeFlashPanel(self.panel, "mythicplus", previousText, nextText)
         return
     end
 
-    self.panel.text:SetText("M+: " .. FormatWholeNumber(score))
+    local nextText = "M+: " .. FormatWholeNumber(score)
+    local previousText = self.panel.text:GetText()
+    self.panel.text:SetText(nextText)
+    DataTextModule:MaybeFlashPanel(self.panel, "mythicplus", previousText, nextText)
 end
 
 function MPDT:OnEvent(panel, event)

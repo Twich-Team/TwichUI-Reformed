@@ -1,4 +1,6 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Include file='ChatEnhancementModule.lua' />
+    <Include file='ChatRenderer.lua' />
+    <Include file='ChatStyling.lua' />
     <Include file='ChatAlerts.lua' />
 </Ui>
