@@ -48,6 +48,13 @@ local CLASS_ICON_LABEL_OFFSET = 18  -- horizontal space reserved for the class i
 local BORDER = { 0.10, 0.72, 0.74 }
 local ACCENT = { 0.95, 0.76, 0.26 }
 local TEXT_MUTED = { 0.57, 0.66, 0.74 }
+
+local function PlayMenuSound(soundKey)
+    local uiTools = T.Tools and T.Tools.UI or nil
+    if uiTools and uiTools.PlayTwichSound then
+        uiTools.PlayTwichSound(soundKey)
+    end
+end
 local TEXT_ACTIVE = { 0.96, 0.93, 0.88 }
 local DebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole or nil
 
@@ -301,9 +308,11 @@ function ChatRendererModule:RefreshSettings()
         keywordHighlightColor = options:GetResolvedKeywordHighlightColor(),
         keywords = options:GetParsedKeywords(),
         headerDatatextEnabled = options:IsHeaderDatatextEnabled(),
+        msgBgColor = options:GetResolvedMsgBgColor(),
         showClassIcons = options:IsClassIconsEnabled(),
         classIconStyle = options:GetClassIconStyle(),
         tabStyle = options:GetTabStyle(),
+        routingRules = options:GetParsedRoutingRules(),
     }
 end
 
@@ -505,7 +514,10 @@ function ChatRendererModule:ResolveMessageChannelKey(message)
         end
     end
 
-    if message:find("|HBNplayer:", 1, true) or message:find("|Hplayer:", 1, true) then
+    -- BNet whispers use a distinct link type; keep them as whisper.
+    -- Do NOT map regular |Hplayer: to whisper — that hyperlink appears in SAY,
+    -- YELL, PARTY, etc. and would incorrectly colour all player messages pink.
+    if message:find("|HBNplayer:", 1, true) then
         return "whisper"
     end
 
@@ -543,12 +555,8 @@ function ChatRendererModule:UpdateRowOpacity(renderer, row, entry)
     -- restarts the fade-delay countdown each time they leave, so messages don't snap
     -- to faded state immediately after the pointer exits.  GetTime() is used for
     -- sub-second precision so alpha changes are smooth at any tick rate.
-    local age
-    if renderer.unhoveredAt then
-        age = GetTime() - renderer.unhoveredAt
-    else
-        age = GetTime() - (entry.entryTime or GetTime())
-    end
+    -- When unhoveredAt is not yet set (first time leaving), treat now as the base.
+    local age = GetTime() - (renderer.unhoveredAt or GetTime())
     local delay = self.settings.messageFadeDelay or 45
     local duration = mathMax(1, self.settings.messageFadeDuration or 6)
     if age <= delay then
@@ -602,28 +610,78 @@ function ChatRendererModule:GetAddonFrame()
     return nil
 end
 
-function ChatRendererModule:HandleAddonMessage(_, event, prefix, message, channel, sender)
+function ChatRendererModule:GetFrameByTabName(tabName)
+    if not tabName or tabName == "" then return nil end
+    local lower = tabName:lower()
+    for _, frameName in ipairs(CHAT_FRAMES or {}) do
+        local frame = _G[frameName]
+        local tab = frame and frame.GetName and _G[frame:GetName() .. "Tab"] or nil
+        local text = tab and tab.GetText and StripMarkup(tab:GetText()) or nil
+        if text and text:lower() == lower then
+            return frame
+        end
+    end
+    return nil
+end
+
+--- Returns the target frame for the first routing rule whose pattern matches
+--- the given message text.  Returns nil if no rule matches.
+function ChatRendererModule:ResolveRoutingTarget(message)
+    local rules = self.settings and self.settings.routingRules
+    if not rules or #rules == 0 then return nil end
+    local stripped = StripMarkup(message)
+    for _, rule in ipairs(rules) do
+        if stripped:find(rule.pattern, 1, true) then
+            local target = self:GetFrameByTabName(rule.tabName)
+            if not target then
+                print(string.format("|cff80dfff[TwichUI Routing]|r Pattern '%s' matched but tab '%s' not found.",
+                    rule.pattern, rule.tabName))
+            end
+            return target
+        end
+    end
+    return nil
+end
+
+function ChatRendererModule:HandleAddonMessage(chatFrame, event, prefix, message, channel, sender)
     if event ~= "CHAT_MSG_ADDON" or not self:IsEnabled() or not self.settings.addonRedirectEnabled then
         return false
     end
 
-    local frame = self:GetAddonFrame()
-    if not frame then
+    local addonFrame = self:GetAddonFrame()
+    if not addonFrame then
         return false
     end
+
+    -- Suppress Blizzard's own formatting on the AddOns frame; we push a
+    -- consistently-formatted version from the redirect below.
+    if chatFrame == addonFrame then
+        return true
+    end
+
+    -- ChatFrame_AddMessageEventFilter fires for EVERY chat frame registered
+    -- for the event. Deduplicate so only the first non-AddOns frame routes
+    -- the message (same C_Timer.After(0) cycle = same dispatch).
+    local dedupKey = tostring(prefix) .. "\0" .. tostring(channel) .. "\0" ..
+        tostring(sender) .. "\0" .. tostring(message)
+    if self._addonMsgDedupKey == dedupKey then
+        return true
+    end
+    self._addonMsgDedupKey = dedupKey
+    C_Timer.After(0, function()
+        if self._addonMsgDedupKey == dedupKey then
+            self._addonMsgDedupKey = nil
+        end
+    end)
 
     local color = self.settings.channelColors and self.settings.channelColors.addon or nil
     local r = color and color.r or 0.84
     local g = color and color.g or 0.62
     local b = color and color.b or 0.26
     local text = ("|cffd69f42[ADDON:%s]|r %s: %s"):format(prefix or "?", sender or "Unknown", message or "")
-    local addMessage = frame.TwichUIOriginalAddMessage or frame.AddMessage
-    if type(addMessage) == "function" then
-        addMessage(frame, text, r, g, b)
-        return true
-    end
-
-    return false
+    -- Route through the hooked AddMessage so the message enters our renderer.
+    addonFrame.AddMessage(addonFrame, text, r, g, b)
+    return true
 end
 
 function ChatRendererModule:IsFrameOwned(frame)
@@ -638,8 +696,15 @@ function ChatRendererModule:DecorateMessage(message)
     if self.settings.hideRealm then
         -- Strip the realm suffix from the display name inside |Hplayer:...|h[Name-Realm]|h
         -- while keeping the full qualified name in the hyperlink target intact.
+        -- Also ensure any |c color markup inside the display is properly closed with |r
+        -- so the class color does not bleed into subsequent message text.
         message = message:gsub("|Hplayer:([^|]+)|h%[([^%]]+)%]|h", function(target, display)
             local shortDisplay = display:match("^([^%-]+)") or display
+            -- If the display started a color escape and we stripped its |r terminator
+            -- when removing the realm suffix, re-append it so the color is closed.
+            if shortDisplay:find("|c", 1, true) and not shortDisplay:match("|r%s*$") then
+                shortDisplay = shortDisplay .. "|r"
+            end
             return string.format("|Hplayer:%s|h[%s]|h", target, shortDisplay)
         end)
     end
@@ -930,13 +995,13 @@ function ChatRendererModule:EnsureRow(renderer, index)
         selfRow.HoverFadeOut:Stop()
         local targetAlpha = 1
         if ChatRendererModule.settings.messageFadesEnabled and ChatRendererModule:IsAtBottom(renderer) then
-            local baseTime = renderer.unhoveredAt or nil
-            local age
-            if baseTime then
-                age = GetTime() - baseTime
-            else
-                age = GetTime() - (selfRow.entry and (selfRow.entry.entryTime or GetTime()) or GetTime())
+            -- The viewport/renderer OnLeave hooks set unhoveredAt, but they fire AFTER
+            -- row OnLeave.  Seed it here so old messages don't snap to fully faded state
+            -- before the viewport handler runs — the delay restarts from NOW on mouse-out.
+            if not renderer.unhoveredAt then
+                renderer.unhoveredAt = GetTime()
             end
+            local age = GetTime() - renderer.unhoveredAt
             local delay = ChatRendererModule.settings.messageFadeDelay or 45
             local duration = mathMax(1, ChatRendererModule.settings.messageFadeDuration or 6)
             local minAlpha = mathMax(0, mathMin(1, ChatRendererModule.settings.messageFadeMinAlpha or 0.55))
@@ -991,10 +1056,12 @@ function ChatRendererModule:EnsureRow(renderer, index)
     row:SetScript("OnHyperlinkClick", function(selfRow, link, text, button)
         selfRow._twichHyperlinkHandled = true
         local chatFrame = renderer:GetParent()
+        -- Use securecall to avoid propagating addon taint into Blizzard's
+        -- protected hyperlink handlers (e.g. CommunitiesHyperlink → GetLastTicketResponse).
         if _G.ChatFrame_OnHyperlinkShow then
-            _G.ChatFrame_OnHyperlinkShow(chatFrame or _G.ChatFrame1, link, text, button)
+            securecall("ChatFrame_OnHyperlinkShow", chatFrame or _G.ChatFrame1, link, text, button)
         elseif _G.SetItemRef then
-            _G.SetItemRef(link, text, button, chatFrame)
+            securecall("SetItemRef", link, text, button, chatFrame)
         end
     end)
 
@@ -1047,12 +1114,17 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
     row:SetPoint("TOPRIGHT", renderer.Content, "TOPRIGHT", 0, -entry.yOffset)
     row:SetHeight(entry.rowHeight)
 
+    local msgBg = self.settings.msgBgColor or {}
+    local mbR = msgBg.r or 0.03
+    local mbG = msgBg.g or 0.05
+    local mbB = msgBg.b or 0.07
+    local mbA = msgBg.a ~= nil and msgBg.a or 0.72
     SetVerticalGradient(row.Fill,
-        grouped and 0.03 or 0.06,
-        grouped and 0.05 or 0.08,
-        grouped and 0.07 or 0.10,
-        grouped and 0.52 or 0.84,
-        0.02, 0.03, 0.05, grouped and 0.52 or 0.84)
+        mathMin(1, mbR * (grouped and 1.0 or 2.0)),
+        mathMin(1, mbG * (grouped and 1.0 or 2.0)),
+        mathMin(1, mbB * (grouped and 1.0 or 2.0)),
+        mbA * (grouped and 0.62 or 1.0),
+        mbR * 0.65, mbG * 0.65, mbB * 0.65, mbA * (grouped and 0.62 or 1.0))
 
     -- Keyword match highlight: override the row background and accent bar with a warm tint.
     -- Also change the row border to the keyword color so it stands out more clearly.
@@ -1066,7 +1138,7 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
         row.Bar:SetColorTexture(hR, hG, hB, grouped and 0.6 or 1.0)
         row.Bar:Show()
     else
-        row:SetBackdropColor(0.03, 0.05, 0.07, grouped and 0.4 or 0.68)
+        row:SetBackdropColor(mbR, mbG, mbB, mbA * (grouped and 0.55 or 0.92))
         row:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.08)
         row.Bar:SetShown(self.settings.showAccentBar)
         row.Bar:SetColorTexture(accentR, accentG, accentB, grouped and 0.52 or 0.96)
@@ -1092,6 +1164,7 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
     row.Label:ClearAllPoints()
     local labelOffsetX = timestampWidth + 14
     local showIcon = self.settings.showClassIcons and entry.speakerKey ~= nil
+    local iconShown = false
     if showIcon then
         local classToken = self:GetSpeakerClassToken(entry.speakerKey)
         if classToken then
@@ -1105,18 +1178,22 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
                 TwichTextures:ApplyClassTexture(row.ClassIcon, classToken, ChatRendererModule.settings and ChatRendererModule.settings.classIconStyle)
                 row.ClassIcon:Show()
                 labelOffsetX = timestampWidth + 14 + CLASS_ICON_LABEL_OFFSET
+                iconShown = true
             else
                 row.ClassIcon:Hide()
             end
         else
+            -- Class not yet resolved for this sender; hide icon and use full width.
             row.ClassIcon:Hide()
-            labelOffsetX = timestampWidth + 14 + CLASS_ICON_LABEL_OFFSET
         end
     else
         row.ClassIcon:Hide()
     end
     row.Label:SetPoint("TOPLEFT", row, "TOPLEFT", labelOffsetX, -8)
-    row.Label:SetWidth(bodyWidth)
+    -- When an icon is shown the label starts CLASS_ICON_LABEL_OFFSET to the right;
+    -- shrink its width by the same amount so text doesn't overflow the row edge.
+    local effectiveLabelWidth = iconShown and mathMax(50, bodyWidth - CLASS_ICON_LABEL_OFFSET) or bodyWidth
+    row.Label:SetWidth(effectiveLabelWidth)
     ApplyResolvedFont(row.Label, self.settings.chatFont, self.settings.chatFontSize, entry.r, entry.g, entry.b, "")
     row.Label:SetText(entry.text or "")
     row.Label:SetTextColor(entry.r, entry.g, entry.b)
@@ -1145,8 +1222,9 @@ function ChatRendererModule:RelayoutRenderer(renderer)
 
     local timestampWidth = self.settings.timestampsEnabled and (self.settings.timestampWidth or DEFAULT_TIMESTAMP_WIDTH) or
     0
-    local classIconReserve = self.settings.showClassIcons and CLASS_ICON_LABEL_OFFSET or 0
-    local bodyWidth = mathMax(70, width - timestampWidth - 18 - classIconReserve)
+    -- bodyWidth is the shared content column width.  Class-icon space is handled
+    -- per-entry in RefreshRow so rows without a resolved icon don't have a blank gap.
+    local bodyWidth = mathMax(70, width - timestampWidth - 18)
     local offsetY = CONTENT_TOP_PADDING
     local previousEntry = nil
     local rowGap = self.settings.rowGap or DEFAULT_ROW_GAP
@@ -1385,8 +1463,12 @@ function ChatRendererModule:EnsureRenderer(frame)
     renderer.Viewport:HookScript("OnEnter", function()
         renderer.unhoveredAt = nil
         ChatRendererModule:RefreshAllRowOpacities(renderer)
-        -- Reveal scrollbar.
+        -- Cancel any pending fade-out timer and reveal scrollbar immediately.
         if renderer.ScrollTrack then
+            if renderer.ScrollTrack.__sbFadeOutTimer then
+                renderer.ScrollTrack.__sbFadeOutTimer:Cancel()
+                renderer.ScrollTrack.__sbFadeOutTimer = nil
+            end
             if renderer.ScrollTrack.__sbFadeOut then renderer.ScrollTrack.__sbFadeOut:Stop() end
             if renderer.ScrollTrack.__sbFadeIn and not renderer.ScrollTrack.__sbFadeIn:IsPlaying() then
                 renderer.ScrollTrack.__sbFadeIn:Play()
@@ -1405,12 +1487,20 @@ function ChatRendererModule:EnsureRenderer(frame)
         if renderer:IsMouseOver() then return end
         renderer.unhoveredAt = GetTime()
         ChatRendererModule:RefreshAllRowOpacities(renderer)
-        -- Fade out scrollbar when pointer leaves the viewport.
+        -- Schedule scrollbar fade-out after a 5-second idle delay.
         if renderer.ScrollTrack then
-            if renderer.ScrollTrack.__sbFadeIn then renderer.ScrollTrack.__sbFadeIn:Stop() end
-            if renderer.ScrollTrack.__sbFadeOut and not renderer.ScrollTrack.__sbFadeOut:IsPlaying() then
-                renderer.ScrollTrack.__sbFadeOut:Play()
+            if renderer.ScrollTrack.__sbFadeOutTimer then
+                renderer.ScrollTrack.__sbFadeOutTimer:Cancel()
+                renderer.ScrollTrack.__sbFadeOutTimer = nil
             end
+            renderer.ScrollTrack.__sbFadeOutTimer = C_Timer.NewTimer(5, function()
+                renderer.ScrollTrack.__sbFadeOutTimer = nil
+                if renderer:IsMouseOver() or (renderer.Viewport and renderer.Viewport:IsMouseOver()) then return end
+                if renderer.ScrollTrack.__sbFadeIn then renderer.ScrollTrack.__sbFadeIn:Stop() end
+                if renderer.ScrollTrack.__sbFadeOut and not renderer.ScrollTrack.__sbFadeOut:IsPlaying() then
+                    renderer.ScrollTrack.__sbFadeOut:Play()
+                end
+            end)
         end
         local stylingModule = GetStylingModule()
         if stylingModule and frame.TwichUIControlStrip then
@@ -1490,7 +1580,16 @@ function ChatRendererModule:ShowMessageContextMenu(row, entry)
 
     local playerTarget = ExtractPlayerTarget(entry.message)
     local shortName    = playerTarget and (playerTarget:match("^([^%-]+)") or playerTarget) or nil
-    local rawText      = entry.message and _G.string.gsub(entry.message, "|[cC]%x+", ""):gsub("|r", ""):gsub("|H[^|]+|h%[([^%]]*)%]|h", "%1"):gsub("|[TR][^|]+|", "") or ""
+    local rawText = ""
+    if entry.message then
+        rawText = entry.message
+        rawText = rawText:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|C%x%x%x%x%x%x%x%x%x%x", "")
+        rawText = rawText:gsub("|r", "")
+        rawText = rawText:gsub("|H[^|]+|h%[([^%]]*)%]|h", "%1")
+        rawText = rawText:gsub("|A.-|a", "")
+        rawText = rawText:gsub("|T.-|t", "")
+        rawText = rawText:gsub("|K.-|k", "")
+    end
 
     local entries = {}
 
@@ -1527,13 +1626,26 @@ function ChatRendererModule:ShowMessageContextMenu(row, entry)
         entries[#entries + 1] = {
             text = "Copy to Clipboard",
             func = function()
-                if _G.C_Clipboard and _G.C_Clipboard.SetText then
-                    _G.C_Clipboard.SetText(rawText)
+                PlayMenuSound("TwichUI-Menu-Confirm")
+                -- rawText is already markup-stripped; pass false to skip redundant stripping.
+                local ok, err = pcall(_G.CopyToClipboard, rawText, false)
+                if ok then
+                    print("|cff80dfff[TwichUI]|r Copied to clipboard (" .. #rawText .. " chars)")
+                else
+                    -- Fallback: open the copy frame pre-filled so the user can Ctrl+C.
+                    if err then
+                        print("|cffffaa44[TwichUI]|r CopyToClipboard failed: " .. tostring(err))
+                    end
+                    local stylingModule = GetStylingModule()
+                    if stylingModule and stylingModule.ShowRawTextCopyFrame then
+                        stylingModule:ShowRawTextCopyFrame(rawText)
+                    end
                 end
             end,
         }
     end
 
+    PlayMenuSound("TwichUI-Menu-Click")
     menu:SetEntries(entries)
     menu:Toggle(row, "TOPLEFT", "BOTTOMLEFT", 0, -4)
 end
@@ -1591,6 +1703,14 @@ function ChatRendererModule:HookChatFrame(frame)
 
     frame.AddMessage = function(chatFrame, message, red, green, blue, accessID, ...)
         if ChatRendererModule:IsEnabled() and chatFrame.TwichUICustomRenderer then
+            -- Keyword routing: if a routing rule matches and targets a different
+            -- frame, redirect the message there instead of the current frame.
+            local routeTarget = ChatRendererModule:ResolveRoutingTarget(message)
+            if routeTarget and routeTarget ~= chatFrame then
+                routeTarget.AddMessage(routeTarget, message, red, green, blue, accessID, ...)
+                return
+            end
+
             ChatRendererModule:PushMessage(chatFrame, message, red, green, blue, accessID)
             return
         end

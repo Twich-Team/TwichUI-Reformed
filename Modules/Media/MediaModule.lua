@@ -38,6 +38,8 @@ MediaModule.Sounds = {
     { name = "Game-Error",                   extension = "mp3" },
     { name = "TwichUI-Chat-Ping",            extension = "mp3" },
     { name = "TwichUI-Green-Dude-Gets-Loot", extension = "mp3" },
+    { name = "TwichUI-Menu-Click",           extension = "mp3" },
+    { name = "TwichUI-Menu-Confirm",         extension = "mp3" },
     { name = "TwichUI-Notification-1",       extension = "mp3" },
     { name = "TwichUI-Notification-2",       extension = "mp3" },
     { name = "TwichUI-Notification-3",       extension = "mp3" },

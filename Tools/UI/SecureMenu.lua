@@ -18,6 +18,7 @@ local type = type
 local tonumber = tonumber
 local InCombatLockdown = InCombatLockdown
 local PlaySound = _G.PlaySound
+local PlaySoundFile = _G.PlaySoundFile
 local SOUNDKIT = _G.SOUNDKIT
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
 local LibStub = _G.LibStub
@@ -107,8 +108,38 @@ local function SkinBackdrop(frame)
 end
 
 local function PlayMenuClickSound()
+    -- MediaLoader registers sounds with hyphens converted to spaces.
+    local path = LSM and LSM:Fetch("sound", "TwichUI Menu Click")
+    if path and type(PlaySoundFile) == "function" then
+        PlaySoundFile(path, "Master")
+        return
+    end
     if type(PlaySound) == "function" and SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON then
         PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+    end
+end
+
+local function PlayMenuConfirmSound()
+    -- MediaLoader registers sounds with hyphens converted to spaces.
+    local path = LSM and LSM:Fetch("sound", "TwichUI Menu Confirm")
+    if path and type(PlaySoundFile) == "function" then
+        PlaySoundFile(path, "Master")
+        return
+    end
+    if type(PlaySound) == "function" and SOUNDKIT and SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON then
+        PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+    end
+end
+
+--- Public helper so other modules can play TwichUI UI sounds by name.
+--- Normalizes hyphens to spaces to match how MediaLoader registers sounds with LSM.
+--- Falls back gracefully if the sound file is not yet registered.
+function UI.PlayTwichSound(name)
+    -- MediaLoader converts hyphens to spaces when registering; mirror that here.
+    local lsmName = name and name:gsub("-", " ") or name
+    local path = LSM and LSM:Fetch("sound", lsmName)
+    if path and type(PlaySoundFile) == "function" then
+        PlaySoundFile(path, "Master")
     end
 end
 

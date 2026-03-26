@@ -95,6 +95,7 @@ local DEFAULT_CONTROL_BUTTONS = {
 
 local CHANNEL_TYPE_TO_KEY = {
     CHANNEL = "general",
+    EMOTE = "emote",
     GUILD = "guild",
     INSTANCE_CHAT = "instance",
     INSTANCE_CHAT_LEADER = "instanceLeader",
@@ -102,10 +103,29 @@ local CHANNEL_TYPE_TO_KEY = {
     PARTY = "party",
     RAID = "raid",
     RAID_WARNING = "raidLeader",
-    SAY = "general",
+    SAY = "say",
     WHISPER = "whisper",
-    YELL = "general",
+    YELL = "yell",
 }
+
+-- Persistent tab utility context menu (same pattern as chatContextMenu in ChatRenderer).
+local chatTabMenu = nil
+local function GetChatTabMenu()
+    if not chatTabMenu then
+        chatTabMenu = T.Tools.UI.CreateSecureMenu("TwichUIChatTabMenu")
+    end
+    return chatTabMenu
+end
+
+-- Plays a registered TwichUI UI sound.
+-- "TwichUI-Menu-Click"    — subtle hover, open-menu, or navigation sounds.
+-- "TwichUI-Menu-Confirm"  — confirmations, selections, and action completions.
+local function PlayMenuSound(soundKey)
+    local uiTools = T.Tools and T.Tools.UI or nil
+    if uiTools and uiTools.PlayTwichSound then
+        uiTools.PlayTwichSound(soundKey)
+    end
+end
 
 local function NormalizeMatcher(value)
     if not value or value == "" then
@@ -483,6 +503,7 @@ function ChatStylingModule:RefreshSettings()
         chatBorderColor = options:GetResolvedChatBorderColor(),
         shellAccent = options:GetResolvedShellAccentColor(),
         showAccentBar = options:ShouldShowAccentBar(),
+        showChromeAccent = options:IsChromeAccentShown(),
         tabAccentColor = options:GetResolvedTabAccentColor(),
         tabBgColor = options:GetResolvedTabBgColor(),
         tabBorderColor = options:GetResolvedTabBorderColor(),
@@ -499,6 +520,7 @@ function ChatStylingModule:RefreshSettings()
         timestampsEnabled = options:AreTimestampsEnabled(),
         headerDatatext = options:GetHeaderDatatextSettings(),
     }
+    self:RefreshCopyFrame()
 end
 
 --- Applies a saved X/Y position and optional size override to ChatFrame1.
@@ -509,14 +531,32 @@ function ChatStylingModule:ApplyPositionOverride()
     local w, h = s.chatWidth, s.chatHeight
     local frame = _G.ChatFrame1
     if not frame then return end
-    if type(x) == "number" and type(y) == "number" then
+
+    local hasPos  = type(x) == "number" and type(y) == "number"
+    local hasSize = type(w) == "number" and type(h) == "number" and w > 50 and h > 50
+    if not hasPos and not hasSize then return end
+
+    -- SetUserPlaced / SetSize both require the frame to be movable/resizable.
+    -- The lock state is applied by ApplyFrameChrome; temporarily lift it here
+    -- so we can reposition / resize, then restore the original state.
+    local wasMovable   = frame:IsMovable()
+    local wasResizable = frame:IsResizable()
+    frame:SetMovable(true)
+    frame:SetResizable(true)
+
+    if hasPos then
         frame:ClearAllPoints()
         frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
         frame:SetUserPlaced(true)
     end
-    if type(w) == "number" and type(h) == "number" and w > 50 and h > 50 then
+    if hasSize then
         frame:SetSize(w, h)
     end
+
+    -- Restore whatever movable / resizable state the chrome set.
+    if not wasMovable   then frame:SetMovable(false)   end
+    if not wasResizable then frame:SetResizable(false) end
+
     -- Do NOT call FCF_SavePositionAndDimensions here: doing so would snapshot
     -- the frame's position at lifecycle-timer time into Blizzard's own storage,
     -- potentially overwriting a more recent drag-stop position with a stale value.
@@ -598,6 +638,7 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
     if not bar then return end
 
     local slotCount = math.max(1, math.min(3, tonumber(hdt.slotCount) or 1))
+    local slotWidth = math.max(32, math.min(200, tonumber(hdt.slotWidth) or HEADER_DATATEXT_SLOT_WIDTH))
     local frameLevel = frame:GetFrameLevel()
 
     -- ── Position, strata and level ──────────────────────────────────────────
@@ -605,7 +646,7 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
         -- Unified: right-aligned in the chrome area, same row as tabs.
         -- ProxyTabBar is TOOLTIP at max(frameLevel+30, 120); match that.
         local anchor   = frame.TwichUIChrome or frame
-        local barWidth = slotCount * HEADER_DATATEXT_SLOT_WIDTH + 8
+        local barWidth = slotCount * slotWidth + 8
         local barLevel = math.max(frameLevel + 30, 120)
         bar:ClearAllPoints()
         bar:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", -12, -4)
@@ -653,12 +694,22 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
         slot3 = slotCount >= 3 and (slots[3] ~= "NONE" and slots[3] or nil) or nil,
     }
     local accentR, accentG, accentB = self:GetShellAccentColor()
+    local hdtFontSize = hdt.fontSize or 11
+    local textR, textG, textB = 0.92, 0.94, 0.96
+    if hdt.useCustomTextColor and hdt.textColor then
+        textR = hdt.textColor.r or textR
+        textG = hdt.textColor.g or textG
+        textB = hdt.textColor.b or textB
+    end
     DataTextMod:RefreshEmbeddedBar(barID, panelDefinition, {
         font       = self.settings and self.settings.tabFont,
-        fontSize   = 11,
+        fontSize   = hdtFontSize,
         accentR    = accentR,
         accentG    = accentG,
         accentB    = accentB,
+        textR      = textR,
+        textG      = textG,
+        textB      = textB,
     })
 
     self:LogDebugf(true,
@@ -716,6 +767,18 @@ function ChatStylingModule:ResolveChannelKeyFromLabel(label)
 
     if cleanLabel:find("whisper", 1, true) or cleanLabel:find("tell", 1, true) then
         return "whisper"
+    end
+
+    if cleanLabel == "say" or cleanLabel:find("^say$") then
+        return "say"
+    end
+
+    if cleanLabel == "yell" or cleanLabel:find("^yell$") then
+        return "yell"
+    end
+
+    if cleanLabel == "emote" or cleanLabel:find("^emote$") then
+        return "emote"
     end
 
     if cleanLabel:find("party leader", 1, true) then
@@ -1009,39 +1072,91 @@ function ChatStylingModule:OpenTabContextMenu(frame)
     end
 end
 
+--- Toggles the voice chat panel using a robust fallback chain.
+--- Tries the standard Blizzard API, then known frame names, then the mute button.
+function ChatStylingModule:ToggleVoiceChat()
+    -- Modern API (Dragonflight / Midnight).
+    if type(_G.ToggleVoiceChatFrame) == "function" then
+        local ok = pcall(_G.ToggleVoiceChatFrame)
+        if ok then return end
+    end
+    -- Direct frame show/hide — different WoW builds use different names.
+    for _, name in ipairs({ "VoiceChatFrame", "VoiceChatPromptFrame" }) do
+        local vcf = _G[name]
+        if vcf and type(vcf.IsShown) == "function" then
+            if vcf:IsShown() then
+                vcf:Hide()
+            else
+                vcf:Show()
+            end
+            return
+        end
+    end
+    -- Last resort: delegate to the mute toggle button's click handler.
+    local btn = _G.ChatFrameToggleVoiceMuteButton
+    if btn and type(btn.GetScript) == "function" then
+        local onClick = btn:GetScript("OnClick")
+        if type(onClick) == "function" then
+            pcall(onClick, btn, "LeftButton")
+        end
+    end
+end
+
 function ChatStylingModule:OpenFrameUtilityMenu(frame, anchor)
     local uiTools = T.Tools and T.Tools.UI or nil
-    local showSecureDropdown = uiTools and uiTools.ShowSecureDropdown or nil
     local targetFrame = frame or self:GetManagedChatFrame()
-    if not targetFrame or type(showSecureDropdown) ~= "function" then
+    if not targetFrame then
         self:OpenTabContextMenu(targetFrame)
         return
     end
 
+    local menu = GetChatTabMenu()
+
     local entries = {
         {
             text = GetFrameDisplayText(targetFrame),
-            disabled = true,
-            notCheckable = true,
+            isTitle = true,
         },
         {
             text = "Copy Chat Text",
             notCheckable = true,
             func = function()
+                PlayMenuSound("TwichUI-Menu-Confirm")
                 self:OpenCopyFrame(targetFrame)
             end,
         },
         {
-            text = "Tab Configuration",
+            text = "Blizzard Configuration",
             notCheckable = true,
             func = function()
+                PlayMenuSound("TwichUI-Menu-Confirm")
                 self:OpenTabContextMenu(targetFrame)
+            end,
+        },
+        {
+            text = "Open Voice Chat",
+            notCheckable = true,
+            func = function()
+                PlayMenuSound("TwichUI-Menu-Confirm")
+                self:ToggleVoiceChat()
+            end,
+        },
+        {
+            text = "TwichUI Settings",
+            notCheckable = true,
+            func = function()
+                PlayMenuSound("TwichUI-Menu-Confirm")
+                local config = T:GetModule("Configuration", true)
+                if config and type(config.ToggleOptionsUI) == "function" then
+                    config:ToggleOptionsUI("Chat")
+                end
             end,
         },
         {
             text = "New Tab",
             notCheckable = true,
             func = function()
+                PlayMenuSound("TwichUI-Menu-Confirm")
                 self:CreateChatWindow()
             end,
         },
@@ -1050,12 +1165,14 @@ function ChatStylingModule:OpenFrameUtilityMenu(frame, anchor)
             notCheckable = true,
             disabled = targetFrame == DEFAULT_CHAT_FRAME,
             func = function()
+                PlayMenuSound("TwichUI-Menu-Confirm")
                 self:CloseChatWindow(targetFrame)
             end,
         },
     }
 
-    showSecureDropdown(entries, anchor or UIParent)
+    menu:SetEntries(entries)
+    menu:Toggle(anchor or UIParent)
 end
 
 function ChatStylingModule:CreateChatWindow()
@@ -1449,11 +1566,13 @@ function ChatStylingModule:ApplyFrameChrome(frame)
         local bdB = bd and bd.b or PRIMARY_BORDER[3]
         local bdA = bd and bd.a or 0.55
         frame.TwichUIChrome:SetBackdropBorderColor(bdR, bdG, bdB, bdA)
-        frame.TwichUIChrome.LeftAccent:SetColorTexture(accentR, accentG, accentB, 0.92)
+        local showChromeAccent = self.settings == nil or self.settings.showChromeAccent ~= false
+        frame.TwichUIChrome.LeftAccent:SetColorTexture(accentR, accentG, accentB, showChromeAccent and 0.92 or 0)
         if frame.TwichUIChrome.DragHint then
             frame.TwichUIChrome.DragHint:SetTextColor(accentR, accentG, accentB)
         end
-        SetVerticalGradient(frame.TwichUIChrome.BottomShade, 0, 0, 0, 0, accentR, accentG, accentB, 0.08)
+        SetVerticalGradient(frame.TwichUIChrome.BottomShade, 0, 0, 0, 0, accentR, accentG, accentB,
+            showChromeAccent and 0.08 or 0)
         if frame.TwichUIChrome.ResizeHandle then
             frame.TwichUIChrome.ResizeHandle:SetBackdropBorderColor(accentR, accentG, accentB, 0.2)
             frame.TwichUIChrome.ResizeHandle:SetShown(not locked)
@@ -1498,8 +1617,9 @@ function ChatStylingModule:ApplyFrameChrome(frame)
                 -- TopGlow is an ARTWORK-layer teal gradient that sits above HeaderArea.
                 -- When the header background is fully transparent it becomes the only visible
                 -- element in the header zone, so hide it together with the background.
+                -- Also hide it when the user has disabled the chrome accent entirely.
                 if frame.TwichUIChrome.TopGlow then
-                    frame.TwichUIChrome.TopGlow:SetShown(ha > 0.01)
+                    frame.TwichUIChrome.TopGlow:SetShown(showChromeAccent and ha > 0.01)
                 end
                 if frame.TwichUIChrome.DragHandle then
                     -- In non-unified with datatexts: shrink DragHandle to a 4px thin
@@ -1671,12 +1791,17 @@ function ChatStylingModule:ApplyEditBoxChrome()
             editBox:SetTextInsets(leftInset, pH, pV, pV)
         end
         if editBox.header then
-            ApplyResolvedFont(editBox.header, s.chatFont, max(11, (s.chatFontSize or 13) - 1),
+            -- Use the editbox font and size so the channel prefix matches the typed text.
+            local ebFont = s.editBoxFont or s.chatFont
+            local ebSize = (s.editBoxFontSize and s.editBoxFontSize > 0 and s.editBoxFontSize) or s.chatFontSize or 13
+            ApplyResolvedFont(editBox.header, ebFont, ebSize,
                 accentR, accentG, accentB, "")
         end
         if editBox.headerSuffix then
-            ApplyResolvedFont(editBox.headerSuffix, s.chatFont,
-                max(11, (s.chatFontSize or 13) - 1), TEXT_ACTIVE[1], TEXT_ACTIVE[2], TEXT_ACTIVE[3], "")
+            local ebFont = s.editBoxFont or s.chatFont
+            local ebSize = (s.editBoxFontSize and s.editBoxFontSize > 0 and s.editBoxFontSize) or s.chatFontSize or 13
+            ApplyResolvedFont(editBox.headerSuffix, ebFont, ebSize,
+                TEXT_ACTIVE[1], TEXT_ACTIVE[2], TEXT_ACTIVE[3], "")
         end
         self:ApplyChatFonts(DEFAULT_CHAT_FRAME)
         self:ApplyEditBoxPosition()
@@ -1720,13 +1845,14 @@ function ChatStylingModule:EnsureCopyFrame()
     frame.LeftAccent:SetWidth(3)
     frame.LeftAccent:SetColorTexture(accentR, accentG, accentB, 0.9)
 
-    -- Title bar fill (header strip)
+    -- Title bar fill (header strip) — flat color, fully opaque so the gradient
+    -- body background does not bleed through.
     local HEADER_H = 36
     frame.HeaderFill = frame:CreateTexture(nil, "BACKGROUND", nil, 1)
     frame.HeaderFill:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
     frame.HeaderFill:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
     frame.HeaderFill:SetHeight(HEADER_H)
-    SetVerticalGradient(frame.HeaderFill, 0.08, 0.12, 0.16, 0.96, 0.04, 0.06, 0.09, 0.96)
+    frame.HeaderFill:SetColorTexture(0.06, 0.09, 0.13, 1.0)
 
     -- Title text
     frame.Title = frame:CreateFontString(nil, "OVERLAY")
@@ -1747,14 +1873,7 @@ function ChatStylingModule:EnsureCopyFrame()
     frame.Separator:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -(HEADER_H + 1))
     frame.Separator:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -(HEADER_H + 1))
     frame.Separator:SetHeight(1)
-    frame.Separator:SetColorTexture(accentR, accentG, accentB, 0.18)
-
-    -- Top accent glow along the header border
-    frame.TopGlow = frame:CreateTexture(nil, "ARTWORK")
-    frame.TopGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
-    frame.TopGlow:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
-    frame.TopGlow:SetHeight(20)
-    SetVerticalGradient(frame.TopGlow, accentR, accentG, accentB, 0.10, accentR, accentG, accentB, 0)
+    frame.Separator:SetColorTexture(accentR, accentG, accentB, 0.30)
 
     -- Close button
     frame.Close = CreateFrame("Button", nil, frame, "BackdropTemplate")
@@ -1769,6 +1888,10 @@ function ChatStylingModule:EnsureCopyFrame()
     end
     frame.Close:SetScript("OnClick", function()
         frame:Hide()
+        local uiTools = T.Tools and T.Tools.UI or nil
+        if uiTools and uiTools.PlayTwichSound then
+            uiTools.PlayTwichSound("TwichUI-Menu-Confirm")
+        end
     end)
     frame.Close:SetFrameLevel(frame:GetFrameLevel() + 4)
 
@@ -1847,10 +1970,54 @@ function ChatStylingModule:GetCopyText(frame)
     return ""
 end
 
+function ChatStylingModule:RefreshCopyFrame()
+    local frame = self.CopyFrame
+    if not frame then return end
+    local accentR, accentG, accentB = self:GetShellAccentColor()
+    local font = self.settings and self.settings.tabFont
+    local fontSize = self.settings and self.settings.chatFontSize or 13
+
+    frame:SetBackdropBorderColor(accentR, accentG, accentB, 0.28)
+    if frame.LeftAccent then frame.LeftAccent:SetColorTexture(accentR, accentG, accentB, 0.9) end
+    if frame.Separator then frame.Separator:SetColorTexture(accentR, accentG, accentB, 0.30) end
+    if frame.ScrollBar then frame.ScrollBar:SetColorTexture(accentR, accentG, accentB, 0.22) end
+    if frame.SubTitle then
+        ApplyResolvedFont(frame.SubTitle, font, 11,
+            accentR * 0.8, accentG * 0.8, accentB * 0.8, "")
+    end
+    if frame.Close and T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichButton then
+        T.Tools.UI.SkinTwichButton(frame.Close, { accentR, accentG, accentB })
+        if frame.Close.GetFontString and frame.Close:GetFontString() then
+            ApplyResolvedFont(frame.Close:GetFontString(), font,
+                max(11, fontSize - 1),
+                TEXT_ACTIVE[1], TEXT_ACTIVE[2], TEXT_ACTIVE[3], "")
+        end
+    end
+    if frame.EditBox then
+        frame.EditBox:SetFont(ResolveFontPath(font), fontSize, "")
+    end
+end
+
 function ChatStylingModule:OpenCopyFrame(frame)
     local copyFrame = self:EnsureCopyFrame()
+    self:RefreshCopyFrame()
     local text = self:GetCopyText(frame or _G.SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME)
     copyFrame.EditBox:SetText(text)
+    copyFrame.EditBox:HighlightText()
+    copyFrame:Show()
+    copyFrame.EditBox:SetFocus()
+    -- Also push to the system clipboard; strip markup since it's raw chat text.
+    pcall(_G.CopyToClipboard, text, true)
+    PlayMenuSound("TwichUI-Menu-Click")
+end
+
+--- Opens the copy frame pre-filled with an arbitrary raw text string.
+--- Used by the right-click context menu as a reliable clipboard fallback when
+--- C_Clipboard.SetText is unavailable or restricted.
+function ChatStylingModule:ShowRawTextCopyFrame(text)
+    local copyFrame = self:EnsureCopyFrame()
+    self:RefreshCopyFrame()
+    copyFrame.EditBox:SetText(text or "")
     copyFrame.EditBox:HighlightText()
     copyFrame:Show()
     copyFrame.EditBox:SetFocus()
@@ -1986,10 +2153,12 @@ function ChatStylingModule:EnsureProxyTabButton(bar, index)
         end
 
         if mouseButton == "RightButton" then
+            PlayMenuSound("TwichUI-Menu-Click")
             ChatStylingModule:OpenFrameUtilityMenu(selfButton.chatFrameTarget, selfButton)
             return
         end
 
+        PlayMenuSound("TwichUI-Menu-Confirm")
         ChatStylingModule:LogDebugf(false, "tab click target=%s docked=%s",
             tostring(selfButton.chatFrameTarget:GetName()),
             tostring(selfButton.chatFrameTarget.isDocked == true))
@@ -2159,7 +2328,8 @@ function ChatStylingModule:RefreshProxyTabBar(frame)
             bar:SetPoint("TOPLEFT", anchor, "TOPLEFT", 12, -4)
             if hdtEnabled then
                 local slotCount = math.max(1, math.min(3, tonumber(hdt.slotCount) or 1))
-                local dtBarWidth = slotCount * HEADER_DATATEXT_SLOT_WIDTH + 8
+                local slotWidth = math.max(32, math.min(200, tonumber(hdt.slotWidth) or HEADER_DATATEXT_SLOT_WIDTH))
+                local dtBarWidth = slotCount * slotWidth + 8
                 bar:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", -(12 + dtBarWidth + 4), -4)
             else
                 bar:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", -12, -4)
@@ -2376,18 +2546,18 @@ function ChatStylingModule:EnsureControlStrip(frame)
     end
 
     strip.buttons.voice = CreateProxyButton(strip, "VOICE", { 0.26, 0.84, 0.98 }, function()
-        local original = _G.ChatFrameChannelButton
-        if original and original.Click then
-            original:Click()
-        end
+        PlayMenuSound("TwichUI-Menu-Confirm")
+        ChatStylingModule:ToggleVoiceChat()
     end)
 
     strip.buttons.copy = CreateProxyButton(strip, "COPY", { 0.42, 0.89, 0.63 }, function()
+        PlayMenuSound("TwichUI-Menu-Confirm")
         ChatStylingModule:OpenCopyFrame(frame)
     end)
 
     -- Context-menu button: right-click on hover strip opens the utility menu.
     strip.buttons.menu = CreateProxyButton(strip, "MENU", { 0.98, 0.76, 0.24 }, function()
+        PlayMenuSound("TwichUI-Menu-Click")
         ChatStylingModule:OpenFrameUtilityMenu(frame, strip.buttons.menu)
     end)
 
@@ -2501,12 +2671,16 @@ function ChatStylingModule:ApplyChatFonts(frame)
         end
         if editBox and editBox.header then
             local accentR, accentG, accentB = self:GetEditBoxAccentColor(editBox)
-            ApplyResolvedFont(editBox.header, s.chatFont, max(11, (s.chatFontSize or 13) - 1),
+            local ebFont = s.editBoxFont or s.chatFont
+            local ebSize = (s.editBoxFontSize and s.editBoxFontSize > 0 and s.editBoxFontSize) or s.chatFontSize or 13
+            ApplyResolvedFont(editBox.header, ebFont, ebSize,
                 accentR, accentG, accentB, "")
         end
         if editBox and editBox.headerSuffix then
-            ApplyResolvedFont(editBox.headerSuffix, s.chatFont,
-                max(11, (s.chatFontSize or 13) - 1), TEXT_ACTIVE[1], TEXT_ACTIVE[2], TEXT_ACTIVE[3], "")
+            local ebFont = s.editBoxFont or s.chatFont
+            local ebSize = (s.editBoxFontSize and s.editBoxFontSize > 0 and s.editBoxFontSize) or s.chatFontSize or 13
+            ApplyResolvedFont(editBox.headerSuffix, ebFont, ebSize,
+                TEXT_ACTIVE[1], TEXT_ACTIVE[2], TEXT_ACTIVE[3], "")
         end
     end
 

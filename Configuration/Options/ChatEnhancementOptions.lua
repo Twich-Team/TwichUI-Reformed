@@ -36,9 +36,12 @@ local DEFAULT_CHANNEL_COLORS = {
     raid = { r = 1.00, g = 0.48, b = 0.38 },
     raidLeader = { r = 1.00, g = 0.58, b = 0.45 },
     services = { r = 0.93, g = 0.72, b = 0.32 },
+    say = { r = 1.00, g = 1.00, b = 1.00 },
     system = { r = 0.74, g = 0.74, b = 0.74 },
     trade = { r = 0.95, g = 0.68, b = 0.24 },
     whisper = { r = 0.93, g = 0.52, b = 0.89 },
+    yell = { r = 1.00, g = 0.52, b = 0.52 },
+    emote = { r = 1.00, g = 0.74, b = 0.60 },
 }
 
 local function CopyColor(color)
@@ -405,6 +408,19 @@ function Options:SetShowAccentBar(info, value)
     self:RefreshChatStylingModule()
 end
 
+function Options:IsChromeAccentShown()
+    local db = self:GetChatEnhancementDB()
+    if db.showChromeAccent == nil then
+        return true
+    end
+    return db.showChromeAccent
+end
+
+function Options:SetChromeAccentShown(info, value)
+    self:GetChatEnhancementDB().showChromeAccent = value
+    self:RefreshChatStylingModule()
+end
+
 function Options:AreAbbreviationsEnabled()
     local db = self:GetChatEnhancementDB()
     if db.abbreviationsEnabled == nil then
@@ -746,6 +762,8 @@ function Options:SetChatPositionX(info, value)
     local n = tonumber(value)
     self:GetChatEnhancementDB().chatPositionX = n
     self:RefreshChatStylingModule()
+    local m = GetChatStylingModule()
+    if m then m:ApplyPositionOverride() end
 end
 
 function Options:GetChatPositionY()
@@ -756,6 +774,8 @@ function Options:SetChatPositionY(info, value)
     local n = tonumber(value)
     self:GetChatEnhancementDB().chatPositionY = n
     self:RefreshChatStylingModule()
+    local m = GetChatStylingModule()
+    if m then m:ApplyPositionOverride() end
 end
 
 function Options:GetChatPositionXStr()
@@ -781,6 +801,32 @@ end
 
 function Options:GetChatHeight()
     return self:GetChatEnhancementDB().chatHeight
+end
+
+-- Message row background color (the per-row backdrop inside the renderer).
+local DEFAULT_MSG_BG = { r = 0.03, g = 0.05, b = 0.07, a = 0.72 }
+
+function Options:GetMsgBgColor()
+    local db = self:GetChatEnhancementDB()
+    local c = db.msgBgColor or DEFAULT_MSG_BG
+    return c.r or DEFAULT_MSG_BG.r, c.g or DEFAULT_MSG_BG.g, c.b or DEFAULT_MSG_BG.b,
+        c.a ~= nil and c.a or DEFAULT_MSG_BG.a
+end
+
+function Options:SetMsgBgColor(info, r, g, b, a)
+    self:GetChatEnhancementDB().msgBgColor = { r = r, g = g, b = b, a = a ~= nil and a or DEFAULT_MSG_BG.a }
+    self:RefreshChatStylingModule()
+end
+
+function Options:GetResolvedMsgBgColor()
+    local db = self:GetChatEnhancementDB()
+    local c = db.msgBgColor or DEFAULT_MSG_BG
+    return {
+        r = c.r or DEFAULT_MSG_BG.r,
+        g = c.g or DEFAULT_MSG_BG.g,
+        b = c.b or DEFAULT_MSG_BG.b,
+        a = c.a ~= nil and c.a or DEFAULT_MSG_BG.a,
+    }
 end
 function Options:IsTabNameFadeEnabled()
     return self:GetChatEnhancementDB().tabNameFade == true
@@ -851,6 +897,112 @@ function Options:SetWhisperTabEnabled(info, value)
     self:RefreshChatStylingModule()
 end
 
+-- ─── Message Routing Rules ──────────────────────────────────────────────────
+-- Stored as a table of {pattern, tab} objects at db.routingEntries.
+-- A legacy raw-string field (routingRulesRaw) is migrated on first access.
+
+local MAX_ROUTING_ENTRIES = 20
+
+--- Returns the routing entries table, migrating from the legacy string format
+--- if needed.  Always returns a real (possibly empty) table.
+function Options:GetRoutingEntries()
+    local db = self:GetChatEnhancementDB()
+    if not db.routingEntries then
+        db.routingEntries = {}
+        -- Migrate legacy raw string format if present.
+        local raw = db.routingRulesRaw or ""
+        for line in raw:gmatch("[^\n]+") do
+            local trimmed = line:match("^%s*(.-)%s*$")
+            if trimmed and trimmed ~= "" then
+                local lastColon = trimmed:find(":[^:]*$")
+                if lastColon then
+                    local pattern = trimmed:sub(1, lastColon - 1):match("^%s*(.-)%s*$")
+                    local tabName  = trimmed:sub(lastColon + 1):match("^%s*(.-)%s*$")
+                    if pattern and pattern ~= "" and tabName and tabName ~= "" then
+                        db.routingEntries[#db.routingEntries + 1] = { pattern = pattern, tab = tabName }
+                    end
+                end
+            end
+        end
+        db.routingRulesRaw = nil  -- clear legacy field after migration
+    end
+    return db.routingEntries
+end
+
+function Options:AddRoutingEntry()
+    local entries = self:GetRoutingEntries()
+    if #entries >= MAX_ROUTING_ENTRIES then return end
+    entries[#entries + 1] = { pattern = "", tab = "" }
+    self:RefreshChatStylingModule()
+end
+
+function Options:RemoveRoutingEntry(index)
+    local entries = self:GetRoutingEntries()
+    if entries[index] then
+        table.remove(entries, index)
+        self:RefreshChatStylingModule()
+    end
+end
+
+function Options:GetRoutingEntryPattern(index)
+    local entries = self:GetRoutingEntries()
+    return (entries[index] and entries[index].pattern) or ""
+end
+
+function Options:SetRoutingEntryPattern(index, value)
+    local entries = self:GetRoutingEntries()
+    if entries[index] then
+        entries[index].pattern = value or ""
+        self:RefreshChatStylingModule()
+    end
+end
+
+function Options:GetRoutingEntryTab(index)
+    local entries = self:GetRoutingEntries()
+    return (entries[index] and entries[index].tab) or ""
+end
+
+function Options:SetRoutingEntryTab(index, value)
+    local entries = self:GetRoutingEntries()
+    if entries[index] then
+        entries[index].tab = value or ""
+        self:RefreshChatStylingModule()
+    end
+end
+
+--- Returns a name→name table of all current chat tab names, suitable for an
+--- AceConfig select widget.
+function Options:GetAvailableChatTabs()
+    local tabs = {}
+    local CHAT_FRAMES = _G.CHAT_FRAMES or {}
+    for _, frameName in ipairs(CHAT_FRAMES) do
+        local frame = _G[frameName]
+        local tab   = frame and _G[frameName .. "Tab"] or nil
+        local text  = tab and type(tab.GetText) == "function" and tab:GetText() or nil
+        if text and text ~= "" then
+            -- Strip WoW markup from tab names.
+            text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+            tabs[text] = text
+        end
+    end
+    return tabs
+end
+
+--- Returns routing rules as an array of {pattern, tabName} for use by the
+--- renderer.  Entries with empty pattern or tab are skipped.
+function Options:GetParsedRoutingRules()
+    local entries = self:GetRoutingEntries()
+    local rules = {}
+    for _, entry in ipairs(entries) do
+        local pattern = entry.pattern and entry.pattern:match("^%s*(.-)%s*$") or ""
+        local tabName = entry.tab and entry.tab:match("^%s*(.-)%s*$") or ""
+        if pattern ~= "" and tabName ~= "" then
+            rules[#rules + 1] = { pattern = pattern, tabName = tabName }
+        end
+    end
+    return rules
+end
+
 -- Header Datatext Bar: one row of datatext cells embedded in the chat header.
 
 function Options:GetHeaderDatatextDB()
@@ -864,9 +1016,14 @@ end
 --- Returns a snapshot table used by ChatStylingModule.settings.headerDatatext.
 function Options:GetHeaderDatatextSettings()
     local hdt = self:GetHeaderDatatextDB()
+    local textColor = (hdt.useCustomTextColor and hdt.textColor) and hdt.textColor or nil
     return {
         enabled    = hdt.enabled == true,
         slotCount  = math.max(1, math.min(3, tonumber(hdt.slotCount) or 1)),
+        slotWidth  = math.max(32, math.min(200, tonumber(hdt.slotWidth) or 68)),
+        fontSize   = math.max(8, math.min(18, tonumber(hdt.fontSize) or 11)),
+        useCustomTextColor = hdt.useCustomTextColor == true,
+        textColor  = textColor and { r = textColor.r or 0.92, g = textColor.g or 0.94, b = textColor.b or 0.96 } or nil,
         slots      = {
             hdt.slot1 or "NONE",
             hdt.slot2 or "NONE",
@@ -899,6 +1056,43 @@ end
 
 function Options:SetHeaderDatatextSlot(n, name)
     self:GetHeaderDatatextDB()["slot" .. n] = (name ~= "NONE" and name) or "NONE"
+    self:RefreshChatStylingModule()
+end
+
+function Options:GetHeaderDatatextFontSize()
+    return math.max(8, math.min(18, tonumber(self:GetHeaderDatatextDB().fontSize) or 11))
+end
+
+function Options:SetHeaderDatatextFontSize(info, value)
+    self:GetHeaderDatatextDB().fontSize = math.max(8, math.min(18, tonumber(value) or 11))
+    self:RefreshChatStylingModule()
+end
+
+function Options:GetHeaderDatatextSlotWidth()
+    return math.max(32, math.min(200, tonumber(self:GetHeaderDatatextDB().slotWidth) or 68))
+end
+
+function Options:SetHeaderDatatextSlotWidth(info, value)
+    self:GetHeaderDatatextDB().slotWidth = math.max(32, math.min(200, tonumber(value) or 68))
+    self:RefreshChatStylingModule()
+end
+
+function Options:GetHeaderDatatextUseCustomTextColor()
+    return self:GetHeaderDatatextDB().useCustomTextColor == true
+end
+
+function Options:SetHeaderDatatextUseCustomTextColor(info, value)
+    self:GetHeaderDatatextDB().useCustomTextColor = value == true
+    self:RefreshChatStylingModule()
+end
+
+function Options:GetHeaderDatatextTextColor()
+    local c = self:GetHeaderDatatextDB().textColor or {}
+    return c.r or 0.92, c.g or 0.94, c.b or 0.96
+end
+
+function Options:SetHeaderDatatextTextColor(info, r, g, b)
+    self:GetHeaderDatatextDB().textColor = { r = r, g = g, b = b }
     self:RefreshChatStylingModule()
 end
 

@@ -1625,13 +1625,15 @@ function UI:PlayThemeSound(event)
             PlaySound(SOUNDKIT.IG_MAINMENU_OPEN, "Master", false)
         end
     elseif profile == "Standard" then
-        -- Use TwichUI's own registered sounds for a more distinct feel.
-        if event == "toggle_on" or event == "click" then
-            self:PlayConfiguredSound("Game-Ping")
-        elseif event == "toggle_off" then
-            self:PlayConfiguredSound("Game-Success")
-        elseif event == "navigate" then
-            self:PlayConfiguredSound("Ping")
+        -- Use TwichUI's own registered sounds for a distinct, cohesive feel.
+        -- "TwichUI-Menu-Click"   → hover, open, navigate (subtle interactions)
+        -- "TwichUI-Menu-Confirm" → select, toggle-on, execute (confirmed actions)
+        local uiTools = T.Tools and T.Tools.UI or nil
+        if not (uiTools and uiTools.PlayTwichSound) then return end
+        if event == "navigate" or event == "toggle_off" then
+            uiTools.PlayTwichSound("TwichUI-Menu-Click")
+        elseif event == "toggle_on" or event == "click" then
+            uiTools.PlayTwichSound("TwichUI-Menu-Confirm")
         end
     end
 end

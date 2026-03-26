@@ -953,7 +953,10 @@ function DataTextModule:RefreshEmbeddedBar(barID, panelDefinition, styleTable)
             if slot then
                 if slot.text then
                     slot.text:SetFont(fontPath, fontSize, fontFlags)
-                    slot.text:SetTextColor(0.92, 0.94, 0.96)
+                    local tR = tonumber(styleTable.textR) or 0.92
+                    local tG = tonumber(styleTable.textG) or 0.94
+                    local tB = tonumber(styleTable.textB) or 0.96
+                    slot.text:SetTextColor(tR, tG, tB)
                     slot.text:SetShadowColor(0, 0, 0, 0.5)
                     slot.text:SetShadowOffset(1, -1)
                 end

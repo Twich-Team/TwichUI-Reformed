@@ -146,351 +146,404 @@ local function BuildChatEnhancementConfiguration()
 
     optionsTab.args = {
         title = Widgets.TitleWidget(0, "Chat Module"),
-        desc = {
-            type = "description",
-            name =
-            "TwichUI-owned chat chrome and message rendering with configurable accents, channel colors, fades, routing, and focused alerts.",
-            order = 1,
-        },
         visualsGroup = {
             type = "group",
             name = "Visuals",
             order = 2,
-            inline = true,
+            childGroups = "tab",
             args = {
-                enableStyling = {
-                    type = "toggle",
-                    name = "Enable Styling",
-                    desc = "Apply TwichUI formatting to Blizzard chat frames.",
+                -- ──────────────── General ────────────────
+                generalTab = {
+                    type = "group",
+                    name = "General",
                     order = 1,
-                    width = "half",
-                    handler = Options,
-                    get = "IsStylingEnabled",
-                    set = "SetStylingEnabled",
+                    inline = true,
+                    args = {
+                        enableStyling = {
+                            type = "toggle",
+                            name = "Enable Styling",
+                            desc = "Apply TwichUI formatting to Blizzard chat frames.",
+                            order = 1,
+                            width = "half",
+                            handler = Options,
+                            get = "IsStylingEnabled",
+                            set = "SetStylingEnabled",
+                        },
+                        animationsEnabled = {
+                            type = "toggle",
+                            name = "Animations",
+                            desc = "Enable tab and control-strip fades for the bespoke chat shell.",
+                            order = 2,
+                            width = "half",
+                            handler = Options,
+                            get = "AreAnimationsEnabled",
+                            set = "SetAnimationsEnabled",
+                        },
+                        chatLocked = {
+                            type = "toggle",
+                            name = "Lock Chat",
+                            desc = "Prevent the chat frame from being moved or resized and hide the drag and resize handles.",
+                            order = 3,
+                            width = "half",
+                            handler = Options,
+                            get = "IsChatLocked",
+                            set = "SetChatLocked",
+                        },
+                        hideHeader = {
+                            type = "toggle",
+                            name = "Hide Header",
+                            desc = "Remove the header bar entirely so messages extend to the top edge of the frame.",
+                            order = 4,
+                            width = "half",
+                            handler = Options,
+                            get = "IsHeaderHidden",
+                            set = "SetHeaderHidden",
+                        },
+                        showChromeAccent = {
+                            type = "toggle",
+                            name = "Show Accent",
+                            desc = "Show the accent glow, left accent bar, and bottom gradient on the chat chrome. Disable for a flat, minimal look.",
+                            order = 5,
+                            width = "half",
+                            handler = Options,
+                            get = "IsChromeAccentShown",
+                            set = "SetChromeAccentShown",
+                        },
+                        positionNote = {
+                            type = "description",
+                            name = "Position Override — enter exact pixel coordinates to snap the chat frame to a precise location. 0, 0 = bottom-left of screen. Leave blank to let WoW manage position.",
+                            order = 10,
+                            width = "full",
+                        },
+                        positionX = {
+                            type = "input",
+                            name = "Position X",
+                            desc = "Horizontal offset in pixels from the left edge of the screen (BOTTOMLEFT anchor).",
+                            order = 11,
+                            width = "half",
+                            handler = Options,
+                            get = "GetChatPositionXStr",
+                            set = "SetChatPositionX",
+                        },
+                        positionY = {
+                            type = "input",
+                            name = "Position Y",
+                            desc = "Vertical offset in pixels from the bottom edge of the screen.",
+                            order = 12,
+                            width = "half",
+                            handler = Options,
+                            get = "GetChatPositionYStr",
+                            set = "SetChatPositionY",
+                        },
+                        positionCapture = {
+                            type = "execute",
+                            name = "Capture Current Position",
+                            desc = "Read the chat frame's current on-screen position and save it as the override.",
+                            order = 13,
+                            width = "half",
+                            func = function()
+                                local stylingModule = T:GetModule("ChatEnhancements", true)
+                                    and T:GetModule("ChatEnhancements"):GetModule("ChatStyling", true)
+                                local x, y = stylingModule and stylingModule:CaptureCurrentPosition()
+                                if x and y then
+                                    Options:SetChatPositionX(nil, x)
+                                    Options:SetChatPositionY(nil, y)
+                                end
+                            end,
+                        },
+                        positionClear = {
+                            type = "execute",
+                            name = "Clear Override",
+                            desc = "Remove the position override and let WoW position the frame normally.",
+                            order = 14,
+                            width = "half",
+                            func = function()
+                                Options:ClearChatPosition()
+                            end,
+                        },
+                    },
                 },
-                timestampsEnabled = {
-                    type = "toggle",
-                    name = "Left Timestamps",
-                    desc = "Show a compact timestamp before each message.",
+                -- ──────────────── Fonts ────────────────
+                fontsTab = {
+                    type = "group",
+                    name = "Fonts",
                     order = 2,
-                    width = "half",
-                    handler = Options,
-                    get = "AreTimestampsEnabled",
-                    set = "SetTimestampsEnabled",
+                    inline = true,
+                    args = {
+                        chatFont = {
+                            type = "select",
+                            dialogControl = "LSM30_Font",
+                            name = "Chat Font",
+                            desc = "Font used for chat lines and the edit box.",
+                            order = 1,
+                            width = "half",
+                            handler = Options,
+                            get = "GetChatFont",
+                            set = "SetChatFont",
+                            values = function() return LibStub("LibSharedMedia-3.0"):HashTable("font") or {} end,
+                        },
+                        chatFontSize = {
+                            type = "range",
+                            name = "Chat Font Size",
+                            desc = "Font size used for chat lines and the edit box.",
+                            order = 2,
+                            width = "half",
+                            min = 10,
+                            max = 20,
+                            step = 1,
+                            handler = Options,
+                            get = "GetChatFontSize",
+                            set = "SetChatFontSize",
+                        },
+                        tabFont = {
+                            type = "select",
+                            dialogControl = "LSM30_Font",
+                            name = "Tab Font",
+                            desc = "Font used for the bespoke TwichUI tab bar.",
+                            order = 3,
+                            width = "half",
+                            handler = Options,
+                            get = "GetTabFont",
+                            set = "SetTabFont",
+                            values = function() return LibStub("LibSharedMedia-3.0"):HashTable("font") or {} end,
+                        },
+                        tabFontSize = {
+                            type = "range",
+                            name = "Tab Font Size",
+                            desc = "Font size used for the bespoke TwichUI tab bar.",
+                            order = 4,
+                            width = "half",
+                            min = 10,
+                            max = 18,
+                            step = 1,
+                            handler = Options,
+                            get = "GetTabFontSize",
+                            set = "SetTabFontSize",
+                        },
+                    },
                 },
-                timestampFormat = {
-                    type = "select",
-                    name = "Timestamp Format",
-                    desc = "Choose the timestamp format used in chat.",
+                -- ──────────────── Colors ────────────────
+                colorsTab = {
+                    type = "group",
+                    name = "Colors",
                     order = 3,
-                    width = "half",
-                    handler = Options,
-                    get = "GetTimestampFormat",
-                    set = "SetTimestampFormat",
-                    values = {
-                        ["%H:%M"] = "24h, minutes",
-                        ["%H:%M:%S"] = "24h, seconds",
-                        ["%I:%M %p"] = "12h, minutes",
+                    inline = true,
+                    args = {
+                        shellAccent = {
+                            type = "color",
+                            name = "Shell Accent",
+                            desc = "Primary accent used for tabs, borders, scroll chrome, and shell highlights.",
+                            order = 1,
+                            width = "half",
+                            handler = Options,
+                            get = "GetShellAccentColor",
+                            set = "SetShellAccentColor",
+                        },
+                        headerBgColor = {
+                            type = "color",
+                            name = "Header Background",
+                            desc = "Background fill of the header area. Set alpha to 0 to hide it entirely.",
+                            order = 2,
+                            width = "half",
+                            hasAlpha = true,
+                            handler = Options,
+                            get = "GetHeaderBgColor",
+                            set = "SetHeaderBgColor",
+                        },
+                        chatBgColor = {
+                            type = "color",
+                            name = "Frame Background",
+                            desc = "Fill color and opacity of the chat frame chrome background.",
+                            order = 3,
+                            width = "half",
+                            hasAlpha = true,
+                            handler = Options,
+                            get = "GetChatBgColor",
+                            set = "SetChatBgColor",
+                        },
+                        chatBorderColor = {
+                            type = "color",
+                            name = "Frame Border",
+                            desc = "Color and opacity of the chat frame chrome border.",
+                            order = 4,
+                            width = "half",
+                            hasAlpha = true,
+                            handler = Options,
+                            get = "GetChatBorderColor",
+                            set = "SetChatBorderColor",
+                        },
+                        msgBgColor = {
+                            type = "color",
+                            name = "Message Background",
+                            desc = "Fill color and opacity of each chat message row.",
+                            order = 5,
+                            width = "half",
+                            hasAlpha = true,
+                            handler = Options,
+                            get = "GetMsgBgColor",
+                            set = "SetMsgBgColor",
+                        },
                     },
                 },
-                accentBar = {
-                    type = "toggle",
-                    name = "Accent Separator",
-                    desc = "Add a colored separator before each message for a cleaner left edge.",
+                -- ──────────────── Messages ────────────────
+                messagesTab = {
+                    type = "group",
+                    name = "Messages",
                     order = 4,
-                    width = "half",
-                    handler = Options,
-                    get = "ShouldShowAccentBar",
-                    set = "SetShowAccentBar",
-                },
-                showClassIcons = {
-                    type = "toggle",
-                    name = "Class Icons",
-                    desc = "Show a class icon next to each player message. Icons are populated as messages arrive in the current session.",
-                    order = 4.5,
-                    width = "half",
-                    handler = Options,
-                    get = "IsClassIconsEnabled",
-                    set = "SetClassIconsEnabled",
-                },
-                classIconStyle = {
-                    type = "select",
-                    name = "Icon Style",
-                    desc = "Artwork used for class icons. Default uses Blizzard's built-in class icons; Fabled and Pixel use TwichUI custom atlas textures.",
-                    order = 4.6,
-                    width = "half",
-                    handler = Options,
-                    get = "GetClassIconStyle",
-                    set = "SetClassIconStyle",
-                    values = {
-                        ["default"] = "Default",
-                        ["fabled"]  = "Fabled",
-                        ["pixel"]   = "Pixel",
+                    inline = true,
+                    args = {
+                        accentBar = {
+                            type = "toggle",
+                            name = "Accent Separator",
+                            desc = "Add a colored left-edge bar to each message row.",
+                            order = 1,
+                            width = "half",
+                            handler = Options,
+                            get = "ShouldShowAccentBar",
+                            set = "SetShowAccentBar",
+                        },
+                        showClassIcons = {
+                            type = "toggle",
+                            name = "Class Icons",
+                            desc = "Show a class icon next to each player message.",
+                            order = 2,
+                            width = "half",
+                            handler = Options,
+                            get = "IsClassIconsEnabled",
+                            set = "SetClassIconsEnabled",
+                        },
+                        classIconStyle = {
+                            type = "select",
+                            name = "Icon Style",
+                            desc = "Artwork used for class icons.",
+                            order = 3,
+                            width = "half",
+                            handler = Options,
+                            get = "GetClassIconStyle",
+                            set = "SetClassIconStyle",
+                            values = {
+                                ["default"] = "Default",
+                                ["fabled"]  = "Fabled",
+                                ["pixel"]   = "Pixel",
+                            },
+                        },
+                        rowGap = {
+                            type = "range",
+                            name = "Message Gap",
+                            desc = "Vertical spacing between rendered chat entries.",
+                            order = 4,
+                            width = "half",
+                            min = 2,
+                            max = 20,
+                            step = 1,
+                            handler = Options,
+                            get = "GetRowGap",
+                            set = "SetRowGap",
+                        },
+                        timestampsEnabled = {
+                            type = "toggle",
+                            name = "Timestamps",
+                            desc = "Show a compact timestamp before each message.",
+                            order = 5,
+                            width = "half",
+                            handler = Options,
+                            get = "AreTimestampsEnabled",
+                            set = "SetTimestampsEnabled",
+                        },
+                        timestampFormat = {
+                            type = "select",
+                            name = "Timestamp Format",
+                            desc = "Choose the timestamp format used in chat.",
+                            order = 6,
+                            width = "half",
+                            handler = Options,
+                            get = "GetTimestampFormat",
+                            set = "SetTimestampFormat",
+                            values = {
+                                ["%H:%M"] = "24h, minutes",
+                                ["%H:%M:%S"] = "24h, seconds",
+                                ["%I:%M %p"] = "12h, minutes",
+                            },
+                        },
+                        timestampWidth = {
+                            type = "range",
+                            name = "Timestamp Width",
+                            desc = "Width of the timestamp column on the left edge.",
+                            order = 7,
+                            width = "half",
+                            min = 36,
+                            max = 120,
+                            step = 2,
+                            handler = Options,
+                            get = "GetTimestampWidth",
+                            set = "SetTimestampWidth",
+                        },
+                        preview = {
+                            type = "description",
+                            name = T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                                "Preview: [12:34] | [G] Twich: Pull in 10"),
+                            order = 8,
+                            width = "full",
+                        },
                     },
                 },
-                chatFont = {
-                    type = "select",
-                    dialogControl = "LSM30_Font",
-                    name = "Chat Font",
-                    desc = "Font used for chat lines and the edit box.",
+                -- ──────────────── Fading ────────────────
+                fadingTab = {
+                    type = "group",
+                    name = "Fading",
                     order = 5,
-                    width = "half",
-                    handler = Options,
-                    get = "GetChatFont",
-                    set = "SetChatFont",
-                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("font") or {} end,
-                },
-                chatFontSize = {
-                    type = "range",
-                    name = "Chat Font Size",
-                    desc = "Font size used for chat lines and the edit box.",
-                    order = 6,
-                    width = "half",
-                    min = 10,
-                    max = 20,
-                    step = 1,
-                    handler = Options,
-                    get = "GetChatFontSize",
-                    set = "SetChatFontSize",
-                },
-                tabFont = {
-                    type = "select",
-                    dialogControl = "LSM30_Font",
-                    name = "Tab Font",
-                    desc = "Font used for the bespoke TwichUI tab bar.",
-                    order = 7,
-                    width = "half",
-                    handler = Options,
-                    get = "GetTabFont",
-                    set = "SetTabFont",
-                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("font") or {} end,
-                },
-                tabFontSize = {
-                    type = "range",
-                    name = "Tab Font Size",
-                    desc = "Font size used for the bespoke TwichUI tab bar.",
-                    order = 8,
-                    width = "half",
-                    min = 10,
-                    max = 18,
-                    step = 1,
-                    handler = Options,
-                    get = "GetTabFontSize",
-                    set = "SetTabFontSize",
-                },
-                animationsEnabled = {
-                    type = "toggle",
-                    name = "Animations",
-                    desc = "Enable tab and control-strip fades for the bespoke chat shell.",
-                    order = 9,
-                    width = "half",
-                    handler = Options,
-                    get = "AreAnimationsEnabled",
-                    set = "SetAnimationsEnabled",
-                },
-                shellAccent = {
-                    type = "color",
-                    name = "Shell Accent",
-                    desc = "Primary accent used for tabs, borders, scroll chrome, and shell highlights.",
-                    order = 10,
-                    width = "half",
-                    handler = Options,
-                    get = "GetShellAccentColor",
-                    set = "SetShellAccentColor",
-                },
-                messageFadesEnabled = {
-                    type = "toggle",
-                    name = "Fade Messages",
-                    desc = "Fade old messages when the view is resting at the bottom.",
-                    order = 11,
-                    width = "half",
-                    handler = Options,
-                    get = "AreMessageFadesEnabled",
-                    set = "SetMessageFadesEnabled",
-                },
-                messageFadeDelay = {
-                    type = "range",
-                    name = "Fade Delay",
-                    desc = "Seconds to wait before old messages begin fading.",
-                    order = 12,
-                    width = "half",
-                    min = 10,
-                    max = 300,
-                    step = 1,
-                    handler = Options,
-                    get = "GetMessageFadeDelay",
-                    set = "SetMessageFadeDelay",
-                },
-                messageFadeDuration = {
-                    type = "range",
-                    name = "Fade Duration",
-                    desc = "Seconds the fade-out should take once it starts.",
-                    order = 13,
-                    width = "half",
-                    min = 1,
-                    max = 20,
-                    step = 1,
-                    handler = Options,
-                    get = "GetMessageFadeDuration",
-                    set = "SetMessageFadeDuration",
-                },
-                rowGap = {
-                    type = "range",
-                    name = "Message Gap",
-                    desc = "Vertical spacing between rendered chat entries.",
-                    order = 14,
-                    width = "half",
-                    min = 2,
-                    max = 20,
-                    step = 1,
-                    handler = Options,
-                    get = "GetRowGap",
-                    set = "SetRowGap",
-                },
-                timestampWidth = {
-                    type = "range",
-                    name = "Timestamp Width",
-                    desc = "Width of the timestamp column on the left edge.",
-                    order = 15,
-                    width = "half",
-                    min = 36,
-                    max = 120,
-                    step = 2,
-                    handler = Options,
-                    get = "GetTimestampWidth",
-                    set = "SetTimestampWidth",
-                },
-                preview = {
-                    type = "description",
-                    name = T.Tools.Text.Color(T.Tools.Colors.GRAY,
-                        "Preview: [12:34] | [G] Twich: Pull in 10"),
-                    order = 16,
-                    width = "full",
-                },
-                note = {
-                    type = "description",
-                    name = T.Tools.Text.Color(T.Tools.Colors.GRAY,
-                        "The renderer, shell, and controls are TwichUI-owned. Tune spacing, timestamps, and color here, then use the debug console when runtime behavior needs investigation."),
-                    order = 17,
-                    width = "full",
-                },
-                messageFadeMinAlpha = {
-                    type = "range",
-                    name = "Fade Min Alpha",
-                    desc = "The minimum opacity messages fade down to after the fade delay passes. 0 = fully invisible, 1 = fully opaque.",
-                    order = 18,
-                    width = "half",
-                    min = 0.0,
-                    max = 1.0,
-                    step = 0.05,
-                    handler = Options,
-                    get = "GetMessageFadeMinAlpha",
-                    set = "SetMessageFadeMinAlpha",
-                },
-                hideHeader = {
-                    type = "toggle",
-                    name = "Hide Header",
-                    desc = "Remove the header bar entirely so messages extend to the top edge of the frame.",
-                    order = 19,
-                    width = "half",
-                    handler = Options,
-                    get = "IsHeaderHidden",
-                    set = "SetHeaderHidden",
-                },
-                headerBgColor = {
-                    type = "color",
-                    name = "Header Background",
-                    desc = "Background fill of the header area behind the tab bar and control strip. Set alpha to 0 to hide it entirely.",
-                    order = 20,
-                    width = "half",
-                    hasAlpha = true,
-                    handler = Options,
-                    get = "GetHeaderBgColor",
-                    set = "SetHeaderBgColor",
-                },
-                chatLocked = {
-                    type = "toggle",
-                    name = "Lock Chat",
-                    desc = "Prevent the chat frame from being moved or resized and hide the drag and resize handles.",
-                    order = 1,
-                    width = "half",
-                    handler = Options,
-                    get = "IsChatLocked",
-                    set = "SetChatLocked",
-                },
-                positionNote = {
-                    type = "description",
-                    name = "Position Override — enter exact pixel coordinates to snap the chat frame to a precise location regardless of how WoW normally places it. 0, 0 = bottom-left of screen. Leave blank to let WoW manage position.",
-                    order = 20.1,
-                    width = "full",
-                },
-                positionX = {
-                    type = "input",
-                    name = "Position X",
-                    desc = "Horizontal offset in pixels from the left edge of the screen (BOTTOMLEFT anchor).",
-                    order = 20.2,
-                    width = "half",
-                    handler = Options,
-                    get = "GetChatPositionXStr",
-                    set = "SetChatPositionX",
-                },
-                positionY = {
-                    type = "input",
-                    name = "Position Y",
-                    desc = "Vertical offset in pixels from the bottom edge of the screen.",
-                    order = 20.3,
-                    width = "half",
-                    handler = Options,
-                    get = "GetChatPositionYStr",
-                    set = "SetChatPositionY",
-                },
-                positionCapture = {
-                    type = "execute",
-                    name = "Capture Current Position",
-                    desc = "Read the chat frame's current on-screen position and save it as the override.",
-                    order = 20.4,
-                    width = "half",
-                    func = function()
-                        local stylingModule = T:GetModule("ChatEnhancements", true)
-                            and T:GetModule("ChatEnhancements"):GetModule("ChatStyling", true)
-                        local x, y = stylingModule and stylingModule:CaptureCurrentPosition()
-                        if x and y then
-                            Options:SetChatPositionX(nil, x)
-                            Options:SetChatPositionY(nil, y)
-                        end
-                    end,
-                },
-                positionClear = {
-                    type = "execute",
-                    name = "Clear Override",
-                    desc = "Remove the position override and let WoW position the frame normally.",
-                    order = 20.5,
-                    width = "half",
-                    func = function()
-                        Options:ClearChatPosition()
-                    end,
-                },
-                chatBgColor = {
-                    type = "color",
-                    name = "Background",
-                    desc = "Fill color and opacity of the chat frame chrome background. Defaults to the addon-wide background color when not overridden.",
-                    order = 20.6,
-                    width = "half",
-                    hasAlpha = true,
-                    handler = Options,
-                    get = "GetChatBgColor",
-                    set = "SetChatBgColor",
-                },
-                chatBorderColor = {
-                    type = "color",
-                    name = "Border",
-                    desc = "Color and opacity of the chat frame chrome border. Defaults to the addon-wide border color when not overridden.",
-                    order = 20.7,
-                    width = "half",
-                    hasAlpha = true,
-                    handler = Options,
-                    get = "GetChatBorderColor",
-                    set = "SetChatBorderColor",
+                    inline = true,
+                    args = {
+                        messageFadesEnabled = {
+                            type = "toggle",
+                            name = "Enable Fading",
+                            desc = "Fade old messages when the view is resting at the bottom and the cursor is away.",
+                            order = 1,
+                            width = "half",
+                            handler = Options,
+                            get = "AreMessageFadesEnabled",
+                            set = "SetMessageFadesEnabled",
+                        },
+                        messageFadeDelay = {
+                            type = "range",
+                            name = "Fade Delay",
+                            desc = "Seconds after the cursor leaves before old messages begin fading.",
+                            order = 2,
+                            width = "half",
+                            min = 10,
+                            max = 300,
+                            step = 1,
+                            handler = Options,
+                            get = "GetMessageFadeDelay",
+                            set = "SetMessageFadeDelay",
+                        },
+                        messageFadeDuration = {
+                            type = "range",
+                            name = "Fade Duration",
+                            desc = "Seconds the fade-out animation should take once it starts.",
+                            order = 3,
+                            width = "half",
+                            min = 1,
+                            max = 20,
+                            step = 1,
+                            handler = Options,
+                            get = "GetMessageFadeDuration",
+                            set = "SetMessageFadeDuration",
+                        },
+                        messageFadeMinAlpha = {
+                            type = "range",
+                            name = "Minimum Opacity",
+                            desc = "The lowest opacity messages can fade to. 0 = fully invisible, 1 = fully opaque.",
+                            order = 4,
+                            width = "half",
+                            min = 0.0,
+                            max = 1.0,
+                            step = 0.05,
+                            handler = Options,
+                            get = "GetMessageFadeMinAlpha",
+                            set = "SetMessageFadeMinAlpha",
+                        },
+                    },
                 },
             },
         },
@@ -654,60 +707,6 @@ local function BuildChatEnhancementConfiguration()
                 },
             },
         },
-        controlsGroup = {
-            type = "group",
-            name = "Controls",
-            order = 3,
-            inline = true,
-            args = {
-                voiceButton = {
-                    type = "toggle",
-                    name = "Enable Voice Button",
-                    order = 1,
-                    width = "half",
-                    get = function()
-                        return Options:IsControlButtonEnabled("voice")
-                    end,
-                    set = function(_, value)
-                        Options:SetControlButtonEnabled("voice", value)
-                    end,
-                },
-                copyButton = {
-                    type = "toggle",
-                    name = "Enable Copy Button",
-                    order = 2,
-                    width = "half",
-                    get = function()
-                        return Options:IsControlButtonEnabled("copy")
-                    end,
-                    set = function(_, value)
-                        Options:SetControlButtonEnabled("copy", value)
-                    end,
-                },
-                menuButton = {
-                    type = "toggle",
-                    name = "Enable Menu Button",
-                    order = 3,
-                    width = "half",
-                    get = function()
-                        return Options:IsControlButtonEnabled("menu")
-                    end,
-                    set = function(_, value)
-                        Options:SetControlButtonEnabled("menu", value)
-                    end,
-                },
-                addonRedirect = {
-                    type = "toggle",
-                    name = "Redirect Addon Output",
-                    desc = "Suppress CHAT_MSG_ADDON traffic from appearing in your main chat and route it into a chat window named \"AddOns\". Create that window first via the + tab button and name it AddOns, then enable this.",
-                    order = 4,
-                    width = "half",
-                    handler = Options,
-                    get = "IsAddonRedirectEnabled",
-                    set = "SetAddonRedirectEnabled",
-                },
-            },
-        },
         debugGroup = {
             type = "group",
             name = "Debugging",
@@ -742,6 +741,7 @@ local function BuildChatEnhancementConfiguration()
                     handler = Options,
                     func = "OpenDebugConsole",
                 },
+
             },
         },
         channelColorsGroup = {
@@ -797,6 +797,19 @@ local function BuildChatEnhancementConfiguration()
                             "Color used for whispers and tells."),
                         addonColor = CreateChannelColorOption(2, "Addon Output", "addon",
                             "Color used for redirected addon output."),
+                    },
+                },
+                chatTypes = {
+                    type = "group",
+                    name = "Chat Types",
+                    order = 4,
+                    args = {
+                        sayColor = CreateChannelColorOption(1, "Say", "say",
+                            "Color used for /say messages."),
+                        yellColor = CreateChannelColorOption(2, "Yell", "yell",
+                            "Color used for /yell messages."),
+                        emoteColor = CreateChannelColorOption(3, "Emote", "emote",
+                            "Color used for emote messages."),
                     },
                 },
             },
@@ -865,7 +878,7 @@ local function BuildChatEnhancementConfiguration()
         alertsGroup = {
             type = "group",
             name = "Alerts",
-            order = 6,
+            order = 11,
             childGroups = "tree",
             args = {
                 enable = {
@@ -994,7 +1007,7 @@ local function BuildChatEnhancementConfiguration()
         routingGroup = {
             type = "group",
             name = "Routing",
-            order = 7,
+            order = 9,
             inline = true,
             args = {
                 whisperTabs = {
@@ -1007,19 +1020,48 @@ local function BuildChatEnhancementConfiguration()
                     get = "IsWhisperTabEnabled",
                     set = "SetWhisperTabEnabled",
                 },
-                info = {
+                routingDesc = {
                     type = "description",
-                    order = 2,
+                    order = 5,
                     width = "full",
-                    name =
-                    "Addon payload routing is now configurable from Controls. This section remains reserved for future per-window routing and capture rules.",
+                    name = T.Tools.Text.Color(T.Tools.Colors.GRAY,
+                        "Keyword Routing: redirect any message whose text contains a pattern to a specific chat tab. Plain-text matching, case-sensitive."),
+                },
+                routingColumnPat = {
+                    type = "description",
+                    order = 9,
+                    width = "double",
+                    name = T.Tools.Text.Color(T.Tools.Colors.MUTED, "  Match (plain text)"),
+                },
+                routingColumnTab = {
+                    type = "description",
+                    order = 9.5,
+                    width = "normal",
+                    name = T.Tools.Text.Color(T.Tools.Colors.MUTED, "  Route To Tab"),
+                },
+                routingColumnSpacer = {
+                    type = "description",
+                    order = 9.6,
+                    width = "half",
+                    name = "",
+                },
+                routingAddBtn = {
+                    type = "execute",
+                    name = "+ Add Rule",
+                    desc = "Add a new keyword routing rule.",
+                    order = 10,
+                    width = "half",
+                    func = function()
+                        Options:AddRoutingEntry()
+                        ConfigurationModule:Refresh()
+                    end,
                 },
             },
         },
         headerDatatextGroup = {
             type = "group",
             name = "Header Datatexts",
-            order = 8,
+            order = 8.5,
             inline = true,
             args = {
                 headerDatatextNote = {
@@ -1048,6 +1090,17 @@ local function BuildChatEnhancementConfiguration()
                     handler = Options,
                     get = "GetHeaderDatatextSlotCount",
                     set = "SetHeaderDatatextSlotCount",
+                },
+                headerDatatextSlotWidth = {
+                    type = "range",
+                    name = "Slot Width",
+                    desc = "Width of each datatext slot cell in pixels.",
+                    order = 2.5,
+                    width = "half",
+                    min = 32, max = 200, step = 4,
+                    handler = Options,
+                    get = "GetHeaderDatatextSlotWidth",
+                    set = "SetHeaderDatatextSlotWidth",
                 },
                 headerDatatextSlot1 = {
                     type = "select",
@@ -1078,6 +1131,39 @@ local function BuildChatEnhancementConfiguration()
                     values = function() return Options:GetHeaderDatatextChoices() end,
                     get = function() return Options:GetHeaderDatatextSlot(3) end,
                     set = function(_, value) Options:SetHeaderDatatextSlot(3, value) end,
+                },
+                headerDatatextFontSize = {
+                    type = "range",
+                    name = "Font Size",
+                    desc = "Font size for header datatext cells (8-18).",
+                    order = 6,
+                    width = "half",
+                    min = 8, max = 18, step = 1,
+                    handler = Options,
+                    get = "GetHeaderDatatextFontSize",
+                    set = "SetHeaderDatatextFontSize",
+                },
+                headerDatatextCustomColor = {
+                    type = "toggle",
+                    name = "Custom Text Color",
+                    desc = "Use a custom color for the header datatext cells instead of the default white.",
+                    order = 7,
+                    width = "half",
+                    handler = Options,
+                    get = "GetHeaderDatatextUseCustomTextColor",
+                    set = "SetHeaderDatatextUseCustomTextColor",
+                },
+                headerDatatextTextColor = {
+                    type = "color",
+                    name = "Text Color",
+                    desc = "Color of the header datatext cell text.",
+                    order = 8,
+                    width = "half",
+                    disabled = function() return not Options:GetHeaderDatatextUseCustomTextColor() end,
+                    hasAlpha = false,
+                    handler = Options,
+                    get = "GetHeaderDatatextTextColor",
+                    set = "SetHeaderDatatextTextColor",
                 },
             },
         },
@@ -1116,36 +1202,15 @@ local function BuildChatEnhancementConfiguration()
                     get = "GetChatHistoryLimit",
                     set = "SetChatHistoryLimit",
                 },
-            },
-        },
-        debuggingGroup = {
-            type = "group",
-            name = "Debugging",
-            order = 99,
-            inline = true,
-            args = {
-                debugNote = {
-                    type = "description",
-                    order = 0,
-                    width = "full",
-                    name = "Diagnostic tools for testing chat renderer features.",
-                },
-                testItemLink = {
-                    type = "execute",
-                    name = "Send Item Link",
-                    desc = "Inserts a test item link into the chat to verify hyperlink and tooltip handling. Hover the link in chat after clicking.",
-                    order = 1,
+                addonRedirect = {
+                    type = "toggle",
+                    name = "Redirect Addon Output",
+                    desc = "Route CHAT_MSG_ADDON traffic into a chat window named \"AddOns\". Create that window first via the + tab button, name it AddOns, then enable this.",
+                    order = 3,
                     width = "half",
-                    func = function()
-                        local frame = _G.ChatFrame1
-                        if frame and frame.AddMessage then
-                            -- Hearthstone: always available, safe test item link.
-                            frame:AddMessage(
-                                "Hyperlink test: |Hitem:6948:0:0:0:0:0:0:0:0|h[Hearthstone]|h — hover to preview tooltip.",
-                                1, 0.8, 0.2
-                            )
-                        end
-                    end,
+                    handler = Options,
+                    get = "IsAddonRedirectEnabled",
+                    set = "SetAddonRedirectEnabled",
                 },
             },
         },
@@ -1154,6 +1219,76 @@ local function BuildChatEnhancementConfiguration()
     for _, channel in pairs(chatAlertsModule.SupportedChannels) do
         optionsTab.args.alertsGroup.args[channel.name .. "Group"] = CreateChannelConfigurationSection(channel)
     end
+
+    -- Build dynamic routing entry slots (up to 20).  Each slot shows only when
+    -- its index references a real entry in Options:GetRoutingEntries().
+    do
+        local MAX_ROUTING_SLOTS = 20
+        local routingArgs = optionsTab.args.routingGroup.args
+        for i = 1, MAX_ROUTING_SLOTS do
+            local idx = i  -- capture loop variable for closures
+            routingArgs["routingPat_" .. idx] = {
+                type  = "input",
+                name  = "",
+                desc  = "Plain-text pattern. Any message containing this text (case-sensitive) is redirected to the chosen tab.",
+                order = 100 + idx * 3,
+                width = "double",
+                hidden = function()
+                    return idx > #Options:GetRoutingEntries()
+                end,
+                get = function()
+                    return Options:GetRoutingEntryPattern(idx)
+                end,
+                set = function(info, val)
+                    Options:SetRoutingEntryPattern(idx, val)
+                end,
+            }
+            routingArgs["routingTab_" .. idx] = {
+                type   = "select",
+                name   = "",
+                desc   = "Chat tab that matching messages will be routed to.",
+                order  = 100 + idx * 3 + 1,
+                width  = "normal",
+                hidden = function()
+                    return idx > #Options:GetRoutingEntries()
+                end,
+                values = function()
+                    return Options:GetAvailableChatTabs()
+                end,
+                sorting = function()
+                    local t = Options:GetAvailableChatTabs()
+                    local s = {}
+                    for k in pairs(t) do s[#s + 1] = k end
+                    table.sort(s)
+                    return s
+                end,
+                get = function()
+                    local v    = Options:GetRoutingEntryTab(idx)
+                    local tabs = Options:GetAvailableChatTabs()
+                    -- Return nil if the stored tab no longer exists (avoids AceConfig warning).
+                    return tabs[v] and v or nil
+                end,
+                set = function(info, val)
+                    Options:SetRoutingEntryTab(idx, val)
+                end,
+            }
+            routingArgs["routingRemove_" .. idx] = {
+                type   = "execute",
+                name   = "Remove",
+                desc   = "Remove this routing rule.",
+                order  = 100 + idx * 3 + 2,
+                width  = "half",
+                hidden = function()
+                    return idx > #Options:GetRoutingEntries()
+                end,
+                func = function()
+                    Options:RemoveRoutingEntry(idx)
+                    ConfigurationModule:Refresh()
+                end,
+            }
+        end
+    end
+
     return optionsTab
 end
 
