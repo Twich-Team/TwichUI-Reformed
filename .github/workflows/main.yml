@@ -14,5 +14,10 @@ jobs:
       - name: Clone project
         uses: actions/checkout@v6
 
+      - name: Install Subversion
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y subversion
+
       - name: Package and release
         uses: BigWigsMods/packager@v2
