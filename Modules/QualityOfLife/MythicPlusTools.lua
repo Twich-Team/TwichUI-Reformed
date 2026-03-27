@@ -37,6 +37,8 @@ local C_MythicPlus = _G.C_MythicPlus
 local C_PartyInfo = _G.C_PartyInfo
 local C_NamePlate = _G.C_NamePlate
 local C_Spell = _G.C_Spell
+local C_Scenario = _G.C_Scenario
+local C_ScenarioInfo = _G.C_ScenarioInfo
 local C_Timer = _G.C_Timer
 local CombatLogGetCurrentEventInfo = _G.CombatLogGetCurrentEventInfo
 local CreateFrame = _G.CreateFrame
@@ -49,6 +51,7 @@ local GetSpellBaseCooldown = _G.GetSpellBaseCooldown
 local GetSpellCooldown = _G.GetSpellCooldown
 local GetSpellInfo = _G.GetSpellInfo
 local GetTime = _G.GetTime
+local GetWorldElapsedTime = _G.GetWorldElapsedTime
 local InCombatLockdown = _G.InCombatLockdown
 local IsInGroup = _G.IsInGroup
 local IsInInstance = _G.IsInInstance
@@ -77,6 +80,7 @@ local Textures = T.Tools and T.Tools.Textures
 local Colors = T.Tools and T.Tools.Colors
 local DebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
 local FindAuraBySpellID = AuraUtil and (AuraUtil.FindAuraBySpellId or AuraUtil.FindAuraBySpellID)
+local AttachTooltipHandlers
 
 local MYTHIC_KEYSTONE_ITEM_IDS = {
     [138019] = true,
@@ -91,6 +95,14 @@ local READY_COLOR = { 0.32, 0.86, 0.54 }
 local ACTIVE_COLOR = { 0.33, 0.65, 0.96 }
 local WARNING_COLOR = { 0.93, 0.51, 0.2 }
 local ALERT_COLOR = { 0.85, 0.25, 0.25 }
+local TIMER_PLUS_THREE_COLOR = { 0.36, 0.86, 0.54, 0.95 }
+local TIMER_PLUS_TWO_COLOR = { 0.42, 0.82, 0.98, 0.95 }
+local TIMER_PLUS_ONE_COLOR = { 0.95, 0.76, 0.24, 0.95 }
+local TIMER_FORCES_COLOR = { 0.82, 0.36, 0.96, 0.95 }
+local TIMER_MUTED_TEXT_COLOR = { 0.72, 0.74, 0.8, 1 }
+local TIMER_ACTIVE_TEXT_COLOR = { 1, 0.95, 0.86, 1 }
+local TIMER_SETTINGS_ICON = "Interface\\Buttons\\UI-OptionsButton"
+local DUNGEON_DEATH_NOTIFICATION_ICON = "Interface\\Icons\\achievement_bg_xkills_avgraveyard"
 local MUTED_SOUND_VALUE = "__none"
 local DEBUG_LOG_LIMIT = 120
 local DEBUG_SOURCE_KEY = "mythicplustools"
@@ -601,6 +613,48 @@ function MPT:GetTrackerAppearance()
     return c
 end
 
+function MPT:GetMythicPlusTimerAppearance()
+    local appearance = self:GetTrackerAppearance()
+    local db = self:GetDB()
+    local fontColor = self.trackerAppearanceCache.timerFontColor
+    local mutedColor = self.trackerAppearanceCache.timerMutedTextColor
+    local customBarColor = self.trackerAppearanceCache.timerBarColor
+
+    appearance.timerFontPath = GetTrackerFontPath(db.mythicPlusTimerFont or db.trackerFont)
+    appearance.timerFontSize = ClampNumber(db.mythicPlusTimerFontSize, 8, 28, appearance.fontSize)
+    appearance.timerOutline = GetOutlineFlag(db.mythicPlusTimerFontOutline or db.trackerFontOutline)
+    appearance.timerRowGap = ClampNumber(db.mythicPlusTimerRowGap, 0, 30, appearance.rowGap)
+    appearance.timerBarHeight = ClampNumber(db.mythicPlusTimerBarHeight, 10, 40, appearance.barHeight)
+    appearance.timerBarTexture =
+        (db.mythicPlusTimerBarTexture and LSM and LSM.Fetch and LSM:Fetch("statusbar", db.mythicPlusTimerBarTexture)) or
+        appearance.barTexture
+    appearance.timerLayout = db.mythicPlusTimerLayout == "right" and "right" or "left"
+    appearance.timerBarColorMode = db.mythicPlusTimerBarColorMode == "custom" and "custom" or "milestone"
+
+    fontColor[1] = (db.mythicPlusTimerFontColor and db.mythicPlusTimerFontColor.r)
+        or (db.statusTextColor and db.statusTextColor.r)
+        or TIMER_ACTIVE_TEXT_COLOR[1]
+    fontColor[2] = (db.mythicPlusTimerFontColor and db.mythicPlusTimerFontColor.g)
+        or (db.statusTextColor and db.statusTextColor.g)
+        or TIMER_ACTIVE_TEXT_COLOR[2]
+    fontColor[3] = (db.mythicPlusTimerFontColor and db.mythicPlusTimerFontColor.b)
+        or (db.statusTextColor and db.statusTextColor.b)
+        or TIMER_ACTIVE_TEXT_COLOR[3]
+    fontColor[4] = 1
+
+    mutedColor[1] = max(0, min(1, fontColor[1] * 0.76))
+    mutedColor[2] = max(0, min(1, fontColor[2] * 0.76))
+    mutedColor[3] = max(0, min(1, fontColor[3] * 0.76))
+    mutedColor[4] = 1
+
+    customBarColor[1] = (db.mythicPlusTimerBarColor and db.mythicPlusTimerBarColor.r) or TIMER_PLUS_TWO_COLOR[1]
+    customBarColor[2] = (db.mythicPlusTimerBarColor and db.mythicPlusTimerBarColor.g) or TIMER_PLUS_TWO_COLOR[2]
+    customBarColor[3] = (db.mythicPlusTimerBarColor and db.mythicPlusTimerBarColor.b) or TIMER_PLUS_TWO_COLOR[3]
+    customBarColor[4] = 0.95
+
+    return appearance
+end
+
 function MPT:ApplyTrackerFrameStyle(frame)
     if not frame then
         return
@@ -706,6 +760,17 @@ function MPT:GetStatusTextStyle(state)
 end
 
 function MPT:GetFrameSizeDefaults(kind)
+    if kind == "timer" then
+        return {
+            width = 420,
+            height = 320,
+            minWidth = 360,
+            minHeight = 250,
+            maxWidth = 720,
+            maxHeight = 540,
+        }
+    end
+
     return {
         width = 350,
         height = 250,
@@ -718,12 +783,24 @@ end
 
 function MPT:GetFrameLocked(kind)
     local db = self:GetDB()
+    if kind == "timer" then
+        if db.mythicPlusTimerLocked == nil then
+            return true
+        end
+
+        return db.mythicPlusTimerLocked == true
+    end
+
     return db.interruptTrackerLocked == true
 end
 
 function MPT:SetFrameLocked(kind, isLocked)
     local db = self:GetDB()
-    db.interruptTrackerLocked = isLocked == true
+    if kind == "timer" then
+        db.mythicPlusTimerLocked = isLocked == true
+    else
+        db.interruptTrackerLocked = isLocked == true
+    end
     self:ApplyFrameLockStates()
 end
 
@@ -779,6 +856,7 @@ function MPT:UpdateFrameHoverState(frame)
 
     local isHovered = MouseIsOver(frame) or
         (frame.LockButton and frame.LockButton:IsShown() and MouseIsOver(frame.LockButton)) or
+        (frame.SettingsButton and frame.SettingsButton:IsShown() and MouseIsOver(frame.SettingsButton)) or
         (frame.CloseButton and frame.CloseButton:IsShown() and MouseIsOver(frame.CloseButton)) or
         (frame.ResizeHandle and frame.ResizeHandle:IsShown() and MouseIsOver(frame.ResizeHandle)) or false
 
@@ -813,8 +891,12 @@ function MPT:RefreshFrameControls(kind, frame)
         frame.LockButton:SetShown(isHovered)
     end
 
+    if frame.SettingsButton then
+        frame.SettingsButton:SetShown(frame.hasSettingsButton == true and isHovered)
+    end
+
     if frame.CloseButton then
-        frame.CloseButton:SetShown(not isLocked or isHovered)
+        frame.CloseButton:SetShown(frame.suppressCloseButton ~= true and (not isLocked or isHovered))
     end
 end
 
@@ -840,8 +922,12 @@ function MPT:MakeFrameResizable(kind, frame)
             sizedFrame.EmptyText:SetWidth(max(160, (sizedFrame:GetWidth() or 260) - 60))
         end
         if sizedFrame:IsShown() then
-            self:ApplyRowLayout(sizedFrame)
-            self:RefreshInterruptFrame()
+            if kind == "interrupt" then
+                self:ApplyRowLayout(sizedFrame)
+                self:RefreshInterruptFrame()
+            elseif kind == "timer" then
+                self:RefreshMythicPlusTimerFrame()
+            end
         end
     end)
 
@@ -919,6 +1005,9 @@ function MPT:RefreshTrackerStyling()
     if self.interruptFrame then
         self:ApplyRowLayout(self.interruptFrame)
         self:RefreshInterruptFrame()
+    end
+    if self.mythicPlusTimerFrame then
+        self:RefreshMythicPlusTimerFrame()
     end
 end
 
@@ -1023,7 +1112,93 @@ local function HasSlottedKeystone()
     return false
 end
 
+local function FormatClock(seconds, alwaysShowHours)
+    seconds = max(0, tonumber(seconds) or 0)
+    local wholeSeconds = floor(seconds + 0.5)
+    local hours = floor(wholeSeconds / 3600)
+    local minutes = floor((wholeSeconds % 3600) / 60)
+    local remainingSeconds = wholeSeconds % 60
+
+    if hours > 0 or alwaysShowHours then
+        return format("%d:%02d:%02d", hours, minutes, remainingSeconds)
+    end
+
+    return format("%02d:%02d", minutes, remainingSeconds)
+end
+
+local function FormatSignedClock(seconds)
+    local numericValue = tonumber(seconds) or 0
+    if numericValue < 0 then
+        return "-" .. FormatClock(abs(numericValue))
+    end
+
+    return FormatClock(numericValue)
+end
+
+local function GetMythicPlusMapName(mapID)
+    if not (C_ChallengeMode and type(C_ChallengeMode.GetMapUIInfo) == "function") then
+        return "Mythic+"
+    end
+
+    local name = C_ChallengeMode.GetMapUIInfo(mapID)
+    if type(name) == "string" and name ~= "" then
+        return name
+    end
+
+    return "Mythic+"
+end
+
+local function GetMythicPlusTimeLimits(timeLimit, hasChallengersPeril)
+    local fullLimit = max(0, tonumber(timeLimit) or 0)
+    if fullLimit <= 0 then
+        return 0, 0, 0
+    end
+
+    if hasChallengersPeril then
+        local adjustedBase = max(0, fullLimit - 90)
+        return fullLimit, (adjustedBase * 0.8) + 90, (adjustedBase * 0.6) + 90
+    end
+
+    return fullLimit, fullLimit * 0.8, fullLimit * 0.6
+end
+
+local function GetMythicPlusTimerBarFractions(timeLimit, hasChallengersPeril)
+    local plusOneLimit, plusTwoLimit, plusThreeLimit = GetMythicPlusTimeLimits(timeLimit, hasChallengersPeril)
+    if plusOneLimit <= 0 then
+        return 0.2, 0.2, 0.6
+    end
+
+    local plusOneFraction = ClampNumber((plusOneLimit - plusTwoLimit) / plusOneLimit, 0, 1, 0.2)
+    local plusTwoFraction = ClampNumber((plusTwoLimit - plusThreeLimit) / plusOneLimit, 0, 1, 0.2)
+    local plusThreeFraction = ClampNumber(plusThreeLimit / plusOneLimit, 0, 1, 0.6)
+    return plusOneFraction, plusTwoFraction, plusThreeFraction
+end
+
+local function ExtractWeightedProgressCount(criteriaInfo)
+    if type(criteriaInfo) ~= "table" then
+        return 0
+    end
+
+    if type(criteriaInfo.quantity) == "number" then
+        return criteriaInfo.quantity
+    end
+
+    local quantityString = criteriaInfo.quantityString
+    if type(quantityString) ~= "string" or quantityString == "" then
+        return 0
+    end
+
+    return tonumber(quantityString:match("%d+")) or 0
+end
+
 local function GetOwnedKeystoneMapID()
+    if C_MythicPlus and type(C_MythicPlus.GetOwnedKeystoneMapID) == "function" then
+        local mapID = C_MythicPlus.GetOwnedKeystoneMapID()
+        if type(mapID) == "number" and mapID > 0 then
+            return mapID
+        end
+    end
+
     if C_MythicPlus and type(C_MythicPlus.GetOwnedKeystoneChallengeMapID) == "function" then
         local mapID = C_MythicPlus.GetOwnedKeystoneChallengeMapID()
         if type(mapID) == "number" and mapID > 0 then
@@ -1105,6 +1280,13 @@ function MPT:IsFeatureEnabled(featureKey)
     if featureKey == "interruptTracker" then
         return db.interruptTrackerEnabled ~= false
     end
+    if featureKey == "mythicPlusTimer" then
+        if db.mythicPlusTimerEnabled == nil then
+            return true
+        end
+
+        return db.mythicPlusTimerEnabled == true
+    end
     return false
 end
 
@@ -1120,6 +1302,14 @@ function MPT:EnsureRuntime()
     self.preview = self.preview or {
         interrupts = false,
         interruptsStartedAt = 0,
+        mythicPlusTimer = false,
+        mythicPlusTimerStartedAt = 0,
+    }
+    self.mythicPlusTimerState = self.mythicPlusTimerState or {
+        mapID = nil,
+        level = nil,
+        bossCheckpoints = {},
+        forcesCompletionTime = nil,
     }
     self.lastSeenDeaths = self.lastSeenDeaths or {}
     self.lastReadySoundAt = self.lastReadySoundAt or {}
@@ -1137,6 +1327,9 @@ function MPT:EnsureRuntime()
             interruptBarColor      = { 0, 0, 0, 1 },
             interruptReadyBarColor = { 0, 0, 0, 1 },
             interruptFontColor     = { 0, 0, 0, 1 },
+            timerFontColor         = { 0, 0, 0, 1 },
+            timerMutedTextColor    = { 0, 0, 0, 1 },
+            timerBarColor          = { 0, 0, 0, 1 },
         }
     end
     self.trackerMetricsCache     = self.trackerMetricsCache or {}
@@ -1174,12 +1367,19 @@ function MPT:OnDisable()
     if self.interruptFrame then
         self.interruptFrame:Hide()
     end
+
+    if self.mythicPlusTimerFrame then
+        self.mythicPlusTimerFrame:Hide()
+    end
 end
 
 function MPT:RefreshModuleState()
     if not IsModuleConfiguredEnabled() then
         if self.interruptFrame then
             self.interruptFrame:Hide()
+        end
+        if self.mythicPlusTimerFrame then
+            self.mythicPlusTimerFrame:Hide()
         end
         return
     end
@@ -1378,13 +1578,6 @@ function MPT:EnsureHooks()
         return
     end
 
-    if type(hooksecurefunc) == "function" and type(_G.TimerTracker_StartTimerOfType) == "function" then
-        hooksecurefunc("TimerTracker_StartTimerOfType", function(...)
-            self:HandleTimerTrackerStart(...)
-        end)
-        self.hookedTimerTracker = true
-    end
-
     local toastsModule = T.GetModule and T:GetModule("ToastsModule", true) or nil
     if not self.directEventMode and type(hooksecurefunc) == "function" and toastsModule then
         if type(toastsModule.HandlePlayerEnteringWorld) == "function" then
@@ -1508,6 +1701,8 @@ function MPT:RegisterDirectEvents()
     self.runtimeEventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
     self.runtimeEventFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     self.runtimeEventFrame:RegisterEvent("INSPECT_READY")
+    self.runtimeEventFrame:RegisterEvent("START_PLAYER_COUNTDOWN")
+    self.runtimeEventFrame:RegisterEvent("CANCEL_PLAYER_COUNTDOWN")
     -- COMBAT_LOG_EVENT_UNFILTERED is restricted in TWW; sourced via ElvUI hook.
     self.runtimeEventFrame:RegisterEvent("CHALLENGE_MODE_KEYSTONE_RECEPTABLE_OPEN")
 
@@ -1639,20 +1834,9 @@ function MPT:EnsureDynamicHooks()
     end
 end
 
-function MPT:HandleTimerTrackerStart(...)
-    local args = { ... }
-    local timerType = args[1]
-    local timeSeconds = args[2]
-    local totalTime = args[3]
-
-    self:LogDebug(
-    format("hooked timer start type=%s time=%s total=%s", tostring(timerType), tostring(timeSeconds), tostring(totalTime)),
-        false)
-    self:START_TIMER("START_TIMER", timerType, timeSeconds, totalTime)
-end
-
 function MPT:EnsureFrames()
     self:EnsureInterruptFrame()
+    self:EnsureMythicPlusTimerFrame()
 end
 
 function MPT:CreateBaseFrame(width, height, titleText, titleIcon)
@@ -1711,6 +1895,25 @@ function MPT:CreateBaseFrame(width, height, titleText, titleIcon)
     frame.LockButton.Icon = frame.LockButton:CreateTexture(nil, "ARTWORK")
     frame.LockButton.Icon:SetPoint("CENTER", frame.LockButton, "CENTER", 0, 0)
     frame.LockButton.Icon:SetSize(32, 32)
+
+    frame.SettingsButton = CreateFrame("Button", nil, frame)
+    frame.SettingsButton:SetSize(28, 28)
+    frame.SettingsButton:SetHitRectInsets(-6, -6, -6, -6)
+    frame.SettingsButton:SetPoint("TOPRIGHT", frame.TitleBar, "TOPRIGHT", -52, -2)
+    frame.SettingsButton:SetFrameStrata(frame:GetFrameStrata())
+    frame.SettingsButton:SetFrameLevel((frame:GetFrameLevel() or 1) + 40)
+    frame.SettingsButton.Highlight = frame.SettingsButton:CreateTexture(nil, "HIGHLIGHT")
+    frame.SettingsButton.Highlight:SetAllPoints(frame.SettingsButton)
+    frame.SettingsButton.Highlight:SetColorTexture(1, 1, 1, 0.08)
+    frame.SettingsButton.Icon = frame.SettingsButton:CreateTexture(nil, "ARTWORK")
+    frame.SettingsButton.Icon:SetPoint("CENTER", frame.SettingsButton, "CENTER", 0, 0)
+    frame.SettingsButton.Icon:SetSize(18, 18)
+    frame.SettingsButton.Icon:SetTexture(TIMER_SETTINGS_ICON)
+    frame.SettingsButton.tooltipTitle = "Open Settings"
+    frame.SettingsButton.tooltipLines = {
+        "Open the Mythic+ timer configuration page.",
+    }
+    AttachTooltipHandlers(frame.SettingsButton)
 
     frame.CloseButton = CreateFrame("Button", nil, frame.TitleBar, "UIPanelCloseButton")
     frame.CloseButton:SetPoint("RIGHT", frame.TitleBar, "RIGHT", -2, 0)
@@ -1938,6 +2141,12 @@ function MPT:InitializeFrameControls(kind, frame)
         self:SetFrameLocked(kind, not self:GetFrameLocked(kind))
     end)
 
+    if frame.SettingsButton then
+        frame.SettingsButton:SetScript("OnClick", function()
+            self:OpenTimerSettings()
+        end)
+    end
+
     frame:HookScript("OnEnter", function(widget)
         self:SetFrameHovered(widget, true)
     end)
@@ -2042,6 +2251,1148 @@ function MPT:EnsureInterruptFrame()
     return frame
 end
 
+function MPT:ResetMythicPlusTimerTracking()
+    self.mythicPlusTimerState = self.mythicPlusTimerState or {}
+    self.mythicPlusTimerState.mapID = nil
+    self.mythicPlusTimerState.level = nil
+    self.mythicPlusTimerState.forcesCompletionTime = nil
+    self.mythicPlusTimerState.lastNotificationState = nil
+    self.mythicPlusTimerState.bossCheckpoints = self.mythicPlusTimerState.bossCheckpoints or {}
+
+    for key in pairs(self.mythicPlusTimerState.bossCheckpoints) do
+        self.mythicPlusTimerState.bossCheckpoints[key] = nil
+    end
+end
+
+function MPT:OpenTimerSettings()
+    local ui = ConfigurationModule and ConfigurationModule.StandaloneUI
+    if ui and ui.Show then
+        ui:Show("Mythic+ Tools")
+    end
+end
+
+function MPT:GetMythicPlusTimerScale()
+    local db = self:GetDB()
+    return ClampNumber(db.mythicPlusTimerScale, 0.7, 1.5, 1)
+end
+
+local function PlayAnimationGroup(group)
+    if not group then
+        return
+    end
+
+    if group.Stop then
+        group:Stop()
+    end
+    if group.Play then
+        group:Play()
+    end
+end
+
+local function EnsureAlphaPulse(target, key, peakAlpha, fadeInDuration, fadeOutDuration)
+    if not target then
+        return nil
+    end
+
+    if target[key] then
+        return target[key]
+    end
+
+    local group = target:CreateAnimationGroup()
+    local alphaIn = group:CreateAnimation("Alpha")
+    alphaIn:SetTarget(target)
+    alphaIn:SetFromAlpha(1)
+    alphaIn:SetToAlpha(peakAlpha or 0.35)
+    alphaIn:SetDuration(fadeInDuration or 0.08)
+    alphaIn:SetOrder(1)
+
+    local alphaOut = group:CreateAnimation("Alpha")
+    alphaOut:SetTarget(target)
+    alphaOut:SetFromAlpha(peakAlpha or 0.35)
+    alphaOut:SetToAlpha(1)
+    alphaOut:SetDuration(fadeOutDuration or 0.3)
+    alphaOut:SetOrder(2)
+
+    target[key] = group
+    return group
+end
+
+local function EnsureTranslationPulse(target, key, offsetX, offsetY, outDuration, returnDuration)
+    if not target then
+        return nil
+    end
+
+    if target[key] then
+        return target[key]
+    end
+
+    local group = target:CreateAnimationGroup()
+    local moveOut = group:CreateAnimation("Translation")
+    moveOut:SetTarget(target)
+    moveOut:SetOffset(offsetX or 0, offsetY or 0)
+    moveOut:SetDuration(outDuration or 0.12)
+    moveOut:SetSmoothing("OUT")
+    moveOut:SetOrder(1)
+
+    local moveBack = group:CreateAnimation("Translation")
+    moveBack:SetTarget(target)
+    moveBack:SetOffset(-(offsetX or 0), -(offsetY or 0))
+    moveBack:SetDuration(returnDuration or 0.24)
+    moveBack:SetSmoothing("IN")
+    moveBack:SetOrder(2)
+
+    target[key] = group
+    return group
+end
+
+local function EnsureFontColorBloom(target, key, flashColor, holdDuration)
+    if not target then
+        return nil
+    end
+
+    if target[key] then
+        return target[key]
+    end
+
+    local group = target:CreateAnimationGroup()
+    local hold = group:CreateAnimation("Alpha")
+    hold:SetTarget(target)
+    hold:SetFromAlpha(1)
+    hold:SetToAlpha(1)
+    hold:SetDuration(holdDuration or 0.24)
+    hold:SetOrder(1)
+
+    group:SetScript("OnPlay", function(animationGroup)
+        local red, green, blue, alpha = target:GetTextColor()
+        animationGroup.restoreColor = { red or 1, green or 1, blue or 1, alpha or 1 }
+        target:SetTextColor(flashColor[1] or 1, flashColor[2] or 1, flashColor[3] or 1, flashColor[4] or 1)
+    end)
+
+    group:SetScript("OnFinished", function(animationGroup)
+        local restore = animationGroup.restoreColor or { 1, 1, 1, 1 }
+        target:SetTextColor(restore[1], restore[2], restore[3], restore[4])
+    end)
+
+    target[key] = group
+    return group
+end
+
+function AttachTooltipHandlers(region)
+    if not region or region.twichUITooltipBound then
+        return
+    end
+
+    if region.EnableMouse then
+        region:EnableMouse(true)
+    end
+
+    if region.SetScript then
+        region:SetScript("OnEnter", function(widget)
+            if not GameTooltip then
+                return
+            end
+
+            local provider = widget.tooltipProvider
+            local title, lines
+            if type(provider) == "function" then
+                title, lines = provider(widget)
+            else
+                title = widget.tooltipTitle
+                lines = widget.tooltipLines
+            end
+
+            if type(title) ~= "string" or title == "" then
+                return
+            end
+
+            GameTooltip:SetOwner(widget, "ANCHOR_CURSOR")
+            GameTooltip:AddLine(title, 1, 1, 1)
+            if type(lines) == "table" then
+                for _, line in ipairs(lines) do
+                    if type(line) == "string" and line ~= "" then
+                        GameTooltip:AddLine(line, 0.84, 0.84, 0.84, true)
+                    end
+                end
+            elseif type(lines) == "string" and lines ~= "" then
+                GameTooltip:AddLine(lines, 0.84, 0.84, 0.84, true)
+            end
+            GameTooltip:Show()
+        end)
+        region:SetScript("OnLeave", function()
+            if GameTooltip and GameTooltip.Hide then
+                GameTooltip:Hide()
+            end
+        end)
+    end
+
+    region.twichUITooltipBound = true
+end
+
+function MPT:ApplyMythicPlusTimerStyle(frame)
+    if not frame then
+        return
+    end
+
+    local appearance = self:GetMythicPlusTimerAppearance()
+    local style = self:GetDB().mythicPlusTimerStyle or "framed"
+    local isTransparent = style == "transparent"
+    local showHeader = not isTransparent and self:GetDB().mythicPlusTimerShowHeader ~= false
+    local bgR, bgG, bgB, bgA, borderR, borderG, borderB = GetBackdropColors()
+
+    frame:SetScale(self:GetMythicPlusTimerScale())
+
+    if frame.BackgroundFill then
+        frame.BackgroundFill:SetShown(not isTransparent)
+    end
+    if frame.InnerGlow then
+        frame.InnerGlow:SetShown(not isTransparent)
+    end
+
+    if frame.SetBackdropColor then
+        if isTransparent then
+            frame:SetBackdropColor(0, 0, 0, 0)
+            frame:SetBackdropBorderColor(0, 0, 0, 0)
+        else
+            frame:SetBackdropColor(bgR, bgG, bgB, bgA)
+            frame:SetBackdropBorderColor(borderR, borderG, borderB, 1)
+        end
+    end
+
+    if frame.TitleBar and frame.TitleBar.SetBackdropColor then
+        frame.TitleBar:SetShown(showHeader)
+        if isTransparent then
+            frame.TitleBar:SetBackdropColor(0, 0, 0, 0)
+            frame.TitleBar:SetBackdropBorderColor(0, 0, 0, 0)
+        else
+            frame.TitleBar:SetBackdropColor(bgR * 0.75, bgG * 0.75, bgB * 0.75, 0.98)
+            frame.TitleBar:SetBackdropBorderColor(borderR, borderG, borderB, 0.35)
+        end
+    end
+
+    if frame.TitleAccent then
+        frame.TitleAccent:SetShown(showHeader)
+    end
+
+    if frame.TitleIcon then
+        frame.TitleIcon:SetShown(showHeader)
+    end
+
+    if frame.Title then
+        frame.Title:SetShown(showHeader)
+    end
+
+    if frame.ContentInset and frame.ContentInset.SetBackdropColor then
+        frame.ContentInset:ClearAllPoints()
+        if isTransparent or not showHeader then
+            frame.ContentInset:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -8)
+            frame.ContentInset:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
+        else
+            frame.ContentInset:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -40)
+            frame.ContentInset:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
+        end
+
+        if isTransparent then
+            frame.ContentInset:SetBackdropColor(0, 0, 0, 0)
+            frame.ContentInset:SetBackdropBorderColor(0, 0, 0, 0)
+        else
+            frame.ContentInset:SetBackdropColor(bgR * 0.82, bgG * 0.82, bgB * 0.82, 0.98)
+            frame.ContentInset:SetBackdropBorderColor(borderR, borderG, borderB, 0.45)
+        end
+    end
+
+    if frame.KeyText then
+        frame.KeyText:SetJustifyH(appearance.timerLayout == "right" and "RIGHT" or "LEFT")
+    end
+end
+
+function MPT:CreateMythicPlusTimerBarRow(parent)
+    local row = CreateFrame("Frame", nil, parent)
+    row.barBackdrop, row.bar = self:CreateTrackerBar(row)
+    row.barBackdrop:SetAllPoints(row)
+
+    row.content = CreateFrame("Frame", nil, row)
+    row.content:SetAllPoints(row)
+    row.content:SetFrameLevel((row.barBackdrop:GetFrameLevel() or row:GetFrameLevel()) + 5)
+
+    row.label = row.content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    row.label:SetJustifyH("LEFT")
+    row.label:SetJustifyV("MIDDLE")
+
+    row.value = row.content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    row.value:SetJustifyH("RIGHT")
+    row.value:SetJustifyV("MIDDLE")
+
+    row.detail = row.content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.detail:SetJustifyH("LEFT")
+    row.detail:SetJustifyV("MIDDLE")
+
+    return row
+end
+
+function MPT:CreateMythicPlusTimerMilestoneRow(parent)
+    local row = CreateFrame("Frame", nil, parent)
+    row.content = CreateFrame("Frame", nil, row)
+    row.content:SetAllPoints(row)
+    row.Segments = {}
+
+    for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
+        local segment = CreateFrame("Frame", nil, row.content)
+        segment.backdrop, segment.bar = self:CreateTrackerBar(segment)
+        segment.backdrop:SetAllPoints(segment)
+        AttachTooltipHandlers(segment)
+        segment.content = CreateFrame("Frame", nil, segment)
+        segment.content:SetAllPoints(segment)
+        segment.content:SetFrameLevel((segment.backdrop:GetFrameLevel() or segment:GetFrameLevel()) + 5)
+
+        segment.Label = segment.content:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        segment.Label:SetJustifyH("LEFT")
+        segment.Label:SetJustifyV("TOP")
+
+        segment.Value = segment.content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        segment.Value:SetJustifyH("CENTER")
+        segment.Value:SetJustifyV("MIDDLE")
+
+        segment.Flash = segment:CreateTexture(nil, "OVERLAY")
+        segment.Flash:SetAllPoints(segment.backdrop)
+        segment.Flash:SetAlpha(0)
+        segment.Flash:SetBlendMode("ADD")
+
+        segment.Chaser = segment:CreateTexture(nil, "OVERLAY")
+        segment.Chaser:SetPoint("TOP", segment.backdrop, "TOP", 0, 0)
+        segment.Chaser:SetPoint("BOTTOM", segment.backdrop, "BOTTOM", 0, 0)
+        segment.Chaser:SetWidth(28)
+        segment.Chaser:SetAlpha(0)
+        segment.Chaser:SetBlendMode("ADD")
+
+        segment.FlashAnimation = segment:CreateAnimationGroup()
+        local flashIn = segment.FlashAnimation:CreateAnimation("Alpha")
+        flashIn:SetTarget(segment.Flash)
+        flashIn:SetFromAlpha(0)
+        flashIn:SetToAlpha(0.34)
+        flashIn:SetDuration(0.14)
+        flashIn:SetOrder(1)
+
+        local flashOut = segment.FlashAnimation:CreateAnimation("Alpha")
+        flashOut:SetTarget(segment.Flash)
+        flashOut:SetFromAlpha(0.34)
+        flashOut:SetToAlpha(0)
+        flashOut:SetDuration(0.5)
+        flashOut:SetOrder(2)
+
+        segment.ChaserAnimation = segment:CreateAnimationGroup()
+        local chaserIn = segment.ChaserAnimation:CreateAnimation("Alpha")
+        chaserIn:SetTarget(segment.Chaser)
+        chaserIn:SetFromAlpha(0)
+        chaserIn:SetToAlpha(0.65)
+        chaserIn:SetDuration(0.08)
+        chaserIn:SetOrder(1)
+
+        local chaserMove = segment.ChaserAnimation:CreateAnimation("Translation")
+        chaserMove:SetTarget(segment.Chaser)
+        chaserMove:SetOffset(60, 0)
+        chaserMove:SetDuration(0.48)
+        chaserMove:SetSmoothing("OUT")
+        chaserMove:SetOrder(2)
+
+        local chaserOut = segment.ChaserAnimation:CreateAnimation("Alpha")
+        chaserOut:SetTarget(segment.Chaser)
+        chaserOut:SetFromAlpha(0.65)
+        chaserOut:SetToAlpha(0)
+        chaserOut:SetDuration(0.18)
+        chaserOut:SetOrder(3)
+
+        row.Segments[key] = segment
+    end
+
+    return row
+end
+
+function MPT:EnsureMythicPlusTimerAnimationSurfaces(frame)
+    if not frame or frame.timerAnimationsInitialized then
+        return
+    end
+
+    frame.timerAnimationsInitialized = true
+end
+
+function MPT:PlayMythicPlusTimerBossAnimation(completedIndex)
+    local frame = self:EnsureMythicPlusTimerFrame()
+    self:EnsureMythicPlusTimerAnimationSurfaces(frame)
+    local flashColor = { 1, 0.86, 0.42, 1 }
+    local completedColor = { 0.34, 0.92, 0.62, 1 }
+
+    local resolvedIndex = tonumber(completedIndex)
+    if not resolvedIndex or resolvedIndex <= 0 then
+        for index = #frame.CheckpointRows, 1, -1 do
+            local row = frame.CheckpointRows[index]
+            if row and row:IsShown() and row.Name and row.Name:GetText() and row.Name:GetText() ~= "" then
+                resolvedIndex = index
+                break
+            end
+        end
+    end
+
+    local row = resolvedIndex and frame.CheckpointRows and frame.CheckpointRows[resolvedIndex]
+    if row then
+        PlayAnimationGroup(EnsureAlphaPulse(row.Name, "BossPulseAnimation", 0.28, 0.07, 0.34))
+        PlayAnimationGroup(EnsureAlphaPulse(row.Time, "BossPulseAnimation", 0.28, 0.07, 0.34))
+        PlayAnimationGroup(EnsureTranslationPulse(row.Name, "BossSlideAnimation", 10, 0, 0.11, 0.24))
+        PlayAnimationGroup(EnsureTranslationPulse(row.Time, "BossSlideAnimation", -10, 0, 0.11, 0.24))
+        PlayAnimationGroup(EnsureFontColorBloom(row.Name, "BossColorBloom", flashColor, 0.22))
+        PlayAnimationGroup(EnsureFontColorBloom(row.Time, "BossColorBloom", flashColor, 0.22))
+        row.Name:SetTextColor(completedColor[1], completedColor[2], completedColor[3], completedColor[4])
+        row.Time:SetTextColor(completedColor[1], completedColor[2], completedColor[3], completedColor[4])
+    end
+
+    PlayAnimationGroup(EnsureAlphaPulse(frame.CheckpointHeader, "BossPulseAnimation", 0.35, 0.07, 0.28))
+    PlayAnimationGroup(EnsureAlphaPulse(frame.ElapsedText, "BossPulseAnimation", 0.35, 0.07, 0.28))
+    PlayAnimationGroup(EnsureTranslationPulse(frame.ElapsedText, "BossSlideAnimation", 0, -4, 0.1, 0.22))
+    PlayAnimationGroup(EnsureFontColorBloom(frame.CheckpointHeader, "BossColorBloom", flashColor, 0.18))
+end
+
+function MPT:PlayMythicPlusTimerUpgradeAnimation(segmentKey)
+    local frame = self:EnsureMythicPlusTimerFrame()
+    self:EnsureMythicPlusTimerAnimationSurfaces(frame)
+
+    local segment = frame.MilestoneRow and frame.MilestoneRow.Segments and frame.MilestoneRow.Segments[segmentKey or "plusOne"]
+    if segment and segment.Flash then
+        local color = segment.barColor or TIMER_PLUS_ONE_COLOR
+        segment.Flash:SetColorTexture(color[1] or 1, color[2] or 1, color[3] or 1, 1)
+        PlayAnimationGroup(segment.FlashAnimation)
+        if segment.Chaser then
+            segment.Chaser:SetColorTexture(color[1] or 1, color[2] or 1, color[3] or 1, 1)
+            PlayAnimationGroup(segment.ChaserAnimation)
+        end
+        PlayAnimationGroup(EnsureAlphaPulse(segment.Label, "UpgradePulseAnimation", 0.25, 0.08, 0.28))
+        PlayAnimationGroup(EnsureAlphaPulse(segment.Value, "UpgradePulseAnimation", 0.25, 0.08, 0.28))
+    end
+
+    PlayAnimationGroup(EnsureAlphaPulse(frame.KeyText, "UpgradePulseAnimation", 0.35, 0.08, 0.28))
+end
+
+function MPT:HandleMythicPlusTimerStateAnimations(state)
+    if not state or self.preview.mythicPlusTimer then
+        return
+    end
+
+    self.mythicPlusTimerState = self.mythicPlusTimerState or {}
+
+    local previousCheckpointCount = tonumber(self.mythicPlusTimerState.lastCheckpointCount) or 0
+    local previousUpgradeTier = tonumber(self.mythicPlusTimerState.lastUpgradeTier)
+
+    if tonumber(state.completedCheckpointCount) and state.completedCheckpointCount > previousCheckpointCount then
+        self:PlayMythicPlusTimerBossAnimation(state.completedCheckpointCount)
+    end
+
+    if previousUpgradeTier and tonumber(state.currentUpgradeTier) and state.currentUpgradeTier ~= previousUpgradeTier then
+        local segmentKeyByTier = {
+            [3] = "plusThree",
+            [2] = "plusTwo",
+            [1] = "plusOne",
+            [0] = "plusOne",
+        }
+        self:PlayMythicPlusTimerUpgradeAnimation(segmentKeyByTier[state.currentUpgradeTier] or "plusOne")
+    end
+
+    self.mythicPlusTimerState.lastCheckpointCount = tonumber(state.completedCheckpointCount) or 0
+    self.mythicPlusTimerState.lastUpgradeTier = tonumber(state.currentUpgradeTier) or 0
+end
+
+function MPT:EnsureMythicPlusTimerFrame()
+    if self.mythicPlusTimerFrame then
+        return self.mythicPlusTimerFrame
+    end
+
+    local frame = self:CreateBaseFrame(420, 320, "Mythic+ Timer", 236686)
+    frame:SetPoint("CENTER", UIParent, "CENTER", -260, -40)
+    frame.suppressCloseButton = true
+    frame.hasSettingsButton = true
+    frame.EmptyText:SetText("No active Mythic+ run detected.")
+
+    frame.KeyText = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    frame.KeyText:SetJustifyH("LEFT")
+    AttachTooltipHandlers(frame.KeyText)
+
+    frame.AffixText = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.AffixText:SetJustifyH("LEFT")
+    AttachTooltipHandlers(frame.AffixText)
+
+    frame.ElapsedText = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.ElapsedText:SetJustifyH("LEFT")
+    AttachTooltipHandlers(frame.ElapsedText)
+
+    frame.DeathText = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.DeathText:SetJustifyH("LEFT")
+    AttachTooltipHandlers(frame.DeathText)
+
+    frame.BarsHeader = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.BarsHeader:SetJustifyH("LEFT")
+    frame.BarsHeader:SetText("Milestones")
+    AttachTooltipHandlers(frame.BarsHeader)
+
+    frame.MilestoneRow = self:CreateMythicPlusTimerMilestoneRow(frame.ScrollChild)
+    AttachTooltipHandlers(frame.MilestoneRow)
+    frame.ForcesRow = self:CreateMythicPlusTimerBarRow(frame.ScrollChild)
+    AttachTooltipHandlers(frame.ForcesRow)
+
+    frame.CheckpointHeader = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.CheckpointHeader:SetJustifyH("LEFT")
+    frame.CheckpointHeader:SetText("Bosses")
+    AttachTooltipHandlers(frame.CheckpointHeader)
+
+    frame.CheckpointRows = {}
+    for index = 1, 8 do
+        local row = CreateFrame("Frame", nil, frame.ScrollChild)
+        row:SetHeight(18)
+
+        row.Name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.Name:SetJustifyH("LEFT")
+        row.Name:SetPoint("LEFT", row, "LEFT", 0, 0)
+
+        row.Time = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.Time:SetJustifyH("RIGHT")
+        row.Time:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+
+        AttachTooltipHandlers(row)
+
+        frame.CheckpointRows[index] = row
+    end
+
+    frame:SetScript("OnDragStart", function(widget)
+        if self:GetFrameLocked("timer") then
+            return
+        end
+        widget:StartMoving()
+    end)
+    frame:SetScript("OnDragStop", function(widget)
+        widget:StopMovingOrSizing()
+        self:PersistFramePosition("timer", widget)
+    end)
+
+    self:ApplyFrameSize("timer", frame)
+    self:InitializeFrameControls("timer", frame)
+    self:RestoreFramePosition("timer", frame, -260, -40)
+    self:EnsureMythicPlusTimerAnimationSurfaces(frame)
+
+    self.mythicPlusTimerFrame = frame
+    return frame
+end
+
+function MPT:BuildMythicPlusTimerPreviewState()
+    local plusOneLimit, plusTwoLimit, plusThreeLimit = GetMythicPlusTimeLimits(33 * 60, false)
+    local plusOneFraction, plusTwoFraction, plusThreeFraction = GetMythicPlusTimerBarFractions(33 * 60, false)
+    return {
+        active = true,
+        mapName = "The Stonevault",
+        keyText = "+12 The Stonevault",
+        affixText = "Tyrannical • Challenger's Peril • Volcanic",
+        elapsedText = "18:42 / 33:00",
+        deathText = "Deaths 4  |  +20s",
+        milestoneBar = {
+            segments = {
+                { key = "plusOne", label = "+1", widthFraction = plusOneFraction, timeLimit = plusOneLimit, nextLimit = plusTwoLimit, value = "", progress = 0, color = TIMER_PLUS_ONE_COLOR },
+                { key = "plusTwo", label = "+2", widthFraction = plusTwoFraction, timeLimit = plusTwoLimit, nextLimit = plusThreeLimit, value = "", progress = 0, color = TIMER_PLUS_TWO_COLOR },
+                { key = "plusThree", label = "+3", widthFraction = plusThreeFraction, timeLimit = plusThreeLimit, nextLimit = 0, value = "01:06", progress = 0.94, color = TIMER_PLUS_THREE_COLOR },
+            },
+        },
+        forcesBar = {
+            label = "Forces",
+            detail = "94 / 100 enemy forces",
+            value = "94.0%",
+            progress = 0.94,
+            color = TIMER_FORCES_COLOR,
+        },
+        checkpoints = {
+            { name = "E.D.N.A.", time = "[04:26]", completed = true },
+            { name = "Skarmorak", time = "[09:41]", completed = true },
+            { name = "Master Machinists", time = "Pending", completed = false },
+            { name = "Void Speaker Eirich", time = "Pending", completed = false },
+        },
+        completedCheckpointCount = 2,
+        currentUpgradeTier = 3,
+    }
+end
+
+function MPT:BuildActiveMythicPlusTimerState()
+    if not IsChallengeModeActive() then
+        self:ResetMythicPlusTimerTracking()
+        return nil
+    end
+
+    local mapID = C_ChallengeMode and type(C_ChallengeMode.GetActiveChallengeMapID) == "function" and
+        C_ChallengeMode.GetActiveChallengeMapID() or nil
+    if type(mapID) ~= "number" or mapID <= 0 then
+        return nil
+    end
+
+    local level = 0
+    local affixIDs = nil
+    if C_ChallengeMode and type(C_ChallengeMode.GetActiveKeystoneInfo) == "function" then
+        local keystoneInfo = { C_ChallengeMode.GetActiveKeystoneInfo() }
+        level = tonumber(keystoneInfo[1]) or 0
+        if type(keystoneInfo[2]) == "table" then
+            affixIDs = keystoneInfo[2]
+        else
+            affixIDs = {}
+            for index = 2, #keystoneInfo do
+                if type(keystoneInfo[index]) == "number" then
+                    affixIDs[#affixIDs + 1] = keystoneInfo[index]
+                end
+            end
+        end
+    end
+
+    self.mythicPlusTimerState = self.mythicPlusTimerState or {
+        mapID = nil,
+        level = nil,
+        bossCheckpoints = {},
+        forcesCompletionTime = nil,
+    }
+
+    if self.mythicPlusTimerState.mapID ~= mapID or self.mythicPlusTimerState.level ~= level then
+        self:ResetMythicPlusTimerTracking()
+        self.mythicPlusTimerState.mapID = mapID
+        self.mythicPlusTimerState.level = level
+    end
+
+    local elapsed = type(GetWorldElapsedTime) == "function" and select(2, GetWorldElapsedTime(1)) or 0
+    local deathCount = 0
+    local deathTimeLost = 0
+    if C_ChallengeMode and type(C_ChallengeMode.GetDeathCount) == "function" then
+        local deathInfo = { C_ChallengeMode.GetDeathCount() }
+        deathCount = tonumber(deathInfo[1]) or 0
+        deathTimeLost = tonumber(deathInfo[2]) or 0
+    end
+
+    local mapName, _, timeLimit
+    if C_ChallengeMode and type(C_ChallengeMode.GetMapUIInfo) == "function" then
+        mapName, _, timeLimit = C_ChallengeMode.GetMapUIInfo(mapID)
+    end
+    mapName = type(mapName) == "string" and mapName or GetMythicPlusMapName(mapID)
+    timeLimit = tonumber(timeLimit) or 0
+
+    local affixNames = {}
+    local hasChallengersPeril = false
+    for _, affixID in ipairs(type(affixIDs) == "table" and affixIDs or {}) do
+        if affixID == 152 then
+            hasChallengersPeril = true
+        end
+        if type(C_ChallengeMode.GetAffixInfo) == "function" then
+            local affixName = C_ChallengeMode.GetAffixInfo(affixID)
+            if type(affixName) == "string" and affixName ~= "" then
+                affixNames[#affixNames + 1] = affixName
+            end
+        end
+    end
+
+    local plusOneLimit, plusTwoLimit, plusThreeLimit = GetMythicPlusTimeLimits(timeLimit, hasChallengersPeril)
+    local plusOneFraction, plusTwoFraction, plusThreeFraction = GetMythicPlusTimerBarFractions(timeLimit, hasChallengersPeril)
+    local milestoneSegments = {
+        {
+            key = "plusOne",
+            label = "+1",
+            widthFraction = plusOneFraction,
+            timeLimit = plusOneLimit,
+            nextLimit = plusTwoLimit,
+            value = elapsed > plusTwoLimit and FormatSignedClock(plusOneLimit - elapsed) or "",
+            progress = plusOneLimit > plusTwoLimit and ClampNumber((elapsed - plusTwoLimit) / (plusOneLimit - plusTwoLimit), 0, 1, 0) or 0,
+            color = TIMER_PLUS_ONE_COLOR,
+        },
+        {
+            key = "plusTwo",
+            label = "+2",
+            widthFraction = plusTwoFraction,
+            timeLimit = plusTwoLimit,
+            nextLimit = plusThreeLimit,
+            value = elapsed > plusThreeLimit and elapsed <= plusTwoLimit and FormatClock(plusTwoLimit - elapsed) or "",
+            progress = plusTwoLimit > plusThreeLimit and ClampNumber((elapsed - plusThreeLimit) / (plusTwoLimit - plusThreeLimit), 0, 1, 0) or 0,
+            color = TIMER_PLUS_TWO_COLOR,
+        },
+        {
+            key = "plusThree",
+            label = "+3",
+            widthFraction = plusThreeFraction,
+            timeLimit = plusThreeLimit,
+            nextLimit = 0,
+            value = elapsed <= plusThreeLimit and FormatClock(plusThreeLimit - elapsed) or "",
+            progress = plusThreeLimit > 0 and ClampNumber(elapsed / plusThreeLimit, 0, 1, 0) or 0,
+            color = TIMER_PLUS_THREE_COLOR,
+        },
+    }
+
+    local checkpoints = {}
+    local completedCheckpointCount = 0
+    local totalCount = 0
+    local currentCount = 0
+    local stepCount = C_Scenario and type(C_Scenario.GetStepInfo) == "function" and select(3, C_Scenario.GetStepInfo()) or 0
+    for index = 1, max(0, tonumber(stepCount) or 0) do
+        local info = C_ScenarioInfo and type(C_ScenarioInfo.GetCriteriaInfo) == "function" and C_ScenarioInfo.GetCriteriaInfo(index)
+        if type(info) == "table" then
+            if info.isWeightedProgress and type(info.totalQuantity) == "number" and info.totalQuantity > 0 then
+                totalCount = info.totalQuantity
+                currentCount = ExtractWeightedProgressCount(info)
+                if currentCount >= totalCount and not self.mythicPlusTimerState.forcesCompletionTime then
+                    self.mythicPlusTimerState.forcesCompletionTime = max(0, elapsed - (tonumber(info.elapsed) or 0))
+                end
+            else
+                local key = format("%d:%s", index, tostring(info.description or "Boss"))
+                if info.completed and self.mythicPlusTimerState.bossCheckpoints[key] == nil then
+                    self.mythicPlusTimerState.bossCheckpoints[key] = max(0, elapsed - (tonumber(info.elapsed) or 0))
+                end
+                if info.completed then
+                    completedCheckpointCount = completedCheckpointCount + 1
+                end
+
+                checkpoints[#checkpoints + 1] = {
+                    name = tostring(info.description or ("Boss " .. index)),
+                    time = info.completed and ("[" .. FormatClock(self.mythicPlusTimerState.bossCheckpoints[key] or 0) .. "]") or "Pending",
+                    completed = info.completed == true,
+                }
+            end
+        end
+    end
+
+    local forcesBar = {
+        label = "Forces",
+        detail = totalCount > 0 and format("%d / %d enemy forces", currentCount, totalCount) or "Enemy forces unavailable",
+        value = totalCount > 0 and format("%.1f%%", min(100, (currentCount / totalCount) * 100)) or "--",
+        progress = totalCount > 0 and ClampNumber(currentCount / totalCount, 0, 1, 0) or 0,
+        color = TIMER_FORCES_COLOR,
+    }
+
+    local currentUpgradeTier = 0
+    if elapsed <= plusThreeLimit then
+        currentUpgradeTier = 3
+    elseif elapsed <= plusTwoLimit then
+        currentUpgradeTier = 2
+    elseif elapsed <= plusOneLimit then
+        currentUpgradeTier = 1
+    end
+
+    return {
+        active = true,
+        mapName = mapName,
+        keyText = format("+%d %s", level, mapName),
+        affixText = #affixNames > 0 and table.concat(affixNames, " • ") or "Affixes unavailable",
+        elapsedText = FormatClock(elapsed) .. " / " .. FormatClock(timeLimit),
+        deathText = format("Deaths %d  |  +%ss", deathCount or 0, tostring(deathTimeLost or 0)),
+        milestoneBar = {
+            segments = milestoneSegments,
+        },
+        forcesBar = forcesBar,
+        checkpoints = checkpoints,
+        completedCheckpointCount = completedCheckpointCount,
+        currentUpgradeTier = currentUpgradeTier,
+        plusThreeExpired = plusThreeLimit > 0 and elapsed > plusThreeLimit,
+        plusTwoExpired = plusTwoLimit > 0 and elapsed > plusTwoLimit,
+        plusOneExpired = plusOneLimit > 0 and elapsed > plusOneLimit,
+        forcesCompleted = totalCount > 0 and currentCount >= totalCount,
+    }
+end
+
+function MPT:BuildMythicPlusTimerNotification(kind, state)
+    local mapName = state and state.mapName or "the current key"
+    if kind == "plusThree" then
+        return {
+            status = "MYTHIC+ TIMER",
+            title = "+3 Timer Ended",
+            detail = format("%s is no longer on pace for a +3.", mapName),
+            icon = 236686,
+            color = TIMER_PLUS_THREE_COLOR,
+        }
+    elseif kind == "plusTwo" then
+        return {
+            status = "MYTHIC+ TIMER",
+            title = "+2 Timer Ended",
+            detail = format("%s is no longer on pace for a +2.", mapName),
+            icon = 236686,
+            color = TIMER_PLUS_TWO_COLOR,
+        }
+    elseif kind == "plusOne" then
+        return {
+            status = "MYTHIC+ TIMER",
+            title = "+1 Timer Ended",
+            detail = format("%s key has been depleted.", mapName),
+            icon = 236686,
+            color = TIMER_PLUS_ONE_COLOR,
+        }
+    end
+
+    return {
+        status = "MYTHIC+ TIMER",
+        title = "Forces Complete",
+        detail = format("Enemy forces are complete in %s.", mapName),
+        icon = 132349,
+        color = TIMER_FORCES_COLOR,
+    }
+end
+
+function MPT:SendMythicPlusTimerNotification(kind, state)
+    local notification = self:BuildMythicPlusTimerNotification(kind, state)
+    ---@type TwichUI_MythicPlusAlertNotificationWidget
+    local widget = CreateWidget(AceGUI, "TwichUI_MythicPlusAlertNotification")
+    widget:SetAlert(notification.status, notification.title, notification.detail, notification.icon, notification.color)
+
+    if NotificationModule and type(NotificationModule.TWICH_NOTIFICATION) == "function" then
+        local soundKey = self:GetDB().mythicPlusTimerNotificationSound
+        if soundKey == MUTED_SOUND_VALUE then
+            soundKey = nil
+        elseif soundKey == nil then
+            soundKey = "TwichUI Alert 1"
+        end
+
+        NotificationModule:TWICH_NOTIFICATION("TWICH_NOTIFICATION", widget, {
+            soundKey = soundKey,
+            displayDuration = self:GetDB().mythicPlusTimerNotificationDisplayTime or 8,
+        })
+    end
+end
+
+function MPT:HandleMythicPlusTimerNotifications(state)
+    if not state or self.preview.mythicPlusTimer then
+        return
+    end
+
+    self.mythicPlusTimerState = self.mythicPlusTimerState or {}
+    local previous = self.mythicPlusTimerState.lastNotificationState
+    local current = {
+        plusThreeExpired = state.plusThreeExpired == true,
+        plusTwoExpired = state.plusTwoExpired == true,
+        plusOneExpired = state.plusOneExpired == true,
+        forcesCompleted = state.forcesCompleted == true,
+    }
+
+    if previous then
+        local db = self:GetDB()
+        if db.mythicPlusTimerNotifyPlusThreeExpired ~= false and current.plusThreeExpired and not previous.plusThreeExpired then
+            self:SendMythicPlusTimerNotification("plusThree", state)
+        end
+        if db.mythicPlusTimerNotifyPlusTwoExpired ~= false and current.plusTwoExpired and not previous.plusTwoExpired then
+            self:SendMythicPlusTimerNotification("plusTwo", state)
+        end
+        if db.mythicPlusTimerNotifyPlusOneExpired ~= false and current.plusOneExpired and not previous.plusOneExpired then
+            self:SendMythicPlusTimerNotification("plusOne", state)
+        end
+        if db.mythicPlusTimerNotifyForcesComplete ~= false and current.forcesCompleted and not previous.forcesCompleted then
+            self:SendMythicPlusTimerNotification("forces", state)
+        end
+    end
+
+    self.mythicPlusTimerState.lastNotificationState = current
+end
+
+function MPT:LayoutMythicPlusTimerFrame(frame, checkpointCount)
+    if not frame then
+        return
+    end
+
+    local appearance = self:GetMythicPlusTimerAppearance()
+    local alignRight = appearance.timerLayout == "right"
+
+    if frame.ScrollChild and frame.ContentScroll then
+        frame.ScrollChild:SetWidth(max(1, frame.ContentScroll:GetWidth() or 1))
+    end
+
+    local outline = appearance.timerOutline
+    local yOffset = -8
+
+    local function anchorFontString(fontString, height)
+        fontString:ClearAllPoints()
+        fontString:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+        fontString:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+        fontString:SetJustifyH(alignRight and "RIGHT" or "LEFT")
+        yOffset = yOffset - height
+    end
+
+    anchorFontString(frame.KeyText, appearance.timerFontSize + 8)
+    anchorFontString(frame.AffixText, appearance.timerFontSize + 4)
+    yOffset = yOffset - 4
+    anchorFontString(frame.ElapsedText, appearance.timerFontSize + 6)
+    anchorFontString(frame.DeathText, appearance.timerFontSize + 4)
+    yOffset = yOffset - 6
+
+    frame.BarsHeader:ClearAllPoints()
+    frame.BarsHeader:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+    frame.BarsHeader:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+    frame.BarsHeader:SetJustifyH("LEFT")
+    yOffset = yOffset - (appearance.timerFontSize + 6)
+
+    local milestoneRowHeight = max(26, appearance.timerBarHeight + 12)
+    frame.MilestoneRow:ClearAllPoints()
+    frame.MilestoneRow:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+    frame.MilestoneRow:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+    frame.MilestoneRow:SetHeight(milestoneRowHeight)
+    yOffset = yOffset - (milestoneRowHeight + appearance.timerRowGap)
+
+    local forcesRow = frame.ForcesRow
+    local rowHeight = max(20, appearance.timerBarHeight + 10)
+    forcesRow:ClearAllPoints()
+    forcesRow:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+    forcesRow:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+    forcesRow:SetHeight(rowHeight)
+    forcesRow.barBackdrop:SetHeight(appearance.timerBarHeight + 2)
+    forcesRow.barBackdrop:ClearAllPoints()
+    forcesRow.barBackdrop:SetPoint("LEFT", forcesRow, "LEFT", 0, 0)
+    forcesRow.barBackdrop:SetPoint("RIGHT", forcesRow, "RIGHT", 0, 0)
+    forcesRow.barBackdrop:SetPoint("CENTER", forcesRow, "CENTER", 0, 0)
+    forcesRow.label:ClearAllPoints()
+    forcesRow.label:SetJustifyH("LEFT")
+    forcesRow.label:SetPoint("LEFT", forcesRow.content, "LEFT", 8, 7)
+    forcesRow.value:ClearAllPoints()
+    forcesRow.value:SetJustifyH("RIGHT")
+    forcesRow.value:SetPoint("RIGHT", forcesRow.content, "RIGHT", -8, 0)
+    forcesRow.detail:ClearAllPoints()
+    forcesRow.detail:SetJustifyH("LEFT")
+    forcesRow.detail:SetPoint("LEFT", forcesRow.content, "LEFT", 8, -7)
+    forcesRow.detail:SetPoint("RIGHT", forcesRow.content, "RIGHT", -50, -7)
+    yOffset = yOffset - (rowHeight + appearance.timerRowGap)
+
+    local availableWidth = max(120, (frame.ScrollChild:GetWidth() or 280) - 16)
+    local xOffset = 0
+    for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
+        local segment = frame.MilestoneRow.Segments[key]
+        local fraction = segment.widthFraction or 0
+        local segmentWidth = key == "plusThree" and max(24, availableWidth - xOffset) or max(24, floor(availableWidth * fraction))
+        segment:ClearAllPoints()
+        segment:SetPoint("TOPLEFT", frame.MilestoneRow, "TOPLEFT", xOffset, 0)
+        segment:SetWidth(segmentWidth)
+        segment:SetHeight(milestoneRowHeight)
+        segment.backdrop:SetAllPoints(segment)
+        segment.Label:ClearAllPoints()
+        segment.Label:SetPoint("TOPLEFT", segment.content, "TOPLEFT", 6, -4)
+        segment.Value:ClearAllPoints()
+        segment.Value:SetPoint("CENTER", segment.content, "CENTER", 0, -4)
+        xOffset = xOffset + segmentWidth + (key ~= "plusThree" and 2 or 0)
+    end
+
+    yOffset = yOffset - 2
+    frame.CheckpointHeader:ClearAllPoints()
+    frame.CheckpointHeader:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+    frame.CheckpointHeader:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+    frame.CheckpointHeader:SetJustifyH("LEFT")
+    yOffset = yOffset - (appearance.timerFontSize + 6)
+
+    for index, row in ipairs(frame.CheckpointRows) do
+        if index <= checkpointCount then
+            row:Show()
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+            row:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+            row.Name:ClearAllPoints()
+            row.Time:ClearAllPoints()
+            row.Name:SetJustifyH("LEFT")
+            row.Name:SetPoint("LEFT", row, "LEFT", 0, 0)
+            row.Time:SetJustifyH("RIGHT")
+            row.Time:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+            yOffset = yOffset - 18
+        else
+            row:Hide()
+        end
+    end
+
+    frame.ScrollChild:SetHeight(max(1, abs(yOffset) + 12))
+    self:UpdateFrameScrollState(frame)
+
+    ApplyFontString(frame.Title, appearance.timerFontPath, appearance.timerFontSize + 2, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.KeyText, appearance.timerFontPath, appearance.timerFontSize + 4, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.AffixText, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1)
+    ApplyFontString(frame.ElapsedText, appearance.timerFontPath, appearance.timerFontSize + 2, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.DeathText, appearance.timerFontPath, appearance.timerFontSize, outline, 0.96, 0.36, 0.36, 1)
+    ApplyFontString(frame.BarsHeader, appearance.timerFontPath, appearance.timerFontSize, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.CheckpointHeader, appearance.timerFontPath, appearance.timerFontSize, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+
+    ApplyFontString(forcesRow.label, appearance.timerFontPath, appearance.timerFontSize, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(forcesRow.value, appearance.timerFontPath, appearance.timerFontSize, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(forcesRow.detail, appearance.timerFontPath, max(10, appearance.timerFontSize - 2), outline, appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1)
+
+    for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
+        local segment = frame.MilestoneRow.Segments[key]
+        ApplyFontString(segment.Label, appearance.timerFontPath, max(9, appearance.timerFontSize - 2), outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+        ApplyFontString(segment.Value, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, 1, 1, 1, 1)
+    end
+
+    for _, row in ipairs(frame.CheckpointRows) do
+        local nameColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or { appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1 }
+        local timeColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or { appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1 }
+        ApplyFontString(row.Name, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, nameColor[1], nameColor[2], nameColor[3], nameColor[4])
+        ApplyFontString(row.Time, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, timeColor[1], timeColor[2], timeColor[3], timeColor[4])
+    end
+end
+
+function MPT:RefreshMythicPlusTimerFrame()
+    local frame = self:EnsureMythicPlusTimerFrame()
+    local appearance = self:GetMythicPlusTimerAppearance()
+    local state = self.preview.mythicPlusTimer and self:BuildMythicPlusTimerPreviewState() or self:BuildActiveMythicPlusTimerState()
+    local shouldShow = self.preview.mythicPlusTimer or
+        (IsModuleConfiguredEnabled() and self:IsFeatureEnabled("mythicPlusTimer") and state and self:ShouldShowTrackerFrames())
+
+    if not shouldShow or not state then
+        frame:Hide()
+        return
+    end
+
+    frame:Show()
+    frame.EmptyText:Hide()
+    self:ApplyMythicPlusTimerStyle(frame)
+
+    frame.KeyText:SetText(state.keyText or state.mapName or "Mythic+")
+    frame.AffixText:SetText(state.affixText or "")
+    frame.ElapsedText:SetText(state.elapsedText or "")
+    frame.DeathText:SetText(state.deathText or "")
+    frame.KeyText.tooltipTitle = "Keystone"
+    frame.KeyText.tooltipLines = {
+        "Current keystone level and dungeon.",
+        tostring(state.keyText or state.mapName or "Mythic+"),
+    }
+    frame.AffixText.tooltipTitle = "Affixes"
+    frame.AffixText.tooltipLines = {
+        "Weekly affixes active for this run.",
+        tostring(state.affixText or "Affixes unavailable"),
+    }
+    frame.ElapsedText.tooltipTitle = "Timer"
+    frame.ElapsedText.tooltipLines = {
+        "Elapsed run time versus the base dungeon timer.",
+        tostring(state.elapsedText or ""),
+    }
+    frame.DeathText.tooltipTitle = "Deaths"
+    frame.DeathText.tooltipLines = {
+        "Party deaths and the total time penalty added to the run.",
+        tostring(state.deathText or ""),
+    }
+    frame.BarsHeader.tooltipTitle = "Milestones"
+    frame.BarsHeader.tooltipLines = {
+        "Upgrade timer windows.",
+        "These bars now start full and drain as each upgrade window expires.",
+    }
+    frame.MilestoneRow.tooltipTitle = "Upgrade Timers"
+    frame.MilestoneRow.tooltipLines = {
+        "Track the remaining time for +3, +2, and +1 upgrade windows.",
+        "Each segment drains toward zero as its window closes.",
+    }
+
+    for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
+        local segment = frame.MilestoneRow.Segments[key]
+        segment.widthFraction = 0
+        segment.Label:SetText("")
+        segment.Value:SetText("")
+        segment.bar:SetStatusBarTexture(appearance.timerBarTexture)
+        segment.bar:SetMinMaxValues(0, 1)
+        segment.bar:SetValue(0)
+        segment.tooltipProvider = function(widget)
+            return widget.tooltipTitle, widget.tooltipLines
+        end
+    end
+
+    for _, segmentState in ipairs((state.milestoneBar and state.milestoneBar.segments) or {}) do
+        local segment = frame.MilestoneRow.Segments[segmentState.key]
+        if segment then
+            segment.widthFraction = tonumber(segmentState.widthFraction) or 0
+            segment.Label:SetText(segmentState.label or "")
+            segment.Value:SetText(segmentState.value or "")
+            segment.bar:SetValue(1 - ClampNumber(segmentState.progress, 0, 1, 0))
+            segment.barColor = appearance.timerBarColorMode == "custom" and appearance.timerBarColor or (segmentState.color or ACTIVE_COLOR)
+            SetStatusBarColor(segment.bar, segment.barColor)
+            local progress = ClampNumber(segmentState.progress, 0, 1, 0)
+            local detailLine = ""
+            if progress <= 0 then
+                detailLine = "This window is still fully available."
+            elseif progress >= 1 then
+                detailLine = "This window has expired."
+            elseif segmentState.value and segmentState.value ~= "" then
+                detailLine = "Time left: " .. tostring(segmentState.value)
+            else
+                detailLine = "This window is currently draining."
+            end
+            segment.tooltipTitle = tostring(segmentState.label or "Milestone") .. " Window"
+            segment.tooltipLines = {
+                "Remaining time in this upgrade range.",
+                detailLine,
+            }
+            if segment.Flash then
+                segment.Flash:SetColorTexture(segment.barColor[1] or 1, segment.barColor[2] or 1, segment.barColor[3] or 1, 1)
+            end
+        end
+    end
+
+    frame.ForcesRow:Show()
+    frame.ForcesRow.label:SetText(state.forcesBar and state.forcesBar.label or "")
+    frame.ForcesRow.value:SetText(state.forcesBar and state.forcesBar.value or "")
+    frame.ForcesRow.detail:SetText(state.forcesBar and state.forcesBar.detail or "")
+    frame.ForcesRow.tooltipTitle = "Enemy Forces"
+    frame.ForcesRow.tooltipLines = {
+        "Enemy forces required to complete the dungeon.",
+        tostring(state.forcesBar and state.forcesBar.detail or "Enemy forces unavailable"),
+    }
+    frame.ForcesRow.bar:SetStatusBarTexture(appearance.timerBarTexture)
+    frame.ForcesRow.bar:SetMinMaxValues(0, 1)
+    frame.ForcesRow.bar:SetValue(ClampNumber(state.forcesBar and state.forcesBar.progress or 0, 0, 1, 0))
+    SetStatusBarColor(frame.ForcesRow.bar,
+        appearance.timerBarColorMode == "custom" and appearance.timerBarColor or ((state.forcesBar and state.forcesBar.color) or TIMER_FORCES_COLOR))
+
+    local showBossCheckpoints = self:GetDB().mythicPlusTimerShowBossCheckpoints ~= false
+    frame.CheckpointHeader:SetShown(showBossCheckpoints)
+    frame.CheckpointHeader.tooltipTitle = "Bosses"
+    frame.CheckpointHeader.tooltipLines = {
+        "Boss kill checkpoints for the current run.",
+        "Completed bosses show the recorded kill time.",
+    }
+
+    for _, row in ipairs(frame.CheckpointRows) do
+        row.Name:SetText("")
+        row.Time:SetText("")
+        row.IsCompleted = false
+        row.tooltipTitle = nil
+        row.tooltipLines = nil
+    end
+
+    local visibleCheckpointCount = 0
+    for index, rowState in ipairs(state.checkpoints or {}) do
+        local row = frame.CheckpointRows[index]
+        if row and showBossCheckpoints then
+            row.Name:SetText(rowState.name or "")
+            row.Time:SetText(rowState.time or "")
+            row.IsCompleted = rowState.completed == true
+            row.tooltipTitle = tostring(rowState.name or "Boss")
+            row.tooltipLines = {
+                row.IsCompleted and ("Defeated at " .. tostring(rowState.time or "unknown time") .. ".") or "Not defeated yet.",
+            }
+            visibleCheckpointCount = visibleCheckpointCount + 1
+        end
+    end
+
+    self:LayoutMythicPlusTimerFrame(frame, showBossCheckpoints and visibleCheckpointCount or 0)
+    self:HandleMythicPlusTimerNotifications(state)
+    self:HandleMythicPlusTimerStateAnimations(state)
+end
+
+function MPT:TestMythicPlusTimerNotification(kind)
+    self:SendMythicPlusTimerNotification(kind or "plusThree", self:BuildMythicPlusTimerPreviewState())
+end
+
+function MPT:DebugMythicPlusTimerBossAnimation()
+    self:SetMythicPlusTimerPreviewEnabled(true)
+    self:RefreshMythicPlusTimerFrame()
+    local previewState = self:BuildMythicPlusTimerPreviewState()
+    self:PlayMythicPlusTimerBossAnimation(previewState and previewState.completedCheckpointCount or 1)
+end
+
+function MPT:DebugMythicPlusTimerUpgradeAnimation()
+    self:SetMythicPlusTimerPreviewEnabled(true)
+    self:RefreshMythicPlusTimerFrame()
+    self.debugMythicPlusTimerUpgradeIndex = ((tonumber(self.debugMythicPlusTimerUpgradeIndex) or 0) % 3) + 1
+    local keys = { "plusOne", "plusTwo", "plusThree" }
+    self:PlayMythicPlusTimerUpgradeAnimation(keys[self.debugMythicPlusTimerUpgradeIndex])
+end
+
+function MPT:ResetMythicPlusTimerPosition()
+    local db = self:GetDB()
+    db.timerX = -260
+    db.timerY = -40
+    if self.mythicPlusTimerFrame then
+        self:RestoreFramePosition("timer", self.mythicPlusTimerFrame, -260, -40)
+    end
+end
+
 function MPT:PersistFramePosition(kind, frame)
     local db = self:GetDB()
     if not frame then
@@ -2056,14 +3407,25 @@ function MPT:PersistFramePosition(kind, frame)
 
     local x = floor((centerX - parentX) + 0.5)
     local y = floor((centerY - parentY) + 0.5)
-    db.interruptX = x
-    db.interruptY = y
+    if kind == "timer" then
+        db.timerX = x
+        db.timerY = y
+    else
+        db.interruptX = x
+        db.interruptY = y
+    end
 end
 
 function MPT:RestoreFramePosition(kind, frame, fallbackX, fallbackY)
     local db = self:GetDB()
-    local x = db.interruptX
-    local y = db.interruptY
+    local x, y
+    if kind == "timer" then
+        x = db.timerX
+        y = db.timerY
+    else
+        x = db.interruptX
+        y = db.interruptY
+    end
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", UIParent, "CENTER", tonumber(x) or fallbackX, tonumber(y) or fallbackY)
 end
@@ -2072,6 +3434,11 @@ function MPT:ApplyFrameLockStates()
     if self.interruptFrame then
         self.interruptFrame:EnableMouse(true)
         self:RefreshFrameControls("interrupt", self.interruptFrame)
+    end
+
+    if self.mythicPlusTimerFrame then
+        self.mythicPlusTimerFrame:EnableMouse(true)
+        self:RefreshFrameControls("timer", self.mythicPlusTimerFrame)
     end
 end
 
@@ -2092,9 +3459,17 @@ function MPT:SetInterruptPreviewEnabled(enabled)
     self:RefreshInterruptFrame()
 end
 
+function MPT:SetMythicPlusTimerPreviewEnabled(enabled)
+    self:EnsureRuntime()
+    self.preview.mythicPlusTimer = enabled == true
+    self.preview.mythicPlusTimerStartedAt = GetTime()
+    self:RefreshMythicPlusTimerFrame()
+end
+
 function MPT:RefreshAllState()
     self:RefreshInterruptRoster()
     self:RefreshInterruptFrame()
+    self:RefreshMythicPlusTimerFrame()
 end
 
 function MPT:PLAYER_ENTERING_WORLD()
@@ -2120,11 +3495,26 @@ function MPT:CHALLENGE_MODE_KEYSTONE_RECEPTABLE_OPEN()
     self:TryAutoSlotKeystone()
 end
 
-function MPT:START_TIMER(_, timerType, timeSeconds, totalTime)
-    local duration = tonumber(totalTime) or tonumber(timeSeconds)
+local function ResolveCountdownDuration(...)
+    local duration = nil
+    for index = 1, select("#", ...) do
+        local rawValue = select(index, ...)
+        local value = tonumber(rawValue)
+        if value and value >= 1 and value <= 60 then
+            duration = max(duration or 0, value)
+        end
+    end
+
+    return duration
+end
+
+function MPT:START_PLAYER_COUNTDOWN(...)
+    local duration = ResolveCountdownDuration(...)
     if not duration or duration < 1 or duration > 60 then
         return
     end
+
+    self:LogDebugf(false, "external pull timer started duration=%s", tostring(duration))
 
     if self:GetDB().autoStartDungeon ~= true then
         return
@@ -2144,6 +3534,13 @@ function MPT:START_TIMER(_, timerType, timeSeconds, totalTime)
             self:TryStartChallengeMode()
         end)
     end
+end
+
+function MPT:CANCEL_PLAYER_COUNTDOWN()
+    if self.pendingStartTimerDuration then
+        self:LogDebug("external pull timer cancelled", false)
+    end
+    self.pendingStartTimerDuration = nil
 end
 
 function MPT:COMBAT_LOG_EVENT_UNFILTERED()
@@ -2322,16 +3719,11 @@ function MPT:TryAutoSlotKeystone()
         return
     end
 
-    if C_ChallengeMode and type(C_ChallengeMode.SlotKeystone) == "function" then
-        self:LogDebug("attempting keystone auto-slot", false)
-        C_ChallengeMode.SlotKeystone()
-        if HasSlottedKeystone() then
-            self:LogDebug("keystone auto-slot succeeded via SlotKeystone()", false)
-            return
-        end
+    if not (C_ChallengeMode and type(C_ChallengeMode.SlotKeystone) == "function") then
+        return
     end
 
-    if not C_Container or type(C_Container.GetContainerNumSlots) ~= "function" then
+    if not C_Container or type(C_Container.GetContainerNumSlots) ~= "function" or type(C_Container.PickupContainerItem) ~= "function" then
         return
     end
 
@@ -2344,15 +3736,14 @@ function MPT:TryAutoSlotKeystone()
             nil
             local isKeystone = MYTHIC_KEYSTONE_ITEM_IDS[itemID or 0] == true or
                 (type(itemLink) == "string" and itemLink:find("|Hkeystone:", 1, true) ~= nil)
-            if isKeystone and type(C_Container.UseContainerItem) == "function" then
-                self:LogDebugf(false, "attempting keystone bag use bag=%d slot=%d", bagIndex, slotIndex)
-                C_Container.UseContainerItem(bagIndex, slotIndex)
-                if C_Timer and type(C_Timer.After) == "function" then
-                    C_Timer.After(0.1, function()
-                        if not HasSlottedKeystone() and C_ChallengeMode and type(C_ChallengeMode.SlotKeystone) == "function" then
-                            C_ChallengeMode.SlotKeystone()
-                        end
-                    end)
+            if isKeystone then
+                self:LogDebugf(false, "attempting keystone pickup bag=%d slot=%d", bagIndex, slotIndex)
+                C_Container.PickupContainerItem(bagIndex, slotIndex)
+                C_ChallengeMode.SlotKeystone()
+                if HasSlottedKeystone() then
+                    self:LogDebug("keystone auto-slot succeeded via PickupContainerItem()+SlotKeystone()", false)
+                else
+                    self:LogDebug("keystone auto-slot pickup attempt did not slot immediately", false)
                 end
                 return
             end
@@ -2377,20 +3768,6 @@ function MPT:TryStartChallengeMode()
         self:LogDebug("attempting challenge start", false)
         C_ChallengeMode.StartChallengeMode()
     end
-end
-
-function MPT:TestPullTimer()
-    if not HasSlottedKeystone() then
-        return false
-    end
-
-    if type(RunMacroText) == "function" then
-        RunMacroText("/cd 10")
-    elseif C_PartyInfo and type(C_PartyInfo.DoCountdown) == "function" then
-        C_PartyInfo.DoCountdown(10)
-    end
-
-    return true
 end
 
 function MPT:GetPlayerSpecID()
@@ -3180,12 +4557,11 @@ function MPT:BuildDeathNotification(member, totalDeaths)
     local roleLabel = ROLE_LABELS[member.role or "NONE"] or ROLE_LABELS.NONE
     local title = BuildColoredName(GetShortName(member.name), member.classToken)
     local detail = format("%s down. Total deaths: %d", roleLabel, totalDeaths or 0)
-    local iconTexture = member.spellIcon or "Interface\\RaidFrame\\ReadyCheck-NotReady"
     return {
         status = "MYTHIC+ DEATH",
         title = title,
         detail = detail,
-        icon = iconTexture,
+        icon = DUNGEON_DEATH_NOTIFICATION_ICON,
         color = ALERT_COLOR,
     }
 end
@@ -3211,7 +4587,6 @@ function MPT:TestDeathNotification()
         name = GetFullUnitName("player") or "Player",
         classToken = select(2, UnitClass("player")),
         role = UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") or "DAMAGER",
-        spellIcon = "Interface\\RaidFrame\\ReadyCheck-NotReady",
         unit = "player",
     }
     self:SendDeathNotification(member, (self.deathCount or 0) + 1)
@@ -3510,6 +4885,10 @@ function MPT:OnTick()
         self:RefreshInterruptFrame()
     end
 
+    if self.preview.mythicPlusTimer or IsChallengeModeActive() or (self.mythicPlusTimerFrame and self.mythicPlusTimerFrame:IsShown()) then
+        self:RefreshMythicPlusTimerFrame()
+    end
+
     if not IsChallengeModeActive() then
         self.deathCount = 0
     end
@@ -3563,6 +4942,8 @@ do
     preInitFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
     preInitFrame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
     preInitFrame:RegisterEvent("INSPECT_READY")
+    preInitFrame:RegisterEvent("START_PLAYER_COUNTDOWN")
+    preInitFrame:RegisterEvent("CANCEL_PLAYER_COUNTDOWN")
     -- COMBAT_LOG_EVENT_UNFILTERED is restricted in TWW for custom addon frames;
     -- it is sourced via the ElvUI Misc module hook instead.
     preInitFrame:RegisterEvent("CHALLENGE_MODE_KEYSTONE_RECEPTABLE_OPEN")

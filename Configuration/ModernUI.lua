@@ -38,9 +38,16 @@ local NAV_ITEMS = {
     {
         id = "qualityOfLife",
         title = "Weekly and Utility",
-        description = "Chores, Mythic+, gathering, teleports, and daily-use tools.",
+        description = "Chores, gathering, teleports, and daily-use tools.",
         accent = { 0.98, 0.68, 0.26 },
         path = { "Quality of Life" },
+    },
+    {
+        id = "mythicPlusTools",
+        title = "Mythic+ Tools",
+        description = "Timer, interrupts, keystone helpers, and dungeon-focused notifications.",
+        accent = { 0.48, 0.82, 1.0 },
+        path = { "Mythic+ Tools" },
     },
     {
         id = "datatexts",
@@ -138,8 +145,8 @@ local FEATURE_CARDS = {
         title = "Interrupt Tracker",
         subtitle = "Preview class colors, cooldown bars, and status text while tuning Mythic+ tools.",
         accent = { 0.48, 0.82, 1.0 },
-        pageId = "qualityOfLife",
-        path = { "Quality of Life", "mythicPlusToolsTab" },
+        pageId = "mythicPlusTools",
+        path = { "Mythic+ Tools" },
         status = function()
             local options = ConfigurationModule.Options and ConfigurationModule.Options.MythicPlusTools
             if not options then
@@ -1197,7 +1204,7 @@ function UI:EnsureFrame()
     frame.Subtitle:SetPoint("TOPLEFT", frame.Title, "BOTTOMLEFT", 0, -6)
     frame.Subtitle:SetJustifyH("LEFT")
     frame.Subtitle:SetTextColor(0.72, 0.74, 0.8)
-    frame.Subtitle:SetText("Modern navigation, live previews, and custom controls for TwichUI.")
+    frame.Subtitle:SetText("Your personal UI suite for raiding, M+, and completionism.")
 
     frame.CloseButton = CreateFrame("Button", nil, frame.TitleBar, "BackdropTemplate")
     frame.CloseButton:SetSize(26, 26)
@@ -1426,7 +1433,7 @@ function UI:ConfigureHeader(item, path)
     if path and #path > 0 then
         frame.PageStatus:SetText(table.concat(path, " / "))
     else
-        frame.PageStatus:SetText("Featured systems, live previews, and direct entry points.")
+        frame.PageStatus:SetText("Quick access to active modules, status, and shortcuts.")
     end
 end
 

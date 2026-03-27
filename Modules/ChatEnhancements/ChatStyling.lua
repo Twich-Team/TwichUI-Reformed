@@ -28,6 +28,10 @@ local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
 local SERVICES = _G.SERVICES
 local TRADE = _G.TRADE
 local UIParent = _G.UIParent
+local ChatEdit_GetChannelTarget = _G.ChatEdit_GetChannelTarget
+local IsSecureCmd = _G.IsSecureCmd
+local hasanysecretvalues = _G.hasanysecretvalues
+local format = string.format
 local date = _G.date
 local hooksecurefunc = _G.hooksecurefunc
 local ipairs = _G.ipairs
@@ -54,6 +58,39 @@ local PRIMARY_FILL_ACTIVE = { 0.08, 0.11, 0.14 }
 local GOLD_ACCENT = { 0.95, 0.76, 0.26 }
 local TEXT_ACTIVE = { 1.0, 0.95, 0.86 }
 local TEXT_INACTIVE = { 0.68, 0.73, 0.80 }
+local EDIT_BOX_HISTORY_LIMIT = 50
+local CHAT_HISTORY_DEBUG_TO_CHAT = false
+local EDIT_BOX_HISTORY_HOOKED = setmetatable({}, { __mode = "k" })
+
+local function DescribeHistoryText(text)
+    if type(text) ~= "string" then
+        return tostring(text)
+    end
+
+    local normalized = text:gsub("\r", " "):gsub("\n", " ")
+    if normalized == "" then
+        return "<empty>"
+    end
+
+    if #normalized > 72 then
+        normalized = normalized:sub(1, 69) .. "..."
+    end
+
+    return normalized
+end
+
+local function IterateChatEditBoxes()
+    local editBoxes = {}
+
+    for _, frameName in ipairs(CHAT_FRAMES or {}) do
+        local editBox = _G[tostring(frameName) .. "EditBox"]
+        if editBox then
+            editBoxes[#editBoxes + 1] = editBox
+        end
+    end
+
+    return editBoxes
+end
 
 -- Height of one header datatext row (pixels).
 -- The bar sits in the existing 26px header inset zone so viewport top is unchanged.
@@ -281,7 +318,18 @@ local function ApplyResolvedFont(fontString, fontName, size, r, g, b, flags)
 end
 
 local function StripMarkup(text)
-    if not text or text == "" then
+    if type(text) ~= "string" then
+        return ""
+    end
+
+    if type(hasanysecretvalues) == "function" then
+        local ok, hasSecret = pcall(hasanysecretvalues, text)
+        if ok and hasSecret then
+            return ""
+        end
+    end
+
+    if text == "" then
         return text
     end
 
@@ -290,6 +338,21 @@ local function StripMarkup(text)
         :gsub("|c%x%x%x%x%x%x%x%x", "")
         :gsub("|r", "")
         :gsub("|A.-|a", "")
+end
+
+local function GetSafeDisplayText(text)
+    if type(text) ~= "string" then
+        return ""
+    end
+
+    if type(hasanysecretvalues) == "function" then
+        local ok, hasSecret = pcall(hasanysecretvalues, text)
+        if ok and hasSecret then
+            return ""
+        end
+    end
+
+    return text
 end
 
 local function EnsureFadeAnimations(frame)
@@ -712,7 +775,7 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
         textB      = textB,
     })
 
-    self:LogDebugf(true,
+    self:LogDebugf(false,
         "headerDT: frame=%s isUnified=%s frameLevel=%d rendererLevel=%d barLevel=%d slot1Level=%d",
         tostring(frame:GetName()),
         tostring(isUnified),
@@ -866,6 +929,15 @@ function ChatStylingModule:LogDebugf(shouldShow, messageFormat, ...)
     return false
 end
 
+function ChatStylingModule:LogHistoryDebugf(messageFormat, ...)
+    local message = format(messageFormat, ...)
+    self:LogDebug(message, false)
+
+    if CHAT_HISTORY_DEBUG_TO_CHAT and DEFAULT_CHAT_FRAME and DEFAULT_CHAT_FRAME.AddMessage then
+        DEFAULT_CHAT_FRAME:AddMessage("|cff80dfff[TwichUI ChatDebug]|r " .. message)
+    end
+end
+
 function ChatStylingModule:ForwardDragStart(frame)
     local targetFrame = self:GetDragTargetFrame(frame)
 
@@ -877,7 +949,7 @@ function ChatStylingModule:ForwardDragStart(frame)
         targetFrame:SetUserPlaced(true)
     end
 
-    self:LogDebugf(true, "drag start frame=%s isDocked=%s movable=%s pos=(%.0f,%.0f)",
+    self:LogDebugf(false, "drag start frame=%s isDocked=%s movable=%s pos=(%.0f,%.0f)",
         tostring(targetFrame and targetFrame:GetName() or "nil"),
         tostring(targetFrame and targetFrame.isDocked or false),
         tostring(targetFrame and targetFrame:IsMovable() or false),
@@ -923,7 +995,7 @@ function ChatStylingModule:ForwardDragStop(frame)
         end
     end
 
-    self:LogDebugf(true, "drag stop frame=%s pos=(%.0f,%.0f)",
+    self:LogDebugf(false, "drag stop frame=%s pos=(%.0f,%.0f)",
         tostring(targetFrame and targetFrame:GetName() or "nil"),
         targetFrame and targetFrame:GetLeft() or 0,
         targetFrame and targetFrame:GetTop() or 0)
@@ -966,7 +1038,7 @@ function ChatStylingModule:SelectChatFrame(targetFrame)
                 if primaryFrame then
                     local newW = primaryFrame:GetWidth()
                     local newH = primaryFrame:GetHeight()
-                    self:LogDebugf(true, "resize check after select: saved=%.0fx%.0f current=%.0fx%.0f",
+                    self:LogDebugf(false, "resize check after select: saved=%.0fx%.0f current=%.0fx%.0f",
                         savedW, savedH, newW, newH)
                     if math.abs(newW - savedW) > 2 or math.abs(newH - savedH) > 2 then
                         primaryFrame:SetSize(savedW, savedH)
@@ -978,7 +1050,7 @@ function ChatStylingModule:SelectChatFrame(targetFrame)
                 -- so the visible frame never appears to resize on tab switch.
                 if targetFrame and targetFrame ~= primaryFrame and targetFrame.GetWidth then
                     local tw, th = targetFrame:GetWidth(), targetFrame:GetHeight()
-                    self:LogDebugf(true, "resize check target: target=%.0fx%.0f vs primary=%.0fx%.0f",
+                    self:LogDebugf(false, "resize check target: target=%.0fx%.0f vs primary=%.0fx%.0f",
                         tw, th, savedW, savedH)
                     if math.abs(tw - savedW) > 2 or math.abs(th - savedH) > 2 then
                         targetFrame:SetSize(savedW, savedH)
@@ -995,7 +1067,7 @@ function ChatStylingModule:SelectChatFrame(targetFrame)
             C_Timer.After(0.1, function()
                 local newW = primaryFrame:GetWidth()
                 local newH = primaryFrame:GetHeight()
-                self:LogDebugf(true, "resize check after selectDock: saved=%.0fx%.0f current=%.0fx%.0f",
+                self:LogDebugf(false, "resize check after selectDock: saved=%.0fx%.0f current=%.0fx%.0f",
                     savedW, savedH, newW, newH)
                 if math.abs(newW - savedW) > 2 or math.abs(newH - savedH) > 2 then
                     primaryFrame:SetSize(savedW, savedH)
@@ -1022,7 +1094,7 @@ function ChatStylingModule:SelectChatFrame(targetFrame)
                 if primaryFrame then
                     local newW = primaryFrame:GetWidth()
                     local newH = primaryFrame:GetHeight()
-                    self:LogDebugf(true, "resize check non-docked: saved=%.0fx%.0f current=%.0fx%.0f",
+                    self:LogDebugf(false, "resize check non-docked: saved=%.0fx%.0f current=%.0fx%.0f",
                         savedW, savedH, newW, newH)
                     if math.abs(newW - savedW) > 2 or math.abs(newH - savedH) > 2 then
                         primaryFrame:SetSize(savedW, savedH)
@@ -1030,7 +1102,7 @@ function ChatStylingModule:SelectChatFrame(targetFrame)
                 end
                 if targetFrame and targetFrame ~= primaryFrame and targetFrame.GetWidth then
                     local tw, th = targetFrame:GetWidth(), targetFrame:GetHeight()
-                    self:LogDebugf(true, "resize check non-docked target: target=%.0fx%.0f vs primary=%.0fx%.0f",
+                    self:LogDebugf(false, "resize check non-docked target: target=%.0fx%.0f vs primary=%.0fx%.0f",
                         tw, th, savedW, savedH)
                     if math.abs(tw - savedW) > 2 or math.abs(th - savedH) > 2 then
                         targetFrame:SetSize(savedW, savedH)
@@ -1436,11 +1508,11 @@ function ChatStylingModule:EnsureFrameChrome(frame)
     chrome.DragHandle:SetMouseMotionEnabled(true)
     chrome.DragHandle:RegisterForDrag("LeftButton")
     chrome.DragHandle:SetScript("OnDragStart", function()
-        ChatStylingModule:LogDebugf(true, "drag start frame=%s", tostring(frame:GetName()))
+        ChatStylingModule:LogDebugf(false, "drag start frame=%s", tostring(frame:GetName()))
         ChatStylingModule:ForwardDragStart(frame)
     end)
     chrome.DragHandle:SetScript("OnDragStop", function()
-        ChatStylingModule:LogDebugf(true, "drag stop frame=%s", tostring(frame:GetName()))
+        ChatStylingModule:LogDebugf(false, "drag stop frame=%s", tostring(frame:GetName()))
         ChatStylingModule:ForwardDragStop(frame)
     end)
     chrome.DragHandle:HookScript("OnEnter", function()
@@ -1461,11 +1533,11 @@ function ChatStylingModule:EnsureFrameChrome(frame)
     chrome.AccentDragHandle:SetMouseMotionEnabled(true)
     chrome.AccentDragHandle:RegisterForDrag("LeftButton")
     chrome.AccentDragHandle:SetScript("OnDragStart", function()
-        ChatStylingModule:LogDebugf(true, "accent drag start frame=%s", tostring(frame:GetName()))
+        ChatStylingModule:LogDebugf(false, "accent drag start frame=%s", tostring(frame:GetName()))
         ChatStylingModule:ForwardDragStart(frame)
     end)
     chrome.AccentDragHandle:SetScript("OnDragStop", function()
-        ChatStylingModule:LogDebugf(true, "accent drag stop frame=%s", tostring(frame:GetName()))
+        ChatStylingModule:LogDebugf(false, "accent drag stop frame=%s", tostring(frame:GetName()))
         ChatStylingModule:ForwardDragStop(frame)
     end)
 
@@ -1491,7 +1563,7 @@ function ChatStylingModule:EnsureFrameChrome(frame)
     chrome.ResizeHandle:SetScript("OnDragStart", function()
         local targetFrame = ChatStylingModule:GetDragTargetFrame(frame)
         if targetFrame and targetFrame.StartSizing then
-            ChatStylingModule:LogDebugf(true, "resize start frame=%s", tostring(targetFrame:GetName()))
+            ChatStylingModule:LogDebugf(false, "resize start frame=%s", tostring(targetFrame:GetName()))
             targetFrame:StartSizing("BOTTOMRIGHT")
         end
     end)
@@ -1499,7 +1571,7 @@ function ChatStylingModule:EnsureFrameChrome(frame)
         local targetFrame = ChatStylingModule:GetDragTargetFrame(frame)
         if targetFrame and targetFrame.StopMovingOrSizing then
             targetFrame:StopMovingOrSizing()
-            ChatStylingModule:LogDebugf(true, "resize stop frame=%s size=%.0fx%.0f", tostring(targetFrame:GetName()),
+            ChatStylingModule:LogDebugf(false, "resize stop frame=%s size=%.0fx%.0f", tostring(targetFrame:GetName()),
                 targetFrame:GetWidth() or 0, targetFrame:GetHeight() or 0)
             -- Persist the new size via WoW's FCF system so it survives /reload.
             if type(FCF_SavePositionAndDimensions) == "function" then
@@ -1603,7 +1675,7 @@ function ChatStylingModule:ApplyFrameChrome(frame)
                 local hg = hc and hc.g or 0.09
                 local hb = hc and hc.b or 0.12
                 local ha = hc and hc.a ~= nil and hc.a or 0.9
-                self:LogDebugf(true, "header color r=%.2f g=%.2f b=%.2f a=%.2f", hr, hg, hb, ha)
+                self:LogDebugf(false, "header color r=%.2f g=%.2f b=%.2f a=%.2f", hr, hg, hb, ha)
                 frame.TwichUIChrome.HeaderArea:SetShown(true)
                 frame.TwichUIChrome.HeaderArea:SetColorTexture(hr, hg, hb, ha)
                 -- Extend header height when the header datatext bar is enabled,
@@ -1655,6 +1727,9 @@ end
 function ChatStylingModule:EnsureEditBoxChrome()
     local editBox = _G.ChatFrame1EditBox
     if not editBox or editBox.TwichUIChrome then
+        if editBox then
+            self:EnsureEditBoxHistoryHooks(editBox)
+        end
         return
     end
 
@@ -1692,6 +1767,8 @@ function ChatStylingModule:EnsureEditBoxChrome()
         editBox:SetAltArrowKeyMode(false)
     end
 
+    self:EnsureEditBoxHistoryHooks(editBox)
+
     editBox:HookScript("OnShow", function(self)
         if self.TwichUIChrome and ChatStylingModule:IsEnabled() then
             self.TwichUIChrome:Show()
@@ -1722,6 +1799,54 @@ function ChatStylingModule:EnsureEditBoxChrome()
             ChatStylingModule:ApplyEditBoxPosition()
         end)
     end
+end
+
+function ChatStylingModule:EnsureEditBoxHistoryHooks(editBox)
+    if not editBox then
+        return
+    end
+
+    if editBox.SetAltArrowKeyMode then
+        editBox:SetAltArrowKeyMode(false)
+    end
+
+    if editBox.SetHistoryLines then
+        editBox:SetHistoryLines(EDIT_BOX_HISTORY_LIMIT)
+    end
+
+    if EDIT_BOX_HISTORY_HOOKED[editBox] then
+        return
+    end
+
+    EDIT_BOX_HISTORY_HOOKED[editBox] = true
+
+    self:LogHistoryDebugf("history hook attached box=%s", tostring(editBox.GetName and editBox:GetName() or "unknown"))
+
+    if editBox.AddHistoryLine then
+        hooksecurefunc(editBox, "AddHistoryLine", function(selfEditBox, text)
+            ChatStylingModule:AddEditBoxHistoryLine(selfEditBox, text, "native")
+        end)
+    end
+end
+
+function ChatStylingModule:AddEditBoxHistoryLine(editBox, text, source)
+    if not editBox or type(text) ~= "string" or not text:match("%S") then
+        self:LogHistoryDebugf("chat history skip source=%s reason=empty box=%s",
+            tostring(source or "unknown"), tostring(editBox and editBox.GetName and editBox:GetName() or "unknown"))
+        return
+    end
+
+    local command = text:match("(/[^ ]+)")
+    if command and IsSecureCmd and IsSecureCmd(command) then
+        self:LogHistoryDebugf("chat history skip source=%s reason=secure command=%s box=%s",
+            tostring(source or "unknown"), tostring(command),
+            tostring(editBox.GetName and editBox:GetName() or "unknown"))
+        return
+    end
+
+    self:LogHistoryDebugf("chat history store source=%s box=%s text=%s",
+        tostring(source or "unknown"), tostring(editBox.GetName and editBox:GetName() or "unknown"),
+        DescribeHistoryText(text))
 end
 
 function ChatStylingModule:ApplyEditBoxPosition()
@@ -2001,7 +2126,7 @@ end
 function ChatStylingModule:OpenCopyFrame(frame)
     local copyFrame = self:EnsureCopyFrame()
     self:RefreshCopyFrame()
-    local text = self:GetCopyText(frame or _G.SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME)
+    local text = GetSafeDisplayText(self:GetCopyText(frame or _G.SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME))
     copyFrame.EditBox:SetText(text)
     copyFrame.EditBox:HighlightText()
     copyFrame:Show()
@@ -2015,7 +2140,7 @@ end
 function ChatStylingModule:ShowRawTextCopyFrame(text)
     local copyFrame = self:EnsureCopyFrame()
     self:RefreshCopyFrame()
-    copyFrame.EditBox:SetText(text or "")
+    copyFrame.EditBox:SetText(GetSafeDisplayText(text))
     copyFrame.EditBox:HighlightText()
     copyFrame:Show()
     -- Defer focus so menu teardown can't steal it back.
@@ -2703,7 +2828,12 @@ function ChatStylingModule:HookChatFrame(frame)
     frame:SetMovable(true)
     frame:SetResizable(true)
     frame:SetClampedToScreen(false)  -- allow placing flush against the monitor edge
-    frame:SetUserPlaced(true)
+    -- Do not mark every chat frame as user-placed here. Temporary windows such as
+    -- whisper tabs can inherit this flag and later trigger Blizzard restore errors
+    -- during display-size changes when they are no longer movable/resizable.
+    if frame.isTemporary and frame.SetUserPlaced then
+        frame:SetUserPlaced(false)
+    end
     if frame.SetMinResize then
         frame:SetMinResize(260, 120)
     end
@@ -2776,6 +2906,14 @@ function ChatStylingModule:HookAllChatFrames()
     for _, frame in ipairs(IterateStyledChatFrames()) do
         self:HookChatFrame(frame)
     end
+
+    self:HookAllChatEditBoxes()
+end
+
+function ChatStylingModule:HookAllChatEditBoxes()
+    for _, editBox in ipairs(IterateChatEditBoxes()) do
+        self:EnsureEditBoxHistoryHooks(editBox)
+    end
 end
 
 function ChatStylingModule:RefreshAllVisuals()
@@ -2808,6 +2946,7 @@ function ChatStylingModule:RefreshAllVisuals()
         end
     end
 
+    self:HookAllChatEditBoxes()
     self:ApplyCombatLogChrome()
     self:ApplyDefaultButtonSuppression()
 end
@@ -2868,6 +3007,11 @@ function ChatStylingModule:InstallFrameHooks()
     if type(FCF_OpenTemporaryWindow) == "function" then
         hooksecurefunc("FCF_OpenTemporaryWindow", function()
             self:HookAllChatFrames()
+            for _, frame in ipairs(IterateStyledChatFrames()) do
+                if frame and frame.isTemporary and frame.SetUserPlaced then
+                    frame:SetUserPlaced(false)
+                end
+            end
             self:RefreshAllVisuals()
         end)
     end

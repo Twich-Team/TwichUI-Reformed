@@ -1203,7 +1203,9 @@ end
 
 local function SetFriendsPanelText(panel)
     local wowOnline, _, bnetOnline = GetOnlineFriendSummary()
-    local totalOnline = wowOnline + bnetOnline
+    local friendsDB = GetDatatextDB("friends")
+    local countWoWOnly = friendsDB.countWoWOnly == true
+    local totalOnline = wowOnline + (countWoWOnly and 0 or bnetOnline)
     local text = totalOnline > 0 and format("Friends %d", totalOnline) or "Friends"
     if totalOnline > 0 then
         SetPanelText(panel, text, "friends", 0.4, 0.86, 0.52, 1)

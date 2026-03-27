@@ -4,6 +4,7 @@
 local TwichRx = _G.TwichRx
 ---@type TwichUI
 local T = unpack(TwichRx)
+local hasanysecretvalues = _G.hasanysecretvalues
 
 --- local references to WoW APIs
 local PlaySoundFile = PlaySoundFile
@@ -21,6 +22,25 @@ local ChatEnhancementModule = T:GetModule("ChatEnhancements")
 ---@field blizzardTellSoundSuppressed boolean whether the default tell sound is suppressed
 local ChatAlertsModule = ChatEnhancementModule:NewModule("ChatAlerts")
 ---@alias ChatChannelInfo { name: string, color: string, event: string }
+
+local function HasSecretValues(...)
+    if type(hasanysecretvalues) == "function" then
+        local ok, hasSecret = pcall(hasanysecretvalues, ...)
+        if ok and hasSecret then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function IsUsablePlainString(value)
+    if type(value) ~= "string" then
+        return false
+    end
+
+    return not HasSecretValues(value)
+end
 
 --- Supported chat channels for monitoring. Configuration is created automatically based on added channels.
 ---@type table<string, ChatChannelInfo>
@@ -180,16 +200,18 @@ function ChatAlertsModule:RefreshEvents()
             -- is this a keywords monitored channel?
             if channel and self:IsKeywordChannelRegistered(channel) then
                 -- does the message have a keyword?
-                local messageLower = message:lower()
-                for _, keyword in ipairs(self.keyWords) do
-                    if string.find(messageLower, keyword, 1, true) then
-                        -- if so, play sound
-                        local keywordSound = ChatAlertsModule:GetKeywordSound()
-                        if keywordSound then
-                            PlaySoundFile(keywordSound, "Master")
-                            playSound = false
+                if IsUsablePlainString(message) then
+                    local messageLower = message:lower()
+                    for _, keyword in ipairs(self.keyWords) do
+                        if string.find(messageLower, keyword, 1, true) then
+                            -- if so, play sound
+                            local keywordSound = ChatAlertsModule:GetKeywordSound()
+                            if keywordSound then
+                                PlaySoundFile(keywordSound, "Master")
+                                playSound = false
+                            end
+                            break
                         end
-                        break
                     end
                 end
             end

@@ -277,9 +277,25 @@ function DebugConsole:EnsureFrame()
         return self.frame
     end
 
-    local frame = CreateFrame("Frame", "TwichUIDebugConsoleFrame", UIParent, "BackdropTemplate")
-    frame:SetSize(900, 560)
+    local function CreatePanel(parent, r, g, b, a, borderA)
+        local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        f:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        f:SetBackdropColor(r or 0.08, g or 0.08, b or 0.1, a or 0.96)
+        f:SetBackdropBorderColor(0.94, 0.77, 0.28, borderA or 0.22)
+        return f
+    end
+
+    -- Outer frame
+    local frame = CreatePanel(UIParent, 0.03, 0.03, 0.05, 0.985, 0.3)
+    frame:SetSize(940, 580)
     frame:SetPoint("CENTER")
+    frame:SetFrameStrata("DIALOG")
+    frame:SetFrameLevel(80)
     frame:SetMovable(true)
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
@@ -288,106 +304,141 @@ function DebugConsole:EnsureFrame()
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:Hide()
 
-    if frame.SetTemplate then
-        frame:SetTemplate("Transparent")
-    else
-        frame:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-            insets = { left = 1, right = 1, top = 1, bottom = 1 },
-        })
-        frame:SetBackdropColor(0.06, 0.06, 0.08, 0.96)
-        frame:SetBackdropBorderColor(0, 0, 0, 1)
-    end
-
-    local titleBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    titleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
-    titleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
-    titleBar:SetHeight(30)
-    if titleBar.SetTemplate then
-        titleBar:SetTemplate("Default")
-    end
+    -- Title bar
+    local titleBar = CreatePanel(frame, 0.08, 0.08, 0.11, 0.98, 0.24)
+    titleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -6)
+    titleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
+    titleBar:SetHeight(54)
     titleBar:EnableMouse(true)
     titleBar:RegisterForDrag("LeftButton")
-    titleBar:SetScript("OnDragStart", function()
-        frame:StartMoving()
-    end)
-    titleBar:SetScript("OnDragStop", function()
-        frame:StopMovingOrSizing()
-    end)
+    titleBar:SetScript("OnDragStart", function() frame:StartMoving() end)
+    titleBar:SetScript("OnDragStop", function() frame:StopMovingOrSizing() end)
 
-    local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    title:SetPoint("LEFT", titleBar, "LEFT", 10, 0)
-    title:SetJustifyH("LEFT")
-    if GameFontHighlight and title.SetFontObject then
-        title:SetFontObject(GameFontHighlight)
-    end
+    -- Gold accent stripe
+    local titleAccent = titleBar:CreateTexture(nil, "BORDER")
+    titleAccent:SetPoint("TOPLEFT", titleBar, "TOPLEFT", 1, -1)
+    titleAccent:SetPoint("BOTTOMLEFT", titleBar, "BOTTOMLEFT", 1, 1)
+    titleAccent:SetWidth(5)
+    titleAccent:SetColorTexture(0.98, 0.76, 0.22, 1)
+
+    -- Title text
+    local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", titleBar, "TOPLEFT", 18, -10)
     title:SetText("TwichUI Debug Console")
+    title:SetTextColor(1, 0.95, 0.82)
 
-    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    subtitle:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -38)
-    subtitle:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -140, -38)
+    -- Subtitle
+    local subtitle = titleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
     subtitle:SetJustifyH("LEFT")
-    subtitle:SetText("Use /tui debug or /tui debug <module> to open a source directly.")
-    if GameFontHighlightSmall and subtitle.SetFontObject then
-        subtitle:SetFontObject(GameFontHighlightSmall)
-    end
+    subtitle:SetTextColor(0.72, 0.74, 0.8)
+    subtitle:SetText("Use /tui debug or /tui debug <module> to open a specific source.")
 
-    local sourceBar = CreateFrame("Frame", nil, frame)
-    sourceBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -60)
-    sourceBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -140, -60)
-    sourceBar:SetHeight(24)
-
-    local refreshButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    refreshButton:SetSize(60, 22)
-    refreshButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -74, -36)
-    refreshButton:SetText("Refresh")
-    if UI.SkinButton then
-        UI.SkinButton(refreshButton)
-    end
-
-    local clearButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    clearButton:SetSize(60, 22)
-    clearButton:SetPoint("RIGHT", refreshButton, "LEFT", -8, 0)
-    clearButton:SetText("Clear")
-    if UI.SkinButton then
-        UI.SkinButton(clearButton)
-    end
-
-    local closeButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
-    closeButton:SetScript("OnClick", function()
+    -- Close button
+    local closeButton = CreateFrame("Button", nil, titleBar, "BackdropTemplate")
+    closeButton:SetSize(26, 26)
+    closeButton:SetPoint("RIGHT", titleBar, "RIGHT", -10, 0)
+    closeButton:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    closeButton:SetBackdropColor(0.98 * 0.22, 0.56 * 0.22, 0.5 * 0.22, 0.98)
+    closeButton:SetBackdropBorderColor(0.98, 0.56, 0.5, 0.42)
+    local closeIcon = closeButton:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    closeIcon:SetAllPoints(closeButton)
+    closeIcon:SetJustifyH("CENTER")
+    closeIcon:SetJustifyV("MIDDLE")
+    closeIcon:SetText("×")
+    closeIcon:SetTextColor(1, 0.85, 0.82)
+    closeButton:SetScript("OnMouseDown", function(b) b:SetBackdropColor(0.98 * 0.38, 0.56 * 0.38, 0.5 * 0.38, 1) end)
+    closeButton:SetScript("OnMouseUp", function(b)
+        b:SetBackdropColor(0.98 * 0.22, 0.56 * 0.22, 0.5 * 0.22, 0.98)
         frame:Hide()
     end)
-    if UI.SkinCloseButton then
-        UI.SkinCloseButton(closeButton)
-    end
+    closeButton:SetScript("OnClick", function() frame:Hide() end)
 
-    local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -92)
-    scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -32, 12)
-    if UI.SkinScrollBar then
-        UI.SkinScrollBar(scroll)
-    end
+    -- Clear button
+    local clearButton = CreateFrame("Button", nil, titleBar, "BackdropTemplate")
+    clearButton:SetSize(72, 24)
+    clearButton:SetPoint("RIGHT", closeButton, "LEFT", -8, 0)
+    clearButton:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    clearButton:SetBackdropColor(0.42 * 0.18, 0.82 * 0.18, 0.98 * 0.18, 0.98)
+    clearButton:SetBackdropBorderColor(0.42, 0.82, 0.98, 0.38)
+    local clearLabel = clearButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    clearLabel:SetAllPoints(clearButton)
+    clearLabel:SetJustifyH("CENTER")
+    clearLabel:SetJustifyV("MIDDLE")
+    clearLabel:SetText("Clear")
+    clearLabel:SetTextColor(0.82, 0.92, 1)
+    clearButton:SetScript("OnMouseDown", function(b) b:SetBackdropColor(0.42 * 0.28, 0.82 * 0.28, 0.98 * 0.28, 1) end)
+    clearButton:SetScript("OnMouseUp", function(b) b:SetBackdropColor(0.42 * 0.18, 0.82 * 0.18, 0.98 * 0.18, 0.98) end)
+
+    -- Refresh button
+    local refreshButton = CreateFrame("Button", nil, titleBar, "BackdropTemplate")
+    refreshButton:SetSize(72, 24)
+    refreshButton:SetPoint("RIGHT", clearButton, "LEFT", -6, 0)
+    refreshButton:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    refreshButton:SetBackdropColor(0.42 * 0.18, 0.82 * 0.18, 0.98 * 0.18, 0.98)
+    refreshButton:SetBackdropBorderColor(0.42, 0.82, 0.98, 0.38)
+    local refreshLabel = refreshButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    refreshLabel:SetAllPoints(refreshButton)
+    refreshLabel:SetJustifyH("CENTER")
+    refreshLabel:SetJustifyV("MIDDLE")
+    refreshLabel:SetText("Refresh")
+    refreshLabel:SetTextColor(0.82, 0.92, 1)
+    refreshButton:SetScript("OnMouseDown", function(b) b:SetBackdropColor(0.42 * 0.28, 0.82 * 0.28, 0.98 * 0.28, 1) end)
+    refreshButton:SetScript("OnMouseUp", function(b) b:SetBackdropColor(0.42 * 0.18, 0.82 * 0.18, 0.98 * 0.18, 0.98) end)
+
+    subtitle:SetPoint("RIGHT", refreshButton, "LEFT", -12, 0)
+
+    -- Source tab bar
+    local sourceBar = CreatePanel(frame, 0.055, 0.055, 0.08, 0.985, 0.18)
+    sourceBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -68)
+    sourceBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -68)
+    sourceBar:SetHeight(30)
+
+    -- Log area
+    local logPanel = CreatePanel(frame, 0.04, 0.04, 0.06, 0.98, 0.2)
+    logPanel:SetPoint("TOPLEFT", sourceBar, "BOTTOMLEFT", 0, -4)
+    logPanel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -6, 6)
+
+    -- Blue accent on log panel
+    local logAccent = logPanel:CreateTexture(nil, "BORDER")
+    logAccent:SetPoint("TOPLEFT", logPanel, "TOPLEFT", 1, -1)
+    logAccent:SetPoint("BOTTOMLEFT", logPanel, "BOTTOMLEFT", 1, 1)
+    logAccent:SetWidth(3)
+    logAccent:SetColorTexture(0.42, 0.82, 0.98, 0.5)
+
+    local scroll = CreateFrame("ScrollFrame", nil, logPanel, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", logPanel, "TOPLEFT", 10, -8)
+    scroll:SetPoint("BOTTOMRIGHT", logPanel, "BOTTOMRIGHT", -28, 8)
 
     local editBox = CreateFrame("EditBox", nil, scroll)
     editBox:SetMultiLine(true)
     editBox:SetAutoFocus(false)
-    editBox:SetFontObject(_G.ChatFontNormal)
-    editBox:SetWidth(840)
+    editBox:SetFontObject(_G.ChatFontNormal or GameFontHighlightSmall)
+    editBox:SetWidth(860)
     editBox:SetHeight(1800)
-    editBox:SetScript("OnEscapePressed", function()
-        frame:Hide()
-    end)
+    editBox:SetScript("OnEscapePressed", function() frame:Hide() end)
     editBox:SetScript("OnTextChanged", function(box)
         local text = box:GetText() or ""
         local _, lineCount = text:gsub("\n", "\n")
         local _, fontHeight = box:GetFont()
-        local lineHeight = (fontHeight or 14) + 2
+        local lineHeight = (fontHeight or 13) + 2
         box:SetHeight(max(1800, ((lineCount + 1) * lineHeight) + 24))
     end)
-
     scroll:SetScrollChild(editBox)
 
     frame.titleBar = titleBar
@@ -428,28 +479,47 @@ function DebugConsole:RefreshSourceButtons()
     for index, key in ipairs(keys) do
         local button = frame.sourceButtons[index]
         if not button then
-            button = CreateFrame("Button", nil, frame.sourceBar, "UIPanelButtonTemplate")
+            button = CreateFrame("Button", nil, frame.sourceBar, "BackdropTemplate")
             button:SetHeight(22)
-            if UI.SkinButton then
-                UI.SkinButton(button)
-            end
+            button:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8X8",
+                edgeFile = "Interface\\Buttons\\WHITE8X8",
+                edgeSize = 1,
+                insets = { left = 1, right = 1, top = 1, bottom = 1 },
+            })
+            button:SetBackdropColor(0.42 * 0.16, 0.82 * 0.16, 0.98 * 0.16, 0.98)
+            button:SetBackdropBorderColor(0.42, 0.82, 0.98, 0.35)
+            local lbl = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            lbl:SetAllPoints(button)
+            lbl:SetJustifyH("CENTER")
+            lbl:SetJustifyV("MIDDLE")
+            lbl:SetTextColor(0.82, 0.92, 1)
+            button.__twichuiLabel = lbl
+            button:SetScript("OnMouseDown", function(b) b:SetBackdropColor(0.42 * 0.26, 0.82 * 0.26, 0.98 * 0.26, 1) end)
+            button:SetScript("OnMouseUp", function(b) b:SetBackdropColor(0.42 * 0.16, 0.82 * 0.16, 0.98 * 0.16, 0.98) end)
             frame.sourceButtons[index] = button
         end
 
         local source = self.sources[key]
-        button:SetWidth(max(96, (source.title and #source.title or 10) * 7 + 18))
-        button:SetText(source.title or key)
-        button:SetPoint("LEFT", previous or frame.sourceBar, previous and "RIGHT" or "LEFT", previous and 6 or 0, 0)
+        local labelText = source.title or key
+        button:SetWidth(max(80, #labelText * 7 + 18))
+        button.__twichuiLabel:SetText(labelText)
+        button:SetPoint("LEFT", previous or frame.sourceBar, previous and "RIGHT" or "LEFT", previous and 6 or 8, 0)
         button:SetScript("OnClick", function()
             self:Show(key)
         end)
 
         if self.activeSourceKey == key then
-            button:Disable()
-            button:SetAlpha(1.0)
+            button:SetBackdropBorderColor(0.98, 0.76, 0.22, 0.9)
+            button:SetBackdropColor(0.98 * 0.2, 0.76 * 0.2, 0.22 * 0.2, 0.98)
+            button.__twichuiLabel:SetTextColor(1, 0.95, 0.82)
+            button:EnableMouse(false)
         else
-            button:Enable()
-            button:SetAlpha(self:IsSourceEnabled(key) and 1.0 or 0.65)
+            button:SetBackdropColor(0.42 * 0.16, 0.82 * 0.16, 0.98 * 0.16, 0.98)
+            button:SetBackdropBorderColor(0.42, 0.82, 0.98, 0.35)
+            button.__twichuiLabel:SetTextColor(0.82, 0.92, 1)
+            button:EnableMouse(true)
+            button:SetAlpha(self:IsSourceEnabled(key) and 1.0 or 0.55)
         end
 
         button:Show()

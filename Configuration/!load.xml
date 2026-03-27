@@ -12,6 +12,7 @@
     <Include file='RaidFrames.lua' />
     <Include file='Gathering.lua' />
     <Include file='QualityOfLife.lua' />
+    <Include file='MythicPlusTools.lua' />
     <Include file='BestInSlot.lua' />
     <Include file='NotificationPanel.lua' />
 

@@ -928,6 +928,30 @@ function PT:BuildPreyReadyNotificationInfo(snapshot)
     }
 end
 
+function PT:IsFinalPreyStage(snapshot)
+    if type(snapshot) ~= "table" or snapshot.active ~= true then
+        return false
+    end
+
+    return Clamp01(snapshot.progress or (PREY_PROGRESS_BY_STATE[snapshot.progressState] or 0)) >= 1
+end
+
+function PT:BuildPreyCompletionNotificationInfo(snapshot)
+    if type(snapshot) ~= "table" or type(snapshot.questID) ~= "number" then
+        return nil
+    end
+
+    local questTitle = GetQuestTitle(snapshot.questID) or "Prey Hunt"
+    return {
+        questID = snapshot.questID,
+        titleText = questTitle,
+        detailText = "The prey hunt is complete.",
+        statusText = "PREY COMPLETE",
+        atlasName = PREY_ATLAS_BY_STATE[3],
+        buttonText = nil,
+    }
+end
+
 function PT:SendReadyNotification(snapshot)
     local toasts = T:GetModule("ToastsModule", true)
     if not toasts or type(toasts.SendPreyNotification) ~= "function" then
@@ -947,7 +971,47 @@ function PT:SendReadyNotification(snapshot)
     return false
 end
 
+function PT:SendCompletionNotification(snapshot)
+    local toasts = T:GetModule("ToastsModule", true)
+    if not toasts or type(toasts.SendPreyNotification) ~= "function" then
+        return false
+    end
+
+    if type(toasts.IsPreyNotificationEnabled) == "function" and not toasts:IsPreyNotificationEnabled() then
+        return false
+    end
+
+    local info = self:BuildPreyCompletionNotificationInfo(snapshot)
+    if info then
+        toasts:SendPreyNotification(info)
+        return true
+    end
+
+    return false
+end
+
+function PT:IsQuestCompleted(questID)
+    if type(questID) ~= "number" then
+        return false
+    end
+
+    if type(C_QuestLog) == "table" and type(C_QuestLog.IsQuestFlaggedCompleted) == "function" then
+        return C_QuestLog.IsQuestFlaggedCompleted(questID) == true
+    end
+
+    return false
+end
+
 function PT:HandleReadyNotification(snapshot)
+    local previousSnapshot = self.lastSnapshot
+
+    if type(previousSnapshot) == "table" and previousSnapshot.active == true and type(previousSnapshot.questID) == "number" then
+        local currentQuestID = type(snapshot) == "table" and snapshot.questID or nil
+        if currentQuestID ~= previousSnapshot.questID and self:IsQuestCompleted(previousSnapshot.questID) then
+            self:SendCompletionNotification(previousSnapshot)
+        end
+    end
+
     if type(snapshot) ~= "table" or snapshot.active ~= true then
         self.lastNotifiedPreyQuestID = nil
         return
@@ -955,6 +1019,10 @@ function PT:HandleReadyNotification(snapshot)
 
     local questID = snapshot.questID
     if type(questID) ~= "number" then
+        return
+    end
+
+    if not self:IsFinalPreyStage(snapshot) then
         return
     end
 

@@ -1034,6 +1034,17 @@ local function BuildFriendsConfiguration()
         args = {
             title = W.TitleWidget(0, "Friends"),
             desc = W.Description(1, "Summarizes online WoW and Battle.net friends and opens the friends list on click."),
+            behavior = W.IGroup(5, "Behavior", {
+                countWoWOnly = {
+                    type = "toggle",
+                    name = "Count WoW Clients Only",
+                    desc = "Only count friends who are currently online in World of Warcraft in the datatext total.",
+                    order = 1,
+                    handler = Options,
+                    get = "GetFriendsCountWoWOnly",
+                    set = "SetFriendsCountWoWOnly",
+                },
+            }),
             colors = BuildInlineColorGroup(W, 10, "friends", "TwichUI: Friends", "Custom Tint", { 0.4, 0.86, 0.52, 1 }),
         },
     }

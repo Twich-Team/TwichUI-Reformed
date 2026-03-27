@@ -1086,6 +1086,17 @@ function Options:SetChoresTrackerBackgroundTransparency(info, value)
     RefreshDatatext("TwichUI: Chores")
 end
 
+function Options:GetFriendsCountWoWOnly(info)
+    local db = self:GetDatatextDB("friends")
+    return db.countWoWOnly == true
+end
+
+function Options:SetFriendsCountWoWOnly(info, value)
+    local db = self:GetDatatextDB("friends")
+    db.countWoWOnly = value == true
+    RefreshDatatext("TwichUI: Friends")
+end
+
 --- GOBLIN DATATEXT OPTIONS ---
 function Options:GetGoblinGoldDisplayMode(info)
     local db = self:GetDatatextDB("goblin")

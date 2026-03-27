@@ -14,6 +14,7 @@ local UIParent = _G.UIParent
 local date = _G.date
 local format = string.format
 local hooksecurefunc = _G.hooksecurefunc
+local hasanysecretvalues = _G.hasanysecretvalues
 local ipairs = _G.ipairs
 local mathMax = math.max
 local mathMin = math.min
@@ -107,6 +108,29 @@ local function SafeDebugString(value)
     end
 
     return tostring(value)
+end
+
+local function HasSecretValues(...)
+    if type(hasanysecretvalues) == "function" then
+        local ok, hasSecret = pcall(hasanysecretvalues, ...)
+        if ok and hasSecret then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function IsUsablePlainString(value)
+    if type(value) ~= "string" then
+        return false
+    end
+
+    if HasSecretValues(value) then
+        return false
+    end
+
+    return true
 end
 
 local function FormatFramePoint(frame)
@@ -233,11 +257,15 @@ local function ApplyResolvedFont(fontString, fontName, size, r, g, b, flags)
 end
 
 local function StripMarkup(text)
-    if not text or text == "" then
+    if text == nil then
         return ""
     end
 
-    local cleaned = tostring(text)
+    if not IsUsablePlainString(text) then
+        return ""
+    end
+
+    local cleaned = text
     cleaned = cleaned:gsub("|T.-|t", "")
     cleaned = cleaned:gsub("|A.-|a", "")
     cleaned = cleaned:gsub("|c%x%x%x%x%x%x%x%x", "")
@@ -248,7 +276,7 @@ local function StripMarkup(text)
 end
 
 local function ExtractSpeakerKey(message)
-    if type(message) ~= "string" then
+    if not IsUsablePlainString(message) then
         return nil
     end
 
@@ -318,7 +346,7 @@ end
 
 --- Cache the class token for a message sender using the event GUID.
 function ChatRendererModule:CacheClassFromEvent(chatEvent, message, sender, language, channelString, target, flags, _, channelNumber, channelName, _, counter, guid)
-    if not sender or sender == "" then return end
+    if not IsUsablePlainString(sender) or sender == "" then return end
     if not guid or guid == "" then return end
     local _, classToken = GetPlayerInfoByGUID(guid)
     if not classToken then return end
@@ -473,7 +501,7 @@ function ChatRendererModule:GetChannelColor(key, fallbackR, fallbackG, fallbackB
 end
 
 function ChatRendererModule:ResolveMessageChannelKey(message)
-    if type(message) ~= "string" then
+    if not IsUsablePlainString(message) then
         return nil
     end
 
@@ -616,7 +644,8 @@ function ChatRendererModule:GetFrameByTabName(tabName)
     for _, frameName in ipairs(CHAT_FRAMES or {}) do
         local frame = _G[frameName]
         local tab = frame and frame.GetName and _G[frame:GetName() .. "Tab"] or nil
-        local text = tab and tab.GetText and StripMarkup(tab:GetText()) or nil
+        local tabText = tab and tab.GetText and tab:GetText() or nil
+        local text = StripMarkup(tabText)
         if text and text:lower() == lower then
             return frame
         end
@@ -690,6 +719,10 @@ end
 
 function ChatRendererModule:DecorateMessage(message)
     if type(message) ~= "string" then
+        return message
+    end
+
+    if not IsUsablePlainString(message) then
         return message
     end
 
@@ -1092,10 +1125,17 @@ function ChatRendererModule:MeasureEntry(renderer, entry, bodyWidth)
     end
 
     local measure = renderer.MeasureLabel
+    local baseFontSize = self.settings.chatFontSize or 13
+    if not IsUsablePlainString(entry.text) then
+        entry.bodyHeight = baseFontSize
+        entry.rowHeight = mathMax(28, baseFontSize + 16)
+        return
+    end
+
     ApplyResolvedFont(measure, self.settings.chatFont, self.settings.chatFontSize, 1, 1, 1, "")
     measure:SetWidth(bodyWidth)
     measure:SetText(entry.text or "")
-    local textHeight = mathMax(self.settings.chatFontSize or 13, measure:GetStringHeight())
+    local textHeight = mathMax(baseFontSize, measure:GetStringHeight())
     entry.bodyHeight = textHeight
     entry.rowHeight = mathMax(28, textHeight + 16)
 end
@@ -1569,7 +1609,7 @@ end
 
 --- Extracts the full player link target (e.g. "Name-Realm") from a message, or nil.
 local function ExtractPlayerTarget(message)
-    if type(message) ~= "string" then return nil end
+    if not IsUsablePlainString(message) then return nil end
     return message:match("|Hplayer:([^:|]+)")
 end
 
@@ -1581,7 +1621,7 @@ function ChatRendererModule:ShowMessageContextMenu(row, entry)
     local playerTarget = ExtractPlayerTarget(entry.message)
     local shortName    = playerTarget and (playerTarget:match("^([^%-]+)") or playerTarget) or nil
     local rawText = ""
-    if entry.message then
+    if IsUsablePlainString(entry.message) then
         rawText = entry.message
         rawText = rawText:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|C%x%x%x%x%x%x%x%x%x%x", "")
         rawText = rawText:gsub("|r", "")

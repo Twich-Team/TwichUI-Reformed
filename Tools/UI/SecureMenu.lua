@@ -107,7 +107,17 @@ local function SkinBackdrop(frame)
     frame:SetBackdropBorderColor(br, bg, bb, 1)
 end
 
+local function IsUISoundsEnabled()
+    local configurationModule = T:GetModule("Configuration", true)
+    local options = configurationModule and configurationModule.Options and configurationModule.Options.Theme or nil
+    if options and options.GetUISoundsEnabled then
+        return options:GetUISoundsEnabled()
+    end
+    return true
+end
+
 local function PlayMenuClickSound()
+    if not IsUISoundsEnabled() then return end
     -- MediaLoader registers sounds with hyphens converted to spaces.
     local path = LSM and LSM:Fetch("sound", "TwichUI Menu Click")
     if path and type(PlaySoundFile) == "function" then
@@ -120,6 +130,7 @@ local function PlayMenuClickSound()
 end
 
 local function PlayMenuConfirmSound()
+    if not IsUISoundsEnabled() then return end
     -- MediaLoader registers sounds with hyphens converted to spaces.
     local path = LSM and LSM:Fetch("sound", "TwichUI Menu Confirm")
     if path and type(PlaySoundFile) == "function" then
@@ -135,6 +146,7 @@ end
 --- Normalizes hyphens to spaces to match how MediaLoader registers sounds with LSM.
 --- Falls back gracefully if the sound file is not yet registered.
 function UI.PlayTwichSound(name)
+    if not IsUISoundsEnabled() then return end
     -- MediaLoader converts hyphens to spaces when registering; mirror that here.
     local lsmName = name and name:gsub("-", " ") or name
     local path = LSM and LSM:Fetch("sound", lsmName)
@@ -320,7 +332,7 @@ local function CreateRow(menu, index)
     end
 
     button:EnableMouse(true)
-    button:RegisterForClicks("LeftButtonDown", "LeftButtonUp", "RightButtonDown", "RightButtonUp")
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:SetAttribute("pressAndHoldAction", true)
     SkinBackdrop(button)
 

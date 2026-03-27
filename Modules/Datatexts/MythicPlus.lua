@@ -17,6 +17,7 @@ local sort = table.sort
 local C_ChallengeMode = _G.C_ChallengeMode
 local C_MythicPlus = _G.C_MythicPlus
 local C_PlayerInfo = _G.C_PlayerInfo
+local C_TooltipInfo = _G.C_TooltipInfo
 local C_WeeklyRewards = _G.C_WeeklyRewards
 local Enum = _G.Enum
 local ShowUIPanel = _G.ShowUIPanel
@@ -41,6 +42,12 @@ local function GetOptions()
     ---@type ConfigurationModule
     local configurationModule = T:GetModule("Configuration")
     return configurationModule.Options.Datatext
+end
+
+local function GetMythicPlusToolsOptions()
+    ---@type ConfigurationModule
+    local configurationModule = T:GetModule("Configuration")
+    return configurationModule.Options.MythicPlusTools
 end
 
 local function EnsureWeeklyRewardsLoaded()
@@ -327,6 +334,7 @@ local function GetVaultSlotRows()
                 progress = progress,
                 threshold = threshold,
                 unlocked = unlocked,
+                itemLink = itemLink,
                 itemLevel = itemLevel,
                 nextItemLevel = nextItemLevel,
             })
@@ -341,16 +349,56 @@ local function BuildVaultSlotLabel(row)
         T.Tools.Text.Color(T.Tools.Colors.GRAY, "(" .. FormatRunCount(row.threshold) .. ")"))
 end
 
+local function GetVaultUpgradeTrackLabel(itemLink)
+    if type(itemLink) ~= "string" or itemLink == "" then
+        return nil
+    end
+
+    if not (C_TooltipInfo and type(C_TooltipInfo.GetHyperlink) == "function") then
+        return nil
+    end
+
+    local ok, tooltipData = pcall(C_TooltipInfo.GetHyperlink, itemLink)
+    if not ok or type(tooltipData) ~= "table" or type(tooltipData.lines) ~= "table" then
+        return nil
+    end
+
+    for _, line in ipairs(tooltipData.lines) do
+        if type(line) == "table" then
+            local leftText = line.leftText
+            if type(leftText) == "string" and leftText ~= "" then
+                local trackName, currentRank, maxRank = leftText:match("([A-Za-z]+)%s+(%d+)%/(%d+)")
+                if trackName and currentRank and maxRank then
+                    return format("%s %s/%s", trackName, currentRank, maxRank)
+                end
+
+                local prefixedTrackName, prefixedCurrent, prefixedMax = leftText:match("Upgrade Level:%s+([A-Za-z]+)%s+(%d+)%/(%d+)")
+                if prefixedTrackName and prefixedCurrent and prefixedMax then
+                    return format("%s %s/%s", prefixedTrackName, prefixedCurrent, prefixedMax)
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
 local function BuildVaultSlotValue(row)
     local statusColor = row.unlocked and T.Tools.Colors.GREEN or T.Tools.Colors.WARNING
     local statusText = row.unlocked and "Unlocked" or format("%d/%d", row.progress or 0, row.threshold or 0)
     local value = T.Tools.Text.Color(statusColor, statusText)
+    local upgradeTrack = GetVaultUpgradeTrackLabel(row.itemLink)
 
     if type(row.itemLevel) == "number" and row.itemLevel > 0 then
         value = value .. T.Tools.Text.Color(T.Tools.Colors.GRAY, "  |  ilvl ") ..
             T.Tools.Text.Color(T.Tools.Colors.WHITE, FormatWholeNumber(row.itemLevel))
     else
         value = value .. T.Tools.Text.Color(T.Tools.Colors.GRAY, "  |  ilvl preview unavailable")
+    end
+
+    if type(upgradeTrack) == "string" and upgradeTrack ~= "" then
+        value = value .. T.Tools.Text.Color(T.Tools.Colors.GRAY, "  |  ") ..
+            T.Tools.Text.Color(T.Tools.Colors.WHITE, upgradeTrack)
     end
 
     return value
@@ -491,11 +539,26 @@ function MPDT:OnLeave()
 end
 
 function MPDT:OnClick(panel)
+    local mythicPlusToolsOptions = GetMythicPlusToolsOptions()
     local menuList = {
         {
             text = "Mythic+",
             isTitle = true,
             notCheckable = true,
+        },
+        {
+            text = "Show Mythic+ Timer",
+            checked = function()
+                return mythicPlusToolsOptions and mythicPlusToolsOptions.GetMythicPlusTimerEnabled and
+                    mythicPlusToolsOptions:GetMythicPlusTimerEnabled()
+            end,
+            isNotRadio = true,
+            keepShownOnClick = true,
+            func = function()
+                if mythicPlusToolsOptions and mythicPlusToolsOptions.SetMythicPlusTimerEnabled and mythicPlusToolsOptions.GetMythicPlusTimerEnabled then
+                    mythicPlusToolsOptions:SetMythicPlusTimerEnabled(nil, not mythicPlusToolsOptions:GetMythicPlusTimerEnabled())
+                end
+            end,
         },
         {
             text = "Best in Slot",

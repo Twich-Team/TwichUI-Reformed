@@ -37,6 +37,22 @@ local DEFAULTS = {
     interruptUseClassFontColor = true,
     interruptFontColor = { r = 0.96, g = 0.93, b = 0.86 },
     trackerStyle = "paneled",
+    mythicPlusTimerEnabled = true,
+    mythicPlusTimerLocked = true,
+    mythicPlusTimerStyle = "framed",
+    mythicPlusTimerScale = 1,
+    mythicPlusTimerShowHeader = true,
+    mythicPlusTimerLayout = "left",
+    mythicPlusTimerFontColor = { r = 1, g = 0.95, b = 0.86 },
+    mythicPlusTimerBarColorMode = "milestone",
+    mythicPlusTimerBarColor = { r = 0.42, g = 0.82, b = 0.98 },
+    mythicPlusTimerShowBossCheckpoints = true,
+    mythicPlusTimerNotifyPlusThreeExpired = true,
+    mythicPlusTimerNotifyPlusTwoExpired = true,
+    mythicPlusTimerNotifyPlusOneExpired = true,
+    mythicPlusTimerNotifyForcesComplete = true,
+    mythicPlusTimerNotificationSound = DEFAULT_SOUND,
+    mythicPlusTimerNotificationDisplayTime = DEFAULT_NOTIFICATION_DISPLAY_TIME,
 }
 
 local VALID_FRAME_VISIBILITY_MODES = {
@@ -56,6 +72,21 @@ local VALID_INTERRUPT_READY_BAR_COLOR_MODES = {
 local VALID_TRACKER_STYLES = {
     paneled = true,
     bare = true,
+}
+
+local VALID_TIMER_FRAME_STYLES = {
+    framed = true,
+    transparent = true,
+}
+
+local VALID_TIMER_LAYOUTS = {
+    left = true,
+    right = true,
+}
+
+local VALID_TIMER_BAR_COLOR_MODES = {
+    milestone = true,
+    custom = true,
 }
 
 local function NormalizeBoolean(value)
@@ -505,6 +536,291 @@ function Options:SetInterruptTrackerEnabled(info, value)
     end
 end
 
+function Options:GetMythicPlusTimerEnabled()
+    local value = self:GetDB().mythicPlusTimerEnabled
+    if value == nil then
+        return DEFAULTS.mythicPlusTimerEnabled
+    end
+
+    return value == true
+end
+
+function Options:SetMythicPlusTimerEnabled(info, value)
+    self:GetDB().mythicPlusTimerEnabled = NormalizeBoolean(value)
+    local module = GetModule()
+    if module and module.RefreshMythicPlusTimerFrame then
+        module:RefreshMythicPlusTimerFrame()
+    end
+end
+
+function Options:GetMythicPlusTimerLocked()
+    local value = self:GetDB().mythicPlusTimerLocked
+    if value == nil then
+        return DEFAULTS.mythicPlusTimerLocked
+    end
+
+    return value == true
+end
+
+function Options:SetMythicPlusTimerLocked(info, value)
+    self:GetDB().mythicPlusTimerLocked = NormalizeBoolean(value)
+    local module = GetModule()
+    if module and module.ApplyFrameLockStates then
+        module:ApplyFrameLockStates()
+    end
+end
+
+function Options:GetMythicPlusTimerStyle()
+    local value = self:GetDB().mythicPlusTimerStyle
+    if VALID_TIMER_FRAME_STYLES[value] then
+        return value
+    end
+
+    return DEFAULTS.mythicPlusTimerStyle
+end
+
+function Options:SetMythicPlusTimerStyle(info, value)
+    if not VALID_TIMER_FRAME_STYLES[value] then
+        value = DEFAULTS.mythicPlusTimerStyle
+    end
+
+    self:GetDB().mythicPlusTimerStyle = value
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerScale()
+    return ClampNumber(self:GetDB().mythicPlusTimerScale, 0.7, 1.5, DEFAULTS.mythicPlusTimerScale)
+end
+
+function Options:SetMythicPlusTimerScale(info, value)
+    self:GetDB().mythicPlusTimerScale = ClampNumber(value, 0.7, 1.5, DEFAULTS.mythicPlusTimerScale)
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerShowHeader()
+    local value = self:GetDB().mythicPlusTimerShowHeader
+    if value == nil then
+        return DEFAULTS.mythicPlusTimerShowHeader
+    end
+
+    return value == true
+end
+
+function Options:SetMythicPlusTimerShowHeader(info, value)
+    self:GetDB().mythicPlusTimerShowHeader = NormalizeBoolean(value)
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerLayout()
+    local value = self:GetDB().mythicPlusTimerLayout
+    if VALID_TIMER_LAYOUTS[value] then
+        return value
+    end
+
+    return DEFAULTS.mythicPlusTimerLayout
+end
+
+function Options:SetMythicPlusTimerLayout(info, value)
+    if not VALID_TIMER_LAYOUTS[value] then
+        value = DEFAULTS.mythicPlusTimerLayout
+    end
+
+    self:GetDB().mythicPlusTimerLayout = value
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerFont()
+    return self:GetDB().mythicPlusTimerFont or self:GetTrackerFont()
+end
+
+function Options:SetMythicPlusTimerFont(info, value)
+    self:GetDB().mythicPlusTimerFont = value or self:GetTrackerFont()
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerFontSize()
+    return ClampNumber(self:GetDB().mythicPlusTimerFontSize, 8, 28, self:GetTrackerFontSize())
+end
+
+function Options:SetMythicPlusTimerFontSize(info, value)
+    self:GetDB().mythicPlusTimerFontSize = math.floor(ClampNumber(value, 8, 28, self:GetTrackerFontSize()) + 0.5)
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerFontOutline()
+    local value = self:GetDB().mythicPlusTimerFontOutline
+    if value == "none" or value == "outline" or value == "thick" then
+        return value
+    end
+
+    local shared = self:GetTrackerFontOutline()
+    if shared == "none" or shared == "outline" or shared == "thick" then
+        return shared
+    end
+
+    return DEFAULTS.trackerFontOutline
+end
+
+function Options:SetMythicPlusTimerFontOutline(info, value)
+    self:GetDB().mythicPlusTimerFontOutline = value or self:GetTrackerFontOutline()
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerFontColor()
+    local color = self:GetDB().mythicPlusTimerFontColor or self:GetDB().statusTextColor or DEFAULTS.mythicPlusTimerFontColor
+    return color.r, color.g, color.b, color.a or 1
+end
+
+function Options:SetMythicPlusTimerFontColor(info, red, green, blue, alpha)
+    self:GetDB().mythicPlusTimerFontColor = NormalizeColor(self:GetDB().mythicPlusTimerFontColor or DEFAULTS.mythicPlusTimerFontColor, red, green, blue, alpha)
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerBarTexture()
+    return self:GetDB().mythicPlusTimerBarTexture or self:GetTrackerBarTexture()
+end
+
+function Options:SetMythicPlusTimerBarTexture(info, value)
+    self:GetDB().mythicPlusTimerBarTexture = value or self:GetTrackerBarTexture()
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerBarColorMode()
+    local value = self:GetDB().mythicPlusTimerBarColorMode
+    if VALID_TIMER_BAR_COLOR_MODES[value] then
+        return value
+    end
+
+    return DEFAULTS.mythicPlusTimerBarColorMode
+end
+
+function Options:SetMythicPlusTimerBarColorMode(info, value)
+    if not VALID_TIMER_BAR_COLOR_MODES[value] then
+        value = DEFAULTS.mythicPlusTimerBarColorMode
+    end
+
+    self:GetDB().mythicPlusTimerBarColorMode = value
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerBarColor()
+    local color = self:GetDB().mythicPlusTimerBarColor or DEFAULTS.mythicPlusTimerBarColor
+    return color.r, color.g, color.b, color.a or 1
+end
+
+function Options:SetMythicPlusTimerBarColor(info, red, green, blue, alpha)
+    self:GetDB().mythicPlusTimerBarColor = NormalizeColor(self:GetDB().mythicPlusTimerBarColor or DEFAULTS.mythicPlusTimerBarColor, red, green, blue, alpha)
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerRowGap()
+    return ClampNumber(self:GetDB().mythicPlusTimerRowGap, 0, 30, self:GetTrackerRowGap())
+end
+
+function Options:SetMythicPlusTimerRowGap(info, value)
+    self:GetDB().mythicPlusTimerRowGap = math.floor(ClampNumber(value, 0, 30, self:GetTrackerRowGap()) + 0.5)
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerBarHeight()
+    return ClampNumber(self:GetDB().mythicPlusTimerBarHeight, 10, 40, self:GetTrackerBarHeight())
+end
+
+function Options:SetMythicPlusTimerBarHeight(info, value)
+    self:GetDB().mythicPlusTimerBarHeight = math.floor(ClampNumber(value, 10, 40, self:GetTrackerBarHeight()) + 0.5)
+    self:RefreshModuleAppearance()
+end
+
+function Options:GetMythicPlusTimerShowBossCheckpoints()
+    local value = self:GetDB().mythicPlusTimerShowBossCheckpoints
+    if value == nil then
+        return DEFAULTS.mythicPlusTimerShowBossCheckpoints
+    end
+
+    return value == true
+end
+
+function Options:SetMythicPlusTimerShowBossCheckpoints(info, value)
+    self:GetDB().mythicPlusTimerShowBossCheckpoints = NormalizeBoolean(value)
+    local module = GetModule()
+    if module and module.RefreshMythicPlusTimerFrame then
+        module:RefreshMythicPlusTimerFrame()
+    end
+end
+
+function Options:GetMythicPlusTimerNotifyPlusThreeExpired()
+    local value = self:GetDB().mythicPlusTimerNotifyPlusThreeExpired
+    if value == nil then
+        return DEFAULTS.mythicPlusTimerNotifyPlusThreeExpired
+    end
+
+    return value == true
+end
+
+function Options:SetMythicPlusTimerNotifyPlusThreeExpired(info, value)
+    self:GetDB().mythicPlusTimerNotifyPlusThreeExpired = NormalizeBoolean(value)
+end
+
+function Options:GetMythicPlusTimerNotifyPlusTwoExpired()
+    local value = self:GetDB().mythicPlusTimerNotifyPlusTwoExpired
+    if value == nil then
+        return DEFAULTS.mythicPlusTimerNotifyPlusTwoExpired
+    end
+
+    return value == true
+end
+
+function Options:SetMythicPlusTimerNotifyPlusTwoExpired(info, value)
+    self:GetDB().mythicPlusTimerNotifyPlusTwoExpired = NormalizeBoolean(value)
+end
+
+function Options:GetMythicPlusTimerNotifyPlusOneExpired()
+    local value = self:GetDB().mythicPlusTimerNotifyPlusOneExpired
+    if value == nil then
+        return DEFAULTS.mythicPlusTimerNotifyPlusOneExpired
+    end
+
+    return value == true
+end
+
+function Options:SetMythicPlusTimerNotifyPlusOneExpired(info, value)
+    self:GetDB().mythicPlusTimerNotifyPlusOneExpired = NormalizeBoolean(value)
+end
+
+function Options:GetMythicPlusTimerNotifyForcesComplete()
+    local value = self:GetDB().mythicPlusTimerNotifyForcesComplete
+    if value == nil then
+        return DEFAULTS.mythicPlusTimerNotifyForcesComplete
+    end
+
+    return value == true
+end
+
+function Options:SetMythicPlusTimerNotifyForcesComplete(info, value)
+    self:GetDB().mythicPlusTimerNotifyForcesComplete = NormalizeBoolean(value)
+end
+
+function Options:GetMythicPlusTimerNotificationSound()
+    local db = self:GetDB()
+    if db.mythicPlusTimerNotificationSound == nil then
+        return DEFAULTS.mythicPlusTimerNotificationSound
+    end
+
+    return db.mythicPlusTimerNotificationSound
+end
+
+function Options:SetMythicPlusTimerNotificationSound(info, value)
+    self:GetDB().mythicPlusTimerNotificationSound = NormalizeSound(value)
+end
+
+function Options:GetMythicPlusTimerNotificationDisplayTime()
+    return self:GetDB().mythicPlusTimerNotificationDisplayTime or DEFAULTS.mythicPlusTimerNotificationDisplayTime
+end
+
+function Options:SetMythicPlusTimerNotificationDisplayTime(info, value)
+    self:GetDB().mythicPlusTimerNotificationDisplayTime = tonumber(value) or DEFAULTS.mythicPlusTimerNotificationDisplayTime
+end
+
 function Options:GetInterruptTrackerLocked()
     local db = self:GetDB()
     if db.interruptTrackerLocked == nil then
@@ -537,6 +853,36 @@ function Options:ResetInterruptTrackerPosition()
     end
 end
 
+function Options:ResetMythicPlusTimerPosition()
+    local module = GetModule()
+    if module and module.ResetMythicPlusTimerPosition then
+        module:ResetMythicPlusTimerPosition()
+    end
+end
+
+function Options:ResetMythicPlusTimerAppearance()
+    local db = self:GetDB()
+    db.mythicPlusTimerFont = nil
+    db.mythicPlusTimerFontSize = nil
+    db.mythicPlusTimerFontOutline = nil
+    db.mythicPlusTimerFontColor = nil
+    db.mythicPlusTimerShowHeader = nil
+    db.mythicPlusTimerBarTexture = nil
+    db.mythicPlusTimerBarColorMode = nil
+    db.mythicPlusTimerBarColor = nil
+    db.mythicPlusTimerRowGap = nil
+    db.mythicPlusTimerBarHeight = nil
+    db.mythicPlusTimerLayout = nil
+    self:RefreshModuleAppearance()
+end
+
+function Options:OpenMythicPlusTimerSettings()
+    local ui = ConfigurationModule and ConfigurationModule.StandaloneUI
+    if ui and ui.Show then
+        ui:Show("Mythic+ Tools")
+    end
+end
+
 function Options:TestDeathNotification()
     local module = GetModule()
     if module and module.TestDeathNotification then
@@ -544,10 +890,10 @@ function Options:TestDeathNotification()
     end
 end
 
-function Options:TestPullTimer()
+function Options:TestMythicPlusTimerNotification(kind)
     local module = GetModule()
-    if module and module.TestPullTimer then
-        module:TestPullTimer()
+    if module and module.TestMythicPlusTimerNotification then
+        module:TestMythicPlusTimerNotification(kind)
     end
 end
 
@@ -562,5 +908,33 @@ function Options:StopInterruptPreview()
     local module = GetModule()
     if module and module.SetInterruptPreviewEnabled then
         module:SetInterruptPreviewEnabled(false)
+    end
+end
+
+function Options:StartMythicPlusTimerPreview()
+    local module = GetModule()
+    if module and module.SetMythicPlusTimerPreviewEnabled then
+        module:SetMythicPlusTimerPreviewEnabled(true)
+    end
+end
+
+function Options:StopMythicPlusTimerPreview()
+    local module = GetModule()
+    if module and module.SetMythicPlusTimerPreviewEnabled then
+        module:SetMythicPlusTimerPreviewEnabled(false)
+    end
+end
+
+function Options:DebugMythicPlusTimerBossAnimation()
+    local module = GetModule()
+    if module and module.DebugMythicPlusTimerBossAnimation then
+        module:DebugMythicPlusTimerBossAnimation()
+    end
+end
+
+function Options:DebugMythicPlusTimerUpgradeAnimation()
+    local module = GetModule()
+    if module and module.DebugMythicPlusTimerUpgradeAnimation then
+        module:DebugMythicPlusTimerUpgradeAnimation()
     end
 end
