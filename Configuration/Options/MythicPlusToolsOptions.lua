@@ -16,6 +16,11 @@ local DEFAULT_NOTIFICATION_DISPLAY_TIME = 8
 local DEFAULT_FONT = "__default"
 local DEFAULT_BAR_TEXTURE = "Blizzard"
 
+local function GetGlobalBarTexture()
+    local theme = T:GetModule("Theme", true)
+    return (theme and theme:Get("statusBarTexture")) or DEFAULT_BAR_TEXTURE
+end
+
 local DEFAULTS = {
     trackerFont = DEFAULT_FONT,
     trackerFontSize = 12,
@@ -321,7 +326,7 @@ function Options:SetTrackerFontOutline(info, value)
 end
 
 function Options:GetTrackerBarTexture()
-    return self:GetDB().trackerBarTexture or DEFAULTS.trackerBarTexture
+    return self:GetDB().trackerBarTexture or GetGlobalBarTexture()
 end
 
 function Options:SetTrackerBarTexture(info, value)

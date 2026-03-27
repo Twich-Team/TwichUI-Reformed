@@ -37,9 +37,17 @@ local DEFAULT_THEME = {
     backgroundAlpha = 0.94,
     borderAlpha     = 0.85,
 
+    -- Frame appearance
+    statusBarTexture = "TwichUI-Smooth", -- Global status bar / timer bar texture
+    classIconStyle   = "default",        -- "default" | "fabled" | "pixel"
+    globalFont       = "__default",      -- "__default" = WoW system font; otherwise LSM font name
+
+    -- TwichUI sound effects
+    soundVolume     = 100,               -- 0 = muted, 1-100 = enabled (WoW has no per-addon gain)
+
     -- Config UI sounds
     uiSoundsEnabled = true,
-    soundProfile    = "Subtle", -- "None" | "Subtle" | "Standard"
+    soundProfile    = "Standard",        -- "None" | "Subtle" | "Standard"
 }
 
 -- Expose defaults so other modules can use them as typed fallbacks.

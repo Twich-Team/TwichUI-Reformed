@@ -9,19 +9,19 @@ local T = unpack(TwichRx)
 local NM = T:NewModule("Notification", "AceEvent-3.0")
 NM:SetEnabledState(true)
 
-local AceGUI = LibStub("AceGUI-3.0")
+local AceGUI        = LibStub("AceGUI-3.0")
 
-local CreateFrame    = _G.CreateFrame
-local UIParent       = _G.UIParent
-local PlaySoundFile  = _G.PlaySoundFile
+local CreateFrame   = _G.CreateFrame
+local UIParent      = _G.UIParent
+local PlaySoundFile = _G.PlaySoundFile
 
 ---@alias NotificationOptions { displayDuration: number|nil, soundKey: string|nil, wrap: boolean|nil, wrapMessage: string|nil, wrapMessageOptions: WrapperMessageOptions|nil }
 ---@alias WrapperMessageOptions { fontSize: number|nil }
 
-local ANCHOR_HEIGHT   = 28
-local ANCHOR_BORDER   = { 0.10, 0.72, 0.74, 0.90 }
-local ANCHOR_BG       = { 0.04, 0.08, 0.10, 0.92 }
-local ACCENT_COLOR    = "|cff1ab8bc"
+local ANCHOR_HEIGHT = 28
+local ANCHOR_BORDER = { 0.10, 0.72, 0.74, 0.90 }
+local ANCHOR_BG     = { 0.04, 0.08, 0.10, 0.92 }
+local ACCENT_COLOR  = "|cff1ab8bc"
 
 function NM:GetOptions()
     local cfg = T:GetModule("Configuration")
@@ -64,11 +64,11 @@ function NM:CreateAnchor()
     anchor:SetScript("OnDragStop", function(selfAnchor)
         selfAnchor:StopMovingOrSizing()
         -- Persist position as CENTER offset from UIParent center.
-        local ax, ay     = selfAnchor:GetCenter()
-        local uiW, uiH   = UIParent:GetWidth(), UIParent:GetHeight()
-        local offsetX    = ax - (uiW / 2)
-        local offsetY    = ay - (uiH / 2)
-        local o = NM:GetOptions()
+        local ax, ay   = selfAnchor:GetCenter()
+        local uiW, uiH = UIParent:GetWidth(), UIParent:GetHeight()
+        local offsetX  = ax - (uiW / 2)
+        local offsetY  = ay - (uiH / 2)
+        local o        = NM:GetOptions()
         if o then
             o:SetAnchorX(nil, offsetX)
             o:SetAnchorY(nil, offsetY)

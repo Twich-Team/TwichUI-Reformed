@@ -2325,8 +2325,9 @@ local function BuildStandaloneDatatextConfiguration()
                             order = 9,
                             hasAlpha = true,
                             get = function()
-                                local color = Options:GetStandaloneDB().style.backgroundColor
-                                return color[1], color[2], color[3], Options:GetStandaloneDB().style.backgroundAlpha
+                                local resolved = Options:GetResolvedStandaloneStyle()
+                                local color = resolved.backgroundColor or { 0.05, 0.06, 0.08 }
+                                return color[1], color[2], color[3], resolved.backgroundAlpha or 0.94
                             end,
                             set = function(_, r, g, b, a)
                                 local style = Options:GetStandaloneDB().style
@@ -2341,9 +2342,9 @@ local function BuildStandaloneDatatextConfiguration()
                             order = 10,
                             hasAlpha = true,
                             get = function()
-                                local style = Options:GetStandaloneDB().style
-                                local color = style.borderColor
-                                return color[1], color[2], color[3], style.borderAlpha
+                                local resolved = Options:GetResolvedStandaloneStyle()
+                                local color = resolved.borderColor or { 0.24, 0.26, 0.32 }
+                                return color[1], color[2], color[3], resolved.borderAlpha or 0.9
                             end,
                             set = function(_, r, g, b, a)
                                 local style = Options:GetStandaloneDB().style
@@ -2358,9 +2359,9 @@ local function BuildStandaloneDatatextConfiguration()
                             order = 11,
                             hasAlpha = true,
                             get = function()
-                                local style = Options:GetStandaloneDB().style
-                                local color = style.accentColor
-                                return color[1], color[2], color[3], style.accentAlpha
+                                local resolved = Options:GetResolvedStandaloneStyle()
+                                local color = resolved.accentColor or { 0.96, 0.76, 0.24 }
+                                return color[1], color[2], color[3], resolved.accentAlpha or 0.95
                             end,
                             set = function(_, r, g, b, a)
                                 local style = Options:GetStandaloneDB().style
@@ -2392,7 +2393,8 @@ local function BuildStandaloneDatatextConfiguration()
                         resetStyle = {
                             type = "execute",
                             name = "Reset to Theme Defaults",
-                            desc = "Restore all shared style values (colors, fonts, alphas) to the current Theme settings.",
+                            desc =
+                            "Restore all shared style values (colors, fonts, alphas) to the current Theme settings.",
                             order = 99,
                             func = function()
                                 Options:ResetSharedStyle()

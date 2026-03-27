@@ -1820,6 +1820,44 @@ function ChatRendererModule:RefreshAllFrames()
     end
 end
 
+--- Updates renderer settings and fully re-renders all chat frames from their
+--- history.  Needed when the font changes so existing message rows get the new
+--- font baked in rather than keeping the stale one from render time.
+function ChatRendererModule:RebuildAllRenderers()
+    self:RefreshSettings()
+    for _, frameName in ipairs(CHAT_FRAMES or {}) do
+        local frame = _G[frameName]
+        if frame and frame.TwichUICustomRenderer then
+            self:ClearRenderer(frame)
+            self:SeedFromChatFrame(frame)
+        end
+    end
+end
+
+--- Called when the global theme changes so the renderer picks up new font and
+--- color settings without requiring a UI reload.
+function ChatRendererModule:OnThemeChanged(event, changedKey)
+    local isFontChange = changedKey == "globalFont" or changedKey == nil
+    local isColorChange = changedKey == "primaryColor"
+        or changedKey == "accentColor"
+        or changedKey == "backgroundColor"
+        or changedKey == "borderColor"
+        or changedKey == "backgroundAlpha"
+        or changedKey == "borderAlpha"
+        or changedKey == nil
+    if not isFontChange and not isColorChange then return end
+
+    if isFontChange then
+        -- Full rebuild: update settings then re-seed every renderer so that
+        -- existing rows are re-rendered with the new font.
+        self:RebuildAllRenderers()
+    else
+        -- Color-only change: just refresh the settings cache so future
+        -- messages use the updated accent / channel colors.
+        self:RefreshSettings()
+    end
+end
+
 function ChatRendererModule:QueueRefreshAllFrames(delay)
     if self.refreshAllTimer then
         self:CancelTimer(self.refreshAllTimer)
@@ -1944,6 +1982,7 @@ function ChatRendererModule:OnEnable()
     end
     self:HookAllFrames()
     self:RefreshAllFrames()
+    self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
     self:LogDebug("chat renderer enabled", false)
 
     if type(ChatFrame_AddMessageEventFilter) == "function" and not self.addonFilterRegistered then

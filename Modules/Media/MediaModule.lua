@@ -67,20 +67,9 @@ MediaModule.Textures = {
 }
 
 function MediaModule:OnInitialize()
-    ---@type ConfigurationModule
-    local ConfigurationModule = T:GetModule("Configuration")
-
-    if ConfigurationModule.Options.Media:GetFontEnabled() then
-        self:AddFonts()
-    end
-
-    if ConfigurationModule.Options.Media:GetSoundEnabled() then
-        self:AddSounds()
-    end
-
-    if ConfigurationModule.Options.Media:GetTextureEnabled() then
-        self:AddTextures()
-    end
+    self:AddFonts()
+    self:AddSounds()
+    self:AddTextures()
 end
 
 function MediaModule:AddFonts()

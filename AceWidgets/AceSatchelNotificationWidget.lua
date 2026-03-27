@@ -34,7 +34,7 @@ local function ShowIgnoreTooltip(button)
     GameTooltip:SetOwner(button, "ANCHOR_TOP")
     GameTooltip:AddLine("Ignore", 1, 1, 1)
     GameTooltip:AddLine(
-    "Stops SatchelWatch from notifying you about this entry again until you re-enable it or use Reset Ignored Entries.",
+        "Stops SatchelWatch from notifying you about this entry again until you re-enable it or use Reset Ignored Entries.",
         0.85, 0.85, 0.85, true)
     GameTooltip:Show()
 end

@@ -249,18 +249,17 @@ function NotificationFrame:Create()
             local chatFrame = _G.ChatFrame1
             local chrome = chatFrame and chatFrame.TwichUIChrome
             if chrome then
-                container.frame:SetPoint("BOTTOMLEFT",  chrome, "TOPLEFT",  0, 0)
+                container.frame:SetPoint("BOTTOMLEFT", chrome, "TOPLEFT", 0, 0)
                 container.frame:SetPoint("BOTTOMRIGHT", chrome, "TOPRIGHT", 0, 0)
             elseif chatFrame then
                 -- Fallback: no chrome, use raw frame top + 8px chrome margin.
-                container.frame:SetPoint("BOTTOMLEFT",  chatFrame, "TOPLEFT",  -8, 8)
-                container.frame:SetPoint("BOTTOMRIGHT", chatFrame, "TOPRIGHT",  8, 8)
+                container.frame:SetPoint("BOTTOMLEFT", chatFrame, "TOPLEFT", -8, 8)
+                container.frame:SetPoint("BOTTOMRIGHT", chatFrame, "TOPRIGHT", 8, 8)
             else
                 local anchor = NM.anchor or UIParent
-                container.frame:SetPoint("BOTTOMLEFT",  anchor, "BOTTOMLEFT",  0, 0)
+                container.frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
                 container.frame:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
             end
-
         elseif dockMode == "right" then
             -- Align to the outside of the chat chrome: the chrome extends 8px to the
             -- right and 8px below ChatFrame1, so offset (8, -8) places the notification
@@ -274,7 +273,6 @@ function NotificationFrame:Create()
                 container.frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", 0, 0)
             end
             container.frame:SetWidth(panelWidth)
-
         else
             -- Manual anchor ("none") — use the TwichUI-owned draggable anchor.
             local anchor = NM.anchor or UIParent
@@ -282,10 +280,10 @@ function NotificationFrame:Create()
                 NM.anchor:SetWidth(panelWidth)
             end
             if effectiveGrowth == "UP" then
-                container.frame:SetPoint("BOTTOMLEFT",  anchor, "BOTTOMLEFT",  0, 0)
+                container.frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
                 container.frame:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
             else
-                container.frame:SetPoint("TOPLEFT",  anchor, "TOPLEFT",  0, 0)
+                container.frame:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, 0)
                 container.frame:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", 0, 0)
             end
         end

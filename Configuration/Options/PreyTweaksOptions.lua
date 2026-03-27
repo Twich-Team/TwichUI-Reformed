@@ -44,6 +44,11 @@ local DEFAULTS = {
     fallbackHuntReward = "gold",
 }
 
+local function GetGlobalBarTexture()
+    local theme = T:GetModule("Theme", true)
+    return (theme and theme:Get("statusBarTexture")) or DEFAULTS.barTexture
+end
+
 local function ClampNumber(value, minValue, maxValue, fallback)
     value = tonumber(value)
     if not value then
@@ -326,7 +331,7 @@ function Options:SetPhaseChangeSound(info, value)
 end
 
 function Options:GetBarTexture()
-    return self:GetDB().barTexture or DEFAULTS.barTexture
+    return self:GetDB().barTexture or GetGlobalBarTexture()
 end
 
 function Options:SetBarTexture(info, value)

@@ -131,9 +131,14 @@ local function GetThemeBasedDefaults()
         base.backgroundAlpha = theme:Get("backgroundAlpha") or 0.94
         base.borderColor     = { bd[1], bd[2], bd[3], 1 }
         base.borderAlpha     = theme:Get("borderAlpha") or 0.9
-        -- Hover colors derive from accent by default
-        base.hoverGlowColor  = base.hoverGlowColor or base.accentColor
-        base.hoverBarColor   = base.hoverBarColor or base.accentColor
+        -- Hover colors always default to the live accent so they track theme changes.
+        base.hoverGlowColor  = base.accentColor
+        base.hoverBarColor   = base.accentColor
+        -- Use the global font when one is set
+        local gf = theme:Get("globalFont")
+        if gf and gf ~= "__default" then
+            base.font = gf
+        end
     end
     return base
 end
@@ -141,19 +146,25 @@ end
 function Options:GetResolvedStandaloneStyle(panelID)
     local standalone = self:GetStandaloneDB()
     local themeDefaults = GetThemeBasedDefaults()
-    local resolved = CopyTable(standalone.style or themeDefaults)
-    local panel = type(panelID) == "string" and self:GetStandalonePanel(panelID) or nil
-
-    if panel and panel.useStyleOverrides == true and type(panel.style) == "table" then
-        MergeDefaults(panel.style, {})
-        for key, value in pairs(panel.style) do
-            if value ~= nil then
-                resolved[key] = CopyTable(value)
+    -- Always start from the live theme so global Appearance changes propagate instantly.
+    local resolved = CopyTable(themeDefaults)
+    -- Layer explicit shared-style user overrides (hoverGlowColor, hoverBarColor, fonts…)
+    if type(standalone.style) == "table" then
+        for k, v in pairs(standalone.style) do
+            if v ~= nil then
+                resolved[k] = type(v) == "table" and CopyTable(v) or v
             end
         end
     end
-
-    MergeDefaults(resolved, themeDefaults)
+    -- Layer per-panel style overrides
+    local panel = type(panelID) == "string" and self:GetStandalonePanel(panelID) or nil
+    if panel and panel.useStyleOverrides == true and type(panel.style) == "table" then
+        for key, value in pairs(panel.style) do
+            if value ~= nil then
+                resolved[key] = type(value) == "table" and CopyTable(value) or value
+            end
+        end
+    end
     return resolved
 end
 
@@ -189,7 +200,18 @@ function Options:GetStandaloneDB()
     if type(standalone.style) ~= "table" then
         standalone.style = {}
     end
-    MergeDefaults(standalone.style, GetThemeBasedDefaults())
+    -- Migration v2: theme-origin color keys must not be stored in standalone.style;
+    -- they are now always resolved live from GetThemeBasedDefaults().
+    if standalone._styleSchemaV ~= 2 then
+        local purgeKeys = {
+            "accentColor", "accentAlpha", "backgroundColor", "backgroundAlpha",
+            "borderColor", "borderAlpha", "hoverGlowColor", "hoverBarColor",
+        }
+        for _, k in ipairs(purgeKeys) do
+            standalone.style[k] = nil
+        end
+        standalone._styleSchemaV = 2
+    end
 
     if type(standalone.panels) ~= "table" then
         standalone.panels = {}
@@ -972,7 +994,11 @@ end
 
 function Options:GetSharedHoverGlowColor(info)
     local style = self:GetStandaloneDB().style
-    local c = style.hoverGlowColor or style.accentColor or { 0.96, 0.76, 0.24, 1 }
+    local c = style.hoverGlowColor
+    if not c then
+        local theme = T:GetModule("Theme", true)
+        c = theme and theme:GetColor("accentColor") or { 0.96, 0.76, 0.24 }
+    end
     return c[1], c[2], c[3], style.hoverGlowAlpha or 0.09
 end
 
@@ -985,7 +1011,11 @@ end
 
 function Options:GetSharedHoverBarColor(info)
     local style = self:GetStandaloneDB().style
-    local c = style.hoverBarColor or style.accentColor or { 0.96, 0.76, 0.24, 1 }
+    local c = style.hoverBarColor
+    if not c then
+        local theme = T:GetModule("Theme", true)
+        c = theme and theme:GetColor("accentColor") or { 0.96, 0.76, 0.24 }
+    end
     return c[1], c[2], c[3], style.hoverBarAlpha or 0.92
 end
 
@@ -1025,7 +1055,6 @@ end
 function Options:ResetSharedStyle()
     local standalone = self:GetStandaloneDB()
     standalone.style = {}
-    MergeDefaults(standalone.style, GetThemeBasedDefaults())
     RefreshStandalonePanels()
 end
 
@@ -1035,6 +1064,19 @@ function Options:ResetPanelStyleOverrides(panelID)
     if panel then
         panel.style = {}
         panel.useStyleOverrides = false
+    end
+    RefreshStandalonePanels()
+end
+
+--- Clears style overrides on every panel, reverting all to the shared style.
+function Options:ResetAllPanelStyleOverrides()
+    local panelIDs = self:GetStandalonePanelIDs()
+    for _, panelID in ipairs(panelIDs or {}) do
+        local panel = self:GetStandalonePanel(panelID)
+        if panel then
+            panel.style = {}
+            panel.useStyleOverrides = false
+        end
     end
     RefreshStandalonePanels()
 end

@@ -4,7 +4,6 @@
     <Include file='Options\!load.xml' />
     <Include file='ModernUI.lua' />
 
-    <Include file='Media.lua' />
     <Include file='Theme.lua' />
     <Include file='ChatEnhancements.lua' />
     <Include file='SmartMount.lua' />
@@ -15,6 +14,4 @@
     <Include file='MythicPlusTools.lua' />
     <Include file='BestInSlot.lua' />
     <Include file='NotificationPanel.lua' />
-
-    <Include file='About.lua' />
 </Ui>

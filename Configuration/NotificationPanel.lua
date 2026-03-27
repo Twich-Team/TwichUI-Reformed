@@ -2,24 +2,24 @@
     Notification configuration.
     Consolidates per-feature alert settings alongside the panel display controls.
 ]]
-local TwichRx = _G["TwichRx"]
+local TwichRx             = _G["TwichRx"]
 ---@type TwichUI
-local T = unpack(TwichRx)
+local T                   = unpack(TwichRx)
 
 ---@type ConfigurationModule
 local ConfigurationModule = T:GetModule("Configuration")
 ---@type TexturesTool
-local Textures = T.Tools and T.Tools.Textures
+local Textures            = T.Tools and T.Tools.Textures
 
 ---@class NotificationPanelConfigurationOptions
-local Options          = ConfigurationModule.Options.NotificationPanel
-local MPTOptions       = ConfigurationModule.Options.MythicPlusTools
-local DTOptions        = ConfigurationModule.Options.DungeonTracking
-local BISOptions       = ConfigurationModule.Options.BestInSlot
-local GatheringOptions = ConfigurationModule.Options.Gathering
+local Options             = ConfigurationModule.Options.NotificationPanel
+local MPTOptions          = ConfigurationModule.Options.MythicPlusTools
+local DTOptions           = ConfigurationModule.Options.DungeonTracking
+local BISOptions          = ConfigurationModule.Options.BestInSlot
+local GatheringOptions    = ConfigurationModule.Options.Gathering
 
-local Widgets = ConfigurationModule.Widgets
-local LibStub = _G.LibStub
+local Widgets             = ConfigurationModule.Widgets
+local LibStub             = _G.LibStub
 
 local function GetBISModule()
     ---@type BestInSlotModule
@@ -66,7 +66,8 @@ local function BuildNotificationPanelConfiguration()
                 chatDockMode = {
                     type = "select",
                     name = "Chat Frame Dock",
-                    desc = "Attach the notification panel to the chat frame.\n\n|cffffcc00Top|r — Notifications grow upward from the top edge of the chat frame and match its width.\n\n|cffffcc00Right|r — Notifications grow upward from the bottom-right corner of the chat frame.",
+                    desc =
+                    "Attach the notification panel to the chat frame.\n\n|cffffcc00Top|r — Notifications grow upward from the top edge of the chat frame and match its width.\n\n|cffffcc00Right|r — Notifications grow upward from the bottom-right corner of the chat frame.",
                     order = 1,
                     values = {
                         none  = "None (manual position)",
@@ -99,7 +100,8 @@ local function BuildNotificationPanelConfiguration()
                 anchorX = {
                     type = "range",
                     name = "Position X",
-                    desc = "Horizontal offset of the notification anchor from the center of the screen. Positive moves right.",
+                    desc =
+                    "Horizontal offset of the notification anchor from the center of the screen. Positive moves right.",
                     order = 3,
                     softMin = -1200,
                     softMax = 1200,
@@ -127,7 +129,8 @@ local function BuildNotificationPanelConfiguration()
                 growthDirection = {
                     type = "select",
                     name = "Growth Direction",
-                    desc = "The direction new notifications appear from the anchor point. Forced upward when docked to the chat frame.",
+                    desc =
+                    "The direction new notifications appear from the anchor point. Forced upward when docked to the chat frame.",
                     order = 5,
                     values = { UP = "Upwards", DOWN = "Downwards" },
                     disabled = function() return Options:GetChatDockMode() ~= "none" end,
@@ -138,7 +141,8 @@ local function BuildNotificationPanelConfiguration()
                 panelWidth = {
                     type = "range",
                     name = "Notification Width",
-                    desc = "Width of each notification. Also applies when docked to the right of the chat frame. Ignored when docked to the top (width matches the chat frame).",
+                    desc =
+                    "Width of each notification. Also applies when docked to the right of the chat frame. Ignored when docked to the top (width matches the chat frame).",
                     order = 6,
                     softMin = 200,
                     softMax = 600,
@@ -167,7 +171,8 @@ local function BuildNotificationPanelConfiguration()
                 notificationFontSizeAdjustment = {
                     type = "range",
                     name = "Font Size Adjustment",
-                    desc = "Shift notification text size up or down while keeping the style hierarchy. Zero preserves defaults.",
+                    desc =
+                    "Shift notification text size up or down while keeping the style hierarchy. Zero preserves defaults.",
                     order = 8,
                     min = -4,
                     max = 8,
@@ -214,8 +219,8 @@ local function BuildNotificationPanelConfiguration()
                     values = function()
                         return {
                             default = BuildIconStyleLabel("default", "Default"),
-                            fabled  = BuildIconStyleLabel("fabled",  "Fabled"),
-                            pixel   = BuildIconStyleLabel("pixel",   "Pixel"),
+                            fabled  = BuildIconStyleLabel("fabled", "Fabled"),
+                            pixel   = BuildIconStyleLabel("pixel", "Pixel"),
                         }
                     end,
                     disabled = function() return not Options:GetEnableFriendsNotifications() end,
@@ -228,7 +233,10 @@ local function BuildNotificationPanelConfiguration()
                     name = "Duration",
                     desc = "How long friend notifications remain visible.",
                     order = 4,
-                    min = 2, max = 30, step = 1, width = 1.5,
+                    min = 2,
+                    max = 30,
+                    step = 1,
+                    width = 1.5,
                     disabled = function() return not Options:GetEnableFriendsNotifications() end,
                     handler = Options,
                     get = "GetFriendsNotificationDisplayTime",
@@ -282,7 +290,10 @@ local function BuildNotificationPanelConfiguration()
                         type = "range",
                         name = "Duration",
                         order = 2,
-                        min = 2, max = 30, step = 1, width = 1.5,
+                        min = 2,
+                        max = 30,
+                        step = 1,
+                        width = 1.5,
                         disabled = function() return not Options:GetEnableKeystoneNotifications() end,
                         handler = Options,
                         get = "GetKeystoneNotificationDisplayTime",
@@ -311,7 +322,8 @@ local function BuildNotificationPanelConfiguration()
                 }),
 
                 deathGroup = W.IGroup(20, "Death Alerts", {
-                    desc = W.Description(0, "Route party member deaths to notifications with role filtering and wipe suppression."),
+                    desc = W.Description(0,
+                        "Route party member deaths to notifications with role filtering and wipe suppression."),
                     enable = {
                         type = "toggle",
                         name = "Enable",
@@ -325,7 +337,10 @@ local function BuildNotificationPanelConfiguration()
                         type = "range",
                         name = "Duration",
                         order = 2,
-                        min = 2, max = 30, step = 1, width = 1.5,
+                        min = 2,
+                        max = 30,
+                        step = 1,
+                        width = 1.5,
                         handler = MPTOptions,
                         get = "GetDeathNotificationDisplayTime",
                         set = "SetDeathNotificationDisplayTime",
@@ -440,7 +455,10 @@ local function BuildNotificationPanelConfiguration()
                         type = "range",
                         name = "Duration",
                         order = 5,
-                        min = 2, max = 30, step = 1, width = 1.5,
+                        min = 2,
+                        max = 30,
+                        step = 1,
+                        width = 1.5,
                         handler = MPTOptions,
                         get = "GetMythicPlusTimerNotificationDisplayTime",
                         set = "SetMythicPlusTimerNotificationDisplayTime",
@@ -458,22 +476,30 @@ local function BuildNotificationPanelConfiguration()
                         set = "SetMythicPlusTimerNotificationSound",
                     },
                     testPlusThree = {
-                        type = "execute", name = "Test +3", order = 7,
+                        type = "execute",
+                        name = "Test +3",
+                        order = 7,
                         handler = MPTOptions,
                         func = function() MPTOptions:TestMythicPlusTimerNotification("plusThree") end,
                     },
                     testPlusTwo = {
-                        type = "execute", name = "Test +2", order = 8,
+                        type = "execute",
+                        name = "Test +2",
+                        order = 8,
                         handler = MPTOptions,
                         func = function() MPTOptions:TestMythicPlusTimerNotification("plusTwo") end,
                     },
                     testPlusOne = {
-                        type = "execute", name = "Test +1", order = 9,
+                        type = "execute",
+                        name = "Test +1",
+                        order = 9,
                         handler = MPTOptions,
                         func = function() MPTOptions:TestMythicPlusTimerNotification("plusOne") end,
                     },
                     testForces = {
-                        type = "execute", name = "Test Forces", order = 10,
+                        type = "execute",
+                        name = "Test Forces",
+                        order = 10,
                         handler = MPTOptions,
                         func = function() MPTOptions:TestMythicPlusTimerNotification("forces") end,
                     },
@@ -536,8 +562,8 @@ local function BuildNotificationPanelConfiguration()
                         values = function()
                             return {
                                 default = BuildIconStyleLabel("default", "Default Icons"),
-                                fabled  = BuildIconStyleLabel("fabled",  "Fabled Icons"),
-                                pixel   = BuildIconStyleLabel("pixel",   "Pixel Icons"),
+                                fabled  = BuildIconStyleLabel("fabled", "Fabled Icons"),
+                                pixel   = BuildIconStyleLabel("pixel", "Pixel Icons"),
                             }
                         end,
                         handler = DTOptions,
@@ -612,7 +638,10 @@ local function BuildNotificationPanelConfiguration()
                         type = "range",
                         name = "Duration",
                         order = 2,
-                        min = 2, max = 30, step = 1, width = 1.5,
+                        min = 2,
+                        max = 30,
+                        step = 1,
+                        width = 1.5,
                         disabled = function() return not Options:GetEnableGreatVaultNotifications() end,
                         handler = Options,
                         get = "GetGreatVaultNotificationDisplayTime",
@@ -654,7 +683,10 @@ local function BuildNotificationPanelConfiguration()
                         type = "range",
                         name = "Duration",
                         order = 2,
-                        min = 2, max = 30, step = 1, width = 1.5,
+                        min = 2,
+                        max = 30,
+                        step = 1,
+                        width = 1.5,
                         disabled = function() return not Options:GetEnableDailyResetNotifications() end,
                         handler = Options,
                         get = "GetDailyResetNotificationDisplayTime",
@@ -696,7 +728,10 @@ local function BuildNotificationPanelConfiguration()
                         type = "range",
                         name = "Duration",
                         order = 2,
-                        min = 2, max = 30, step = 1, width = 1.5,
+                        min = 2,
+                        max = 30,
+                        step = 1,
+                        width = 1.5,
                         disabled = function() return not Options:GetEnableChoresNotifications() end,
                         handler = Options,
                         get = "GetChoresNotificationDisplayTime",
@@ -749,7 +784,10 @@ local function BuildNotificationPanelConfiguration()
                         type = "range",
                         name = "Duration",
                         order = 2,
-                        min = 2, max = 30, step = 1, width = 1.5,
+                        min = 2,
+                        max = 30,
+                        step = 1,
+                        width = 1.5,
                         disabled = function() return not Options:GetEnableGroupFinderNotifications() end,
                         handler = Options,
                         get = "GetGroupFinderNotificationDisplayTime",
@@ -778,7 +816,8 @@ local function BuildNotificationPanelConfiguration()
                     testGroupFinderManaforgeNotification = {
                         type = "execute",
                         name = "Test Manaforge Omega",
-                        desc = "Test a Group Finder notification with a Manaforge Omega entry to verify the teleport button.",
+                        desc =
+                        "Test a Group Finder notification with a Manaforge Omega entry to verify the teleport button.",
                         order = 5,
                         disabled = function() return not Options:GetEnableGroupFinderNotifications() end,
                         handler = Options,
@@ -800,7 +839,10 @@ local function BuildNotificationPanelConfiguration()
                         type = "range",
                         name = "Duration",
                         order = 2,
-                        min = 2, max = 30, step = 1, width = 1.5,
+                        min = 2,
+                        max = 30,
+                        step = 1,
+                        width = 1.5,
                         disabled = function() return not Options:GetEnablePreyNotifications() end,
                         handler = Options,
                         get = "GetPreyNotificationDisplayTime",
@@ -846,7 +888,10 @@ local function BuildNotificationPanelConfiguration()
                     name = "Duration",
                     desc = "How long a gathering notification stays on screen.",
                     order = 2,
-                    min = 2, max = 30, step = 1, width = 1.5,
+                    min = 2,
+                    max = 30,
+                    step = 1,
+                    width = 1.5,
                     handler = GatheringOptions,
                     get = "GetNotificationDuration",
                     set = "SetNotificationDuration",
@@ -866,7 +911,8 @@ local function BuildNotificationPanelConfiguration()
                 highValueThreshold = {
                     type = "input",
                     name = "High Value Threshold (Gold)",
-                    desc = "Send a high-value notification when a single loot batch meets or exceeds this total. Set to 0 to disable.",
+                    desc =
+                    "Send a high-value notification when a single loot batch meets or exceeds this total. Set to 0 to disable.",
                     order = 4,
                     width = 1.5,
                     handler = GatheringOptions,
@@ -946,7 +992,9 @@ local function BuildNotificationPanelConfiguration()
                         name = "Duration",
                         desc = "How long a Best In Slot notification remains visible.",
                         order = 1,
-                        min = 2, max = 60, step = 1,
+                        min = 2,
+                        max = 60,
+                        step = 1,
                         handler = BISOptions,
                         get = "GetNotificationDisplayTime",
                         set = "SetNotificationDisplayTime",
@@ -995,5 +1043,3 @@ local function BuildNotificationPanelConfiguration()
 end
 
 ConfigurationModule:RegisterConfigurationFunction("Notification Panel", BuildNotificationPanelConfiguration)
-
-

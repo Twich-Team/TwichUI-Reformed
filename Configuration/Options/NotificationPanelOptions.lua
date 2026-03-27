@@ -187,7 +187,10 @@ end
 
 function Options:GetFriendsNotificationIconStyle(info)
     local db = self:GetDB()
-    return db.friendsNotificationIconStyle or DEFAULT_FRIENDS_ICON_STYLE
+    local val = db.friendsNotificationIconStyle
+    if val then return val end
+    local theme = T:GetModule("Theme", true)
+    return (theme and theme:Get("classIconStyle")) or DEFAULT_FRIENDS_ICON_STYLE
 end
 
 function Options:SetFriendsNotificationIconStyle(info, value)

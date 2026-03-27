@@ -41,16 +41,27 @@ local function BroadcastChange(key)
     theme:SendMessage("TWICH_THEME_CHANGED", key)
     -- Refresh Standalone data panels so they pick up the new theme defaults
     local datatextModule = T:GetModule("Datatexts", true)
-    if datatextModule and type(datatextModule.RefreshAllStandalonePanels) == "function" then
-        datatextModule:RefreshAllStandalonePanels()
+    if datatextModule and type(datatextModule.RefreshStandalonePanels) == "function" then
+        datatextModule:RefreshStandalonePanels()
+    end
+    -- Refresh modules whose appearance depends on statusBarTexture or classIconStyle.
+    if key == "statusBarTexture" or key == "classIconStyle" or key == nil then
+        local mptOpts = ConfigurationModule.Options.MythicPlusTools
+        if mptOpts and type(mptOpts.RefreshModuleAppearance) == "function" then
+            pcall(mptOpts.RefreshModuleAppearance, mptOpts)
+        end
+        local preyOpts = ConfigurationModule.Options.PreyTweaks
+        if preyOpts and type(preyOpts.RefreshModule) == "function" then
+            pcall(preyOpts.RefreshModule, preyOpts)
+        end
     end
 end
 
 -- ─── Color get/set ─────────────────────────────────────────────────────────
 
--- Generate a get/set pair for each named palette color.
+-- Generate a get/set pair for palette colors without a separate alpha channel.
 local COLOR_KEYS = {
-    "primaryColor", "accentColor", "backgroundColor", "borderColor",
+    "primaryColor", "accentColor",
     "textColor", "successColor", "warningColor", "dangerColor",
 }
 
@@ -70,7 +81,36 @@ for _, colorKey in ipairs(COLOR_KEYS) do
     end
 end
 
--- ─── Surface alphas ────────────────────────────────────────────────────────
+-- backgroundColor and borderColor include alpha (stored separately as backgroundAlpha / borderAlpha).
+function Options:GetBackgroundColor(info)
+    local db = GetDB()
+    local c = db.backgroundColor or DefaultColor("backgroundColor")
+    local a = db.backgroundAlpha or 0.94
+    return c[1] or 0.05, c[2] or 0.06, c[3] or 0.08, a
+end
+
+function Options:SetBackgroundColor(info, r, g, b, a)
+    GetDB().backgroundColor = { r, g, b }
+    GetDB().backgroundAlpha = a ~= nil and a or 0.94
+    BroadcastChange("backgroundColor")
+    BroadcastChange("backgroundAlpha")
+end
+
+function Options:GetBorderColor(info)
+    local db = GetDB()
+    local c = db.borderColor or DefaultColor("borderColor")
+    local a = db.borderAlpha or 0.85
+    return c[1] or 0.24, c[2] or 0.26, c[3] or 0.32, a
+end
+
+function Options:SetBorderColor(info, r, g, b, a)
+    GetDB().borderColor = { r, g, b }
+    GetDB().borderAlpha = a ~= nil and a or 0.85
+    BroadcastChange("borderColor")
+    BroadcastChange("borderAlpha")
+end
+
+-- ─── Surface alphas (kept for API compat; color pickers above are the primary UI) ──
 
 function Options:GetBackgroundAlpha(info)
     return GetDB().backgroundAlpha or 0.94
@@ -101,11 +141,89 @@ function Options:SetUISoundsEnabled(info, value)
 end
 
 function Options:GetSoundProfile(info)
-    return GetDB().soundProfile or "Subtle"
+    return GetDB().soundProfile or "Standard"
 end
 
 function Options:SetSoundProfile(info, value)
     GetDB().soundProfile = value
+end
+
+-- ─── Frame appearance ──────────────────────────────────────────────────────
+
+function Options:GetStatusBarTexture(info)
+    return GetDB().statusBarTexture or "TwichUI-Smooth"
+end
+
+function Options:SetStatusBarTexture(info, value)
+    GetDB().statusBarTexture = value
+    BroadcastChange("statusBarTexture")
+end
+
+function Options:GetClassIconStyle(info)
+    return GetDB().classIconStyle or "default"
+end
+
+function Options:SetClassIconStyle(info, value)
+    GetDB().classIconStyle = value
+    BroadcastChange("classIconStyle")
+end
+
+-- ─── Global font ───────────────────────────────────────────────────────────
+
+function Options:GetGlobalFont(info)
+    return GetDB().globalFont or "__default"
+end
+
+function Options:SetGlobalFont(info, value)
+    GetDB().globalFont = value
+    BroadcastChange("globalFont")
+end
+
+-- ─── Sound volume ──────────────────────────────────────────────────────────
+
+function Options:GetSoundVolume(info)
+    local v = GetDB().soundVolume
+    if v == nil then return 100 end
+    return v
+end
+
+function Options:SetSoundVolume(info, value)
+    GetDB().soundVolume = value
+    BroadcastChange("soundVolume")
+end
+
+-- ─── Revert overrides ──────────────────────────────────────────────────────
+
+--- Resets all per-frame style overrides so every frame falls back to global
+--- Appearance defaults. Also re-broadcasts TWICH_THEME_CHANGED so every
+--- subscribed module re-applies its visuals.
+function Options:ResetAllFrameOverrides()
+    local datatextOpts = ConfigurationModule.Options.Datatext
+    if datatextOpts then
+        if type(datatextOpts.ResetSharedStyle) == "function" then
+            datatextOpts:ResetSharedStyle()
+        end
+        if type(datatextOpts.ResetAllPanelStyleOverrides) == "function" then
+            datatextOpts:ResetAllPanelStyleOverrides()
+        end
+    end
+    -- Clear explicit chat color overrides so chat falls back to global theme.
+    local chatOpts = ConfigurationModule.Options.ChatEnhancement
+    if chatOpts then
+        local db = chatOpts:GetChatEnhancementDB()
+        db.shellAccentColor         = nil ; db._shellAccentExplicitlySet  = nil
+        db.tabAccentColor           = nil ; db._tabAccentExplicitlySet    = nil
+        db.tabBorderColor           = nil ; db._tabBorderExplicitlySet    = nil
+        db.tabBgColor               = nil ; db._tabBgExplicitlySet        = nil
+        db.chatBgColor              = nil ; db._chatBgExplicitlySet       = nil
+        db.chatBorderColor          = nil ; db._chatBorderExplicitlySet   = nil
+        db.chatFont                  = nil ; db._chatFontExplicitlySet     = nil
+        if type(chatOpts.RefreshChatStylingModule) == "function" then
+            chatOpts:RefreshChatStylingModule()
+        end
+    end
+    -- Re-broadcast to all other frame modules (Chat, RaidFrames, etc.)
+    BroadcastChange(nil)
 end
 
 -- ─── Section builder ───────────────────────────────────────────────────────
@@ -143,9 +261,9 @@ function Options:BuildConfiguration()
             backgroundColor = {
                 type = "color",
                 name = "Background",
-                desc = "Base surface color for panels and frames.",
+                desc = "Base surface color for panels and frames. The alpha slider controls panel opacity.",
                 order = 3,
-                hasAlpha = false,
+                hasAlpha = true,
                 handler = Options,
                 get = "GetBackgroundColor",
                 set = "SetBackgroundColor",
@@ -153,9 +271,9 @@ function Options:BuildConfiguration()
             borderColor = {
                 type = "color",
                 name = "Border",
-                desc = "Default border color for panels and frames.",
+                desc = "Default border color for panels and frames. The alpha slider controls border opacity.",
                 order = 4,
-                hasAlpha = false,
+                hasAlpha = true,
                 handler = Options,
                 get = "GetBorderColor",
                 set = "SetBorderColor",
@@ -202,34 +320,77 @@ function Options:BuildConfiguration()
             },
         }),
 
-        surfaces    = W.IGroup(20, "Surfaces", {
-            backgroundAlpha = {
-                type = "range",
-                name = "Background Opacity",
-                desc = "How opaque panel backgrounds appear (0 = fully transparent, 1 = fully solid).",
+        frameAppearance = W.IGroup(30, "Frame Appearance", {
+            statusBarTexture = {
+                type = "select",
+                name = "Status Bar Texture",
+                desc = "Default bar texture used by all status bars and timer bars across TwichUI frames. Individual frames can override this in their own settings.",
                 order = 1,
-                min = 0,
-                max = 1,
-                step = 0.01,
+                dialogControl = "LSM30_Statusbar",
+                values = function()
+                    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+                    return LSM and LSM:HashTable("statusbar") or {}
+                end,
                 handler = Options,
-                get = "GetBackgroundAlpha",
-                set = "SetBackgroundAlpha",
+                get = "GetStatusBarTexture",
+                set = "SetStatusBarTexture",
             },
-            borderAlpha = {
-                type = "range",
-                name = "Border Opacity",
-                desc = "How visible panel borders are.",
+            classIconStyle = {
+                type = "select",
+                name = "Class Icon Style",
+                desc = "Default style for class icons in chat, notifications, and tracking frames. Individual modules can override this in their own settings.",
                 order = 2,
-                min = 0,
-                max = 1,
-                step = 0.01,
+                values = function()
+                    local Textures = T.Tools and T.Tools.Textures
+                    local function IconLabel(style, label)
+                        if Textures and Textures.GetPlayerClassTextureString then
+                            local icon = Textures:GetPlayerClassTextureString(14, style)
+                            if icon then return ("%s %s"):format(icon, label) end
+                        end
+                        return label
+                    end
+                    return {
+                        default = IconLabel("default", "Default"),
+                        fabled  = IconLabel("fabled",  "Fabled"),
+                        pixel   = IconLabel("pixel",   "Pixel"),
+                    }
+                end,
+                sorting = { "default", "fabled", "pixel" },
                 handler = Options,
-                get = "GetBorderAlpha",
-                set = "SetBorderAlpha",
+                get = "GetClassIconStyle",
+                set = "SetClassIconStyle",
+            },
+            globalFont = {
+                type = "select",
+                name = "Global Font",
+                desc = "Default font used across TwichUI data panels and frames. Individual frames can override this in their own settings. Choose \"Default\" to use the WoW system font.",
+                order = 3,
+                dialogControl = "LSM30_Font",
+                values = function()
+                    local LSM = LibStub and LibStub("LibSharedMedia-3.0", true)
+                    local fonts = LSM and LSM:HashTable("font") or {}
+                    fonts["__default"] = "Default (WoW System Font)"
+                    return fonts
+                end,
+                handler = Options,
+                get = "GetGlobalFont",
+                set = "SetGlobalFont",
             },
         }),
 
-        sounds      = W.IGroup(30, "Config Sounds", {
+        sounds      = W.IGroup(40, "Config Sounds", {
+            soundVolume = {
+                type = "range",
+                name = "TwichUI Sound Volume",
+                desc = "Controls TwichUI sound effects. Set to 0 to mute all TwichUI sounds.\n\nNote: WoW does not support per-addon volume gain — any value above 0 plays at native volume.",
+                order = 0,
+                min = 0,
+                max = 100,
+                step = 1,
+                handler = Options,
+                get = "GetSoundVolume",
+                set = "SetSoundVolume",
+            },
             uiSoundsEnabled = {
                 type = "toggle",
                 name = "Enable Menu Sounds",
@@ -259,11 +420,11 @@ function Options:BuildConfiguration()
             },
         }),
 
-        resetGroup  = W.IGroup(40, "Reset", {
+        resetGroup  = W.IGroup(50, "Reset", {
             resetPalette = {
                 type = "execute",
                 name = "Reset to Defaults",
-                desc = "Restore the entire theme palette and sound settings to TwichUI defaults.",
+                desc = "Restore the entire theme palette, appearance, and sound settings to TwichUI defaults.",
                 order = 1,
                 func = function()
                     local theme = GetThemeModule()
@@ -271,10 +432,23 @@ function Options:BuildConfiguration()
                     theme:ResetToDefaults()
                     -- Refresh data panels
                     local datatextModule = T:GetModule("Datatexts", true)
-                    if datatextModule and type(datatextModule.RefreshAllStandalonePanels) == "function" then
-                        datatextModule:RefreshAllStandalonePanels()
+                    if datatextModule and type(datatextModule.RefreshStandalonePanels) == "function" then
+                        datatextModule:RefreshStandalonePanels()
                     end
                     -- Refresh the config page to reflect new defaults
+                    local configUI = ConfigurationModule.StandaloneUI
+                    if configUI and configUI.RequestRenderCurrentPage then
+                        configUI:RequestRenderCurrentPage()
+                    end
+                end,
+            },
+            revertOverrides = {
+                type = "execute",
+                name = "Revert Frame Overrides",
+                desc = "Clears all individual frame style overrides so every frame falls back to the global Appearance defaults above.",
+                order = 2,
+                func = function()
+                    Options:ResetAllFrameOverrides()
                     local configUI = ConfigurationModule.StandaloneUI
                     if configUI and configUI.RequestRenderCurrentPage then
                         configUI:RequestRenderCurrentPage()

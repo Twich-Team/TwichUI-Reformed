@@ -2983,8 +2983,19 @@ end
 
 --- Called whenever the shared theme changes so chat chrome stays in sync.
 function ChatStylingModule:OnThemeChanged(event, changedKey)
-    local isColorChange = changedKey == "primaryColor" or changedKey == "accentColor" or changedKey == nil
-    if not isColorChange then return end
-    self:ApplyThemeColors()
+    local isColorChange = changedKey == "primaryColor"
+        or changedKey == "accentColor"
+        or changedKey == "backgroundColor"
+        or changedKey == "borderColor"
+        or changedKey == "backgroundAlpha"
+        or changedKey == "borderAlpha"
+        or changedKey == nil
+    local isFontChange = changedKey == "globalFont"
+    if not isColorChange and not isFontChange then return end
+    if isColorChange then
+        self:ApplyThemeColors()
+    end
+    -- Invalidate the settings snapshot so any theme-derived values are re-read.
+    self:RefreshSettings()
     self:QueueRefreshAllVisuals(0.05)
 end

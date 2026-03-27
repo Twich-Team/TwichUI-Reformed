@@ -282,7 +282,8 @@ local function BuildMythicPlusToolsTab()
                 preview = {
                     type = "execute",
                     name = "Start Timer Preview",
-                    desc = "Show a live-style Mythic+ timer preview with milestone bars, forces, deaths, and boss checkpoints.",
+                    desc =
+                    "Show a live-style Mythic+ timer preview with milestone bars, forces, deaths, and boss checkpoints.",
                     order = 4,
                     handler = MPTOptions,
                     func = "StartMythicPlusTimerPreview",
@@ -298,7 +299,8 @@ local function BuildMythicPlusToolsTab()
                 frameStyle = {
                     type = "select",
                     name = "Timer Style",
-                    desc = "Choose whether the Mythic+ timer uses a framed shell or a transparent data-first presentation.",
+                    desc =
+                    "Choose whether the Mythic+ timer uses a framed shell or a transparent data-first presentation.",
                     order = 6,
                     width = 1.6,
                     values = {

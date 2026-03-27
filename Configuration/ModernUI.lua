@@ -1596,6 +1596,15 @@ function UI:PlayConfiguredSound(soundKey)
         return
     end
 
+    -- Respect the global TwichUI sound volume (0 = muted).
+    local theme = T:GetModule("Theme", true)
+    if theme then
+        local vol = theme:Get("soundVolume")
+        if type(vol) == "number" and vol <= 0 then
+            return
+        end
+    end
+
     local soundPath = nil
     if LSM then
         soundPath = LSM:Fetch("sound", soundKey, true)

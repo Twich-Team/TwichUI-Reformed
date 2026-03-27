@@ -151,7 +151,19 @@ function Options:GetChatEnhancementDB()
     if not ConfigurationModule:GetProfileDB().chatEnhancement then
         ConfigurationModule:GetProfileDB().chatEnhancement = {}
     end
-    return ConfigurationModule:GetProfileDB().chatEnhancement
+    local db = ConfigurationModule:GetProfileDB().chatEnhancement
+    -- Migration v4: adds chatFont to the purge list alongside v3 keys.
+    if db._chatSchemaV ~= 4 then
+        if not db._shellAccentExplicitlySet  then db.shellAccentColor  = nil end
+        if not db._tabAccentExplicitlySet    then db.tabAccentColor    = nil end
+        if not db._tabBorderExplicitlySet    then db.tabBorderColor    = nil end
+        if not db._tabBgExplicitlySet        then db.tabBgColor        = nil end
+        if not db._chatBgExplicitlySet       then db.chatBgColor       = nil end
+        if not db._chatBorderExplicitlySet   then db.chatBorderColor   = nil end
+        if not db._chatFontExplicitlySet     then db.chatFont          = nil end
+        db._chatSchemaV = 4
+    end
+    return db
 end
 
 function Options:IsAlertsEnabled()
@@ -241,12 +253,28 @@ function Options:ShouldShowAccentBar()
 end
 
 function Options:GetChatFont()
-    return self:GetChatEnhancementDB().chatFont or DEFAULT_CHAT_FONT
+    local db = self:GetChatEnhancementDB()
+    if db.chatFont then return db.chatFont end
+    -- Fall back to the global font when set, otherwise the chat default.
+    local theme = T:GetModule("Theme", true)
+    local gf = theme and theme:Get("globalFont")
+    if gf and gf ~= "__default" then return gf end
+    return DEFAULT_CHAT_FONT
 end
 
 function Options:SetChatFont(info, value)
-    self:GetChatEnhancementDB().chatFont = value
+    local db = self:GetChatEnhancementDB()
+    db.chatFont = value
+    db._chatFontExplicitlySet = true
     self:RefreshChatStylingModule()
+    -- RefreshChatStylingModule does not broadcast a theme change, so the
+    -- ChatRenderer's own font cache won't be updated automatically.  Trigger a
+    -- full renderer rebuild so existing messages re-render at once.
+    local chatEnhancementsModule = T:GetModule("ChatEnhancements", true)
+    local chatRendererModule = chatEnhancementsModule and chatEnhancementsModule:GetModule("ChatRenderer", true)
+    if chatRendererModule and chatRendererModule.RebuildAllRenderers and chatRendererModule:IsEnabled() then
+        chatRendererModule:RebuildAllRenderers()
+    end
 end
 
 function Options:GetChatFontSize()
@@ -332,20 +360,30 @@ function Options:SetMessageFadeDuration(info, value)
 end
 
 function Options:GetShellAccentColor()
-    local db = self:GetChatEnhancementDB()
-    db.shellAccentColor = db.shellAccentColor or CopyColor(DEFAULT_SHELL_ACCENT)
-    local color = db.shellAccentColor
-    return color.r, color.g, color.b, 1
+    -- Display the effective resolved color in the picker (tracks theme when not overridden).
+    local c = self:GetResolvedShellAccentColor()
+    return c.r, c.g, c.b, 1
 end
 
 function Options:SetShellAccentColor(info, r, g, b)
-    self:GetChatEnhancementDB().shellAccentColor = { r = r, g = g, b = b }
+    local db = self:GetChatEnhancementDB()
+    db.shellAccentColor = { r = r, g = g, b = b }
+    db._shellAccentExplicitlySet = true
     self:RefreshChatStylingModule()
 end
 
 function Options:GetResolvedShellAccentColor()
     local db = self:GetChatEnhancementDB()
-    return CopyColor(db.shellAccentColor or DEFAULT_SHELL_ACCENT)
+    if db.shellAccentColor then
+        return CopyColor(db.shellAccentColor)
+    end
+    -- Fall back to the global theme accent color so chat chrome tracks Appearance changes.
+    local theme = T:GetModule("Theme", true)
+    if theme then
+        local ac = theme:GetColor("accentColor")
+        return { r = ac[1], g = ac[2], b = ac[3] }
+    end
+    return CopyColor(DEFAULT_SHELL_ACCENT)
 end
 
 function Options:GetChannelColor(key)
@@ -588,57 +626,92 @@ function Options:SetTabStyle(info, value)
     self:RefreshChatStylingModule()
 end
 
--- Tab custom colors (nil = use PRIMARY_BORDER/FILL defaults)
-local DEFAULT_TAB_BG = { r = 0.03, g = 0.05, b = 0.07 }
-local DEFAULT_TAB_BORDER = { r = 0.10, g = 0.72, b = 0.74 }
-local DEFAULT_TAB_ACCENT = { r = 0.10, g = 0.72, b = 0.74 }
+-- Tab custom colors (nil = fall back to live theme defaults)
+local DEFAULT_TAB_BG     = { r = 0.03, g = 0.05, b = 0.07 }
+local DEFAULT_TAB_BORDER = { r = 0.10, g = 0.72, b = 0.74 }  -- fallback only when theme unavailable
+local DEFAULT_TAB_ACCENT = { r = 0.10, g = 0.72, b = 0.74 }  -- fallback only when theme unavailable
+
+local function GetThemePrimaryColor()
+    local theme = T:GetModule("Theme", true)
+    if theme then
+        local c = theme:GetColor("primaryColor")
+        return { r = c[1], g = c[2], b = c[3] }
+    end
+    return DEFAULT_TAB_ACCENT
+end
+
+local function GetThemeTabBg()
+    local theme = T:GetModule("Theme", true)
+    if theme then
+        local c = theme:GetColor("backgroundColor")
+        local a = theme:Get("backgroundAlpha") or 0.94
+        -- Slightly darker than the panel bg for visual separation
+        return { r = c[1] * 0.7, g = c[2] * 0.7, b = c[3] * 0.7 }
+    end
+    return DEFAULT_TAB_BG
+end
 
 function Options:GetTabBgColor()
     local db = self:GetChatEnhancementDB()
-    local c = db.tabBgColor or DEFAULT_TAB_BG
-    return c.r or DEFAULT_TAB_BG.r, c.g or DEFAULT_TAB_BG.g, c.b or DEFAULT_TAB_BG.b, 1
+    local c = db.tabBgColor
+    if c then return c.r, c.g, c.b, 1 end
+    local def = GetThemeTabBg()
+    return def.r, def.g, def.b, 1
 end
 
 function Options:SetTabBgColor(info, r, g, b)
-    self:GetChatEnhancementDB().tabBgColor = { r = r, g = g, b = b }
+    local db = self:GetChatEnhancementDB()
+    db.tabBgColor = { r = r, g = g, b = b }
+    db._tabBgExplicitlySet = true
     self:RefreshChatStylingModule()
 end
 
 function Options:GetResolvedTabBgColor()
     local db = self:GetChatEnhancementDB()
-    return CopyColor(db.tabBgColor or DEFAULT_TAB_BG)
+    if db.tabBgColor then return CopyColor(db.tabBgColor) end
+    return GetThemeTabBg()
 end
 
 function Options:GetTabBorderColor()
     local db = self:GetChatEnhancementDB()
-    local c = db.tabBorderColor or DEFAULT_TAB_BORDER
-    return c.r or DEFAULT_TAB_BORDER.r, c.g or DEFAULT_TAB_BORDER.g, c.b or DEFAULT_TAB_BORDER.b, 1
+    local c = db.tabBorderColor
+    if c then return c.r, c.g, c.b, 1 end
+    local def = GetThemePrimaryColor()
+    return def.r, def.g, def.b, 1
 end
 
 function Options:SetTabBorderColor(info, r, g, b)
-    self:GetChatEnhancementDB().tabBorderColor = { r = r, g = g, b = b }
+    local db = self:GetChatEnhancementDB()
+    db.tabBorderColor = { r = r, g = g, b = b }
+    db._tabBorderExplicitlySet = true
     self:RefreshChatStylingModule()
 end
 
 function Options:GetResolvedTabBorderColor()
     local db = self:GetChatEnhancementDB()
-    return CopyColor(db.tabBorderColor or DEFAULT_TAB_BORDER)
+    if db.tabBorderColor then return CopyColor(db.tabBorderColor) end
+    return GetThemePrimaryColor()
 end
 
 function Options:GetTabAccentColor()
     local db = self:GetChatEnhancementDB()
-    local c = db.tabAccentColor or DEFAULT_TAB_ACCENT
-    return c.r or DEFAULT_TAB_ACCENT.r, c.g or DEFAULT_TAB_ACCENT.g, c.b or DEFAULT_TAB_ACCENT.b, 1
+    local c = db.tabAccentColor
+    if c then return c.r, c.g, c.b, 1 end
+    local def = GetThemePrimaryColor()
+    return def.r, def.g, def.b, 1
 end
 
 function Options:SetTabAccentColor(info, r, g, b)
-    self:GetChatEnhancementDB().tabAccentColor = { r = r, g = g, b = b }
+    local db = self:GetChatEnhancementDB()
+    db.tabAccentColor = { r = r, g = g, b = b }
+    db._tabAccentExplicitlySet = true
     self:RefreshChatStylingModule()
 end
 
 function Options:GetResolvedTabAccentColor()
     local db = self:GetChatEnhancementDB()
-    return CopyColor(db.tabAccentColor or DEFAULT_TAB_ACCENT)
+    if db.tabAccentColor then return CopyColor(db.tabAccentColor) end
+    return GetThemePrimaryColor()
 end
 
 -- Edit box visual customisation
@@ -668,7 +741,7 @@ function Options:GetResolvedEditBoxBgColor()
 end
 
 function Options:GetEditBoxFont()
-    return self:GetChatEnhancementDB().editBoxFont or nil  -- nil = inherit chat font
+    return self:GetChatEnhancementDB().editBoxFont or nil -- nil = inherit chat font
 end
 
 function Options:SetEditBoxFont(info, value)
@@ -677,7 +750,7 @@ function Options:SetEditBoxFont(info, value)
 end
 
 function Options:GetEditBoxFontSize()
-    return self:GetChatEnhancementDB().editBoxFontSize or 0  -- 0 = inherit chat font size
+    return self:GetChatEnhancementDB().editBoxFontSize or 0 -- 0 = inherit chat font size
 end
 
 function Options:SetEditBoxFontSize(info, value)
@@ -811,6 +884,7 @@ function Options:GetResolvedMsgBgColor()
         a = c.a ~= nil and c.a or DEFAULT_MSG_BG.a,
     }
 end
+
 function Options:IsTabNameFadeEnabled()
     return self:GetChatEnhancementDB().tabNameFade == true
 end
@@ -900,14 +974,14 @@ function Options:GetRoutingEntries()
                 local lastColon = trimmed:find(":[^:]*$")
                 if lastColon then
                     local pattern = trimmed:sub(1, lastColon - 1):match("^%s*(.-)%s*$")
-                    local tabName  = trimmed:sub(lastColon + 1):match("^%s*(.-)%s*$")
+                    local tabName = trimmed:sub(lastColon + 1):match("^%s*(.-)%s*$")
                     if pattern and pattern ~= "" and tabName and tabName ~= "" then
                         db.routingEntries[#db.routingEntries + 1] = { pattern = pattern, tab = tabName }
                     end
                 end
             end
         end
-        db.routingRulesRaw = nil  -- clear legacy field after migration
+        db.routingRulesRaw = nil -- clear legacy field after migration
     end
     return db.routingEntries
 end
@@ -1001,13 +1075,14 @@ function Options:GetHeaderDatatextSettings()
     local hdt = self:GetHeaderDatatextDB()
     local textColor = (hdt.useCustomTextColor and hdt.textColor) and hdt.textColor or nil
     return {
-        enabled    = hdt.enabled == true,
-        slotCount  = math.max(1, math.min(3, tonumber(hdt.slotCount) or 1)),
-        slotWidth  = math.max(32, math.min(200, tonumber(hdt.slotWidth) or 68)),
-        fontSize   = math.max(8, math.min(18, tonumber(hdt.fontSize) or 11)),
+        enabled            = hdt.enabled == true,
+        slotCount          = math.max(1, math.min(3, tonumber(hdt.slotCount) or 1)),
+        slotWidth          = math.max(32, math.min(200, tonumber(hdt.slotWidth) or 68)),
+        fontSize           = math.max(8, math.min(18, tonumber(hdt.fontSize) or 11)),
         useCustomTextColor = hdt.useCustomTextColor == true,
-        textColor  = textColor and { r = textColor.r or 0.92, g = textColor.g or 0.94, b = textColor.b or 0.96 } or nil,
-        slots      = {
+        textColor          = textColor and { r = textColor.r or 0.92, g = textColor.g or 0.94, b = textColor.b or 0.96 } or
+        nil,
+        slots              = {
             hdt.slot1 or "NONE",
             hdt.slot2 or "NONE",
             hdt.slot3 or "NONE",
@@ -1103,7 +1178,10 @@ function Options:SetClassIconsEnabled(info, value)
 end
 
 function Options:GetClassIconStyle()
-    return self:GetChatEnhancementDB().classIconStyle or "default"
+    local val = self:GetChatEnhancementDB().classIconStyle
+    if val then return val end
+    local theme = T:GetModule("Theme", true)
+    return (theme and theme:Get("classIconStyle")) or "default"
 end
 
 function Options:SetClassIconStyle(info, value)
@@ -1175,7 +1253,9 @@ function Options:GetChatBgColor()
 end
 
 function Options:SetChatBgColor(info, r, g, b, a)
-    self:GetChatEnhancementDB().chatBgColor = { r = r, g = g, b = b, a = a ~= nil and a or 0.94 }
+    local db = self:GetChatEnhancementDB()
+    db.chatBgColor = { r = r, g = g, b = b, a = a ~= nil and a or 0.94 }
+    db._chatBgExplicitlySet = true
     self:RefreshChatStylingModule()
 end
 
@@ -1204,7 +1284,9 @@ function Options:GetChatBorderColor()
 end
 
 function Options:SetChatBorderColor(info, r, g, b, a)
-    self:GetChatEnhancementDB().chatBorderColor = { r = r, g = g, b = b, a = a ~= nil and a or 0.85 }
+    local db = self:GetChatEnhancementDB()
+    db.chatBorderColor = { r = r, g = g, b = b, a = a ~= nil and a or 0.85 }
+    db._chatBorderExplicitlySet = true
     self:RefreshChatStylingModule()
 end
 

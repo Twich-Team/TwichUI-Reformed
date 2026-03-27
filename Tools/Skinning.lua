@@ -162,7 +162,7 @@ function UI.SkinTwichButton(btn, color)
     end
 
     -- Per-button animation state (closed over per SkinTwichButton call).
-    local HOVER_SPEED   = 8     -- 0→1 in ~125ms
+    local HOVER_SPEED   = 8 -- 0→1 in ~125ms
     local hoverProgress = 0.0
     local isPressed     = false
 
@@ -170,8 +170,8 @@ function UI.SkinTwichButton(btn, color)
 
     local function applyVisual(selfBtn)
         local enabled = selfBtn.IsEnabled == nil or selfBtn:IsEnabled()
-        local h  = hoverProgress
-        local fs = selfBtn.GetFontString and selfBtn:GetFontString() or nil
+        local h       = hoverProgress
+        local fs      = selfBtn.GetFontString and selfBtn:GetFontString() or nil
 
         if not enabled then
             chrome:SetBackdropColor(r * 0.14, g * 0.14, b * 0.14, 0.70)

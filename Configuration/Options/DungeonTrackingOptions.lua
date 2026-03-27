@@ -74,7 +74,10 @@ end
 
 function Options:GetClassIconStyle(info)
     local db = self:GetDB()
-    return db.classIconStyle or DEFAULT_CLASS_ICON_STYLE
+    local val = db.classIconStyle
+    if val then return val end
+    local theme = T:GetModule("Theme", true)
+    return (theme and theme:Get("classIconStyle")) or DEFAULT_CLASS_ICON_STYLE
 end
 
 function Options:SetClassIconStyle(info, value)
