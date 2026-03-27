@@ -1,45 +1,31 @@
-# TwichUI-Redux
+# TwichUI-Reformed
 
-An ElvUI plugin that provides suite of customization options and gameplay enhancements. The addon intends to provide various quality of life features that may otherwise be provided by multiple other addons that are often not kept up to date.
+What originally started as custom implementations of various game tweaks that I wanted more control over has now morphed into a full UI replacement suite.
 
-I've developed the addon with emphasis on performance while trying to keep the same look and feel of ElvUI.
+> **Warning:** This addon is currently in **alpha**. It is under heavy development, unstable, and unoptimized. Use at your own risk.
 
-## Features
+## Configuration
 
-**Best in Slot**
+- **Settings:** Access the primary configuration via the `/tui` slash command, or the AddOn Compartment.
 
-A best in slot frame scans the Encounter Journal's Dungeons, Raids, and Sets tabs to automatically collect gear rewards from each. A best in slot item can then be selected for each slot. Any item not found by the addon automatically can be added via a custom item function, accepting a name, item ID, or WoWHead link. Once an item is selected, the item will show in the tracker along with its source. Once collected, the item is marked as complete. You can also enable notifications:
+_Note: Most features are disabled by default to prevent unexpected behavior._
 
-- When you receive an item that is best in slot.
-- When an item drops that is best in slot (to roll on or master looted).
-- When the Great Vault contains a best in slot item.
+## Installation
 
-**Chat**
+Since the addon is in early development, install it manually or via [WowUp](https://wowup.io/) (recommended).
 
-Adds the ability to assign alerts to chat events. While this functionality is provided by ElvUI for the default ElvUI chat, I personally enjoy using other chat addons, which often do not have this funcctionality.
+### Method 1: WowUp (Recommended)
 
-**DataTexts**
+1. Open WowUp and go to the **Get Addons** tab.
+2. Click **Install from URL**.
+3. Paste `https://github.com/Twich-Team/TwichUI-Reformed` into the **Addon URL** box.
+4. Click **Import** and then **Install**.
 
-Adds additional DataTexts for use customizing your interface:
+WowUp will automatically check for updates.
 
-- Mounts: Shortcuts to access your auction and/or vendor mounts, as well as provides a menu to choose any of your favorited mounts.
+### Method 2: Manual
 
-**Media**
-
-Adds additional fonts, sounds or textures for use customizing your interface.
-
-**Quality of Life**
-
-Provides various smaller functions to make gameplay better based on your preferences.
-
-- Assign hotkeys to NPC gossip.
-- Automatically accept or turn in quests based on type.
-- Clean your quest log, keeping quests of specific types.
-
-**Smart Mount**
-
-Provides a slash command to macro and/or a keybinding to automatically mount based on your preferences. It can mount a ground mount when flying is not allowed, and even an aquatic mount while you are swimming. All with the same command.
-
-## Roadmap
-
-This addon is still under heavy development.
+1. Download the latest release zip file from the [Releases Page](https://github.com/Twich-Team/TwichUI-Reformed/releases).
+2. Extract the contents.
+3. Move the `TwichUI` folder to your World of Warcraft AddOns directory:
+   - Windows Default: `C:\Program Files (x86)\World of Warcraft\_retail_\Interface\AddOns`
