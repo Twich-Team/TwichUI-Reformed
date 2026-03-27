@@ -25,4 +25,4 @@ externals:
     Libraries/LibSharedMedia-3.0: https://repos.curseforge.com/wow/libsharedmedia-3-0/trunk/LibSharedMedia-3.0
     Libraries/LibStub: https://repos.curseforge.com/wow/libstub/trunk
     Libraries/CallbackHandler-1.0: https://repos.curseforge.com/wow/callbackhandler/trunk/CallbackHandler-1.0
-    Libraries/LibButtonGlow-1.0: https://repos.curseforge.com/wow/libbuttonglow-1-0/trunk/LibButtonGlow-1.0
+    Libraries/LibButtonGlow-1.0: https://repos.curseforge.com/wow/libbuttonglow-1-0 libbuttonglow-1-0
