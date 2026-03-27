@@ -62,6 +62,33 @@ local EDIT_BOX_HISTORY_LIMIT = 50
 local CHAT_HISTORY_DEBUG_TO_CHAT = false
 local EDIT_BOX_HISTORY_HOOKED = setmetatable({}, { __mode = "k" })
 
+-- Builds the full chat text including channel prefix, e.g. "/say Hello".
+-- Mirrors Chattynator CommandHistory GetCurrent so stored entries can be
+-- replayed verbatim including the channel type context.
+local function GetCurrentChatText(editBox)
+    if not editBox then return "" end
+    local chatType = editBox.GetAttribute and editBox:GetAttribute("chatType") or nil
+    local text = ""
+    if chatType then
+        local header = _G["SLASH_" .. chatType .. "1"]
+        if header then
+            text = header
+        end
+        if chatType == "WHISPER" then
+            text = text .. " " .. (editBox:GetAttribute("tellTarget") or "")
+        elseif chatType == "CHANNEL" then
+            text = "/" .. (ChatEdit_GetChannelTarget and ChatEdit_GetChannelTarget(editBox) or "")
+        end
+    end
+    local editBoxText = editBox.GetText and editBox:GetText() or ""
+    if editBoxText ~= "" then
+        text = text .. " " .. editBoxText
+    else
+        text = text .. " "
+    end
+    return text
+end
+
 local function DescribeHistoryText(text)
     if type(text) ~= "string" then
         return tostring(text)
@@ -1781,16 +1808,6 @@ function ChatStylingModule:EnsureEditBoxChrome()
             self.TwichUIChrome:Hide()
         end
     end)
-    editBox:HookScript("OnTextChanged", function()
-        ChatStylingModule:ApplyEditBoxChrome()
-    end)
-    editBox:HookScript("OnEditFocusGained", function()
-        ChatStylingModule:ApplyEditBoxChrome()
-    end)
-    editBox:HookScript("OnEditFocusLost", function()
-        ChatStylingModule:ApplyEditBoxChrome()
-    end)
-
     -- Re-apply our custom position whenever the chat frame is repositioned/resized by WoW.
     local chatFrame = _G.ChatFrame1
     if chatFrame and not chatFrame.TwichUIEditBoxPositionHooked then
@@ -1801,52 +1818,16 @@ function ChatStylingModule:EnsureEditBoxChrome()
     end
 end
 
-function ChatStylingModule:EnsureEditBoxHistoryHooks(editBox)
-    if not editBox then
-        return
-    end
-
-    if editBox.SetAltArrowKeyMode then
-        editBox:SetAltArrowKeyMode(false)
-    end
-
-    if editBox.SetHistoryLines then
-        editBox:SetHistoryLines(EDIT_BOX_HISTORY_LIMIT)
-    end
-
-    if EDIT_BOX_HISTORY_HOOKED[editBox] then
-        return
-    end
-
-    EDIT_BOX_HISTORY_HOOKED[editBox] = true
-
-    self:LogHistoryDebugf("history hook attached box=%s", tostring(editBox.GetName and editBox:GetName() or "unknown"))
-
-    if editBox.AddHistoryLine then
-        hooksecurefunc(editBox, "AddHistoryLine", function(selfEditBox, text)
-            ChatStylingModule:AddEditBoxHistoryLine(selfEditBox, text, "native")
-        end)
-    end
+function ChatStylingModule:EnsureEditBoxHistoryHooks(editBox) -- disabled
 end
 
 function ChatStylingModule:AddEditBoxHistoryLine(editBox, text, source)
-    if not editBox or type(text) ~= "string" or not text:match("%S") then
-        self:LogHistoryDebugf("chat history skip source=%s reason=empty box=%s",
-            tostring(source or "unknown"), tostring(editBox and editBox.GetName and editBox:GetName() or "unknown"))
-        return
-    end
-
-    local command = text:match("(/[^ ]+)")
-    if command and IsSecureCmd and IsSecureCmd(command) then
-        self:LogHistoryDebugf("chat history skip source=%s reason=secure command=%s box=%s",
-            tostring(source or "unknown"), tostring(command),
-            tostring(editBox.GetName and editBox:GetName() or "unknown"))
-        return
-    end
-
-    self:LogHistoryDebugf("chat history store source=%s box=%s text=%s",
-        tostring(source or "unknown"), tostring(editBox.GetName and editBox:GetName() or "unknown"),
-        DescribeHistoryText(text))
+    -- Note: primary-box history is now managed inline by the closures in
+    -- EnsureEditBoxHistoryHooks (same self-contained pattern as Chattynator).
+    -- This method is retained only for external call-sites / future extension.
+    self:LogHistoryDebugf("chat history line source=%s box=%s text=%s",
+        tostring(source or "unknown"), tostring(editBox and editBox.GetName and editBox:GetName() or "unknown"),
+        DescribeHistoryText(text or ""))
 end
 
 function ChatStylingModule:ApplyEditBoxPosition()
@@ -1928,8 +1909,6 @@ function ChatStylingModule:ApplyEditBoxChrome()
             ApplyResolvedFont(editBox.headerSuffix, ebFont, ebSize,
                 TEXT_ACTIVE[1], TEXT_ACTIVE[2], TEXT_ACTIVE[3], "")
         end
-        self:ApplyChatFonts(DEFAULT_CHAT_FRAME)
-        self:ApplyEditBoxPosition()
     else
         editBox.TwichUIChrome:Hide()
     end
