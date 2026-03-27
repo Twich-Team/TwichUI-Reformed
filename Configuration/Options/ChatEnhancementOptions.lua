@@ -154,13 +154,13 @@ function Options:GetChatEnhancementDB()
     local db = ConfigurationModule:GetProfileDB().chatEnhancement
     -- Migration v4: adds chatFont to the purge list alongside v3 keys.
     if db._chatSchemaV ~= 4 then
-        if not db._shellAccentExplicitlySet  then db.shellAccentColor  = nil end
-        if not db._tabAccentExplicitlySet    then db.tabAccentColor    = nil end
-        if not db._tabBorderExplicitlySet    then db.tabBorderColor    = nil end
-        if not db._tabBgExplicitlySet        then db.tabBgColor        = nil end
-        if not db._chatBgExplicitlySet       then db.chatBgColor       = nil end
-        if not db._chatBorderExplicitlySet   then db.chatBorderColor   = nil end
-        if not db._chatFontExplicitlySet     then db.chatFont          = nil end
+        if not db._shellAccentExplicitlySet then db.shellAccentColor = nil end
+        if not db._tabAccentExplicitlySet then db.tabAccentColor = nil end
+        if not db._tabBorderExplicitlySet then db.tabBorderColor = nil end
+        if not db._tabBgExplicitlySet then db.tabBgColor = nil end
+        if not db._chatBgExplicitlySet then db.chatBgColor = nil end
+        if not db._chatBorderExplicitlySet then db.chatBorderColor = nil end
+        if not db._chatFontExplicitlySet then db.chatFont = nil end
         db._chatSchemaV = 4
     end
     return db
@@ -628,8 +628,8 @@ end
 
 -- Tab custom colors (nil = fall back to live theme defaults)
 local DEFAULT_TAB_BG     = { r = 0.03, g = 0.05, b = 0.07 }
-local DEFAULT_TAB_BORDER = { r = 0.10, g = 0.72, b = 0.74 }  -- fallback only when theme unavailable
-local DEFAULT_TAB_ACCENT = { r = 0.10, g = 0.72, b = 0.74 }  -- fallback only when theme unavailable
+local DEFAULT_TAB_BORDER = { r = 0.10, g = 0.72, b = 0.74 } -- fallback only when theme unavailable
+local DEFAULT_TAB_ACCENT = { r = 0.10, g = 0.72, b = 0.74 } -- fallback only when theme unavailable
 
 local function GetThemePrimaryColor()
     local theme = T:GetModule("Theme", true)
@@ -1081,7 +1081,7 @@ function Options:GetHeaderDatatextSettings()
         fontSize           = math.max(8, math.min(18, tonumber(hdt.fontSize) or 11)),
         useCustomTextColor = hdt.useCustomTextColor == true,
         textColor          = textColor and { r = textColor.r or 0.92, g = textColor.g or 0.94, b = textColor.b or 0.96 } or
-        nil,
+            nil,
         slots              = {
             hdt.slot1 or "NONE",
             hdt.slot2 or "NONE",

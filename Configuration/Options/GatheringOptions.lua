@@ -155,7 +155,13 @@ function Options:ResetTrackerPosition()
 end
 
 function Options:GetTrackerFont(info)
-    return self:GetDB().trackerFont or DEFAULT_TRACKER_FONT
+    local f = self:GetDB().trackerFont
+    if f and f ~= "__default" then return f end
+    -- Fall back to global font when set, then to the gathering default.
+    local theme = T:GetModule("Theme", true)
+    local gf = theme and theme:Get("globalFont")
+    if gf and gf ~= "__default" then return gf end
+    return DEFAULT_TRACKER_FONT
 end
 
 function Options:SetTrackerFont(info, value)

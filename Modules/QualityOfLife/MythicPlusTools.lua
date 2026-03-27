@@ -558,19 +558,26 @@ function MPT:GetTrackerAppearance()
 
     local c                      = self.trackerAppearanceCache
     local db                     = self:GetDB()
+    local options                = GetOptions()
     local outline                = GetOutlineFlag(db.trackerFontOutline)
 
-    c.fontPath                   = GetTrackerFontPath(db.trackerFont)
+    -- Use options getters so that unset values fall back to global theme settings
+    -- (globalFont for fonts, statusBarTexture for bar textures).
+    local resolvedFont           = options and options:GetTrackerFont()           or db.trackerFont
+    local resolvedBarTextureName = options and options:GetTrackerBarTexture()     or "Blizzard"
+    local resolvedStatusFont     = options and options:GetStatusTextFont()        or db.statusTextFont
+    local resolvedReadyFont      = options and options:GetReadyTextFont()         or db.readyTextFont
+
+    c.fontPath                   = GetTrackerFontPath(resolvedFont)
     c.fontSize                   = ClampNumber(db.trackerFontSize, 8, 24, 12)
     c.outline                    = outline
     c.rowGap                     = ClampNumber(db.trackerRowGap, 0, 20, 6)
     c.iconSize                   = ClampNumber(db.trackerIconSize, 14, 32, 18)
     c.barHeight                  = ClampNumber(db.trackerBarHeight, 10, 30, 18)
-    c.barTexture                 = (db.trackerBarTexture and LSM and LSM.Fetch and LSM:Fetch("statusbar", db.trackerBarTexture)) or
-        (LSM and LSM.Fetch and LSM:Fetch("statusbar", "Blizzard")) or
+    c.barTexture                 = (LSM and LSM.Fetch and LSM:Fetch("statusbar", resolvedBarTextureName)) or
         "Interface\\TargetingFrame\\UI-StatusBar"
-    c.statusTextFontPath         = GetTrackerFontPath(db.statusTextFont)
-    c.readyTextFontPath          = GetTrackerFontPath(db.readyTextFont)
+    c.statusTextFontPath         = GetTrackerFontPath(resolvedStatusFont)
+    c.readyTextFontPath          = GetTrackerFontPath(resolvedReadyFont)
     c.showReadyText              = db.showReadyText ~= false
     c.frameVisibilityMode        = db.frameVisibilityMode or "mythicplus"
     c.interruptReadyBarColorMode = db.interruptReadyBarColorMode or "default"
@@ -616,17 +623,19 @@ end
 function MPT:GetMythicPlusTimerAppearance()
     local appearance = self:GetTrackerAppearance()
     local db = self:GetDB()
+    local options = GetOptions()
     local fontColor = self.trackerAppearanceCache.timerFontColor
     local mutedColor = self.trackerAppearanceCache.timerMutedTextColor
     local customBarColor = self.trackerAppearanceCache.timerBarColor
 
-    appearance.timerFontPath = GetTrackerFontPath(db.mythicPlusTimerFont or db.trackerFont)
+    appearance.timerFontPath = GetTrackerFontPath(options and options:GetMythicPlusTimerFont() or (db.mythicPlusTimerFont or db.trackerFont))
     appearance.timerFontSize = ClampNumber(db.mythicPlusTimerFontSize, 8, 28, appearance.fontSize)
     appearance.timerOutline = GetOutlineFlag(db.mythicPlusTimerFontOutline or db.trackerFontOutline)
     appearance.timerRowGap = ClampNumber(db.mythicPlusTimerRowGap, 0, 30, appearance.rowGap)
     appearance.timerBarHeight = ClampNumber(db.mythicPlusTimerBarHeight, 10, 40, appearance.barHeight)
+    local timerBarTextureName = options and options:GetMythicPlusTimerBarTexture()
     appearance.timerBarTexture =
-        (db.mythicPlusTimerBarTexture and LSM and LSM.Fetch and LSM:Fetch("statusbar", db.mythicPlusTimerBarTexture)) or
+        (timerBarTextureName and LSM and LSM.Fetch and LSM:Fetch("statusbar", timerBarTextureName)) or
         appearance.barTexture
     appearance.timerLayout = db.mythicPlusTimerLayout == "right" and "right" or "left"
     appearance.timerBarColorMode = db.mythicPlusTimerBarColorMode == "custom" and "custom" or "milestone"
@@ -1001,6 +1010,9 @@ function MPT:GetInterruptFontColor(member)
 end
 
 function MPT:RefreshTrackerStyling()
+    -- Invalidate the appearance cache so the new global settings (statusBarTexture,
+    -- globalFont, etc.) are picked up immediately rather than waiting for the next tick.
+    self.trackerAppearanceDirty = true
     self:ApplyFrameLockStates()
     if self.interruptFrame then
         self:ApplyRowLayout(self.interruptFrame)

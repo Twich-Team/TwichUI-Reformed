@@ -24,18 +24,18 @@ ThemeModule:SetEnabledState(true)
 --- this table directly, so DB overrides are respected.
 local DEFAULT_THEME = {
     -- Core palette
-    primaryColor    = { 0.10, 0.72, 0.74 }, -- TwichUI Teal — chat chrome, primary borders
-    accentColor     = { 0.96, 0.76, 0.24 }, -- Gold — panel accents, active indicators
-    backgroundColor = { 0.05, 0.06, 0.08 }, -- Near-black surface
-    borderColor     = { 0.24, 0.26, 0.32 }, -- Cool-grey border
-    textColor       = { 1.00, 0.95, 0.85 }, -- Warm white labels
-    successColor    = { 0.42, 0.89, 0.63 }, -- Green — enabled states
-    warningColor    = { 0.96, 0.74, 0.22 }, -- Amber — cautionary callouts
-    dangerColor     = { 0.90, 0.30, 0.32 }, -- Red — destructive / critical
+    primaryColor     = { 0.10, 0.72, 0.74 }, -- TwichUI Teal — chat chrome, primary borders
+    accentColor      = { 0.96, 0.76, 0.24 }, -- Gold — panel accents, active indicators
+    backgroundColor  = { 0.05, 0.06, 0.08 }, -- Near-black surface
+    borderColor      = { 0.24, 0.26, 0.32 }, -- Cool-grey border
+    textColor        = { 1.00, 0.95, 0.85 }, -- Warm white labels
+    successColor     = { 0.42, 0.89, 0.63 }, -- Green — enabled states
+    warningColor     = { 0.96, 0.74, 0.22 }, -- Amber — cautionary callouts
+    dangerColor      = { 0.90, 0.30, 0.32 }, -- Red — destructive / critical
 
     -- Surface alphas
-    backgroundAlpha = 0.94,
-    borderAlpha     = 0.85,
+    backgroundAlpha  = 0.94,
+    borderAlpha      = 0.85,
 
     -- Frame appearance
     statusBarTexture = "TwichUI-Smooth", -- Global status bar / timer bar texture
@@ -43,11 +43,11 @@ local DEFAULT_THEME = {
     globalFont       = "__default",      -- "__default" = WoW system font; otherwise LSM font name
 
     -- TwichUI sound effects
-    soundVolume     = 100,               -- 0 = muted, 1-100 = enabled (WoW has no per-addon gain)
+    soundVolume      = 100, -- 0 = muted, 1-100 = enabled (WoW has no per-addon gain)
 
     -- Config UI sounds
-    uiSoundsEnabled = true,
-    soundProfile    = "Standard",        -- "None" | "Subtle" | "Standard"
+    uiSoundsEnabled  = true,
+    soundProfile     = "Standard", -- "None" | "Subtle" | "Standard"
 }
 
 -- Expose defaults so other modules can use them as typed fallbacks.

@@ -45,7 +45,7 @@ local SCROLL_STEP = 42
 local SCROLLBAR_WIDTH = 8
 local LIVE_BUTTON_WIDTH = 58
 local CLASS_ICON_SIZE = 14
-local CLASS_ICON_LABEL_OFFSET = 18  -- horizontal space reserved for the class icon
+local CLASS_ICON_LABEL_OFFSET = 18 -- horizontal space reserved for the class icon
 local BORDER = { 0.10, 0.72, 0.74 }
 local ACCENT = { 0.95, 0.76, 0.26 }
 local TEXT_MUTED = { 0.57, 0.66, 0.74 }
@@ -72,20 +72,20 @@ local CLASS_CACHE_EVENTS = {
 -- Maps a resolved channel key to the slash command used to open that channel in the edit box.
 -- Whisper entries are handled separately (need the target player name).
 local CHANNEL_KEY_TO_SLASH = {
-    guild         = "/g ",
-    officer       = "/o ",
-    party         = "/p ",
-    partyLeader   = "/p ",
-    raid          = "/raid ",
-    raidLeader    = "/rw ",
-    instance      = "/i ",
-    instanceLeader = "/i ",
-    general       = "/s ",
-    trade         = "/s ",
-    localDefense  = "/s ",
+    guild           = "/g ",
+    officer         = "/o ",
+    party           = "/p ",
+    partyLeader     = "/p ",
+    raid            = "/raid ",
+    raidLeader      = "/rw ",
+    instance        = "/i ",
+    instanceLeader  = "/i ",
+    general         = "/s ",
+    trade           = "/s ",
+    localDefense    = "/s ",
     lookingForGroup = "/s ",
-    services      = "/s ",
-    newcomer      = "/s ",
+    services        = "/s ",
+    newcomer        = "/s ",
 }
 
 local function GetOptions()
@@ -345,7 +345,8 @@ function ChatRendererModule:RefreshSettings()
 end
 
 --- Cache the class token for a message sender using the event GUID.
-function ChatRendererModule:CacheClassFromEvent(chatEvent, message, sender, language, channelString, target, flags, _, channelNumber, channelName, _, counter, guid)
+function ChatRendererModule:CacheClassFromEvent(chatEvent, message, sender, language, channelString, target, flags, _,
+                                                channelNumber, channelName, _, counter, guid)
     if not IsUsablePlainString(sender) or sender == "" then return end
     if not guid or guid == "" then return end
     local _, classToken = GetPlayerInfoByGUID(guid)
@@ -454,7 +455,7 @@ function ChatRendererModule:BuildDebugReport()
             local entries = renderer and #(renderer.entries or {}) or 0
             local buttonCount = proxyBar and #(proxyBar.buttons or {}) or 0
             local owner = styleModule and styleModule.GetProxyOwnerFrame and styleModule:GetProxyOwnerFrame(frame) or
-            frame
+                frame
             lines[#lines + 1] = ""
             lines[#lines + 1] = format("[%s] docked=%s shown=%s size=%.0fx%.0f", frameName,
                 tostring(frame.isDocked == true),
@@ -958,7 +959,7 @@ function ChatRendererModule:EnsureRow(renderer, index)
     -- Hover restore: smoothly raise alpha to 1 when mouse enters a faded row.
     row.HoverFadeIn = row:CreateAnimationGroup()
     local hoverAlphaIn = row.HoverFadeIn:CreateAnimation("Alpha")
-    hoverAlphaIn:SetFromAlpha(0)   -- will be overridden via SetAlpha before Play()
+    hoverAlphaIn:SetFromAlpha(0) -- will be overridden via SetAlpha before Play()
     hoverAlphaIn:SetToAlpha(1)
     hoverAlphaIn:SetDuration(0.30)
     hoverAlphaIn:SetOrder(1)
@@ -975,7 +976,7 @@ function ChatRendererModule:EnsureRow(renderer, index)
     row.HoverFadeOut = row:CreateAnimationGroup()
     local hoverAlphaOut = row.HoverFadeOut:CreateAnimation("Alpha")
     hoverAlphaOut:SetFromAlpha(1)
-    hoverAlphaOut:SetToAlpha(0)    -- will be overridden via SetAlpha before Play()
+    hoverAlphaOut:SetToAlpha(0) -- will be overridden via SetAlpha before Play()
     hoverAlphaOut:SetDuration(0.45)
     hoverAlphaOut:SetOrder(1)
     row.HoverFadeOut:SetScript("OnPlay", function()
@@ -1060,10 +1061,19 @@ function ChatRendererModule:EnsureRow(renderer, index)
     -- tooltip, so we leave hover over those links as a no-op and let the click
     -- handler open the window on demand.
     local TOOLTIP_LINK_TYPES = {
-        item = true, spell = true, achievement = true, quest = true,
-        enchant = true, battlepet = true, instancelockout = true,
-        transmogappearance = true, garrmission = true, talent = true,
-        currency = true, glyph = true, dungeonScore = true,
+        item = true,
+        spell = true,
+        achievement = true,
+        quest = true,
+        enchant = true,
+        battlepet = true,
+        instancelockout = true,
+        transmogappearance = true,
+        garrmission = true,
+        talent = true,
+        currency = true,
+        glyph = true,
+        dungeonScore = true,
     }
     row:SetScript("OnHyperlinkEnter", function(selfRow, link)
         if not link or link == "" then return end
@@ -1219,7 +1229,8 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
                 local iconY = -8 - (CLASS_ICON_SIZE - (self.settings.chatFontSize or 13)) * 0.5
                 row.ClassIcon:SetPoint("TOPLEFT", row, "TOPLEFT", timestampWidth + 14, iconY)
                 row.ClassIcon:SetSize(CLASS_ICON_SIZE, CLASS_ICON_SIZE)
-                TwichTextures:ApplyClassTexture(row.ClassIcon, classToken, ChatRendererModule.settings and ChatRendererModule.settings.classIconStyle)
+                TwichTextures:ApplyClassTexture(row.ClassIcon, classToken,
+                    ChatRendererModule.settings and ChatRendererModule.settings.classIconStyle)
                 row.ClassIcon:Show()
                 labelOffsetX = timestampWidth + 14 + CLASS_ICON_LABEL_OFFSET
                 iconShown = true
@@ -1265,7 +1276,7 @@ function ChatRendererModule:RelayoutRenderer(renderer)
     end
 
     local timestampWidth = self.settings.timestampsEnabled and (self.settings.timestampWidth or DEFAULT_TIMESTAMP_WIDTH) or
-    0
+        0
     -- bodyWidth is the shared content column width.
     local bodyWidth = mathMax(70, width - timestampWidth - 18)
     local offsetY = CONTENT_TOP_PADDING
@@ -1641,7 +1652,7 @@ function ChatRendererModule:ShowMessageContextMenu(row, entry)
 
     local playerTarget = ExtractPlayerTarget(entry.message)
     local shortName    = playerTarget and (playerTarget:match("^([^%-]+)") or playerTarget) or nil
-    local rawText = ""
+    local rawText      = ""
     if IsUsablePlainString(entry.message) then
         rawText = entry.message
         rawText = rawText:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|C%x%x%x%x%x%x%x%x%x%x", "")

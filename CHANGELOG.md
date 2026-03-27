@@ -13,4 +13,4 @@
 - Added the ability to reset global appearance settings to default
 - Introduced a setup wizard for onboarding
 - Re-skinned buttons that are available on notifications to the in-house skin
-- Revamp of global Appearances, including the ability to reset, global font, status texture, sound volume, class icon picker, etc.
+- Revamp of global Appearances, including the ability to reset, global font, status texture, mute sound, class icon picker, etc.

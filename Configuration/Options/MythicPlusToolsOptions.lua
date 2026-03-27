@@ -21,6 +21,13 @@ local function GetGlobalBarTexture()
     return (theme and theme:Get("statusBarTexture")) or DEFAULT_BAR_TEXTURE
 end
 
+local function GetGlobalFont()
+    local theme = T:GetModule("Theme", true)
+    local gf = theme and theme:Get("globalFont")
+    if gf and gf ~= "__default" then return gf end
+    return nil
+end
+
 local DEFAULTS = {
     trackerFont = DEFAULT_FONT,
     trackerFontSize = 12,
@@ -141,7 +148,23 @@ function Options:GetDB()
         ConfigurationModule:GetProfileDB().mythicPlusTools = {}
     end
 
-    return ConfigurationModule:GetProfileDB().mythicPlusTools
+    local db = ConfigurationModule:GetProfileDB().mythicPlusTools
+
+    -- Schema migration v1: clear bar texture keys that were stamped in as the
+    -- hardcoded default ("Blizzard") without the user explicitly choosing them.
+    -- After migration these keys are nil, so GetTrackerBarTexture() falls back
+    -- to the global statusBarTexture from the theme.
+    if db._mptSchemaV ~= 1 then
+        if not db._trackerBarTextureExplicitlySet   then db.trackerBarTexture          = nil end
+        if not db._timerBarTextureExplicitlySet     then db.mythicPlusTimerBarTexture  = nil end
+        if not db._trackerFontExplicitlySet         then db.trackerFont                = nil end
+        if not db._statusTextFontExplicitlySet      then db.statusTextFont             = nil end
+        if not db._readyTextFontExplicitlySet       then db.readyTextFont              = nil end
+        if not db._timerFontExplicitlySet           then db.mythicPlusTimerFont        = nil end
+        db._mptSchemaV = 1
+    end
+
+    return db
 end
 
 local function GetModule()
@@ -294,11 +317,15 @@ function Options:SetSuppressWipeSpam(info, value)
 end
 
 function Options:GetTrackerFont()
-    return self:GetDB().trackerFont or DEFAULTS.trackerFont
+    local f = self:GetDB().trackerFont
+    if f and f ~= "__default" then return f end
+    return GetGlobalFont() or DEFAULTS.trackerFont
 end
 
 function Options:SetTrackerFont(info, value)
-    self:GetDB().trackerFont = value or DEFAULTS.trackerFont
+    local db = self:GetDB()
+    db.trackerFont = value or DEFAULTS.trackerFont
+    db._trackerFontExplicitlySet = true
     self:RefreshModuleAppearance()
 end
 
@@ -330,7 +357,9 @@ function Options:GetTrackerBarTexture()
 end
 
 function Options:SetTrackerBarTexture(info, value)
-    self:GetDB().trackerBarTexture = value or DEFAULTS.trackerBarTexture
+    local db = self:GetDB()
+    db.trackerBarTexture = value or DEFAULTS.trackerBarTexture
+    db._trackerBarTextureExplicitlySet = true
     self:RefreshModuleAppearance()
 end
 
@@ -362,11 +391,15 @@ function Options:SetTrackerBarHeight(info, value)
 end
 
 function Options:GetStatusTextFont()
-    return self:GetDB().statusTextFont or DEFAULTS.statusTextFont
+    local f = self:GetDB().statusTextFont
+    if f and f ~= "__default" then return f end
+    return GetGlobalFont() or DEFAULTS.statusTextFont
 end
 
 function Options:SetStatusTextFont(info, value)
-    self:GetDB().statusTextFont = value or DEFAULTS.statusTextFont
+    local db = self:GetDB()
+    db.statusTextFont = value or DEFAULTS.statusTextFont
+    db._statusTextFontExplicitlySet = true
     self:RefreshModuleAppearance()
 end
 
@@ -376,16 +409,21 @@ function Options:GetStatusTextColor()
 end
 
 function Options:SetStatusTextColor(info, red, green, blue, alpha)
-    self:GetDB().statusTextColor = NormalizeColor(self:GetDB().statusTextColor or DEFAULTS.statusTextColor, red, green, blue, alpha)
+    self:GetDB().statusTextColor = NormalizeColor(self:GetDB().statusTextColor or DEFAULTS.statusTextColor, red, green,
+        blue, alpha)
     self:RefreshModuleAppearance()
 end
 
 function Options:GetReadyTextFont()
-    return self:GetDB().readyTextFont or DEFAULTS.readyTextFont
+    local f = self:GetDB().readyTextFont
+    if f and f ~= "__default" then return f end
+    return GetGlobalFont() or DEFAULTS.readyTextFont
 end
 
 function Options:SetReadyTextFont(info, value)
-    self:GetDB().readyTextFont = value or DEFAULTS.readyTextFont
+    local db = self:GetDB()
+    db.readyTextFont = value or DEFAULTS.readyTextFont
+    db._readyTextFontExplicitlySet = true
     self:RefreshModuleAppearance()
 end
 
@@ -395,7 +433,8 @@ function Options:GetReadyTextColor()
 end
 
 function Options:SetReadyTextColor(info, red, green, blue, alpha)
-    self:GetDB().readyTextColor = NormalizeColor(self:GetDB().readyTextColor or DEFAULTS.readyTextColor, red, green, blue, alpha)
+    self:GetDB().readyTextColor = NormalizeColor(self:GetDB().readyTextColor or DEFAULTS.readyTextColor, red, green, blue,
+        alpha)
     self:RefreshModuleAppearance()
 end
 
@@ -455,7 +494,8 @@ function Options:GetInterruptBarColor()
 end
 
 function Options:SetInterruptBarColor(info, red, green, blue, alpha)
-    self:GetDB().interruptBarColor = NormalizeColor(self:GetDB().interruptBarColor or DEFAULTS.interruptBarColor, red, green, blue, alpha)
+    self:GetDB().interruptBarColor = NormalizeColor(self:GetDB().interruptBarColor or DEFAULTS.interruptBarColor, red,
+        green, blue, alpha)
     self:RefreshModuleAppearance()
 end
 
@@ -483,7 +523,8 @@ function Options:GetInterruptReadyBarColor()
 end
 
 function Options:SetInterruptReadyBarColor(info, red, green, blue, alpha)
-    self:GetDB().interruptReadyBarColor = NormalizeColor(self:GetDB().interruptReadyBarColor or DEFAULTS.interruptReadyBarColor, red, green, blue, alpha)
+    self:GetDB().interruptReadyBarColor = NormalizeColor(
+    self:GetDB().interruptReadyBarColor or DEFAULTS.interruptReadyBarColor, red, green, blue, alpha)
     self:RefreshModuleAppearance()
 end
 
@@ -507,7 +548,8 @@ function Options:GetInterruptFontColor()
 end
 
 function Options:SetInterruptFontColor(info, red, green, blue, alpha)
-    self:GetDB().interruptFontColor = NormalizeColor(self:GetDB().interruptFontColor or DEFAULTS.interruptFontColor, red, green, blue, alpha)
+    self:GetDB().interruptFontColor = NormalizeColor(self:GetDB().interruptFontColor or DEFAULTS.interruptFontColor, red,
+        green, blue, alpha)
     self:RefreshModuleAppearance()
 end
 
@@ -639,7 +681,9 @@ function Options:GetMythicPlusTimerFont()
 end
 
 function Options:SetMythicPlusTimerFont(info, value)
-    self:GetDB().mythicPlusTimerFont = value or self:GetTrackerFont()
+    local db = self:GetDB()
+    db.mythicPlusTimerFont = value or self:GetTrackerFont()
+    db._timerFontExplicitlySet = true
     self:RefreshModuleAppearance()
 end
 
@@ -672,12 +716,14 @@ function Options:SetMythicPlusTimerFontOutline(info, value)
 end
 
 function Options:GetMythicPlusTimerFontColor()
-    local color = self:GetDB().mythicPlusTimerFontColor or self:GetDB().statusTextColor or DEFAULTS.mythicPlusTimerFontColor
+    local color = self:GetDB().mythicPlusTimerFontColor or self:GetDB().statusTextColor or
+    DEFAULTS.mythicPlusTimerFontColor
     return color.r, color.g, color.b, color.a or 1
 end
 
 function Options:SetMythicPlusTimerFontColor(info, red, green, blue, alpha)
-    self:GetDB().mythicPlusTimerFontColor = NormalizeColor(self:GetDB().mythicPlusTimerFontColor or DEFAULTS.mythicPlusTimerFontColor, red, green, blue, alpha)
+    self:GetDB().mythicPlusTimerFontColor = NormalizeColor(
+    self:GetDB().mythicPlusTimerFontColor or DEFAULTS.mythicPlusTimerFontColor, red, green, blue, alpha)
     self:RefreshModuleAppearance()
 end
 
@@ -686,7 +732,9 @@ function Options:GetMythicPlusTimerBarTexture()
 end
 
 function Options:SetMythicPlusTimerBarTexture(info, value)
-    self:GetDB().mythicPlusTimerBarTexture = value or self:GetTrackerBarTexture()
+    local db = self:GetDB()
+    db.mythicPlusTimerBarTexture = value or self:GetTrackerBarTexture()
+    db._timerBarTextureExplicitlySet = true
     self:RefreshModuleAppearance()
 end
 
@@ -714,7 +762,8 @@ function Options:GetMythicPlusTimerBarColor()
 end
 
 function Options:SetMythicPlusTimerBarColor(info, red, green, blue, alpha)
-    self:GetDB().mythicPlusTimerBarColor = NormalizeColor(self:GetDB().mythicPlusTimerBarColor or DEFAULTS.mythicPlusTimerBarColor, red, green, blue, alpha)
+    self:GetDB().mythicPlusTimerBarColor = NormalizeColor(
+    self:GetDB().mythicPlusTimerBarColor or DEFAULTS.mythicPlusTimerBarColor, red, green, blue, alpha)
     self:RefreshModuleAppearance()
 end
 
@@ -823,7 +872,8 @@ function Options:GetMythicPlusTimerNotificationDisplayTime()
 end
 
 function Options:SetMythicPlusTimerNotificationDisplayTime(info, value)
-    self:GetDB().mythicPlusTimerNotificationDisplayTime = tonumber(value) or DEFAULTS.mythicPlusTimerNotificationDisplayTime
+    self:GetDB().mythicPlusTimerNotificationDisplayTime = tonumber(value) or
+    DEFAULTS.mythicPlusTimerNotificationDisplayTime
 end
 
 function Options:GetInterruptTrackerLocked()
@@ -867,17 +917,19 @@ end
 
 function Options:ResetMythicPlusTimerAppearance()
     local db = self:GetDB()
-    db.mythicPlusTimerFont = nil
-    db.mythicPlusTimerFontSize = nil
-    db.mythicPlusTimerFontOutline = nil
-    db.mythicPlusTimerFontColor = nil
-    db.mythicPlusTimerShowHeader = nil
-    db.mythicPlusTimerBarTexture = nil
-    db.mythicPlusTimerBarColorMode = nil
-    db.mythicPlusTimerBarColor = nil
-    db.mythicPlusTimerRowGap = nil
-    db.mythicPlusTimerBarHeight = nil
-    db.mythicPlusTimerLayout = nil
+    db.mythicPlusTimerFont                = nil
+    db._timerFontExplicitlySet            = nil
+    db.mythicPlusTimerFontSize            = nil
+    db.mythicPlusTimerFontOutline         = nil
+    db.mythicPlusTimerFontColor           = nil
+    db.mythicPlusTimerShowHeader          = nil
+    db.mythicPlusTimerBarTexture          = nil
+    db._timerBarTextureExplicitlySet      = nil
+    db.mythicPlusTimerBarColorMode        = nil
+    db.mythicPlusTimerBarColor            = nil
+    db.mythicPlusTimerRowGap              = nil
+    db.mythicPlusTimerBarHeight           = nil
+    db.mythicPlusTimerLayout              = nil
     self:RefreshModuleAppearance()
 end
 

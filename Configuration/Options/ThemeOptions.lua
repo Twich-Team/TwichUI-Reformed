@@ -55,6 +55,18 @@ local function BroadcastChange(key)
             pcall(preyOpts.RefreshModule, preyOpts)
         end
     end
+    -- Refresh modules whose font settings fall back to globalFont.
+    if key == "globalFont" or key == nil then
+        local mptOpts = ConfigurationModule.Options.MythicPlusTools
+        if mptOpts and type(mptOpts.RefreshModuleAppearance) == "function" then
+            pcall(mptOpts.RefreshModuleAppearance, mptOpts)
+        end
+        local gatheringModule = T:GetModule("QualityOfLife", true)
+        gatheringModule = gatheringModule and gatheringModule:GetModule("Gathering", true)
+        if gatheringModule and type(gatheringModule.RefreshTrackerFrame) == "function" then
+            pcall(gatheringModule.RefreshTrackerFrame, gatheringModule)
+        end
+    end
 end
 
 -- ─── Color get/set ─────────────────────────────────────────────────────────
@@ -210,20 +222,50 @@ function Options:ResetAllFrameOverrides()
     -- Clear explicit chat color overrides so chat falls back to global theme.
     local chatOpts = ConfigurationModule.Options.ChatEnhancement
     if chatOpts then
-        local db = chatOpts:GetChatEnhancementDB()
-        db.shellAccentColor         = nil ; db._shellAccentExplicitlySet  = nil
-        db.tabAccentColor           = nil ; db._tabAccentExplicitlySet    = nil
-        db.tabBorderColor           = nil ; db._tabBorderExplicitlySet    = nil
-        db.tabBgColor               = nil ; db._tabBgExplicitlySet        = nil
-        db.chatBgColor              = nil ; db._chatBgExplicitlySet       = nil
-        db.chatBorderColor          = nil ; db._chatBorderExplicitlySet   = nil
-        db.chatFont                  = nil ; db._chatFontExplicitlySet     = nil
+        local db                     = chatOpts:GetChatEnhancementDB()
+        db.shellAccentColor          = nil; db._shellAccentExplicitlySet = nil
+        db.tabAccentColor            = nil; db._tabAccentExplicitlySet = nil
+        db.tabBorderColor            = nil; db._tabBorderExplicitlySet = nil
+        db.tabBgColor                = nil; db._tabBgExplicitlySet = nil
+        db.chatBgColor               = nil; db._chatBgExplicitlySet = nil
+        db.chatBorderColor           = nil; db._chatBorderExplicitlySet = nil
+        db.chatFont                  = nil; db._chatFontExplicitlySet = nil
         if type(chatOpts.RefreshChatStylingModule) == "function" then
             chatOpts:RefreshChatStylingModule()
         end
     end
     -- Re-broadcast to all other frame modules (Chat, RaidFrames, etc.)
     BroadcastChange(nil)
+    -- Clear MythicPlusTools bar texture and font overrides so they fall back
+    -- to the global statusBarTexture and globalFont settings.
+    local mptOpts = ConfigurationModule.Options.MythicPlusTools
+    if mptOpts then
+        local mptDB = mptOpts:GetDB()
+        mptDB.trackerFont                    = nil; mptDB._trackerFontExplicitlySet         = nil
+        mptDB.statusTextFont                 = nil; mptDB._statusTextFontExplicitlySet      = nil
+        mptDB.readyTextFont                  = nil; mptDB._readyTextFontExplicitlySet        = nil
+        mptDB.trackerBarTexture              = nil; mptDB._trackerBarTextureExplicitlySet    = nil
+        if type(mptOpts.ResetMythicPlusTimerAppearance) == "function" then
+            mptOpts:ResetMythicPlusTimerAppearance()
+        else
+            mptOpts:RefreshModuleAppearance()
+        end
+        -- ResetMythicPlusTimerAppearance already calls RefreshModuleAppearance.
+        -- Also refresh for the tracker-level resets above.
+        if type(mptOpts.RefreshModuleAppearance) == "function" then
+            pcall(mptOpts.RefreshModuleAppearance, mptOpts)
+        end
+    end
+    -- Clear Gathering tracker font override so it falls back to globalFont.
+    local gatheringOpts = ConfigurationModule.Options.Gathering
+    if gatheringOpts then
+        gatheringOpts:GetDB().trackerFont = nil
+        local gatheringModule = T:GetModule("QualityOfLife", true)
+        gatheringModule = gatheringModule and gatheringModule:GetModule("Gathering", true)
+        if gatheringModule and type(gatheringModule.RefreshTrackerFrame) == "function" then
+            pcall(gatheringModule.RefreshTrackerFrame, gatheringModule)
+        end
+    end
 end
 
 -- ─── Section builder ───────────────────────────────────────────────────────
@@ -232,12 +274,12 @@ function Options:BuildConfiguration()
     local W = ConfigurationModule.Widgets
     local tab = W.NewConfigurationSection(25, "Theme")
     tab.args = {
-        title       = W.TitleWidget(0, "Appearance"),
-        description = W.Description(1,
+        title           = W.TitleWidget(0, "Appearance"),
+        description     = W.Description(1,
             "Define a shared visual identity across TwichUI. The palette drives accent colors, " ..
             "surfaces, and borders for Data Panels, Chat, Unit Frames, and more."),
 
-        palette     = W.IGroup(10, "Color Palette", {
+        palette         = W.IGroup(10, "Color Palette", {
             primaryColor = {
                 type = "color",
                 name = "Primary Color",
@@ -324,7 +366,8 @@ function Options:BuildConfiguration()
             statusBarTexture = {
                 type = "select",
                 name = "Status Bar Texture",
-                desc = "Default bar texture used by all status bars and timer bars across TwichUI frames. Individual frames can override this in their own settings.",
+                desc =
+                "Default bar texture used by all status bars and timer bars across TwichUI frames. Individual frames can override this in their own settings.",
                 order = 1,
                 dialogControl = "LSM30_Statusbar",
                 values = function()
@@ -338,7 +381,8 @@ function Options:BuildConfiguration()
             classIconStyle = {
                 type = "select",
                 name = "Class Icon Style",
-                desc = "Default style for class icons in chat, notifications, and tracking frames. Individual modules can override this in their own settings.",
+                desc =
+                "Default style for class icons in chat, notifications, and tracking frames. Individual modules can override this in their own settings.",
                 order = 2,
                 values = function()
                     local Textures = T.Tools and T.Tools.Textures
@@ -351,8 +395,8 @@ function Options:BuildConfiguration()
                     end
                     return {
                         default = IconLabel("default", "Default"),
-                        fabled  = IconLabel("fabled",  "Fabled"),
-                        pixel   = IconLabel("pixel",   "Pixel"),
+                        fabled  = IconLabel("fabled", "Fabled"),
+                        pixel   = IconLabel("pixel", "Pixel"),
                     }
                 end,
                 sorting = { "default", "fabled", "pixel" },
@@ -363,7 +407,8 @@ function Options:BuildConfiguration()
             globalFont = {
                 type = "select",
                 name = "Global Font",
-                desc = "Default font used across TwichUI data panels and frames. Individual frames can override this in their own settings. Choose \"Default\" to use the WoW system font.",
+                desc =
+                "Default font used across TwichUI data panels and frames. Individual frames can override this in their own settings. Choose \"Default\" to use the WoW system font.",
                 order = 3,
                 dialogControl = "LSM30_Font",
                 values = function()
@@ -378,11 +423,12 @@ function Options:BuildConfiguration()
             },
         }),
 
-        sounds      = W.IGroup(40, "Config Sounds", {
+        sounds          = W.IGroup(40, "Config Sounds", {
             soundVolume = {
                 type = "range",
                 name = "TwichUI Sound Volume",
-                desc = "Controls TwichUI sound effects. Set to 0 to mute all TwichUI sounds.\n\nNote: WoW does not support per-addon volume gain — any value above 0 plays at native volume.",
+                desc =
+                "Controls TwichUI sound effects. Set to 0 to mute all TwichUI sounds.\n\nNote: WoW does not support per-addon volume gain — any value above 0 plays at native volume.",
                 order = 0,
                 min = 0,
                 max = 100,
@@ -420,7 +466,7 @@ function Options:BuildConfiguration()
             },
         }),
 
-        resetGroup  = W.IGroup(50, "Reset", {
+        resetGroup      = W.IGroup(50, "Reset", {
             resetPalette = {
                 type = "execute",
                 name = "Reset to Defaults",
@@ -445,7 +491,8 @@ function Options:BuildConfiguration()
             revertOverrides = {
                 type = "execute",
                 name = "Revert Frame Overrides",
-                desc = "Clears all individual frame style overrides so every frame falls back to the global Appearance defaults above.",
+                desc =
+                "Clears all individual frame style overrides so every frame falls back to the global Appearance defaults above.",
                 order = 2,
                 func = function()
                     Options:ResetAllFrameOverrides()

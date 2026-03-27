@@ -135,7 +135,7 @@ local function GetThemeBasedDefaults()
         base.hoverGlowColor  = base.accentColor
         base.hoverBarColor   = base.accentColor
         -- Use the global font when one is set
-        local gf = theme:Get("globalFont")
+        local gf             = theme:Get("globalFont")
         if gf and gf ~= "__default" then
             base.font = gf
         end
