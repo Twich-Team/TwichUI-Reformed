@@ -1,10 +1,10 @@
 ## Title: Twich|cff19c9c7UI|r: Reformed
-## Notes: Handcrafted ElvUI tweaks and features.
+## Notes: Full interface replacement suite designed for Mythic+ and Raiding.
 ## Author: Twich
 ## Version: 0.01-ALPHA
 ## SavedVariables: TwichDB
 ## RequiredDeps: ElvUI
-## Interface: 120000
+## Interface: 120001
 ## Group: Twich
 ## IconTexture: Interface\AddOns\TwichUI_Reformed\Media\Textures\logo.tga
 ## AddonCompartmentFunc: TwichUIRx_AddonCompartmentFunc
