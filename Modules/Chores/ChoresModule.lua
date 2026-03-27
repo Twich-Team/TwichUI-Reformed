@@ -52,7 +52,7 @@ local EXPANSION_WAR_WITHIN = 10
 local EXPANSION_MIDNIGHT = 11
 local PREY_TARGETS_PER_DIFFICULTY = 4
 local PREY_ICON =
-"Interface\\AddOns\\TwichUI_Redux\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
+"Interface\\AddOns\\TwichUI_Reformed\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
 local ASTALOR_PREY_MAP_ID = 2393
 local ASTALOR_PREY_X = 0.55
 local ASTALOR_PREY_Y = 0.634

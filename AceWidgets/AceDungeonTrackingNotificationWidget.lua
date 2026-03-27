@@ -22,8 +22,8 @@ local KEYSTONE_ITEM_ID = 180653
 local FALLBACK_KEYSTONE_TEXTURE = "Interface\\Icons\\INV_Misc_ShadowEgg"
 local FALLBACK_DUNGEON_TEXTURE = "Interface\\EncounterJournal\\UI-EJ-PortraitIcon-Dungeon"
 local FALLBACK_RAID_TEXTURE = "Interface\\EncounterJournal\\UI-EJ-PortraitIcon-Raid"
-local HEALER_BADGE_TEXTURE = "Interface\\AddOns\\TwichUI_Redux\\Media\\Textures\\Healer.tga"
-local TANK_BADGE_TEXTURE = "Interface\\AddOns\\TwichUI_Redux\\Media\\Textures\\Tank.tga"
+local HEALER_BADGE_TEXTURE = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Healer.tga"
+local TANK_BADGE_TEXTURE = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Tank.tga"
 
 local ICON_ATLASES = {
     dungeon = {

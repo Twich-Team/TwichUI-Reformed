@@ -1,7 +1,7 @@
 --[[
     Provides various text-based utilities used throughout the addon
 ]]
----@type TwichUI_Redux
+---@type TwichUI_Reformed
 local TwichRx = _G.TwichRx
 local T, W, I, C = unpack(TwichRx)
 

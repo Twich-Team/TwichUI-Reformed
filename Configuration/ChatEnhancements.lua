@@ -162,7 +162,7 @@ local function BuildChatEnhancementConfiguration()
                         enableStyling = {
                             type = "toggle",
                             name = "Enable Styling",
-                            desc = "Apply TwichUI formatting to Blizzard chat frames.",
+                            desc = "Apply addon formatting to Blizzard chat frames.",
                             order = 1,
                             width = "half",
                             handler = Options,
@@ -299,7 +299,7 @@ local function BuildChatEnhancementConfiguration()
                             type = "select",
                             dialogControl = "LSM30_Font",
                             name = "Tab Font",
-                            desc = "Font used for the bespoke TwichUI tab bar.",
+                            desc = "Font used for the custom chat tab bar.",
                             order = 3,
                             width = "half",
                             handler = Options,
@@ -310,7 +310,7 @@ local function BuildChatEnhancementConfiguration()
                         tabFontSize = {
                             type = "range",
                             name = "Tab Font Size",
-                            desc = "Font size used for the bespoke TwichUI tab bar.",
+                            desc = "Font size used for the custom chat tab bar.",
                             order = 4,
                             width = "half",
                             min = 10,
@@ -722,7 +722,7 @@ local function BuildChatEnhancementConfiguration()
                 enableDebug = {
                     type = "toggle",
                     name = "Enable Debug Capture",
-                    desc = "Record chat tab, layout, drag, and scroll diagnostics in the shared TwichUI debug console.",
+                    desc = "Record chat tab, layout, drag, and scroll diagnostics in the shared debug console.",
                     order = 2,
                     width = "half",
                     disabled = function()
@@ -735,7 +735,7 @@ local function BuildChatEnhancementConfiguration()
                 openDebug = {
                     type = "execute",
                     name = "Open Debug Console",
-                    desc = "Open the shared TwichUI debug console focused on chat.",
+                    desc = "Open the shared debug console focused on chat.",
                     order = 3,
                     width = "half",
                     handler = Options,
@@ -838,7 +838,7 @@ local function BuildChatEnhancementConfiguration()
                         help = {
                             type = "description",
                             name = T.Tools.Text.Color(T.Tools.Colors.GRAY,
-                                "Leave a field empty to fall back to TwichUI's default abbreviation."),
+                                "Leave a field empty to fall back to the default abbreviation."),
                             order = 2,
                             width = "full",
                         },

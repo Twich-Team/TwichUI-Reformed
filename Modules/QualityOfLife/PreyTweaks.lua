@@ -78,7 +78,7 @@ local DIFFICULTY_PATTERNS = {
 }
 local RANDOM_PATTERNS = { "random" }
 local RADIAL_RING_TEXTURE =
-"Interface\\AddOns\\TwichUI_Redux\\AddOnReferences\\Preybreaker\\Media\\Assets\\ProgressBar-Radial-WarWithin"
+"Interface\\AddOns\\TwichUI_Reformed\\AddOnReferences\\Preybreaker\\Media\\Assets\\ProgressBar-Radial-WarWithin"
 local RING_BORDER_TEX_COORD = { 0, 80 / 256, 80 / 256, 160 / 256 }
 local RING_SWIPE_TEX_COORD = { 80 / 256, 160 / 256, 80 / 256, 160 / 256 }
 

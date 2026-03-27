@@ -228,8 +228,13 @@ local PAGE_NAME_OVERRIDES = {
         teleportsTab = "Teleports",
     },
     ["Notification Panel"] = {
-        displayGroup = "Display Panel",
-        additionalNotificationsGroup = "Feature Notifications",
+        displayGroup = "Display",
+        friends      = "Friends",
+        mythicPlus   = "Mythic+",
+        scheduled    = "Scheduled",
+        content      = "Content",
+        gathering    = "Gathering",
+        bestInSlot   = "Best In Slot",
     },
     raidFrames = {
         dispellableDebuffsTab = "Dispellable Glow",
@@ -1347,7 +1352,7 @@ function UI:EnsureFrame()
     frame.HeroTitle = frame.Hero:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     frame.HeroTitle:SetPoint("TOPLEFT", frame.Hero, "TOPLEFT", 18, -16)
     frame.HeroTitle:SetTextColor(1, 0.95, 0.82)
-    frame.HeroTitle:SetText("A cleaner home for every TwichUI setting.")
+    frame.HeroTitle:SetText("A cleaner home for every setting.")
 
     frame.HeroText = frame.Hero:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.HeroText:SetPoint("TOPLEFT", frame.HeroTitle, "BOTTOMLEFT", 0, -10)
@@ -1371,9 +1376,9 @@ function UI:EnsureFrame()
     frame.OptionsHost:SetAllPoints(frame.Body)
     frame.OptionsHost:Hide()
 
-    frame.PreviewHost = CreatePanel(frame.OptionsHost, 0.055, 0.055, 0.08, 0.985, 0.16)
-    frame.PreviewHost:SetPoint("TOPRIGHT", frame.OptionsHost, "TOPRIGHT", -10, -10)
-    frame.PreviewHost:SetPoint("BOTTOMRIGHT", frame.OptionsHost, "BOTTOMRIGHT", -10, 10)
+    frame.PreviewHost = CreatePanel(frame, 0.055, 0.055, 0.08, 0.985, 0.16)
+    frame.PreviewHost:SetPoint("TOPLEFT", frame, "TOPRIGHT", 8, -6)
+    frame.PreviewHost:SetPoint("BOTTOMLEFT", frame, "BOTTOMRIGHT", 8, 6)
     frame.PreviewHost:SetWidth(PREVIEW_WIDTH)
     frame.PreviewHost:Hide()
 
@@ -1652,15 +1657,14 @@ function UI:ConfigureOptionsLayout(path)
     frame.OptionsScrollFrame:ClearAllPoints()
     frame.OptionsScrollFrame:SetPoint("TOPLEFT", frame.OptionsHost, "TOPLEFT", 10, -10)
     frame.OptionsScrollFrame:SetPoint("BOTTOMLEFT", frame.OptionsHost, "BOTTOMLEFT", 10, 10)
+    frame.OptionsScrollFrame:SetPoint("RIGHT", frame.OptionsHost, "RIGHT", -26, 0)
 
     if previewType then
         local accent = self.currentAccent or { 0.98, 0.76, 0.22 }
         frame.PreviewAccent:SetColorTexture(accent[1], accent[2], accent[3], 1)
         frame.PreviewHost:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.2)
-        frame.OptionsScrollFrame:SetPoint("RIGHT", frame.PreviewHost, "LEFT", -14, 0)
         frame.PreviewHost:Show()
     else
-        frame.OptionsScrollFrame:SetPoint("RIGHT", frame.OptionsHost, "RIGHT", -26, 0)
         frame.PreviewHost:Hide()
     end
 
@@ -1694,7 +1698,7 @@ function UI:RenderStickyPreview(path)
         },
         notifications = {
             title = "Notification Preview",
-            subtitle = "A fixed mock of the TwichUI toast stack that stays in view while you edit the panel.",
+            subtitle = "A fixed mock of the toast stack that stays in view while you edit the panel.",
         },
         raid = {
             title = "Raid Preview",

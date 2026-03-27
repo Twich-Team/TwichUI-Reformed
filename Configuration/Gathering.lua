@@ -36,12 +36,12 @@ local function BuildGatheringTab()
 
             debugGroup        = W.IGroup(5, "Debugging", {
                 desc = W.Description(1,
-                    "Capture optional Gathering debug output in the shared /tui debug console. Leave this disabled during normal play to avoid extra logging work."),
+                    "Capture optional Gathering debug output in the shared debug console. Leave this disabled during normal play to avoid extra logging work."),
 
                 enableDebug = {
                     type     = "toggle",
                     name     = "Enable Debug Capture",
-                    desc     = "Record Gathering HUD and session debug lines into the shared TwichUI debug console.",
+                    desc     = "Record Gathering HUD and session debug lines into the shared debug console.",
                     order    = 2,
                     width    = 1.75,
                     disabled = function() return not GatheringOptions:GetEnabled() end,
@@ -53,7 +53,7 @@ local function BuildGatheringTab()
                 openDebug = {
                     type    = "execute",
                     name    = "Open Debug Console",
-                    desc    = "Open the shared TwichUI debug console focused on Gathering.",
+                    desc    = "Open the debug console focused on Gathering.",
                     order   = 3,
                     handler = GatheringOptions,
                     func    = "OpenDebugConsole",
@@ -137,79 +137,6 @@ local function BuildGatheringTab()
                     handler   = GatheringOptions,
                     get       = "GetHudTerrainAlpha",
                     set       = "SetHudTerrainAlpha",
-                },
-            }),
-
-            -- ===== Notifications =====
-            notificationGroup = W.IGroup(20, "Loot Notifications", {
-                desc = W.Description(1,
-                    "Notifications are sent through the TwichUI notification panel when items are gathered during an active session."),
-
-                duration = {
-                    type     = "range",
-                    name     = "Display Duration",
-                    desc     = "Seconds a gathering notification stays on screen.",
-                    order    = 2,
-                    min      = 2,
-                    max      = 30,
-                    step     = 1,
-                    width    = 1.5,
-                    disabled = function() return not GatheringOptions:GetEnabled() end,
-                    handler  = GatheringOptions,
-                    get      = "GetNotificationDuration",
-                    set      = "SetNotificationDuration",
-                },
-
-                sound = {
-                    type          = "select",
-                    dialogControl = "LSM30_Sound",
-                    name          = "Notification Sound",
-                    desc          = "Sound played when a gathering notification appears. Set to None to disable.",
-                    order         = 3,
-                    width         = 2,
-                    disabled      = function() return not GatheringOptions:GetEnabled() end,
-                    values        = function()
-                        local LSM = T.Libs and T.Libs.LSM or LibStub("LibSharedMedia-3.0", true)
-                        local t = LSM and LSM:HashTable("sound") or {}
-                        t["__none"] = "None"
-                        return t
-                    end,
-                    handler       = GatheringOptions,
-                    get           = "GetNotificationSound",
-                    set           = "SetNotificationSound",
-                },
-
-                highValueThreshold = {
-                    type     = "input",
-                    name     = "High Value Threshold (Gold)",
-                    desc     =
-                    "Send a high value gather notification when a single loot batch meets or exceeds this total value. Set to 0 to disable.",
-                    order    = 4,
-                    width    = 1.5,
-                    disabled = function() return not GatheringOptions:GetEnabled() end,
-                    handler  = GatheringOptions,
-                    get      = "GetHighValueThresholdGold",
-                    set      = "SetHighValueThresholdGold",
-                },
-
-                highValueSound = {
-                    type          = "select",
-                    dialogControl = "LSM30_Sound",
-                    name          = "High Value Sound",
-                    desc          =
-                    "Optional separate sound for high value gather notifications. Set to None to reuse the normal notification sound.",
-                    order         = 5,
-                    width         = 2,
-                    disabled      = function() return not GatheringOptions:GetEnabled() end,
-                    values        = function()
-                        local LSM = T.Libs and T.Libs.LSM or LibStub("LibSharedMedia-3.0", true)
-                        local t = LSM and LSM:HashTable("sound") or {}
-                        t["__none"] = "None"
-                        return t
-                    end,
-                    handler       = GatheringOptions,
-                    get           = "GetHighValueSound",
-                    set           = "SetHighValueSound",
                 },
             }),
 

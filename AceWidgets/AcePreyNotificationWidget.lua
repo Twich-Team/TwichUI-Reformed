@@ -14,7 +14,7 @@ local BUTTON_WIDTH = 124
 local BUTTON_SPACING = 10
 local ICON_SIZE = 36
 local TEXT_LEFT_OFFSET = 58
-local FALLBACK_ICON_TEXTURE = "Interface\\AddOns\\TwichUI_Redux\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
+local FALLBACK_ICON_TEXTURE = "Interface\\AddOns\\TwichUI_Reformed\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
 
 local function HideActionTooltip()
     if GameTooltip and GameTooltip.Hide then

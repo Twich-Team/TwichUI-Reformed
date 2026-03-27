@@ -39,7 +39,7 @@ local SWOptions = ConfigurationModule.Options.SatchelWatch
 ---@type ChoresConfigurationOptions
 local ChoresOptions = ConfigurationModule.Options.Chores
 local PreyIcon =
-"Interface\\AddOns\\TwichUI_Redux\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
+"Interface\\AddOns\\TwichUI_Reformed\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
 
 ---@type EasyFishConfigurationOptions
 local EasyFishOptions = ConfigurationModule.Options.EasyFish

@@ -25,7 +25,7 @@ local IsShiftKeyDown = _G.IsShiftKeyDown
 local UIParent = _G.UIParent
 local CreateVector2D = _G.CreateVector2D
 local PREY_ICON =
-"Interface\\AddOns\\TwichUI_Redux\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
+"Interface\\AddOns\\TwichUI_Reformed\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
 
 ---@class ChoresDataText : AceModule, AceEvent-3.0
 ---@field definition DatatextDefinition

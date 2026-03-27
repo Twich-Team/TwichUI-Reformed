@@ -20,8 +20,8 @@ local TEXTURE_STYLES = {
 }
 
 local TEXTURE_PATHS = {
-    [TEXTURE_STYLES.FABLED] = "Interface\\AddOns\\TwichUI_Redux\\Media\\Textures\\fabled.tga",
-    [TEXTURE_STYLES.PIXEL] = "Interface\\AddOns\\TwichUI_Redux\\Media\\Textures\\fabledpixelsv2.tga",
+    [TEXTURE_STYLES.FABLED] = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\fabled.tga",
+    [TEXTURE_STYLES.PIXEL] = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\fabledpixelsv2.tga",
 }
 
 Textures.Styles = TEXTURE_STYLES

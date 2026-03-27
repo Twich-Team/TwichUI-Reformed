@@ -11,7 +11,7 @@ local MediaModule = T:GetModule("Media")
 local MediaLoader = MediaModule.Loader or {}
 MediaModule.Loader = MediaLoader
 
-MediaLoader.MediaRoot = "Interface\\AddOns\\TwichUI_Redux\\Media"
+MediaLoader.MediaRoot = "Interface\\AddOns\\TwichUI_Reformed\\Media"
 MediaLoader.FontPath = "Fonts"
 MediaLoader.TexturePath = "Textures"
 MediaLoader.SoundPath = "Sounds"

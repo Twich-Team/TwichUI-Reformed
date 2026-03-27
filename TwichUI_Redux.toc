@@ -1,4 +1,4 @@
-## Title: Twich|cff19c9c7UI|r: Redux
+## Title: Twich|cff19c9c7UI|r: Reformed
 ## Notes: Handcrafted ElvUI tweaks and features.
 ## Author: Twich
 ## Version: 0.01-ALPHA
@@ -6,7 +6,7 @@
 ## RequiredDeps: ElvUI
 ## Interface: 120000
 ## Group: Twich
-## IconTexture: Interface\AddOns\TwichUI_Redux\Media\Textures\logo.tga
+## IconTexture: Interface\AddOns\TwichUI_Reformed\Media\Textures\logo.tga
 ## AddonCompartmentFunc: TwichUIRx_AddonCompartmentFunc
 ## RequiredDeps: ElvUI
 !load.xml
