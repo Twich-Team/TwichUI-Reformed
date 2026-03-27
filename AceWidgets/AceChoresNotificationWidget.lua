@@ -128,8 +128,8 @@ local function Constructor()
     actionButton:SetText("Set Waypoint")
     actionButton:Hide()
 
-    if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
-        T.Tools.UI.SkinButton(actionButton)
+    if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichButton then
+        T.Tools.UI.SkinTwichButton(actionButton)
     end
 
     local lines = {}

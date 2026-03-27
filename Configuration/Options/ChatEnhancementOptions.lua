@@ -372,23 +372,6 @@ function Options:GetResolvedChannelColors()
     return resolved
 end
 
-function Options:IsControlButtonEnabled(key)
-    local db = self:GetChatEnhancementDB()
-    db.controlButtons = db.controlButtons or {}
-    if db.controlButtons[key] == nil then
-        return true
-    end
-
-    return db.controlButtons[key]
-end
-
-function Options:SetControlButtonEnabled(key, value)
-    local db = self:GetChatEnhancementDB()
-    db.controlButtons = db.controlButtons or {}
-    db.controlButtons[key] = value
-    self:RefreshChatStylingModule()
-end
-
 function Options:IsAddonRedirectEnabled()
     local db = self:GetChatEnhancementDB()
     if db.addonRedirectEnabled == nil then

@@ -3149,11 +3149,11 @@ function UI:RenderColor(parent, y, width, option, path, key)
             r = red,
             g = green,
             b = blue,
-            opacity = 1 - alpha,
+            opacity = alpha,
             hasOpacity = option.hasAlpha == true,
             swatchFunc = function()
                 local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-                local na = option.hasAlpha == true and (1 - ColorPickerFrame:GetColorAlpha()) or 1
+                local na = option.hasAlpha == true and ColorPickerFrame:GetColorAlpha() or 1
                 ResolveOptionMethod(option, info, nr, ng, nb, na)
                 self:RequestRenderCurrentPage()
             end,

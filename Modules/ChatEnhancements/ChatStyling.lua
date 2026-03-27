@@ -574,11 +574,6 @@ function ChatStylingModule:RefreshSettings()
         chatFont = options:GetChatFont(),
         chatFontSize = options:GetChatFontSize(),
         channelColors = options:GetResolvedChannelColors(),
-        controlButtons = {
-            copy = options:IsControlButtonEnabled("copy"),
-            menu = options:IsControlButtonEnabled("menu"),
-            voice = options:IsControlButtonEnabled("voice"),
-        },
         editBoxBgColor = options:GetResolvedEditBoxBgColor(),
         editBoxFont = options:GetEditBoxFont(),
         editBoxFontSize = options:GetEditBoxFontSize(),
@@ -1542,13 +1537,6 @@ function ChatStylingModule:EnsureFrameChrome(frame)
         ChatStylingModule:LogDebugf(false, "drag stop frame=%s", tostring(frame:GetName()))
         ChatStylingModule:ForwardDragStop(frame)
     end)
-    chrome.DragHandle:HookScript("OnEnter", function()
-        ChatStylingModule:UpdateControlStripVisibility(frame, true)
-    end)
-    chrome.DragHandle:HookScript("OnLeave", function()
-        ChatStylingModule:UpdateControlStripVisibility(frame, false)
-    end)
-
     -- Secondary drag zone: the left accent bar (full height). Gives user a clear affordance.
     chrome.AccentDragHandle = CreateFrame("Frame", nil, frame)
     chrome.AccentDragHandle:SetPoint("TOPLEFT", frame, "TOPLEFT", -8, 8)
@@ -2507,32 +2495,6 @@ function ChatStylingModule:RefreshProxyTabBar(frame)
     SetAnimatedVisibility(bar, true, self.settings.animationsEnabled)
 end
 
-function ChatStylingModule:UpdateControlStripVisibility(frame, forceVisible)
-    local strip = frame and frame.TwichUIControlStrip or nil
-    if not strip then
-        return
-    end
-
-    if not self:IsEnabled() then
-        strip:Hide()
-        return
-    end
-
-    -- The custom renderer covers the entire chat frame with EnableMouse(true), so the
-    -- frame's own OnEnter never fires. Use IsMouseOver() position checks for robustness.
-    -- Also include the DragHandle: it sits just above the renderer bounds and physically
-    -- overlaps the top of the control strip, so hovering there should keep the strip up.
-    local renderer = frame.TwichUICustomRenderer
-    local dragHandle = frame.TwichUIChrome and frame.TwichUIChrome.DragHandle or nil
-    local shouldShow = forceVisible
-        or frame:IsMouseOver()
-        or strip:IsMouseOver()
-        or (renderer and renderer:IsMouseOver())
-        or (renderer and renderer.Viewport and renderer.Viewport:IsMouseOver())
-        or (dragHandle and dragHandle:IsMouseOver())
-    SetAnimatedVisibility(strip, shouldShow, self.settings.animationsEnabled)
-end
-
 function ChatStylingModule:EnsureTabChrome(tabOrFrame)
     local tab = ResolveTab(tabOrFrame)
     if not tab or tab.TwichUITabSuppressed then
@@ -2607,133 +2569,6 @@ function ChatStylingModule:ApplyTabChrome(tabOrFrame)
     if frame then
         self:RefreshProxyTabBar(frame)
     end
-end
-
-function ChatStylingModule:EnsureControlStrip(frame)
-    if not frame or frame.TwichUIControlStrip or frame.isCombatLog then
-        return
-    end
-
-    local strip = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    frame.TwichUIControlStrip = strip
-    strip:SetPoint("BOTTOMRIGHT", frame.TwichUIChrome or frame, "TOPRIGHT", -12, -28)
-    strip:SetHeight(24)
-    strip:SetFrameStrata("TOOLTIP")
-    -- Must be above the DragHandle (frame:GetFrameLevel() + 120) so strip buttons are
-    -- always clickable even in the zone where the handle and strip overlap.
-    strip:SetFrameLevel(math.max(frame:GetFrameLevel() + 125, 135))
-    strip:EnableMouse(true)
-    strip:SetAlpha(1)
-    strip.buttons = {}
-    CreateBackdrop(strip)
-    strip:SetBackdropColor(0.03, 0.05, 0.07, 0.92)
-    strip:SetBackdropBorderColor(PRIMARY_BORDER[1], PRIMARY_BORDER[2], PRIMARY_BORDER[3], 0.16)
-
-    strip.Fill = strip:CreateTexture(nil, "BACKGROUND")
-    strip.Fill:SetAllPoints(strip)
-    SetVerticalGradient(strip.Fill, 0.05, 0.07, 0.10, 0.94, 0.02, 0.03, 0.05, 0.94)
-
-    local function CreateProxyButton(parent, text, color, onClick)
-        local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
-        button:SetHeight(20)
-        button:SetText(text)
-        button:SetNormalFontObject("GameFontHighlightSmall")
-        button:SetFrameStrata("TOOLTIP")
-        button:SetFrameLevel(parent:GetFrameLevel() + 2)
-
-        if button.GetFontString then
-            local fontString = button:GetFontString()
-            ApplyResolvedFont(fontString, ChatStylingModule.settings.tabFont,
-                max(10, (ChatStylingModule.settings.tabFontSize or 12) - 2),
-                TEXT_ACTIVE[1], TEXT_ACTIVE[2], TEXT_ACTIVE[3], "")
-        end
-
-        T.Tools.UI.SkinTwichButton(button, color)
-        button:SetScript("OnClick", onClick)
-        return button
-    end
-
-    strip.buttons.voice = CreateProxyButton(strip, "VOICE", { 0.26, 0.84, 0.98 }, function()
-        PlayMenuSound("TwichUI-Menu-Confirm")
-        ChatStylingModule:ToggleVoiceChat()
-    end)
-
-    strip.buttons.copy = CreateProxyButton(strip, "COPY", { 0.42, 0.89, 0.63 }, function()
-        PlayMenuSound("TwichUI-Menu-Confirm")
-        ChatStylingModule:OpenCopyFrame(frame)
-    end)
-
-    -- Context-menu button: right-click on hover strip opens the utility menu.
-    strip.buttons.menu = CreateProxyButton(strip, "MENU", { 0.98, 0.76, 0.24 }, function()
-        PlayMenuSound("TwichUI-Menu-Click")
-        ChatStylingModule:OpenFrameUtilityMenu(frame, strip.buttons.menu)
-    end)
-
-    frame:HookScript("OnEnter", function(selfFrame)
-        ChatStylingModule:RefreshControlStrip(selfFrame)
-        ChatStylingModule:UpdateControlStripVisibility(selfFrame, true)
-    end)
-
-    frame:HookScript("OnLeave", function(selfFrame)
-        ChatStylingModule:UpdateControlStripVisibility(selfFrame, false)
-    end)
-
-    strip:HookScript("OnEnter", function()
-        ChatStylingModule:UpdateControlStripVisibility(frame, true)
-    end)
-    strip:HookScript("OnLeave", function(selfStrip)
-        ChatStylingModule:UpdateControlStripVisibility(frame, false)
-    end)
-end
-
-function ChatStylingModule:RefreshControlStrip(frame)
-    local strip = frame and frame.TwichUIControlStrip or nil
-    if not strip then
-        return
-    end
-
-    if not self:IsEnabled() then
-        strip:Hide()
-        return
-    end
-
-    local visibleButtons = {}
-
-    if self.settings.controlButtons.voice then
-        visibleButtons[#visibleButtons + 1] = strip.buttons.voice
-    end
-    if self.settings.controlButtons.copy then
-        visibleButtons[#visibleButtons + 1] = strip.buttons.copy
-    end
-    if self.settings.controlButtons.menu then
-        visibleButtons[#visibleButtons + 1] = strip.buttons.menu
-    end
-
-    for _, button in pairs(strip.buttons or {}) do
-        button:Hide()
-    end
-
-    local width = 0
-    local previous = nil
-    for _, button in ipairs(visibleButtons) do
-        if button then
-            local label = button.GetText and button:GetText() or ""
-            local buttonWidth = max(42, 16 + (#label * 7))
-            button:SetWidth(buttonWidth)
-            button:ClearAllPoints()
-            if previous then
-                button:SetPoint("LEFT", previous, "RIGHT", 4, 0)
-            else
-                button:SetPoint("LEFT", strip, "LEFT", 2, 0)
-            end
-            previous = button
-            width = width + buttonWidth + 4
-            button:Show()
-        end
-    end
-
-    strip:SetWidth(max(0, width))
-    self:UpdateControlStripVisibility(frame, false)
 end
 
 function ChatStylingModule:ApplyDefaultButtonSuppression()
@@ -2845,11 +2680,6 @@ function ChatStylingModule:HookChatFrame(frame)
         self:RefreshProxyTabBar(frame)
     end
 
-    if not frame.isCombatLog then
-        self:EnsureControlStrip(frame)
-        self:RefreshControlStrip(frame)
-    end
-
     if frame == DEFAULT_CHAT_FRAME then
         self:EnsureEditBoxChrome()
         self:ApplyEditBoxChrome()
@@ -2865,9 +2695,6 @@ function ChatStylingModule:HookChatFrame(frame)
         if not selfFrame.isCombatLog then
             ChatStylingModule:RefreshProxyTabBar(selfFrame)
         end
-        if not selfFrame.isCombatLog then
-            ChatStylingModule:RefreshControlStrip(selfFrame)
-        end
         if selfFrame == DEFAULT_CHAT_FRAME then
             ChatStylingModule:ApplyEditBoxChrome()
         end
@@ -2876,7 +2703,6 @@ function ChatStylingModule:HookChatFrame(frame)
     frame:HookScript("OnSizeChanged", function(selfFrame)
         if not selfFrame.isCombatLog then
             ChatStylingModule:RefreshProxyTabBar(selfFrame)
-            ChatStylingModule:RefreshControlStrip(selfFrame)
         end
     end)
 end
@@ -2911,11 +2737,6 @@ function ChatStylingModule:RefreshAllVisuals()
             if not frame.isCombatLog then
                 self:EnsureProxyTabBar(frame)
                 self:RefreshProxyTabBar(frame)
-            end
-
-            if not frame.isCombatLog then
-                self:EnsureControlStrip(frame)
-                self:RefreshControlStrip(frame)
             end
 
             if frame == DEFAULT_CHAT_FRAME then

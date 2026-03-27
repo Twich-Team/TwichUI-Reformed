@@ -161,41 +161,66 @@ function UI.SkinTwichButton(btn, color)
         chrome.InnerGlow:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -1, 1)
     end
 
-    local function updateVisual(self, hovered, pressed)
-        local enabled = self.IsEnabled == nil or self:IsEnabled()
-        local baseAlpha = enabled and 0.98 or 0.72
-        local borderAlpha = enabled and 0.16 or 0.08
-        local accentAlpha = enabled and 0.92 or 0.3
+    -- Per-button animation state (closed over per SkinTwichButton call).
+    local HOVER_SPEED   = 8     -- 0→1 in ~125ms
+    local hoverProgress = 0.0
+    local isPressed     = false
 
-        if hovered then
-            borderAlpha = enabled and 0.36 or borderAlpha
-            accentAlpha = enabled and 1 or accentAlpha
-        end
+    local function lerp(a, b, t) return a + (b - a) * t end
 
-        if pressed then
-            baseAlpha = enabled and 1 or baseAlpha
-            borderAlpha = enabled and 0.5 or borderAlpha
-        end
+    local function applyVisual(selfBtn)
+        local enabled = selfBtn.IsEnabled == nil or selfBtn:IsEnabled()
+        local h  = hoverProgress
+        local fs = selfBtn.GetFontString and selfBtn:GetFontString() or nil
 
-        chrome:SetBackdropColor(r * (pressed and 0.3 or hovered and 0.22 or 0.16),
-            g * (pressed and 0.3 or hovered and 0.22 or 0.16),
-            b * (pressed and 0.3 or hovered and 0.22 or 0.16),
-            baseAlpha)
-        chrome:SetBackdropBorderColor(r, g, b, borderAlpha)
-        chrome.LeftAccent:SetColorTexture(r, g, b, accentAlpha)
-        chrome.InnerGlow:SetColorTexture(r, g, b, hovered and 0.08 or 0.04)
-
-        local fontString = self.GetFontString and self:GetFontString() or nil
-        if fontString then
-            if fontString.SetDrawLayer then
-                fontString:SetDrawLayer("OVERLAY", 7)
+        if not enabled then
+            chrome:SetBackdropColor(r * 0.14, g * 0.14, b * 0.14, 0.70)
+            chrome:SetBackdropBorderColor(r, g, b, 0.08)
+            chrome.LeftAccent:SetColorTexture(r, g, b, 0.28)
+            chrome.InnerGlow:SetColorTexture(r, g, b, 0.02)
+            if fs then
+                if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", 7) end
+                fs:SetTextColor(0.58, 0.6, 0.66)
             end
-            if enabled then
-                fontString:SetTextColor(1, 0.95, 0.84)
+            return
+        end
+
+        if isPressed then
+            chrome:SetBackdropColor(r * 0.3, g * 0.3, b * 0.3, 1.0)
+            chrome:SetBackdropBorderColor(r, g, b, 0.50)
+            chrome.LeftAccent:SetColorTexture(r, g, b, 1.0)
+            chrome.InnerGlow:SetColorTexture(r, g, b, 0.10)
+        else
+            chrome:SetBackdropColor(
+                r * lerp(0.16, 0.22, h),
+                g * lerp(0.16, 0.22, h),
+                b * lerp(0.16, 0.22, h),
+                lerp(0.95, 1.0, h))
+            chrome:SetBackdropBorderColor(r, g, b, lerp(0.16, 0.36, h))
+            chrome.LeftAccent:SetColorTexture(r, g, b, lerp(0.92, 1.0, h))
+            chrome.InnerGlow:SetColorTexture(r, g, b, lerp(0.04, 0.10, h))
+        end
+
+        if fs then
+            if fs.SetDrawLayer then fs:SetDrawLayer("OVERLAY", 7) end
+            fs:SetTextColor(1, 0.95, 0.84)
+        end
+    end
+
+    -- Drive hoverProgress toward `target` each frame, stop when reached.
+    local function animateTo(selfBtn, target)
+        selfBtn:SetScript("OnUpdate", function(self, elapsed)
+            local step = HOVER_SPEED * elapsed
+            if hoverProgress < target then
+                hoverProgress = math.min(hoverProgress + step, target)
             else
-                fontString:SetTextColor(0.58, 0.6, 0.66)
+                hoverProgress = math.max(hoverProgress - step, target)
             end
-        end
+            applyVisual(self)
+            if hoverProgress == target then
+                self:SetScript("OnUpdate", nil)
+            end
+        end)
     end
 
     local regions = { btn:GetRegions() }
@@ -212,27 +237,41 @@ function UI.SkinTwichButton(btn, color)
 
     if not btn.__twichuiButtonSkinned then
         btn:HookScript("OnEnter", function(self)
-            updateVisual(self, true, false)
+            isPressed = false
+            animateTo(self, 1.0)
         end)
         btn:HookScript("OnLeave", function(self)
-            updateVisual(self, false, false)
+            isPressed = false
+            animateTo(self, 0.0)
         end)
         btn:HookScript("OnMouseDown", function(self)
-            updateVisual(self, self.IsMouseOver and self:IsMouseOver() or false, true)
+            isPressed = true
+            self:SetScript("OnUpdate", nil)
+            applyVisual(self)
         end)
         btn:HookScript("OnMouseUp", function(self)
-            updateVisual(self, self.IsMouseOver and self:IsMouseOver() or false, false)
+            isPressed = false
+            local over = self.IsMouseOver and self:IsMouseOver() or false
+            animateTo(self, over and 1.0 or 0.0)
         end)
         btn:HookScript("OnEnable", function(self)
-            updateVisual(self, self.IsMouseOver and self:IsMouseOver() or false, false)
+            isPressed = false
+            hoverProgress = 0.0
+            self:SetScript("OnUpdate", nil)
+            applyVisual(self)
         end)
         btn:HookScript("OnDisable", function(self)
-            updateVisual(self, false, false)
+            isPressed = false
+            hoverProgress = 0.0
+            self:SetScript("OnUpdate", nil)
+            applyVisual(self)
         end)
         btn.__twichuiButtonSkinned = true
     end
 
-    updateVisual(btn, btn.IsMouseOver and btn:IsMouseOver() or false, false)
+    isPressed = false
+    hoverProgress = 0.0
+    applyVisual(btn)
 end
 
 ---@param frame Frame|nil

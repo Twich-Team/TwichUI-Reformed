@@ -243,25 +243,32 @@ function NotificationFrame:Create()
         container.frame:ClearAllPoints()
 
         if dockMode == "top" then
-            -- Span the full width of the first chat frame, growing notifications
-            -- upward from the chat's top edge.
+            -- Anchor to the TwichUI chrome if available — it already accounts for
+            -- tab height (42px above chatFrame when tabs are visible, 8px otherwise).
+            -- This prevents the notification from overlapping the tab row.
             local chatFrame = _G.ChatFrame1
-            if chatFrame then
-                container.frame:SetPoint("BOTTOMLEFT",  chatFrame, "TOPLEFT",  0, 0)
-                container.frame:SetPoint("BOTTOMRIGHT", chatFrame, "TOPRIGHT", 0, 0)
+            local chrome = chatFrame and chatFrame.TwichUIChrome
+            if chrome then
+                container.frame:SetPoint("BOTTOMLEFT",  chrome, "TOPLEFT",  0, 0)
+                container.frame:SetPoint("BOTTOMRIGHT", chrome, "TOPRIGHT", 0, 0)
+            elseif chatFrame then
+                -- Fallback: no chrome, use raw frame top + 8px chrome margin.
+                container.frame:SetPoint("BOTTOMLEFT",  chatFrame, "TOPLEFT",  -8, 8)
+                container.frame:SetPoint("BOTTOMRIGHT", chatFrame, "TOPRIGHT",  8, 8)
             else
-                -- Fallback to anchor if chat frame is unavailable.
                 local anchor = NM.anchor or UIParent
                 container.frame:SetPoint("BOTTOMLEFT",  anchor, "BOTTOMLEFT",  0, 0)
                 container.frame:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
             end
 
         elseif dockMode == "right" then
-            -- Grow notifications upward from the bottom-right corner of the
-            -- first chat frame.  Width is controlled by the configured value.
+            -- Align to the outside of the chat chrome: the chrome extends 8px to the
+            -- right and 8px below ChatFrame1, so offset (8, -8) places the notification
+            -- immediately to the right of the chrome with its bottom aligned to the
+            -- chrome's bottom edge.
             local chatFrame = _G.ChatFrame1
             if chatFrame then
-                container.frame:SetPoint("BOTTOMLEFT", chatFrame, "BOTTOMRIGHT", 0, 0)
+                container.frame:SetPoint("BOTTOMLEFT", chatFrame, "BOTTOMRIGHT", 8, -8)
             else
                 local anchor = NM.anchor or UIParent
                 container.frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", 0, 0)

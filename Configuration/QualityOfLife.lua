@@ -20,9 +20,6 @@ local QLCOptions = ConfigurationModule.Options.QuestLogCleaner
 ---@type GossipHotkeysConfigurationOptions
 local GHCOptions = ConfigurationModule.Options.GossipHotkeys
 
----@type DungeonTrackingConfigurationOptions
-local DTOptions = ConfigurationModule.Options.DungeonTracking
-
 ---@type MythicPlusToolsConfigurationOptions
 local MPTOptions = ConfigurationModule.Options.MythicPlusTools
 
@@ -80,118 +77,6 @@ local function BuildGossipHotkeysTab()
     }
     return tab
 end
-
-local function BuildDungeonTrackingTab()
-    local W = ConfigurationModule.Widgets
-
-    return {
-        type = "group",
-        name = "Dungeon Tracking",
-        order = 2,
-        args = {
-            desc = {
-                type = "description",
-                order = 1,
-                name =
-                "Monitor dungeon runs, track how long they take, and notify you when they finish or end early.",
-            },
-            enable = {
-                type = "toggle",
-                name = "Enable",
-                desc = "Enable dungeon run tracking.",
-                order = 2,
-                handler = DTOptions,
-                get = "GetEnabled",
-                set = "SetEnabled",
-            },
-            soundGroup = W.IGroup(10, "Notification", {
-                displayDuration = {
-                    type = "range",
-                    name = "Display Duration",
-                    desc = "How long dungeon tracking notifications remain visible before dismissing automatically.",
-                    order = 1,
-                    min = 2,
-                    max = 60,
-                    step = 1,
-                    width = 1.5,
-                    handler = DTOptions,
-                    get = "GetNotificationDisplayTime",
-                    set = "SetNotificationDisplayTime",
-                },
-                sound = {
-                    type = "select",
-                    dialogControl = "LSM30_Sound",
-                    name = "Notification Sound",
-                    desc = "Sound to play when a dungeon run ends.",
-                    order = 2,
-                    width = 2,
-                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("sound") or {} end,
-                    handler = DTOptions,
-                    get = "GetSound",
-                    set = "SetSound",
-                },
-                iconStyle = {
-                    type = "select",
-                    name = "Class Icon Style",
-                    desc = "Choose the class icon style used for dungeon group makeup in notifications.",
-                    order = 3,
-                    values = function()
-                        return {
-                            default = BuildIconStyleLabel("default", "Default Icons"),
-                            fabled = BuildIconStyleLabel("fabled", "Fabled Icons"),
-                            pixel = BuildIconStyleLabel("pixel", "Pixel Icons"),
-                        }
-                    end,
-                    handler = DTOptions,
-                    get = "GetClassIconStyle",
-                    set = "SetClassIconStyle",
-                },
-                testGroup = W.IGroup(4, "Tests", {
-                    test = {
-                        type = "execute",
-                        name = "Test Notification",
-                        desc = "Play a test dungeon tracking notification.",
-                        order = 1,
-                        handler = DTOptions,
-                        func = "TestNotification",
-                    },
-                    testMythic = {
-                        type = "execute",
-                        name = "Test Mythic+ Notification",
-                        desc = "Play a test Mythic+ dungeon tracking notification with score and upgrade details.",
-                        order = 2,
-                        handler = DTOptions,
-                        func = "TestMythicNotification",
-                    },
-                }),
-            }),
-            leaveGroupButton = W.IGroup(20, "Leave Group Button", {
-                showButton = {
-                    type = "toggle",
-                    name = "Show Leave Group Button",
-                    desc = "Show a Leave Group button on the dungeon completion notification.",
-                    order = 1,
-                    width = 1.75,
-                    handler = DTOptions,
-                    get = "GetShowLeaveGroupButton",
-                    set = "SetShowLeaveGroupButton",
-                },
-                leavePhrase = {
-                    type = "input",
-                    name = "Instance Chat Phrase",
-                    desc =
-                    "If set, this text is sent to instance chat before leaving the group.",
-                    order = 2,
-                    width = "full",
-                    handler = DTOptions,
-                    get = "GetLeavePhrase",
-                    set = "SetLeavePhrase",
-                },
-            }),
-        },
-    }
-end
-
 
 local function BuildMythicPlusToolsTab()
     local W = ConfigurationModule.Widgets
@@ -2416,7 +2301,6 @@ local function BuildConfiguration()
             name = "Features to improve your overall user experience.",
         },
         choresTab = BuildChoresTab(),
-        dungeonTrackingTab = BuildDungeonTrackingTab(),
         gatheringTab = ConfigurationModule.BuildGatheringTab and ConfigurationModule.BuildGatheringTab() or nil,
         easyFishTab = BuildEasyFishTab(),
         gossipHotkeysTab = BuildGossipHotkeysTab(),

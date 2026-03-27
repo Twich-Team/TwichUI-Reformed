@@ -1020,6 +1020,25 @@ function Options:SetSharedTooltipFontSize(info, value)
     RefreshDatatext("TwichUI: Chores")
 end
 
+--- Resets the shared (global) panel style to current theme-based defaults.
+--- Wipes all custom overrides so colors, fonts, and alphas re-inherit from the Theme module.
+function Options:ResetSharedStyle()
+    local standalone = self:GetStandaloneDB()
+    standalone.style = {}
+    MergeDefaults(standalone.style, GetThemeBasedDefaults())
+    RefreshStandalonePanels()
+end
+
+--- Clears per-panel style overrides for the given panelID, reverting it to the shared style.
+function Options:ResetPanelStyleOverrides(panelID)
+    local panel = self:GetStandalonePanel(panelID)
+    if panel then
+        panel.style = {}
+        panel.useStyleOverrides = false
+    end
+    RefreshStandalonePanels()
+end
+
 function Options:GetGatheringUseCustomColor(info)
     local db = self:GetDatatextDB("gathering")
     return db.customColor == true

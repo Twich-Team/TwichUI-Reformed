@@ -132,6 +132,18 @@ function NM:OnEnable()
     self:CreateAnchor()
     self:ApplyAnchorLockState()
     self.Frame:Create()
+    -- ChatStyling repositions TwichUIChrome asynchronously (up to 0.35s timers
+    -- after PLAYER_ENTERING_WORLD).  Re-anchor once those have settled so the
+    -- top-dock mode lands in the correct position on first load.
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnEnteringWorld")
+end
+
+function NM:OnEnteringWorld()
+    self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+    C_Timer.After(0.5, function()
+        NM.Frame:Refresh()
+        NM:ApplyAnchorLockState()
+    end)
 end
 
 -- ── Helpers ───────────────────────────────────────────────────────────────

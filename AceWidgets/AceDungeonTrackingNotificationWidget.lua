@@ -193,8 +193,8 @@ local function Constructor()
     local hoverDriver = CreateFrame("Frame", nil, frame)
     hoverDriver:Hide()
 
-    if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
-        T.Tools.UI.SkinButton(actionButton)
+    if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichButton then
+        T.Tools.UI.SkinTwichButton(actionButton)
     end
 
     ---@class TwichUI_DungeonTrackingNotificationWidget : AceGUIWidget

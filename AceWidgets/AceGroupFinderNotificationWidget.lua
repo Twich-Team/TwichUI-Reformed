@@ -106,9 +106,9 @@ local function Constructor()
     browseButton:SetText("Open Teleports")
     browseButton:Hide()
 
-    if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
-        T.Tools.UI.SkinButton(teleportButton)
-        T.Tools.UI.SkinButton(browseButton)
+    if T and T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichButton then
+        T.Tools.UI.SkinTwichButton(teleportButton)
+        T.Tools.UI.SkinTwichButton(browseButton)
     end
 
     ---@class TwichUI_GroupFinderNotificationWidget : AceGUIWidget

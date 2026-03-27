@@ -2085,10 +2085,23 @@ local function BuildStandaloneDatatextConfiguration()
                             RefreshStandalone()
                         end,
                     },
+                    resetOverrides = {
+                        type = "execute",
+                        name = "Clear Style Overrides",
+                        desc = "Remove all per-panel color and style overrides, reverting to the shared style.",
+                        order = 2,
+                        func = function()
+                            Options:ResetPanelStyleOverrides(panelID)
+                            local standaloneUI = ConfigurationModule.StandaloneUI
+                            if standaloneUI and standaloneUI.RequestRenderCurrentPage then
+                                standaloneUI:RequestRenderCurrentPage()
+                            end
+                        end,
+                    },
                     remove = {
                         type = "execute",
                         name = "Remove Panel",
-                        order = 2,
+                        order = 3,
                         disabled = function()
                             return #Options:GetStandalonePanelIDs() <= 1
                         end,
@@ -2375,6 +2388,19 @@ local function BuildStandaloneDatatextConfiguration()
                             handler = Options,
                             get = "GetSharedHoverBarColor",
                             set = "SetSharedHoverBarColor",
+                        },
+                        resetStyle = {
+                            type = "execute",
+                            name = "Reset to Theme Defaults",
+                            desc = "Restore all shared style values (colors, fonts, alphas) to the current Theme settings.",
+                            order = 99,
+                            func = function()
+                                Options:ResetSharedStyle()
+                                local standaloneUI = ConfigurationModule.StandaloneUI
+                                if standaloneUI and standaloneUI.RequestRenderCurrentPage then
+                                    standaloneUI:RequestRenderCurrentPage()
+                                end
+                            end,
                         },
                     }),
                 },
