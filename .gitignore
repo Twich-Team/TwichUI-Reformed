@@ -12,3 +12,4 @@
 # Library files (these are added by the packager)
 Libraries/*
 !Libraries/!load.xml
+AddOnReferences/

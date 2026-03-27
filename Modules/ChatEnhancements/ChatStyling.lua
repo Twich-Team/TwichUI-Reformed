@@ -128,7 +128,7 @@ local HEADER_DATATEXT_BAR_TOP    = 4
 -- Width per slot in the unified (right-aligned, in-chrome) bar.
 local HEADER_DATATEXT_SLOT_WIDTH = 68
 
-local CHANNEL_REF_TO_KEY = {
+local CHANNEL_REF_TO_KEY         = {
     GUILD = "guild",
     OFFICER = "officer",
     PARTY = "party",
@@ -139,7 +139,7 @@ local CHANNEL_REF_TO_KEY = {
     RAID_LEADER = "raidLeader",
 }
 
-local CUSTOM_CHANNEL_MATCHERS = {
+local CUSTOM_CHANNEL_MATCHERS    = {
     general = { GENERAL, "General" },
     trade = { TRADE, "Trade" },
     localDefense = { LOCAL_DEFENSE, "LocalDefense" },
@@ -148,7 +148,7 @@ local CUSTOM_CHANNEL_MATCHERS = {
     newcomer = { NEWCOMER_CHAT, "NewcomerChat" },
 }
 
-local DEFAULT_CONTROL_BUTTONS = {
+local DEFAULT_CONTROL_BUTTONS    = {
     "ChatFrameMenuButton",
     "ChatFrameChannelButton",
     "ChatFrameToggleVoiceMuteButton",
@@ -157,7 +157,7 @@ local DEFAULT_CONTROL_BUTTONS = {
     "FriendsMicroButton",
 }
 
-local CHANNEL_TYPE_TO_KEY = {
+local CHANNEL_TYPE_TO_KEY        = {
     CHANNEL = "general",
     EMOTE = "emote",
     GUILD = "guild",
@@ -173,7 +173,7 @@ local CHANNEL_TYPE_TO_KEY = {
 }
 
 -- Persistent tab utility context menu (same pattern as chatContextMenu in ChatRenderer).
-local chatTabMenu = nil
+local chatTabMenu                = nil
 local function GetChatTabMenu()
     if not chatTabMenu then
         chatTabMenu = T.Tools.UI.CreateSecureMenu("TwichUIChatTabMenu")
@@ -644,7 +644,7 @@ function ChatStylingModule:ApplyPositionOverride()
     end
 
     -- Restore whatever movable / resizable state the chrome set.
-    if not wasMovable   then frame:SetMovable(false)   end
+    if not wasMovable then frame:SetMovable(false) end
     if not wasResizable then frame:SetResizable(false) end
 
     -- Do NOT call FCF_SavePositionAndDimensions here: doing so would snapshot
@@ -714,8 +714,8 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
     local DataTextMod = GetDataTextModule()
     if not DataTextMod then return end
 
-    local hdt      = self.settings and self.settings.headerDatatext or nil
-    local isUnified = self.settings and self.settings.tabStyle == "unified"
+    local hdt        = self.settings and self.settings.headerDatatext or nil
+    local isUnified  = self.settings and self.settings.tabStyle == "unified"
     local hideHeader = self.settings and self.settings.hideHeader or false
 
     -- Hide when the datatext bar is disabled.
@@ -741,7 +741,7 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
         bar:ClearAllPoints()
         bar:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", -12, -4)
         bar:SetWidth(barWidth)
-        bar:SetHeight(28)   -- same height as ProxyTabBar
+        bar:SetHeight(28) -- same height as ProxyTabBar
         bar:SetFrameStrata("TOOLTIP")
         bar:SetFrameLevel(barLevel)
         for i = 1, (bar.maxSlots or 3) do
@@ -754,9 +754,9 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
     else
         -- Non-unified: occupies the 26px header inset zone at frame top.
         -- DragHandle is shrunken to HEADER_DATATEXT_BAR_TOP (4px) to stay clear.
-        local barLevel = frameLevel + 20   -- safely above rows at frameLevel+13/14
+        local barLevel = frameLevel + 20 -- safely above rows at frameLevel+13/14
         bar:ClearAllPoints()
-        bar:SetPoint("TOPLEFT",  frame, "TOPLEFT",  4,  -HEADER_DATATEXT_BAR_TOP)
+        bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 4, -HEADER_DATATEXT_BAR_TOP)
         bar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -HEADER_DATATEXT_BAR_TOP)
         -- Explicitly set the width so RefreshEmbeddedBar (which calls bar:GetWidth() immediately)
         -- receives a non-zero value even before WoW resolves the two-anchor layout pass.
@@ -792,14 +792,14 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
         textB = hdt.textColor.b or textB
     end
     DataTextMod:RefreshEmbeddedBar(barID, panelDefinition, {
-        font       = self.settings and self.settings.tabFont,
-        fontSize   = hdtFontSize,
-        accentR    = accentR,
-        accentG    = accentG,
-        accentB    = accentB,
-        textR      = textR,
-        textG      = textG,
-        textB      = textB,
+        font     = self.settings and self.settings.tabFont,
+        fontSize = hdtFontSize,
+        accentR  = accentR,
+        accentG  = accentG,
+        accentB  = accentB,
+        textR    = textR,
+        textG    = textG,
+        textB    = textB,
     })
 
     self:LogDebugf(false,
@@ -2300,18 +2300,18 @@ function ChatStylingModule:UpdateProxyTabButton(button, hovered)
         selected and TEXT_ACTIVE[2] or TEXT_INACTIVE[2], selected and TEXT_ACTIVE[3] or TEXT_INACTIVE[3], "")
 
     local isTransparent = settings.tabStyle == "transparent" or settings.tabStyle == "unified"
-    local tabBg  = settings.tabBgColor     or {}
-    local tabBr  = settings.tabBorderColor or {}
-    local tabAc  = settings.tabAccentColor or {}
-    local bgR = tabBg.r or PRIMARY_FILL[1]
-    local bgG = tabBg.g or PRIMARY_FILL[2]
-    local bgB = tabBg.b or PRIMARY_FILL[3]
-    local brR = tabBr.r or PRIMARY_BORDER[1]
-    local brG = tabBr.g or PRIMARY_BORDER[2]
-    local brB = tabBr.b or PRIMARY_BORDER[3]
-    local acR = tabAc.r or brR
-    local acG = tabAc.g or brG
-    local acB = tabAc.b or brB
+    local tabBg         = settings.tabBgColor or {}
+    local tabBr         = settings.tabBorderColor or {}
+    local tabAc         = settings.tabAccentColor or {}
+    local bgR           = tabBg.r or PRIMARY_FILL[1]
+    local bgG           = tabBg.g or PRIMARY_FILL[2]
+    local bgB           = tabBg.b or PRIMARY_FILL[3]
+    local brR           = tabBr.r or PRIMARY_BORDER[1]
+    local brG           = tabBr.g or PRIMARY_BORDER[2]
+    local brB           = tabBr.b or PRIMARY_BORDER[3]
+    local acR           = tabAc.r or brR
+    local acG           = tabAc.g or brG
+    local acB           = tabAc.b or brB
 
     if isTransparent then
         -- Transparent mode: no background fill, just text and accent underline.
@@ -2425,9 +2425,9 @@ function ChatStylingModule:RefreshProxyTabBar(frame)
     end
 
     do
-        local anchor   = owner.TwichUIChrome or owner
-        local isUnified = self.settings and self.settings.tabStyle == "unified"
-        local hdt      = isUnified and self.settings and self.settings.headerDatatext or nil
+        local anchor     = owner.TwichUIChrome or owner
+        local isUnified  = self.settings and self.settings.tabStyle == "unified"
+        local hdt        = isUnified and self.settings and self.settings.headerDatatext or nil
         local hdtEnabled = hdt and hdt.enabled
         bar:ClearAllPoints()
         if isUnified then
@@ -2444,7 +2444,7 @@ function ChatStylingModule:RefreshProxyTabBar(frame)
             end
         else
             -- Normal: tabs float just above the chrome top edge.
-            bar:SetPoint("BOTTOMLEFT",  anchor, "TOPLEFT",  12, -2)
+            bar:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 12, -2)
             bar:SetPoint("BOTTOMRIGHT", anchor, "TOPRIGHT", -12, -2)
         end
     end
@@ -2806,7 +2806,7 @@ function ChatStylingModule:HookChatFrame(frame)
     frame.TwichUIChatStylingHooked = true
     frame:SetMovable(true)
     frame:SetResizable(true)
-    frame:SetClampedToScreen(false)  -- allow placing flush against the monitor edge
+    frame:SetClampedToScreen(false) -- allow placing flush against the monitor edge
     -- Do not mark every chat frame as user-placed here. Temporary windows such as
     -- whisper tabs can inherit this flag and later trigger Blizzard restore errors
     -- during display-size changes when they are no longer movable/resizable.
@@ -3046,12 +3046,39 @@ function ChatStylingModule:OnEnable()
     -- Apply theme colors to the local style constants and subscribe to future changes.
     self:ApplyThemeColors()
     self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
+    -- Re-apply all settings immediately when a layout snapshot is restored by the wizard.
+    self:RegisterMessage("TWICH_CONFIG_RESTORED", "OnConfigRestored")
+    self:RefreshAllVisuals()
+    self:HandleLifecycleRefresh()
+
+    -- Register the primary chat frame with the setup wizard layout capture tool.
+    -- The persist callback writes the new absolute position into ChatStyling's own DB
+    -- so that ApplyPositionOverride() restores the wizard-applied position on reload.
+    local SetupWizardModule = T:GetModule("SetupWizard", true)
+    if SetupWizardModule and _G.ChatFrame1 then
+        SetupWizardModule:RegisterLayoutFrame("ChatFrame1", _G.ChatFrame1, function(absX, absY, absW, absH)
+            local opts = ChatStylingModule:GetOptions()
+            if not opts then return end
+            local db = opts:GetChatEnhancementDB()
+            db.chatPositionX = absX
+            db.chatPositionY = absY
+            if absW and absW > 50 then db.chatWidth = absW end
+            if absH and absH > 50 then db.chatHeight = absH end
+            -- Sync into the live settings cache so ApplyPositionOverride can run immediately.
+            ChatStylingModule:RefreshSettings()
+        end)
+    end
+end
+
+function ChatStylingModule:OnConfigRestored()
+    self:RefreshSettings()
     self:RefreshAllVisuals()
     self:HandleLifecycleRefresh()
 end
 
 function ChatStylingModule:OnDisable()
     self:UnregisterMessage("TWICH_THEME_CHANGED")
+    self:UnregisterMessage("TWICH_CONFIG_RESTORED")
     self:RefreshSettings()
     if self.refreshAllTimer then
         self:CancelTimer(self.refreshAllTimer)

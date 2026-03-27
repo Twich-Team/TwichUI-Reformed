@@ -231,25 +231,56 @@ function NotificationFrame:Create()
     -- Use a vertical list so multiple notifications can stack.
     container:SetLayout("List")
 
-    -- Anchor the visible frame to the ElvUI mover/anchor if available,
-    -- otherwise fall back to UIParent. Use the configured growth
-    -- direction to decide which edge is fixed.
+    -- Resolve display settings.
+    local dockMode = options and options.GetChatDockMode and options:GetChatDockMode() or "none"
+    -- "top" and "right" dock modes always grow upward.
+    local effectiveGrowth = (dockMode ~= "none") and "UP" or growthDirection
+    if container.SetGrowDirection then
+        container:SetGrowDirection(effectiveGrowth)
+    end
+
     if container.frame then
-        local anchor = NM.anchor or UIParent
-
-        -- Ensure the ElvUI anchor reflects the configured panel width so
-        -- the notification container visually resizes.
-        if NM.anchor and panelWidth then
-            NM.anchor:SetWidth(panelWidth)
-        end
-
         container.frame:ClearAllPoints()
-        if growthDirection == "UP" then
-            container.frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMLEFT", 0, 0)
-            container.frame:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+
+        if dockMode == "top" then
+            -- Span the full width of the first chat frame, growing notifications
+            -- upward from the chat's top edge.
+            local chatFrame = _G.ChatFrame1
+            if chatFrame then
+                container.frame:SetPoint("BOTTOMLEFT",  chatFrame, "TOPLEFT",  0, 0)
+                container.frame:SetPoint("BOTTOMRIGHT", chatFrame, "TOPRIGHT", 0, 0)
+            else
+                -- Fallback to anchor if chat frame is unavailable.
+                local anchor = NM.anchor or UIParent
+                container.frame:SetPoint("BOTTOMLEFT",  anchor, "BOTTOMLEFT",  0, 0)
+                container.frame:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+            end
+
+        elseif dockMode == "right" then
+            -- Grow notifications upward from the bottom-right corner of the
+            -- first chat frame.  Width is controlled by the configured value.
+            local chatFrame = _G.ChatFrame1
+            if chatFrame then
+                container.frame:SetPoint("BOTTOMLEFT", chatFrame, "BOTTOMRIGHT", 0, 0)
+            else
+                local anchor = NM.anchor or UIParent
+                container.frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", 0, 0)
+            end
+            container.frame:SetWidth(panelWidth)
+
         else
-            container.frame:SetPoint("TOPLEFT", anchor, "TOPLEFT", 0, 0)
-            container.frame:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", 0, 0)
+            -- Manual anchor ("none") — use the TwichUI-owned draggable anchor.
+            local anchor = NM.anchor or UIParent
+            if NM.anchor then
+                NM.anchor:SetWidth(panelWidth)
+            end
+            if effectiveGrowth == "UP" then
+                container.frame:SetPoint("BOTTOMLEFT",  anchor, "BOTTOMLEFT",  0, 0)
+                container.frame:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", 0, 0)
+            else
+                container.frame:SetPoint("TOPLEFT",  anchor, "TOPLEFT",  0, 0)
+                container.frame:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", 0, 0)
+            end
         end
 
         -- Start hidden; we explicitly show when a notification is added.

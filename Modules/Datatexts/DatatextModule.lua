@@ -111,7 +111,7 @@ end
 ---@field HideStandalonePanels fun(self: DataTextModule)|nil
 ---@field RefreshStandaloneDataText fun(self: DataTextModule, datatextName: string)|nil
 ---@field GetStandaloneDatatextChoices fun(self: DataTextModule): table<string, string>|nil
-local DataTextModule = T:NewModule("Datatexts")
+local DataTextModule = T:NewModule("Datatexts", "AceEvent-3.0")
 
 DataTextModule.CommonEvents = {
     ELVUI_FORCE_UPDATE = "ELVUI_FORCE_UPDATE",
@@ -988,9 +988,19 @@ function DataTextModule:OnEnable()
     if self.RefreshStandalonePanels then
         self:RefreshStandalonePanels()
     end
+
+    -- Re-build standalone panels when a layout snapshot is restored by the wizard.
+    self:RegisterMessage("TWICH_CONFIG_RESTORED", "OnConfigRestored")
+end
+
+function DataTextModule:OnConfigRestored()
+    if self.RefreshStandalonePanels then
+        self:RefreshStandalonePanels()
+    end
 end
 
 function DataTextModule:OnDisable()
+    self:UnregisterMessage("TWICH_CONFIG_RESTORED")
     -- Called when the module is disabled
     for name, _ in pairs(self.DatatextRegistry) do
         self:RemoveDatatext(name)

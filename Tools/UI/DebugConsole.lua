@@ -401,7 +401,53 @@ function DebugConsole:EnsureFrame()
     refreshButton:SetScript("OnMouseDown", function(b) b:SetBackdropColor(0.42 * 0.28, 0.82 * 0.28, 0.98 * 0.28, 1) end)
     refreshButton:SetScript("OnMouseUp", function(b) b:SetBackdropColor(0.42 * 0.18, 0.82 * 0.18, 0.98 * 0.18, 0.98) end)
 
-    subtitle:SetPoint("RIGHT", refreshButton, "LEFT", -12, 0)
+    -- Lua Only toggle — strips timestamps/headers; shows the last raw log entry for easy copy-paste.
+    local luaOnlyButton = CreateFrame("Button", nil, titleBar, "BackdropTemplate")
+    luaOnlyButton:SetSize(82, 24)
+    luaOnlyButton:SetPoint("RIGHT", refreshButton, "LEFT", -6, 0)
+    luaOnlyButton:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    luaOnlyButton:SetBackdropColor(0.42 * 0.14, 0.98 * 0.14, 0.56 * 0.14, 0.98)
+    luaOnlyButton:SetBackdropBorderColor(0.42, 0.98, 0.56, 0.35)
+    local luaOnlyLabel = luaOnlyButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    luaOnlyLabel:SetAllPoints(luaOnlyButton)
+    luaOnlyLabel:SetJustifyH("CENTER")
+    luaOnlyLabel:SetJustifyV("MIDDLE")
+    luaOnlyLabel:SetText("Lua Only")
+    luaOnlyLabel:SetTextColor(0.72, 1, 0.80)
+
+    local function ApplyLuaOnlyButtonState(active)
+        if active then
+            luaOnlyButton:SetBackdropColor(0.42 * 0.32, 0.98 * 0.32, 0.56 * 0.32, 1)
+            luaOnlyButton:SetBackdropBorderColor(0.42, 0.98, 0.56, 1)
+            luaOnlyLabel:SetTextColor(0.60, 1, 0.70)
+        else
+            luaOnlyButton:SetBackdropColor(0.42 * 0.14, 0.98 * 0.14, 0.56 * 0.14, 0.98)
+            luaOnlyButton:SetBackdropBorderColor(0.42, 0.98, 0.56, 0.35)
+            luaOnlyLabel:SetTextColor(0.72, 1, 0.80)
+        end
+    end
+
+    luaOnlyButton:SetScript("OnClick", function()
+        self.showRawOnly = not self.showRawOnly
+        ApplyLuaOnlyButtonState(self.showRawOnly)
+        self:Refresh()
+    end)
+    luaOnlyButton:SetScript("OnMouseDown", function(b)
+        b:SetBackdropColor(0.42 * 0.40, 0.98 * 0.40, 0.56 * 0.40, 1)
+    end)
+    luaOnlyButton:SetScript("OnMouseUp", function(b)
+        ApplyLuaOnlyButtonState(self.showRawOnly)
+    end)
+
+    frame.luaOnlyButton     = luaOnlyButton
+    frame.luaOnlyApplyState = ApplyLuaOnlyButtonState
+
+    subtitle:SetPoint("RIGHT", luaOnlyButton, "LEFT", -12, 0)
 
     -- Source tab bar
     local sourceBar = CreatePanel(frame, 0.055, 0.055, 0.08, 0.985, 0.18)
@@ -449,6 +495,7 @@ function DebugConsole:EnsureFrame()
     frame.refreshButton = refreshButton
     frame.clearButton = clearButton
     frame.closeButton = closeButton
+    frame.luaOnlyButton = luaOnlyButton
     frame.scroll = scroll
     frame.editBox = editBox
 
@@ -548,7 +595,27 @@ function DebugConsole:Refresh()
     self.activeSourceKey = key
     local source = self.sources[key]
     frame.title:SetText(format("TwichUI Debug Console - %s", source and source.title or key))
-    frame.editBox:SetText(self:BuildSourceText(key))
+
+    -- Lua Only mode: show the last logged entry stripped of its [HH:MM:SS] prefix.
+    -- This gives a clean, timestampless blob ready to copy into Lua files.
+    if self.showRawOnly then
+        local buffer = self:GetLines(key)
+        local lastEntry = buffer[#buffer]
+        if lastEntry then
+            local raw = lastEntry:gsub("^%[%d%d:%d%d:%d%d%] ", "", 1)
+            frame.editBox:SetText(raw)
+        else
+            frame.editBox:SetText("-- No output captured yet for this source.")
+        end
+    else
+        frame.editBox:SetText(self:BuildSourceText(key))
+    end
+
+    -- Keep toggle button visual state in sync (frame may have just been created).
+    if frame.luaOnlyApplyState then
+        frame.luaOnlyApplyState(self.showRawOnly)
+    end
+
     frame.editBox:SetCursorPosition(0)
     frame.editBox:HighlightText()
     frame.scroll:SetVerticalScroll(0)

@@ -1,0 +1,6 @@
+<Ui xmlns='http://www.blizzard.com/wow/ui/'>
+    <Script file='SetupWizardModule.lua' />
+    <Script file='Layouts.lua' />
+    <Script file='WizardUI.lua' />
+    <Script file='DevTools.lua' />
+</Ui>

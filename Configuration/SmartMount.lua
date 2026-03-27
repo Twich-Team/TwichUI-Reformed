@@ -8,6 +8,99 @@ local ConfigurationModule = T:GetModule("Configuration")
 ---@class SmartMountConfigurationOptions
 local Options = ConfigurationModule.Options.SmartMount
 
+-- ─── Keybind capture popup ──────────────────────────────────────────────────
+-- Bypasses the AceGUI "keybinding" widget (which ElvUI overrides at a higher
+-- LibStub version and doesn't correctly ignore bare modifier-key presses).
+-- This frame is TwichUI-owned: modifier keys are always filtered out and the
+-- resulting string is in WoW's canonical SetBinding format (e.g. "SHIFT-SPACE").
+
+local MODIFIER_ONLY = {
+    LSHIFT = true, RSHIFT = true,
+    LCTRL  = true, RCTRL  = true,
+    LALT   = true, RALT   = true,
+}
+
+local keybindCaptureFrame = nil
+
+local function GetKeybindCaptureFrame()
+    if keybindCaptureFrame then return keybindCaptureFrame end
+
+    local CreateFrame = _G.CreateFrame
+    local UIParent    = _G.UIParent
+    local IsShiftKeyDown   = _G.IsShiftKeyDown
+    local IsControlKeyDown = _G.IsControlKeyDown
+    local IsAltKeyDown     = _G.IsAltKeyDown
+
+    local f = CreateFrame("Frame", "TwichUIKeybindCapture", UIParent, "BackdropTemplate")
+    f:SetSize(300, 90)
+    f:SetPoint("CENTER")
+    f:SetFrameStrata("DIALOG")
+    f:SetFrameLevel(200)
+    f:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    f:SetBackdropColor(0.05, 0.06, 0.08, 0.97)
+    f:SetBackdropBorderColor(0.10, 0.72, 0.74, 1)
+    f:EnableKeyboard(true)
+    f:SetPropagateKeyboardInput(false)
+    f:Hide()
+
+    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOP", f, "TOP", 0, -14)
+    title:SetText("|cff19c9c7Smart Mount|r — Press a key combination")
+    title:SetTextColor(0.85, 0.90, 0.95)
+
+    local hint = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hint:SetPoint("CENTER", f, "CENTER", 0, 4)
+    hint:SetText("Press ESC to cancel, Backspace to clear")
+    hint:SetTextColor(0.50, 0.52, 0.58)
+
+    local cancelBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    cancelBtn:SetSize(70, 22)
+    cancelBtn:SetPoint("BOTTOM", f, "BOTTOM", 0, 10)
+    cancelBtn:SetText("Cancel")
+    cancelBtn:SetScript("OnClick", function() f:Hide() end)
+
+    f:SetScript("OnKeyDown", function(self, key)
+        -- Swallow the event so WoW doesn't process it (e.g. jump on SPACE).
+        f:SetPropagateKeyboardInput(false)
+
+        -- Ignore bare modifier presses — wait for the actual key.
+        if MODIFIER_ONLY[key] then return end
+
+        if key == "ESCAPE" then
+            f:Hide()
+            return
+        end
+
+        -- Build the canonical binding string.
+        local binding = ""
+        if IsShiftKeyDown()   then binding = binding .. "SHIFT-" end
+        if IsControlKeyDown() then binding = binding .. "CTRL-"  end
+        if IsAltKeyDown()     then binding = binding .. "ALT-"   end
+
+        if key == "BACKSPACE" then
+            -- Empty string = clear the binding.
+            binding = ""
+        else
+            binding = binding .. key
+        end
+
+        if f.onCapture then
+            f.onCapture(binding)
+        end
+        f:Hide()
+    end)
+
+    keybindCaptureFrame = f
+    return f
+end
+
+local function OpenKeybindCapture(onCapture)
+    local f = GetKeybindCaptureFrame()
+    f.onCapture = onCapture
+    f:Show()
+    f:SetFrameLevel(200)
+end
+
 local function BuildSmartMountTab(order)
     local groundSelector = nil
     local flyingSelector = nil
@@ -168,13 +261,22 @@ local function BuildSmartMountTab(order)
                 order = 7,
             },
             keybinding = {
-                type = "keybinding",
-                name = "Mount Keybinding",
-                desc = "Set the keybind for toggling the mount behavior. Shift+Space is a good options to start with.",
-                handler = Options,
-                get = "GetSmartMountKeybinding",
-                set = "SetSmartMountKeybinding",
+                type = "execute",
+                name = function()
+                    local k = Options:GetSmartMountKeybinding()
+                    if k and k ~= "" then
+                        return "Bound: |cffffd700" .. k .. "|r  (click to change)"
+                    end
+                    return "Set Keybinding  |cff808080(unbound)|r"
+                end,
+                desc = "Click to capture a new keybind. Press Backspace inside the capture window to clear it.",
                 order = 8,
+                func = function()
+                    OpenKeybindCapture(function(binding)
+                        Options:SetSmartMountKeybinding(nil, binding)
+                        ConfigurationModule:Refresh()
+                    end)
+                end,
             },
             cache = {
                 type = "group",

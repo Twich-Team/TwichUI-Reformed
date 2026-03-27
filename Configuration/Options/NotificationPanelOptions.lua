@@ -23,6 +23,8 @@ local DEFAULT_CHORES_DISPLAY_DURATION = 15
 local DEFAULT_PREY_DISPLAY_DURATION = 12
 local DEFAULT_NOTIFICATION_FONT = "__default"
 local DEFAULT_NOTIFICATION_FONT_SIZE_ADJUSTMENT = 0
+local DEFAULT_ANCHOR_X = 300
+local DEFAULT_ANCHOR_Y = -200
 
 
 function Options:GetDB()
@@ -87,6 +89,55 @@ end
 function Options:SetNotificationFontSizeAdjustment(info, value)
     local db = self:GetDB()
     db.notificationFontSizeAdjustment = value
+    RefreshFrame()
+end
+
+-- ── Anchor position & lock ────────────────────────────────────────────────
+
+function Options:GetAnchorLocked(info)
+    local db = self:GetDB()
+    if db.anchorLocked == nil then return true end
+    return db.anchorLocked
+end
+
+function Options:SetAnchorLocked(info, value)
+    local db = self:GetDB()
+    db.anchorLocked = value
+    GetModule():ApplyAnchorLockState()
+end
+
+function Options:GetAnchorX(info)
+    local db = self:GetDB()
+    return db.anchorX or DEFAULT_ANCHOR_X
+end
+
+function Options:SetAnchorX(info, value)
+    local db = self:GetDB()
+    db.anchorX = value
+    GetModule():ApplyAnchorPosition()
+end
+
+function Options:GetAnchorY(info)
+    local db = self:GetDB()
+    return db.anchorY or DEFAULT_ANCHOR_Y
+end
+
+function Options:SetAnchorY(info, value)
+    local db = self:GetDB()
+    db.anchorY = value
+    GetModule():ApplyAnchorPosition()
+end
+
+-- ── Chat dock mode ────────────────────────────────────────────────────────
+
+function Options:GetChatDockMode(info)
+    local db = self:GetDB()
+    return db.chatDockMode or "none"
+end
+
+function Options:SetChatDockMode(info, value)
+    local db = self:GetDB()
+    db.chatDockMode = value
     RefreshFrame()
 end
 
@@ -372,4 +423,62 @@ end
 
 function Options:TestChoresNotification()
     GetToastsModule():TestChoresNotification()
+end
+
+-- ── Anchor position & lock ────────────────────────────────────────────────
+
+function Options:GetAnchorLocked(info)
+    local db = self:GetDB()
+    if db.anchorLocked == nil then return true end
+    return db.anchorLocked
+end
+
+function Options:SetAnchorLocked(info, value)
+    local db = self:GetDB()
+    db.anchorLocked = value
+    local mod = GetModule()
+    if mod and mod.ApplyAnchorLockState then
+        mod:ApplyAnchorLockState()
+    end
+end
+
+function Options:GetAnchorX(info)
+    local db = self:GetDB()
+    return db.anchorX or DEFAULT_ANCHOR_X
+end
+
+function Options:SetAnchorX(info, value)
+    local db = self:GetDB()
+    db.anchorX = value
+    local mod = GetModule()
+    if mod and mod.ApplyAnchorPosition then
+        mod:ApplyAnchorPosition()
+    end
+end
+
+function Options:GetAnchorY(info)
+    local db = self:GetDB()
+    return db.anchorY or DEFAULT_ANCHOR_Y
+end
+
+function Options:SetAnchorY(info, value)
+    local db = self:GetDB()
+    db.anchorY = value
+    local mod = GetModule()
+    if mod and mod.ApplyAnchorPosition then
+        mod:ApplyAnchorPosition()
+    end
+end
+
+-- ── Chat dock mode ────────────────────────────────────────────────────────
+
+function Options:GetChatDockMode(info)
+    local db = self:GetDB()
+    return db.chatDockMode or "none"
+end
+
+function Options:SetChatDockMode(info, value)
+    local db = self:GetDB()
+    db.chatDockMode = value
+    RefreshFrame()
 end

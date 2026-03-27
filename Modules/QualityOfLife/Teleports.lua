@@ -217,11 +217,25 @@ local function GetEntryCooldown(entry)
         startTime, duration, isEnabled = C_Item.GetItemCooldown(entry.itemID)
     end
 
-    if not startTime or not duration or startTime <= 0 or duration <= 1.5 or isEnabled == false then
+    if not duration or duration <= 1.5 or isEnabled == false then
         return 0
     end
 
-    return math.max(0, (startTime + duration) - GetTime())
+    -- startTime from C_Spell.GetSpellCooldown is a "secret" value that carries Blizzard
+    -- taint.  Comparing it directly (e.g. startTime <= 0) propagates the taint into our
+    -- addon and causes a Lua error.  Use pcall for both the guard check and the remaining-
+    -- time calculation so that if the value is tainted the operation silently returns 0
+    -- rather than erroring and halting the frame render.
+    local ok, remaining = pcall(function()
+        if not startTime or startTime <= 0 then
+            return 0
+        end
+        return math.max(0, (startTime + duration) - GetTime())
+    end)
+    if not ok then
+        return 0
+    end
+    return remaining
 end
 
 local function GetEntryStatus(entry)

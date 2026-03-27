@@ -1055,9 +1055,13 @@ function ChatRendererModule:EnsureRow(renderer, index)
     -- Guild links, calendar links, player links etc. have no hover tooltip
     -- in standard WoW either; attempting SetHyperlink on them produces blank
     -- or erroring tooltips, so we only attempt it for known informational types.
+    -- "trade" (profession links) is intentionally excluded: SetHyperlink on a
+    -- trade link opens the profession UI as a side-effect rather than showing a
+    -- tooltip, so we leave hover over those links as a no-op and let the click
+    -- handler open the window on demand.
     local TOOLTIP_LINK_TYPES = {
         item = true, spell = true, achievement = true, quest = true,
-        enchant = true, trade = true, battlepet = true, instancelockout = true,
+        enchant = true, battlepet = true, instancelockout = true,
         transmogappearance = true, garrmission = true, talent = true,
         currency = true, glyph = true, dungeonScore = true,
     }
@@ -1262,8 +1266,7 @@ function ChatRendererModule:RelayoutRenderer(renderer)
 
     local timestampWidth = self.settings.timestampsEnabled and (self.settings.timestampWidth or DEFAULT_TIMESTAMP_WIDTH) or
     0
-    -- bodyWidth is the shared content column width.  Class-icon space is handled
-    -- per-entry in RefreshRow so rows without a resolved icon don't have a blank gap.
+    -- bodyWidth is the shared content column width.
     local bodyWidth = mathMax(70, width - timestampWidth - 18)
     local offsetY = CONTENT_TOP_PADDING
     local previousEntry = nil
@@ -1271,9 +1274,27 @@ function ChatRendererModule:RelayoutRenderer(renderer)
     local groupedRowGap = mathMax(1, math.floor(rowGap * 0.4))
 
     for index, entry in ipairs(renderer.entries) do
-        if entry.measuredWidth ~= bodyWidth then
-            self:MeasureEntry(renderer, entry, bodyWidth)
-            entry.measuredWidth = bodyWidth
+        -- Mirror the icon-offset logic from RefreshRow so the measurement width
+        -- matches the actual label width used when rendering.  If a class icon
+        -- will be shown, the label is CLASS_ICON_LABEL_OFFSET narrower than
+        -- bodyWidth, causing multi-line wrapping that wasn't captured by a
+        -- measurement taken at the full bodyWidth.  This was the root cause of
+        -- rows not expanding vertically when messages wrapped (most noticeable
+        -- in dungeons where every instance-chat sender has a cached class icon).
+        local iconOffset = 0
+        if self.settings.showClassIcons and entry.speakerKey then
+            local classToken = self:GetSpeakerClassToken(entry.speakerKey)
+            if classToken then
+                local TwichTextures = T.Tools and T.Tools.Textures
+                if TwichTextures and TwichTextures.ApplyClassTexture then
+                    iconOffset = CLASS_ICON_LABEL_OFFSET
+                end
+            end
+        end
+        local effectiveBodyWidth = mathMax(50, bodyWidth - iconOffset)
+        if entry.measuredWidth ~= effectiveBodyWidth then
+            self:MeasureEntry(renderer, entry, effectiveBodyWidth)
+            entry.measuredWidth = effectiveBodyWidth
         end
 
         local spacing = previousEntry and (entry.groupedWithPrevious and groupedRowGap or rowGap) or 0

@@ -48,6 +48,35 @@ local function OpenConfigurationPanel(input)
         return
     end
 
+    if primaryCommand == "wizard" then
+        ---@type SetupWizardModule
+        local SetupWizardModule = T:GetModule("SetupWizard", true)
+        if not SetupWizardModule then
+            T:Print("[TwichUI] Setup wizard is unavailable")
+            return
+        end
+
+        local subCmd, subArgs = remainder:match("^(%S+)%s*(.-)%s*$")
+        subCmd = subCmd or ""
+
+        if subCmd == "capture" then
+            -- /tui wizard capture [layoutId] [layoutName]
+            local layoutId, layoutName = subArgs:match("^(%S+)%s*(.-)%s*$")
+            SetupWizardModule:CaptureLayoutFrames(layoutId, layoutName)
+            return
+        end
+
+        if subCmd == "reset" then
+            SetupWizardModule:Reset()
+            T:Print("[TwichUI] Setup wizard reset — it will appear on next login.")
+            return
+        end
+
+        -- Default: show wizard
+        SetupWizardModule:Show()
+        return
+    end
+
     if primaryCommand == "legacy" then
         ---@type ConfigurationModule
         local ConfigurationModule = T:GetModule("Configuration")
@@ -156,4 +185,3 @@ local function FindTexture(input)
 end
 
 T:RegisterChatCommand("findtexture", FindTexture)
-

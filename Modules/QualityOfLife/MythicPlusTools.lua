@@ -1179,16 +1179,22 @@ local function ExtractWeightedProgressCount(criteriaInfo)
         return 0
     end
 
+    -- WarpDeplete explicitly uses quantityString rather than quantity for isWeightedProgress
+    -- criteria, noting that "the current count contains a percentage sign even though it's
+    -- an absolute value" (e.g. "94%" = 94 force points).  In WoW Midnight the quantity
+    -- field can be 0 or stale while quantityString is always current, so we prefer it.
+    local quantityString = criteriaInfo.quantityString
+    if type(quantityString) == "string" and quantityString ~= "" then
+        local n = tonumber(quantityString:match("%d+"))
+        if n then return n end
+    end
+
+    -- Fallback: numeric quantity field (may be 0 or nil on some builds).
     if type(criteriaInfo.quantity) == "number" then
         return criteriaInfo.quantity
     end
 
-    local quantityString = criteriaInfo.quantityString
-    if type(quantityString) ~= "string" or quantityString == "" then
-        return 0
-    end
-
-    return tonumber(quantityString:match("%d+")) or 0
+    return 0
 end
 
 local function GetOwnedKeystoneMapID()
@@ -1705,6 +1711,12 @@ function MPT:RegisterDirectEvents()
     self.runtimeEventFrame:RegisterEvent("CANCEL_PLAYER_COUNTDOWN")
     -- COMBAT_LOG_EVENT_UNFILTERED is restricted in TWW; sourced via ElvUI hook.
     self.runtimeEventFrame:RegisterEvent("CHALLENGE_MODE_KEYSTONE_RECEPTABLE_OPEN")
+    -- Enemy forces / objectives: fire immediate re-render whenever Blizzard's
+    -- scenario criteria update, rather than waiting for the next 0.1s poll.
+    self.runtimeEventFrame:RegisterEvent("SCENARIO_CRITERIA_UPDATE")
+    self.runtimeEventFrame:RegisterEvent("SCENARIO_POI_UPDATE")
+    self.runtimeEventFrame:RegisterEvent("CHALLENGE_MODE_START")
+    self.runtimeEventFrame:RegisterEvent("CHALLENGE_MODE_COMPLETED")
 
     self:RegisterPartyWatchers()
     self:RegisterMobInterruptWatchers()
@@ -2257,6 +2269,7 @@ function MPT:ResetMythicPlusTimerTracking()
     self.mythicPlusTimerState.level = nil
     self.mythicPlusTimerState.forcesCompletionTime = nil
     self.mythicPlusTimerState.lastNotificationState = nil
+    self.mythicPlusTimerState.lastKnownForceCount = nil
     self.mythicPlusTimerState.bossCheckpoints = self.mythicPlusTimerState.bossCheckpoints or {}
 
     for key in pairs(self.mythicPlusTimerState.bossCheckpoints) do
@@ -2924,13 +2937,27 @@ function MPT:BuildActiveMythicPlusTimerState()
     local completedCheckpointCount = 0
     local totalCount = 0
     local currentCount = 0
+    -- Iterate the same range WarpDeplete does: criteria can live at indices
+    -- beyond what GetStepInfo()'s numCriteria reports in some dungeons (e.g.
+    -- Tazavesh multi-wing).  Hard-capping at 10 ensures we always find the
+    -- isWeightedProgress forces criterion even if numCriteria is wrong.
     local stepCount = C_Scenario and type(C_Scenario.GetStepInfo) == "function" and select(3, C_Scenario.GetStepInfo()) or 0
-    for index = 1, max(0, tonumber(stepCount) or 0) do
+    for index = 1, max(10, tonumber(stepCount) or 0) do
         local info = C_ScenarioInfo and type(C_ScenarioInfo.GetCriteriaInfo) == "function" and C_ScenarioInfo.GetCriteriaInfo(index)
         if type(info) == "table" then
             if info.isWeightedProgress and type(info.totalQuantity) == "number" and info.totalQuantity > 0 then
                 totalCount = info.totalQuantity
                 currentCount = ExtractWeightedProgressCount(info)
+                -- Monotonically-increasing protection: the API can briefly report 0
+                -- right before CHALLENGE_MODE_COMPLETED fires (WarpDeplete note).
+                -- Never let the displayed count go backwards once we've seen a higher
+                -- value during this run.
+                local lastKnown = tonumber(self.mythicPlusTimerState.lastKnownForceCount) or 0
+                if currentCount < lastKnown then
+                    currentCount = lastKnown
+                else
+                    self.mythicPlusTimerState.lastKnownForceCount = currentCount
+                end
                 if currentCount >= totalCount and not self.mythicPlusTimerState.forcesCompletionTime then
                     self.mythicPlusTimerState.forcesCompletionTime = max(0, elapsed - (tonumber(info.elapsed) or 0))
                 end
@@ -3493,6 +3520,31 @@ end
 
 function MPT:CHALLENGE_MODE_KEYSTONE_RECEPTABLE_OPEN()
     self:TryAutoSlotKeystone()
+end
+
+-- Scenario criteria changed: re-render the forces/objectives bar immediately
+-- rather than waiting for the next 0.1s tick.  This is how WarpDeplete stays
+-- up-to-date without relying on COMBAT_LOG (which is restricted in Midnight).
+function MPT:SCENARIO_CRITERIA_UPDATE()
+    if IsChallengeModeActive() and self.mythicPlusTimerFrame then
+        self:RefreshMythicPlusTimerFrame()
+    end
+end
+
+function MPT:SCENARIO_POI_UPDATE()
+    if IsChallengeModeActive() and self.mythicPlusTimerFrame then
+        self:RefreshMythicPlusTimerFrame()
+    end
+end
+
+function MPT:CHALLENGE_MODE_START()
+    -- Reset per-run tracking state so a new run starts clean.
+    self:ResetMythicPlusTimerTracking()
+    self:RefreshMythicPlusTimerFrame()
+end
+
+function MPT:CHALLENGE_MODE_COMPLETED()
+    self:RefreshMythicPlusTimerFrame()
 end
 
 local function ResolveCountdownDuration(...)
