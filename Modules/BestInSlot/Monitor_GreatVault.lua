@@ -307,10 +307,10 @@ function Monitor.IsItemBestInSlot(itemID)
 end
 
 local function ItemIsethAvailable(itemID, link)
-    local function CreateMessage(text, itemLink)
+    local function CreateMessage(detailText, itemLink)
         local AceGUI = LibStub("AceGUI-3.0")
 
-        local widget = AceGUI:Create("TwichUI_Item")
+        local widget = AceGUI:Create("TwichUI_BISNotification")
         ---@type NotificationOptions
         local notifOptions = {}
 
@@ -323,14 +323,8 @@ local function ItemIsethAvailable(itemID, link)
         end
 
         notifOptions.displayDuration = options:GetNotificationDisplayTime()
-        notifOptions.wrap = true
-        notifOptions.wrapMessage = T.Tools.Text.Color(T.Tools.Colors.GREEN,
-            text)
-        notifOptions.wrapMessageOptions = {
-            fontSize = 12,
-        }
 
-        widget:SetItem(link)
+        widget:SetBISNotification(link, detailText, "available_vault")
         Monitor:SendMessage("TWICH_NOTIFICATION", widget, notifOptions)
     end
 
@@ -347,16 +341,13 @@ local function ItemIsethAvailable(itemID, link)
         if newTrackRank and ownedTrackRank and newTrackRank > ownedTrackRank then
             -- upgraded track available
             local ownedTrackStr = BIS.ItemScanner.GetGearTrackByRank(ownedTrackRank)
-            CreateMessage(
-                "An upgraded Best In Slot item is available! " ..
-                T.Tools.Text.ToTitleCase(ownedTrackStr) .. " → " .. track,
-                link)
+            CreateMessage(T.Tools.Text.ToTitleCase(ownedTrackStr) .. " → " .. track, link)
         else
             -- same or lower track
         end
     elseif not alreadyOwned then
         -- Great Vault BIS item not owned yet
-        CreateMessage("A new Best In Slot item is available!", link)
+        CreateMessage(nil, link)
     end
 end
 

@@ -32,10 +32,10 @@ end
 local function ItemHathBeenReceived(itemInfo, previousState, currentState)
 	-- T:Print("You have received a Best in Slot item!", itemInfo.link)
 
-	local function CreateMessage(text)
-		---@type TwichUI_ItemWidget
+	local function CreateMessage(detailText)
+		---@type TwichUI_BISNotificationWidget
 		---@diagnostic disable-next-line: param-type-mismatch
-		local widget = AceGUI:Create("TwichUI_Item")
+		local widget = AceGUI:Create("TwichUI_BISNotification")
 		---@type NotificationOptions
 		local notifOptions = {}
 
@@ -48,14 +48,9 @@ local function ItemHathBeenReceived(itemInfo, previousState, currentState)
 		end
 
 		notifOptions.displayDuration = options:GetNotificationDisplayTime()
-		notifOptions.wrap = true
-		notifOptions.wrapMessage = T.Tools.Text.Color(T.Tools.Colors.GREEN, text)
-		notifOptions.wrapMessageOptions = {
-			fontSize = 12,
-		}
 
 		---@diagnostic disable-next-line: undefined-field
-		widget:SetItem(itemInfo.link)
+		widget:SetBISNotification(itemInfo.link, detailText, "received")
 		Monitor:SendMessage("TWICH_NOTIFICATION", widget, notifOptions)
 	end
 
@@ -66,12 +61,11 @@ local function ItemHathBeenReceived(itemInfo, previousState, currentState)
 		local ownedTrackStr = BIS.ItemScanner.GetGearTrackByRank(previousTrackRank)
 		local newTrackStr = BIS.ItemScanner.GetGearTrackByRank(newTrackRank)
 
-		CreateMessage("You have received an upgraded Best in Slot item! " ..
-			T.Tools.Text.ToTitleCase(ownedTrackStr) .. " → " .. T.Tools.Text.ToTitleCase(newTrackStr))
+		CreateMessage(T.Tools.Text.ToTitleCase(ownedTrackStr) .. " → " .. T.Tools.Text.ToTitleCase(newTrackStr))
 		return
 	end
 
-	CreateMessage("You have received a Best in Slot item!")
+	CreateMessage(nil)
 end
 
 function Monitor:CreateTest()

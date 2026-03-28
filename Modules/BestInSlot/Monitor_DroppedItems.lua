@@ -31,10 +31,10 @@ function Monitor:START_LOOT_ROLL(event, rollID)
 
     if not GVMonitor.IsItemBestInSlot(itemID) then return end
 
-    local function CreateMessage(text, itemLink)
-        local AceGUI = LibStub("AceGUI-3.0")
+    local AceGUI = LibStub("AceGUI-3.0")
 
-        local widget = AceGUI:Create("TwichUI_Item")
+    local function CreateMessage(detailText)
+        local widget = AceGUI:Create("TwichUI_BISNotification")
         ---@type NotificationOptions
         local notifOptions = {}
 
@@ -47,14 +47,8 @@ function Monitor:START_LOOT_ROLL(event, rollID)
         end
 
         notifOptions.displayDuration = options:GetNotificationDisplayTime()
-        notifOptions.wrap = true
-        notifOptions.wrapMessage = T.Tools.Text.Color(T.Tools.Colors.GREEN,
-            text)
-        notifOptions.wrapMessageOptions = {
-            fontSize = 12,
-        }
 
-        widget:SetItem(link)
+        widget:SetBISNotification(link, detailText, "available_roll")
         Monitor:SendMessage("TWICH_NOTIFICATION", widget, notifOptions)
     end
 
@@ -70,15 +64,12 @@ function Monitor:START_LOOT_ROLL(event, rollID)
         if newTrackRank and ownedTrackRank and newTrackRank > ownedTrackRank then
             -- upgraded track available
             local ownedTrackStr = BIS.ItemScanner.GetGearTrackByRank(ownedTrackRank)
-            CreateMessage(
-                "An upgraded Best In Slot item is available to roll for! " ..
-                T.Tools.Text.ToTitleCase(ownedTrackStr) .. " → " .. track,
-                link)
+            CreateMessage(T.Tools.Text.ToTitleCase(ownedTrackStr) .. " → " .. track)
         else
             -- same or lower track
         end
     elseif not alreadyOwned then
         -- not owned at all, so upgrade by default
-        CreateMessage("A new Best In Slot item is available to roll for!", link)
+        CreateMessage(nil)
     end
 end

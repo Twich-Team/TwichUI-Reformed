@@ -1796,7 +1796,8 @@ local function BuildStandaloneDatatextConfiguration()
                     transparentTheme = {
                         type = "toggle",
                         name = "Transparent Theme",
-                        desc = "Hide the panel background, border, accent bar and dividers so only the text, hover underline and hover glow are visible.",
+                        desc =
+                        "Hide the panel background, border, accent bar and dividers so only the text, hover underline and hover glow are visible.",
                         order = 3,
                         get = function()
                             local current = GetCurrentPanel()

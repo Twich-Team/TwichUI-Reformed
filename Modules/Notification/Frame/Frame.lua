@@ -362,6 +362,14 @@ function NotificationFrame:DisplayNotification(widget, options)
     -- Allow the user to dismiss a notification with a right-click.
     if widget.frame then
         local frame = widget.frame
+
+        -- Subtle hover highlight for visual feedback.
+        local hoverHighlight = frame.CreateTexture and frame:CreateTexture(nil, "OVERLAY") or nil
+        if hoverHighlight then
+            hoverHighlight:SetAllPoints(frame)
+            hoverHighlight:SetColorTexture(1, 1, 1, 0)
+        end
+
         local oldOnEnter = frame:GetScript("OnEnter")
         local oldOnLeave = frame:GetScript("OnLeave")
         local oldOnMouseDown = frame:GetScript("OnMouseDown")
@@ -369,6 +377,7 @@ function NotificationFrame:DisplayNotification(widget, options)
         frame:EnableMouse(true)
         frame:SetScript("OnEnter", function(self)
             self.dismissPaused = true
+            if hoverHighlight then hoverHighlight:SetColorTexture(1, 1, 1, 0.05) end
             if oldOnEnter then
                 oldOnEnter(self)
             end
@@ -376,6 +385,7 @@ function NotificationFrame:DisplayNotification(widget, options)
         end)
         frame:SetScript("OnLeave", function(self)
             self.dismissPaused = false
+            if hoverHighlight then hoverHighlight:SetColorTexture(1, 1, 1, 0) end
             if oldOnLeave then
                 oldOnLeave(self)
             end

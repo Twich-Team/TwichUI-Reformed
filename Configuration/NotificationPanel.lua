@@ -53,134 +53,136 @@ local function BuildNotificationPanelConfiguration()
         title = W.TitleWidget(0, "Notifications"),
         desc = W.Description(1, "Configure the notification panel and per-feature alerts."),
 
-        -- ===== Tab: Display =====
+        -- ===== Tab: Global Settings =====
         displayGroup = {
             type = "group",
-            name = "Display",
+            name = "Global Settings",
             inline = false,
-            order = 10,
+            order = 5,
             args = {
-                title = W.TitleWidget(0, "Panel Display"),
+                title = W.TitleWidget(0, "Notification Panel Settings"),
 
-                -- ── Dock mode ──────────────────────────────────────────────
-                chatDockMode = {
-                    type = "select",
-                    name = "Chat Frame Dock",
-                    desc =
-                    "Attach the notification panel to the chat frame.\n\n|cffffcc00Top|r — Notifications grow upward from the top edge of the chat frame and match its width.\n\n|cffffcc00Right|r — Notifications grow upward from the bottom-right corner of the chat frame.",
-                    order = 1,
-                    values = {
-                        none  = "None (manual position)",
-                        top   = "Top of chat frame",
-                        right = "Right of chat frame",
+                -- ── Panel Layout ──────────────────────────────────────────
+                panelLayout = W.IGroup(10, "Panel Layout", {
+                    chatDockMode = {
+                        type = "select",
+                        name = "Chat Frame Dock",
+                        desc =
+                        "Attach the notification panel to the chat frame.\n\n|cffffcc00Top|r — Notifications grow upward from the top edge of the chat frame and match its width.\n\n|cffffcc00Right|r — Notifications grow upward from the bottom-right corner of the chat frame.",
+                        order = 1,
+                        values = {
+                            none  = "None (manual position)",
+                            top   = "Top of chat frame",
+                            right = "Right of chat frame",
+                        },
+                        handler = Options,
+                        get = "GetChatDockMode",
+                        set = "SetChatDockMode",
                     },
-                    handler = Options,
-                    get = "GetChatDockMode",
-                    set = "SetChatDockMode",
-                },
+                    anchorLockToggle = {
+                        type = "execute",
+                        name = function()
+                            return Options:GetAnchorLocked() and "Unlock Anchor" or "Lock Anchor"
+                        end,
+                        desc = function()
+                            return Options:GetAnchorLocked()
+                                and "Show the draggable anchor handle so you can reposition the notification panel."
+                                or "Hide the anchor handle and lock the notification panel in place."
+                        end,
+                        order = 2,
+                        disabled = function() return Options:GetChatDockMode() ~= "none" end,
+                        handler = Options,
+                        func = function(self)
+                            Options:SetAnchorLocked(nil, not Options:GetAnchorLocked())
+                        end,
+                    },
+                    anchorX = {
+                        type = "range",
+                        name = "Position X",
+                        desc =
+                        "Horizontal offset of the notification anchor from the center of the screen. Positive moves right.",
+                        order = 3,
+                        softMin = -1200,
+                        softMax = 1200,
+                        step = 1,
+                        disabled = function() return Options:GetChatDockMode() ~= "none" end,
+                        handler = Options,
+                        get = "GetAnchorX",
+                        set = "SetAnchorX",
+                    },
+                    anchorY = {
+                        type = "range",
+                        name = "Position Y",
+                        desc = "Vertical offset of the notification anchor from the center of the screen. Positive moves up.",
+                        order = 4,
+                        softMin = -600,
+                        softMax = 600,
+                        step = 1,
+                        disabled = function() return Options:GetChatDockMode() ~= "none" end,
+                        handler = Options,
+                        get = "GetAnchorY",
+                        set = "SetAnchorY",
+                    },
+                    growthDirection = {
+                        type = "select",
+                        name = "Growth Direction",
+                        desc =
+                        "The direction new notifications appear from the anchor point. Forced upward when docked to the chat frame.",
+                        order = 5,
+                        values = { UP = "Upwards", DOWN = "Downwards" },
+                        disabled = function() return Options:GetChatDockMode() ~= "none" end,
+                        handler = Options,
+                        get = "GetGrowthDirection",
+                        set = "SetGrowthDirection",
+                    },
+                    panelWidth = {
+                        type = "range",
+                        name = "Notification Width",
+                        desc =
+                        "Width of each notification. Also applies when docked to the right of the chat frame. Ignored when docked to the top (width matches the chat frame).",
+                        order = 6,
+                        softMin = 200,
+                        softMax = 600,
+                        step = 1,
+                        handler = Options,
+                        get = "GetPanelWidth",
+                        set = "SetPanelWidth",
+                    },
+                }),
 
-                -- ── Manual anchor controls (hidden when docked) ───────────
-                anchorLockToggle = {
-                    type = "execute",
-                    name = function()
-                        return Options:GetAnchorLocked() and "Unlock Anchor" or "Lock Anchor"
-                    end,
-                    desc = function()
-                        return Options:GetAnchorLocked()
-                            and "Show the draggable anchor handle so you can reposition the notification panel."
-                            or "Hide the anchor handle and lock the notification panel in place."
-                    end,
-                    order = 2,
-                    disabled = function() return Options:GetChatDockMode() ~= "none" end,
-                    handler = Options,
-                    func = function(self)
-                        Options:SetAnchorLocked(nil, not Options:GetAnchorLocked())
-                    end,
-                },
-                anchorX = {
-                    type = "range",
-                    name = "Position X",
-                    desc =
-                    "Horizontal offset of the notification anchor from the center of the screen. Positive moves right.",
-                    order = 3,
-                    softMin = -1200,
-                    softMax = 1200,
-                    step = 1,
-                    disabled = function() return Options:GetChatDockMode() ~= "none" end,
-                    handler = Options,
-                    get = "GetAnchorX",
-                    set = "SetAnchorX",
-                },
-                anchorY = {
-                    type = "range",
-                    name = "Position Y",
-                    desc = "Vertical offset of the notification anchor from the center of the screen. Positive moves up.",
-                    order = 4,
-                    softMin = -600,
-                    softMax = 600,
-                    step = 1,
-                    disabled = function() return Options:GetChatDockMode() ~= "none" end,
-                    handler = Options,
-                    get = "GetAnchorY",
-                    set = "SetAnchorY",
-                },
-
-                -- ── Shared display controls ────────────────────────────────
-                growthDirection = {
-                    type = "select",
-                    name = "Growth Direction",
-                    desc =
-                    "The direction new notifications appear from the anchor point. Forced upward when docked to the chat frame.",
-                    order = 5,
-                    values = { UP = "Upwards", DOWN = "Downwards" },
-                    disabled = function() return Options:GetChatDockMode() ~= "none" end,
-                    handler = Options,
-                    get = "GetGrowthDirection",
-                    set = "SetGrowthDirection",
-                },
-                panelWidth = {
-                    type = "range",
-                    name = "Notification Width",
-                    desc =
-                    "Width of each notification. Also applies when docked to the right of the chat frame. Ignored when docked to the top (width matches the chat frame).",
-                    order = 6,
-                    softMin = 200,
-                    softMax = 600,
-                    step = 1,
-                    handler = Options,
-                    get = "GetPanelWidth",
-                    set = "SetPanelWidth",
-                },
-                notificationFont = {
-                    type = "select",
-                    dialogControl = "LSM30_Font",
-                    name = "Font",
-                    desc = "Font used across all notifications. Default preserves per-widget fonts.",
-                    order = 7,
-                    width = 2,
-                    values = function()
-                        local fonts = LibStub("LibSharedMedia-3.0"):HashTable("font") or {}
-                        local values = { __default = "Default" }
-                        for k, v in pairs(fonts) do values[k] = v end
-                        return values
-                    end,
-                    handler = Options,
-                    get = "GetNotificationFont",
-                    set = "SetNotificationFont",
-                },
-                notificationFontSizeAdjustment = {
-                    type = "range",
-                    name = "Font Size Adjustment",
-                    desc =
-                    "Shift notification text size up or down while keeping the style hierarchy. Zero preserves defaults.",
-                    order = 8,
-                    min = -4,
-                    max = 8,
-                    step = 1,
-                    handler = Options,
-                    get = "GetNotificationFontSizeAdjustment",
-                    set = "SetNotificationFontSizeAdjustment",
-                },
+                -- ── Appearance ────────────────────────────────────────────
+                appearance = W.IGroup(20, "Appearance", {
+                    notificationFont = {
+                        type = "select",
+                        dialogControl = "LSM30_Font",
+                        name = "Font",
+                        desc = "Font used across all notifications. Default preserves per-widget fonts.",
+                        order = 1,
+                        width = 2,
+                        values = function()
+                            local fonts = LibStub("LibSharedMedia-3.0"):HashTable("font") or {}
+                            local values = { __default = "Default" }
+                            for k, v in pairs(fonts) do values[k] = v end
+                            return values
+                        end,
+                        handler = Options,
+                        get = "GetNotificationFont",
+                        set = "SetNotificationFont",
+                    },
+                    notificationFontSizeAdjustment = {
+                        type = "range",
+                        name = "Font Size Adjustment",
+                        desc =
+                        "Shift notification text size up or down while keeping the style hierarchy. Zero preserves defaults.",
+                        order = 2,
+                        min = -4,
+                        max = 8,
+                        step = 1,
+                        handler = Options,
+                        get = "GetNotificationFontSizeAdjustment",
+                        set = "SetNotificationFontSizeAdjustment",
+                    },
+                }),
             },
         },
 

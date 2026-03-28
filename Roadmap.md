@@ -13,6 +13,7 @@
 - QOL: On-Use Trinket Bar
 - QOL: Sell Junk
 - QOL: Fast Look
+- QOL: Transmog Wardrobe
 - Nameplates
 - UnitFrames
 - Blizzard Re-skin

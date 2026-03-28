@@ -1,4 +1,4 @@
-local E = unpack(ElvUI)
+local E = _G.ElvUI and _G.ElvUI[1]
 local T = unpack(TwichRx)
 
 local AceGUI = LibStub("AceGUI-3.0")
@@ -204,7 +204,9 @@ local function Constructor()
     end
 
     frame:SetScript("OnEnter", function(self)
-        self:SetBackdropBorderColor(unpack(E.media.rgbvaluecolor))
+        if E and E.media and E.media.rgbvaluecolor then
+            self:SetBackdropBorderColor(unpack(E.media.rgbvaluecolor))
+        end
         local obj = self.obj
         if not obj or (not obj.itemID and not obj.itemLink) then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -218,7 +220,9 @@ local function Constructor()
 
     frame:SetScript("OnLeave", function(self)
         GameTooltip:Hide()
-        self:SetBackdropBorderColor(unpack(E.media.bordercolor))
+        if E and E.media and E.media.bordercolor then
+            self:SetBackdropBorderColor(unpack(E.media.bordercolor))
+        end
     end)
 
     return AceGUI:RegisterAsWidget(widget)

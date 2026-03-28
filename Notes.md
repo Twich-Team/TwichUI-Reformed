@@ -16,14 +16,6 @@
 
 ## Datatext
 
-- The friends datatext has an option to only show friends that are online in wow. However its not working, when I have a friend online, it doesnt show any.
-- The favorite mounts in the mounts datatext menu are not populating. It should be showing the mounts I have favorited in the mount journal like it used to.
-- Add a theming option to the configuration for each datatext panel that will apply a transparent theme. sets all colors to transparent so its only the text, hover underline, and hover glow
-- first time opening the hearthstone selector for portals, teh eharthstones dont populate
-- make sure the datatexts are using the primary color for the "colored" texts (like the number of chores, or m+ score). Allow this to be overridden if desired.
-- I have created a panel that is 3440x30, to stretch along the bottom of my screen. I placed it at 0, 0 for x and y offset. There is what looks like 1-2 pixel gap between the monitor and the bar. I can see the game in that area.
-- IN the chores datatext tooltip, it says left click to open menu, right click to pin frame. That is backwords. Please reword it correctly.
-
 ## Mythic+
 
 ## Apperance
@@ -34,7 +26,7 @@
 - Lets keep the left sections in the configuraiton in alpha order- except for overview, which would be at the top.
 - In overview, add a way to toggle the wizard.
 - Rename The Weekly and Utility section to Quality of Life
-- Create a basic datatextd that says "TwichUI", and when clicked opens the configuration
+- Create a basic datatext that says "TwichUI", and when clicked opens the configuration
 - Update the overview to spotlight some of the quality of life features (smart mount, easy fish, etc.)
 - In the configuration title, make it say TwichUI: Reloaded Configuration
 - Remove the Fonts & Media section, we are going to always provide those. Keep them on all the time.
