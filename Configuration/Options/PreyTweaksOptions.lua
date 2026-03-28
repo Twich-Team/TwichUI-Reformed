@@ -12,14 +12,14 @@ ConfigurationModule.Options.PreyTweaks = Options
 
 local DEFAULTS = {
     enabled = false,
-    displayMode = "ring",
+    displayMode = "bar",
     ringBackgroundStyle = "full",
     hideBlizzardWidget = false,
     showValueText = true,
     showStageBadge = true,
     valueFont = "__default",
     stageFont = "__default",
-    valueFontSize = 20,
+    valueFontSize = 16,
     stageFontSize = 12,
     valueFontOutline = "default",
     stageFontOutline = "default",
@@ -27,7 +27,7 @@ local DEFAULTS = {
     ringOffsetX = 0,
     ringOffsetY = 0,
     barOffsetX = 0,
-    barOffsetY = -10,
+    barOffsetY = -60,
     textOffsetX = 0,
     textOffsetY = -6,
     playPhaseChangeSound = false,
@@ -113,7 +113,7 @@ end
 function Options:SetDisplayMode(info, value)
     local db = self:GetDB()
     if value ~= "bar" and value ~= "text" then
-        value = "ring"
+        value = "bar"
     end
 
     db.displayMode = value

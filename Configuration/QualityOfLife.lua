@@ -973,7 +973,6 @@ local function BuildPreyTweaksTab()
                     order = 1,
                     width = 1.5,
                     values = {
-                        ring = "Ring",
                         bar = "Bar",
                         text = "Text",
                     },

@@ -528,7 +528,7 @@ function SW:SendNotification(dungeonName, roles, groupType, dungeonID)
 
     local options = GetOptionsModule()
     local db = options:GetSatchelWatchDB()
-    local soundKey = db.sound or "TwichUI Green Dude Gets Loot"
+    local soundKey = db.sound or "TwichUI Alert 2"
     local displayDuration = db.notificationDisplayTime or 10
 
     self:SendMessage("TWICH_NOTIFICATION", message, { soundKey = soundKey, displayDuration = displayDuration })

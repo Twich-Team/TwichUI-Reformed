@@ -91,6 +91,9 @@ function ErrorLog:Install()
                     while #db.errors > cap do
                         table.remove(db.errors)
                     end
+                    if T.Print then
+                        T:Print("[TwichUI] Captured a new error. Open /tui errors to review details.")
+                    end
                     -- Reflect in viewer if open
                     local viewer = Tools.UI and Tools.UI.ErrorLogViewer
                     if viewer and viewer.frame and viewer.frame:IsShown() then

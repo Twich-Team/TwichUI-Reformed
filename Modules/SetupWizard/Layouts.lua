@@ -96,18 +96,15 @@ SetupWizardModule.THEME_PRESETS = {
 -- Adding a new entry here automatically populates the layout picker in the wizard.
 
 SetupWizardModule.AVAILABLE_LAYOUTS = {
-    -- Captured: 2026-03-27  |  3440x1440  |  layout id: standard
-    -- Captured: 2026-03-27  |  3440x1440  |  layout id: standard
-    -- Captured: 2026-03-27  |  3440x1440  |  layout id: standard
-    -- Captured: 2026-03-28  |  3440x1440  |  layout id: standard
+    -- Captured: 2026-03-28  |  3440x1440  |  layout id: signature
     {
-        id                  = "standard",
-        name                = "Standard",
-        description         = "Add a description here.",
+        id                  = "signature",
+        name                = "Signature",
+        description         = "The original TwichUI layout, optimized for any role and class.",
         role                = "any", -- "any" | "dps" | "healer" | "tank"
         referenceResolution = { w = 3440, h = 1440 },
         frames              = {
-            ChatFrame1 = { x = 0.00233, y = 0.02639, w = 0.17035, h = 0.16458, scaleMode = "height" },
+            ChatFrame1 = { x = 0.00000, y = 0.02083, w = 0.17500, h = 0.19931, scaleMode = "height" },
         },
         apply               = function()
             local T = unpack(_G.TwichRx)
@@ -169,7 +166,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     messageFadeMinAlpha = 0,
                     messageFadesEnabled = true,
                     msgBgColor = {
-                        a = 1,
+                        a = 0.3,
                         b = 0.12549,
                         g = 0.0941177,
                         r = 0.0823529
@@ -505,9 +502,6 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
             })
         end,
     },
-    -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
-    -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
-    -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- {
     --     id          = "standard",

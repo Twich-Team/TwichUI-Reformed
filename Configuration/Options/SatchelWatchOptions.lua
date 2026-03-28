@@ -144,7 +144,7 @@ end
 
 function Options:GetSound(info)
     local db = self:GetSatchelWatchDB()
-    return db.sound or "TwichUI Green Dude Gets Loot"
+    return db.sound or "TwichUI Alert 2"
 end
 
 function Options:SetSound(info, value)
