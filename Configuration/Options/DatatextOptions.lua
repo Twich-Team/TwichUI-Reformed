@@ -165,6 +165,14 @@ function Options:GetResolvedStandaloneStyle(panelID)
             end
         end
     end
+    -- Transparent theme: zero out all opaque surfaces, keeping interaction
+    -- colours (hover glow / hover bar) visible.
+    if panel and panel.transparentTheme == true then
+        resolved.backgroundAlpha = 0
+        resolved.borderAlpha = 0
+        resolved.accentAlpha = 0
+        resolved.dividerAlpha = 0
+    end
     return resolved
 end
 
@@ -1055,6 +1063,22 @@ end
 function Options:ResetSharedStyle()
     local standalone = self:GetStandaloneDB()
     standalone.style = {}
+    RefreshStandalonePanels()
+end
+
+--- Returns true when the given panel should use a fully transparent visual style
+--- (panel background, border, accent bar and dividers all hidden).
+function Options:GetPanelTransparentTheme(panelID)
+    local panel = self:GetStandalonePanel(panelID)
+    return panel and panel.transparentTheme == true or false
+end
+
+--- Enables or disables the transparent theme for the given panel.
+function Options:SetPanelTransparentTheme(panelID, value)
+    local panel = self:GetStandalonePanel(panelID)
+    if panel then
+        panel.transparentTheme = value == true
+    end
     RefreshStandalonePanels()
 end
 

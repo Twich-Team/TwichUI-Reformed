@@ -313,6 +313,13 @@ end
 
 ---@return number[]
 function PDT:FindToyHearthstones()
+    -- Blizzard_Collections is a demand-loaded Blizzard addon that populates the
+    -- toy box.  Without it C_ToyBox.GetNumToys() returns 0, so we force-load it
+    -- before querying.  The call is safe to make when the addon is already loaded.
+    if not IsAddOnLoaded("Blizzard_Collections") then
+        LoadAddOn("Blizzard_Collections")
+    end
+
     -- ensure the toybox is not filtered
     C_ToyBox.SetFilterString("")
 

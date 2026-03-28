@@ -27,6 +27,26 @@ end
 --- Retrieves all mounts from the mount journal. This is the intensive from-scratch version, and should only be called when required.
 --- @return table<number, {name: string, spellID: number, icon: string, mountID: number, isFavorite: boolean}>
 local function GetMountsFromMountJournal()
+    -- Clear mount journal filters so all collected mounts are visible regardless
+    -- of any active search/source filter the player may have set.  We save and
+    -- restore the text filter so we don't visibly stomp the player's journal.
+    local savedText = C_MountJournal.GetTextFilter and C_MountJournal.GetTextFilter() or ""
+    if C_MountJournal.SetTextFilter then
+        C_MountJournal.SetTextFilter("")
+    end
+    if C_MountJournal.SetAllSourceFilters then
+        C_MountJournal.SetAllSourceFilters(true)
+    end
+    if C_MountJournal.SetCollectedFilterSetting then
+        -- Show only collected, hide uncollected
+        if LE_MOUNT_JOURNAL_FILTER_COLLECTED then
+            C_MountJournal.SetCollectedFilterSetting(LE_MOUNT_JOURNAL_FILTER_COLLECTED, true)
+        end
+        if LE_MOUNT_JOURNAL_FILTER_NOT_COLLECTED then
+            C_MountJournal.SetCollectedFilterSetting(LE_MOUNT_JOURNAL_FILTER_NOT_COLLECTED, false)
+        end
+    end
+
     -- start by looping through all the mounts to gather information
     local entries = {}
     local numMounts = GetNumMounts() or 0
@@ -46,6 +66,12 @@ local function GetMountsFromMountJournal()
             })
         end
     end
+
+    -- Restore the text filter so it doesn't visibly change the player's journal
+    if C_MountJournal.SetTextFilter and savedText ~= "" then
+        C_MountJournal.SetTextFilter(savedText)
+    end
+
     return entries
 end
 

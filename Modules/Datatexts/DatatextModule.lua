@@ -494,14 +494,23 @@ function DataTextModule:RegisterDefinition(datatextDefinition)
 end
 
 function DataTextModule:GetElvUIValueColor()
-    -- ElvUI's value color (db.general.valuecolor or E.media.rgbvaluecolor depending on version)
-    local E = GetElvUIEngine()
-    local vc = E.db and E.db.general and E.db.general.valuecolor
-    if not vc then vc = E.media and E.media.rgbvaluecolor end
-    if vc then
-        return vc.r, vc.g, vc.b
+    -- Prefer the TwichUI theme primary color so datatext highlights track the
+    -- global Appearance settings rather than an external addon's stored value.
+    local theme = T:GetModule("Theme", true)
+    if theme then
+        local c = theme:GetColor("primaryColor")
+        if c then return c[1], c[2], c[3] end
     end
-    return nil
+    -- Secondary: ElvUI value color when ElvUI is present and a custom color has
+    -- been configured there.
+    local E = GetElvUIEngine()
+    if E then
+        local vc = E.db and E.db.general and E.db.general.valuecolor
+        if not vc then vc = E.media and E.media.rgbvaluecolor end
+        if vc then return vc.r, vc.g, vc.b end
+    end
+    -- Last-resort hardcoded TwichUI teal.
+    return 0.10, 0.72, 0.74
 end
 
 function DataTextModule:MaybeFlashPanel(panel, dbKey, previousText, nextText)

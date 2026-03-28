@@ -685,9 +685,23 @@ end
 
 function DataTextModule:ApplyStandalonePanelPosition(frame, panelDefinition)
     frame:ClearAllPoints()
-    frame:SetPoint(panelDefinition.point or "BOTTOM", UIParent,
-        panelDefinition.relativePoint or panelDefinition.point or "BOTTOM", panelDefinition.x or 0,
-        panelDefinition.y or 0)
+    local point = panelDefinition.point or "BOTTOM"
+    local relPoint = panelDefinition.relativePoint or point
+    local x = panelDefinition.x or 0
+    local y = panelDefinition.y or 0
+
+    -- The PANEL_BACKDROP has edgeSize=1 with insets={bottom=1}, meaning the
+    -- visible filled area starts 1px above the frame's actual bottom edge.
+    -- When the panel is flush-bottom anchored at y=0 this creates a visible
+    -- 1-2px gap between the panel and the screen edge.  Compensate by nudging
+    -- the frame 1px below the screen edge so the backdrop fill aligns flush.
+    if (point == "BOTTOM" or point == "BOTTOMLEFT" or point == "BOTTOMRIGHT")
+        and relPoint == point and y == 0
+    then
+        y = -1
+    end
+
+    frame:SetPoint(point, UIParent, relPoint, x, y)
 end
 
 function DataTextModule:RefreshStandalonePanels()

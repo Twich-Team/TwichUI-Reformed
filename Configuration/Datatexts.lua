@@ -1793,6 +1793,24 @@ local function BuildStandaloneDatatextConfiguration()
                             RefreshStandalone(true)
                         end,
                     },
+                    transparentTheme = {
+                        type = "toggle",
+                        name = "Transparent Theme",
+                        desc = "Hide the panel background, border, accent bar and dividers so only the text, hover underline and hover glow are visible.",
+                        order = 3,
+                        get = function()
+                            local current = GetCurrentPanel()
+                            return current and current.transparentTheme == true or false
+                        end,
+                        set = function(_, value)
+                            local current = GetCurrentPanel()
+                            if not current then
+                                return
+                            end
+                            current.transparentTheme = value == true
+                            RefreshStandalone(true)
+                        end,
+                    },
                     resetStyleOverrides = {
                         type = "execute",
                         name = "Reset Panel Overrides",

@@ -4,10 +4,15 @@
 - Our edit box used to change the color of its accent to represent the channel you are typing in. Can we please re-enable that.
 - FOr the messages inside the chat frame, can we make sure they reach the bottom of the frame? theres a good maybe 10 pixels between the bottom of the bottom chat and the bottom of the frame. There's also what looks like a slightly different color in that area
 - When in Mythic+ dungeons, the chat message background fails to properly size for messages that overflow onto the following line. The row does not expand vertically, so text overflows it, and causes each row to potentially overlap.
+- There looks to be some sort of a teal or greenish colored tint on the chat. I have set all the colors to black and it still looks somewhat green.
+- There also seems to be a green border and or highlight when hovering the messages that I cannot change.
+- The chat data text panel needs to have an override for font.
 
 ## Notifications
 
 - For the notifications config, can we separate the global configuration settings from the individual notification settings? perhaps a separate tab or group o r something for that
+- The buttons on the notifications have no hover effect.
+- Update the styling of the best in slot notification to be more closely aligned with the other notifications.
 
 ## Datatext
 
@@ -22,8 +27,6 @@
 ## Mythic+
 
 ## Apperance
-
-- The font of notifications does not change when I change the global appearance font.
 
 ## Other
 

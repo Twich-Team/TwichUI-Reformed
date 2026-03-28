@@ -1185,7 +1185,18 @@ local function GetOnlineFriendSummary()
         wowTotal = _G.GetNumFriends() or 0
     end
 
-    if C_FriendList and type(C_FriendList.GetNumOnlineFriends) == "function" then
+    -- Count online WoW friends by iterating individual friend entries so the
+    -- result stays consistent with the CollectWowFriends() path used by the
+    -- tooltip.  GetNumOnlineFriends() can return a stale or zeroed value while
+    -- the per-entry connected flag is always current.
+    if C_FriendList and type(C_FriendList.GetFriendInfoByIndex) == "function" then
+        for i = 1, wowTotal do
+            local info = C_FriendList.GetFriendInfoByIndex(i)
+            if info and info.connected then
+                wowOnline = wowOnline + 1
+            end
+        end
+    elseif C_FriendList and type(C_FriendList.GetNumOnlineFriends) == "function" then
         wowOnline = C_FriendList.GetNumOnlineFriends() or 0
     else
         wowOnline = wowTotal

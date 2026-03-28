@@ -2472,7 +2472,7 @@ function CDT:OnEnter(panel)
     end
 
     tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY,
-        "Left-click for tracking options. Right-click to pin or close the tracker."))
+        "Left-click to pin or close the tracker. Right-click for tracking options."))
     ApplyTooltipLineFont(tooltip, tooltip:NumLines(), fontSettings.entryFont, fontSettings.entryFontSize)
     DataTextModule:ShowDatatextTooltip(tooltip)
 end

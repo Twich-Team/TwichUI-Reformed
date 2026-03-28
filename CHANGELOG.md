@@ -4,7 +4,6 @@
 
 - Fixed an issue where the Mythic+ timer would not properly count all minions
 - Fixed a bug that was causing buttons to appear on the chat frame
-- Fixed an issue where the chat message entries would not size properly within dungeons
 - Fixed incorrect tooltip text in the Mythic+ data panel text
 
 #### New
