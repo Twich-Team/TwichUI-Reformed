@@ -85,11 +85,6 @@ function ConfigurationModule:OnInitialize()
 
     self:RebuildOptionsTableSections()
 
-    -- Register with ElvUI instead
-    if E and E.Options and E.Options.args then
-        E.Options.args.TwichUIRx = self.optionsTable
-    end
-
     self:RegisterStandaloneOptionsTable()
     self:SetChoresTrackerConfigKeybinding()
 end
@@ -224,11 +219,6 @@ function ConfigurationModule:OpenLegacyOptionsUI(...)
         return
     end
 
-    -- Ensure options are registered (ElvUI load-on-demand options might have wiped them)
-    if E.Options and E.Options.args and not E.Options.args.TwichUIRx then
-        E.Options.args.TwichUIRx = self.optionsTable
-    end
-
     -- Prefer ElvUI-patched AceConfig variants if available
     local ACD = _G.LibStub("AceConfigDialog-3.0-ElvUI", true)
         or (E and E.Libs and E.Libs.AceConfigDialog)
@@ -295,7 +285,7 @@ function ConfigurationModule:EnsureChoresTrackerConfigButton()
         ---@type ChoresDataText|nil
         ---@diagnostic disable-next-line: undefined-field
         local choresDataText = datatextModule and datatextModule.GetModule and
-        datatextModule:GetModule("ChoresDataText", true)
+            datatextModule:GetModule("ChoresDataText", true)
         if choresDataText and choresDataText.ToggleTrackerFrame then
             choresDataText:ToggleTrackerFrame()
         end
@@ -338,7 +328,7 @@ end
 function ConfigurationModule:SetChoresTrackerConfigKeybinding()
     local options = self.Options and self.Options.Chores
     local keybinding = options and options.GetTrackerFrameConfigKeybinding and options:GetTrackerFrameConfigKeybinding() or
-    ""
+        ""
     local button = self:EnsureChoresTrackerConfigButton()
     local bindingSet = GetActiveBindingSet()
 

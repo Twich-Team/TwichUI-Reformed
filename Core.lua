@@ -59,7 +59,6 @@ do
     T:AddLib('AceConfigDialog', 'AceConfigDialog-3.0')
     T:AddLib('AceConfigRegistry', 'AceConfigRegistry-3.0')
     T:AddLib('AceDBOptions', 'AceDBOptions-3.0')
-    T:AddLib('LibElvUIPlugin', 'LibElvUIPlugin-1.0')
 end
 
 --[[
@@ -77,24 +76,19 @@ function T:OnInitialize()
     ---@type ConfigurationModule
     local CM = self:GetModule("Configuration")
 
-    -- Register with ElVUI as a plugin
-    if T.Libs.LibElvUIPlugin then
-        T.Libs.LibElvUIPlugin:RegisterPlugin('TwichUI', nil, false, T.addonMetadata.version)
-    end
-
     --- Enable optional modules based on user settings
     ---@type table<AceModule, boolean>
     local moduleRegistry = {
-        { module = self:GetModule("ChatEnhancements"):GetModule("ChatStyling"), enabled = CM.Options.ChatEnhancement:IsStylingEnabled() },
+        { module = self:GetModule("ChatEnhancements"):GetModule("ChatStyling"),  enabled = CM.Options.ChatEnhancement:IsStylingEnabled() },
         { module = self:GetModule("ChatEnhancements"):GetModule("ChatRenderer"), enabled = CM.Options.ChatEnhancement:IsStylingEnabled() },
-        { module = self:GetModule("ChatEnhancements"):GetModule("ChatAlerts"),  enabled = CM.Options.ChatEnhancement:IsAlertsEnabled() },
-        { module = self:GetModule("Chores"),                                    enabled = CM.Options.Chores:GetEnabled() },
-        { module = self:GetModule("SmartMount"),                                enabled = CM.Options.SmartMount:GetEnabled() },
-        { module = self:GetModule("EasyFish"),                                  enabled = CM.Options.EasyFish:GetEnabled() },
-        { module = self:GetModule("Datatexts"),                                 enabled = CM.Options.Datatext:IsModuleEnabled() },
-        { module = self:GetModule("RaidFrames"),                                enabled = CM.Options.RaidFrames:GetEnabled() },
-        { module = self:GetModule("BestInSlot"),                                enabled = CM.Options.BestInSlot:IsBestInSlotModuleEnabled() },
-        { module = self:GetModule("QualityOfLife"):GetModule("Gathering"),      enabled = CM.Options.Gathering:GetEnabled() },
+        { module = self:GetModule("ChatEnhancements"):GetModule("ChatAlerts"),   enabled = CM.Options.ChatEnhancement:IsAlertsEnabled() },
+        { module = self:GetModule("Chores"),                                     enabled = CM.Options.Chores:GetEnabled() },
+        { module = self:GetModule("SmartMount"),                                 enabled = CM.Options.SmartMount:GetEnabled() },
+        { module = self:GetModule("EasyFish"),                                   enabled = CM.Options.EasyFish:GetEnabled() },
+        { module = self:GetModule("Datatexts"),                                  enabled = CM.Options.Datatext:IsModuleEnabled() },
+        { module = self:GetModule("RaidFrames"),                                 enabled = CM.Options.RaidFrames:GetEnabled() },
+        { module = self:GetModule("BestInSlot"),                                 enabled = CM.Options.BestInSlot:IsBestInSlotModuleEnabled() },
+        { module = self:GetModule("QualityOfLife"):GetModule("Gathering"),       enabled = CM.Options.Gathering:GetEnabled() },
     }
 
     for _, entry in ipairs(moduleRegistry) do
