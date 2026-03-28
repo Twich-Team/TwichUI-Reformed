@@ -6,6 +6,8 @@
 local TwichRx = _G.TwichRx
 ---@type TwichUI
 local T = unpack(TwichRx)
+local UnitClass = _G.UnitClass
+local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 
 ---@type ConfigurationModule
 local ConfigurationModule = T:GetModule("Configuration")
@@ -31,6 +33,16 @@ local function DefaultColor(key)
     local theme = GetThemeModule()
     if not theme then return { 1, 1, 1 } end
     return theme.DEFAULT_THEME[key] or { 1, 1, 1 }
+end
+
+local function GetSetupWizardModule()
+    return T:GetModule("SetupWizard", true)
+end
+
+local function MarkPresetCustom()
+    local theme = GetThemeModule()
+    if not theme then return end
+    theme:GetDB().appliedThemePreset = "__custom"
 end
 
 --- Broadcasts a theme change and triggers cascade refreshes in live modules.
@@ -94,6 +106,7 @@ for _, colorKey in ipairs(COLOR_KEYS) do
     end
     Options["Set" .. capKey] = function(self, info, r, g, b, a)
         GetDB()[colorKey] = { r, g, b }
+        MarkPresetCustom()
         BroadcastChange(colorKey)
     end
 end
@@ -109,6 +122,7 @@ end
 function Options:SetBackgroundColor(info, r, g, b, a)
     GetDB().backgroundColor = { r, g, b }
     GetDB().backgroundAlpha = a ~= nil and a or 0.94
+    MarkPresetCustom()
     BroadcastChange("backgroundColor")
     BroadcastChange("backgroundAlpha")
 end
@@ -123,6 +137,7 @@ end
 function Options:SetBorderColor(info, r, g, b, a)
     GetDB().borderColor = { r, g, b }
     GetDB().borderAlpha = a ~= nil and a or 0.85
+    MarkPresetCustom()
     BroadcastChange("borderColor")
     BroadcastChange("borderAlpha")
 end
@@ -135,6 +150,7 @@ end
 
 function Options:SetBackgroundAlpha(info, value)
     GetDB().backgroundAlpha = value
+    MarkPresetCustom()
     BroadcastChange("backgroundAlpha")
 end
 
@@ -144,6 +160,7 @@ end
 
 function Options:SetBorderAlpha(info, value)
     GetDB().borderAlpha = value
+    MarkPresetCustom()
     BroadcastChange("borderAlpha")
 end
 
@@ -155,6 +172,7 @@ end
 
 function Options:SetUISoundsEnabled(info, value)
     GetDB().uiSoundsEnabled = value == true
+    MarkPresetCustom()
 end
 
 function Options:GetSoundProfile(info)
@@ -163,6 +181,7 @@ end
 
 function Options:SetSoundProfile(info, value)
     GetDB().soundProfile = value
+    MarkPresetCustom()
 end
 
 -- ─── Frame appearance ──────────────────────────────────────────────────────
@@ -173,6 +192,7 @@ end
 
 function Options:SetStatusBarTexture(info, value)
     GetDB().statusBarTexture = value
+    MarkPresetCustom()
     BroadcastChange("statusBarTexture")
 end
 
@@ -182,6 +202,7 @@ end
 
 function Options:SetClassIconStyle(info, value)
     GetDB().classIconStyle = value
+    MarkPresetCustom()
     BroadcastChange("classIconStyle")
 end
 
@@ -193,7 +214,100 @@ end
 
 function Options:SetGlobalFont(info, value)
     GetDB().globalFont = value
+    MarkPresetCustom()
     BroadcastChange("globalFont")
+end
+
+function Options:GetUseClassColor(info)
+    return GetDB().useClassColor == true
+end
+
+function Options:SetUseClassColor(info, value)
+    GetDB().useClassColor = value == true
+    MarkPresetCustom()
+    BroadcastChange("useClassColor")
+    BroadcastChange("primaryColor")
+    BroadcastChange("accentColor")
+end
+
+function Options:GetThemePreset(info)
+    local value = GetDB().appliedThemePreset
+    if type(value) ~= "string" or value == "" then
+        return "twich_default"
+    end
+    return value
+end
+
+function Options:SetThemePreset(info, value)
+    if value == "__custom" then return end
+    local setupWizard = GetSetupWizardModule()
+    if setupWizard and type(setupWizard.ApplyThemePreset) == "function" then
+        setupWizard:ApplyThemePreset(value)
+        -- Ensure module refresh cascade runs when applying presets from Appearance.
+        BroadcastChange(nil)
+        return
+    end
+    local db = GetDB()
+    db.appliedThemePreset = value
+    BroadcastChange(nil)
+end
+
+local function ToChannel255(v)
+    return math.floor(math.max(0, math.min(1, v or 1)) * 255 + 0.5)
+end
+
+local function BuildColorChip(color)
+    local r = math.max(0, math.min(1, color and color[1] or 1))
+    local g = math.max(0, math.min(1, color and color[2] or 1))
+    local b = math.max(0, math.min(1, color and color[3] or 1))
+    return string.format("|TInterface\\Buttons\\WHITE8x8:10:10:0:0:8:8:0:8:0:8:%d:%d:%d:255|t", ToChannel255(r),
+        ToChannel255(g), ToChannel255(b))
+end
+
+local function ResolveClassColor()
+    if type(UnitClass) ~= "function" then
+        return { 0.10, 0.72, 0.74 }
+    end
+    local _, classToken = UnitClass("player")
+    local classTable = _G.CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS
+    local classColor = classTable and classToken and classTable[classToken]
+    if not classColor then
+        return { 0.10, 0.72, 0.74 }
+    end
+    return { classColor.r or 1, classColor.g or 1, classColor.b or 1 }
+end
+
+local function ResolvePresetPreviewColor(preset, key)
+    if not preset then return { 1, 1, 1 } end
+    if preset.useClassColor == true and (key == "primaryColor" or key == "accentColor") then
+        return ResolveClassColor()
+    end
+    return preset[key] or { 1, 1, 1 }
+end
+
+local function BuildPresetLabel(preset)
+    if not preset or not preset.name then return "Unknown" end
+    local p = ResolvePresetPreviewColor(preset, "primaryColor")
+    local a = ResolvePresetPreviewColor(preset, "accentColor")
+    local b = ResolvePresetPreviewColor(preset, "backgroundColor")
+    local swatches = string.format("%s %s %s", BuildColorChip(p), BuildColorChip(a), BuildColorChip(b))
+    return string.format("%s  %s", swatches, preset.name)
+end
+
+function Options:GetThemePresetValues(info)
+    local values = {
+        __custom = "Custom",
+    }
+    local setupWizard = GetSetupWizardModule()
+    local presets = setupWizard and setupWizard.GetThemePresets and setupWizard:GetThemePresets() or nil
+    if type(presets) == "table" then
+        for _, preset in ipairs(presets) do
+            if preset.id and preset.name then
+                values[preset.id] = BuildPresetLabel(preset)
+            end
+        end
+    end
+    return values
 end
 
 -- ─── Sound volume ──────────────────────────────────────────────────────────
@@ -206,6 +320,7 @@ end
 
 function Options:SetSoundVolume(info, value)
     GetDB().soundVolume = value
+    MarkPresetCustom()
     BroadcastChange("soundVolume")
 end
 
@@ -284,7 +399,32 @@ function Options:BuildConfiguration()
             "Define a shared visual identity across TwichUI. The palette drives accent colors, " ..
             "surfaces, and borders for Data Panels, Chat, Unit Frames, and more."),
 
+        presets         = W.IGroup(5, "Theme Presets", {
+            themePreset = {
+                type = "select",
+                name = "Theme",
+                desc =
+                "Apply a preset theme from the setup wizard presets. Selecting a preset updates colors and appearance values immediately.",
+                order = 1,
+                values = "GetThemePresetValues",
+                sorting = { "twich_default", "midnight", "crimson", "verdant", "classbound", "__custom" },
+                handler = Options,
+                get = "GetThemePreset",
+                set = "SetThemePreset",
+            },
+        }),
+
         palette         = W.IGroup(10, "Color Palette", {
+            useClassColor = {
+                type = "toggle",
+                name = "Use Class Color",
+                desc =
+                "Use your player class color for Primary and Accent. This keeps your theme surface settings while matching your class identity.",
+                order = 0,
+                handler = Options,
+                get = "GetUseClassColor",
+                set = "SetUseClassColor",
+            },
             primaryColor = {
                 type = "color",
                 name = "Primary Color",

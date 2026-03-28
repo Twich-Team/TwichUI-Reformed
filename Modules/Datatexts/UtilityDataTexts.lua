@@ -1369,6 +1369,33 @@ local function GetCurrencyInfoByID(currencyID)
     return info
 end
 
+local function IsCurrencyAtWeeklyCap(info)
+    if type(info) ~= "table" then
+        return false
+    end
+
+    local weeklyMax = tonumber(info.maxWeeklyQuantity)
+    if not weeklyMax or weeklyMax <= 0 then
+        return false
+    end
+
+    local earnedThisWeek = tonumber(info.quantityEarnedThisWeek)
+    if not earnedThisWeek then
+        earnedThisWeek = tonumber(info.totalEarned)
+    end
+
+    return type(earnedThisWeek) == "number" and earnedThisWeek >= weeklyMax
+end
+
+local function BuildCurrencyQuantityText(info, colorAtCap)
+    local quantityText = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or tostring(info.quantity or 0)
+    if colorAtCap and IsCurrencyAtWeeklyCap(info) then
+        return T.Tools.Text.Color(T.Tools.Colors.RED, quantityText)
+    end
+
+    return quantityText
+end
+
 local function CurrencyDisplayText(currencyID, style, showMax)
     local info = GetCurrencyInfoByID(currencyID)
     if not info then
@@ -1376,7 +1403,7 @@ local function CurrencyDisplayText(currencyID, style, showMax)
     end
 
     local icon = info.iconFileID and T.Tools.Text.Icon(tostring(info.iconFileID)) or ""
-    local quantity = FormatQuantity(info.quantity or 0)
+    local quantity = BuildCurrencyQuantityText(info, true)
     local name = tostring(info.name or "Currency")
     local text
 
@@ -1440,8 +1467,7 @@ function CurrencyDT:SyncCustomDatatexts()
 
                     local icon = settings.showIcon ~= false and info.iconFileID and
                         (T.Tools.Text.Icon(tostring(info.iconFileID)) .. " ") or ""
-                    local quantity = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or
-                        tostring(info.quantity or 0)
+                    local quantity = BuildCurrencyQuantityText(info, true)
                     local nameStyle = settings.nameStyle or "abbr"
                     local text
                     if nameStyle == "none" then
@@ -1545,8 +1571,7 @@ function CurrencyDT:OnEnter()
         if info then
             shownCurrencyIDs[currencyID] = true
             local icon = info.iconFileID and T.Tools.Text.Icon(tostring(info.iconFileID)) or ""
-            local rightText = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or
-                tostring(info.quantity or 0)
+            local rightText = BuildCurrencyQuantityText(info, true)
             if db.showMax and type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
                 rightText = format("%s / %s", rightText,
                     BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity))
@@ -1561,8 +1586,7 @@ function CurrencyDT:OnEnter()
             local info = GetCurrencyInfoByID(numericCurrencyID)
             if info then
                 local icon = info.iconFileID and T.Tools.Text.Icon(tostring(info.iconFileID)) or ""
-                local rightText = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or
-                    tostring(info.quantity or 0)
+                local rightText = BuildCurrencyQuantityText(info, true)
                 if settings.showMax ~= false and type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
                     rightText = format("%s / %s", rightText,
                         BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity))

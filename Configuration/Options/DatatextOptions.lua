@@ -156,11 +156,12 @@ function Options:GetResolvedStandaloneStyle(panelID)
             end
         end
     end
-    -- Layer per-panel style overrides
+    -- Layer per-panel style overrides, but NEVER override theme-based colors
     local panel = type(panelID) == "string" and self:GetStandalonePanel(panelID) or nil
     if panel and panel.useStyleOverrides == true and type(panel.style) == "table" then
         for key, value in pairs(panel.style) do
-            if value ~= nil then
+            -- Theme colors always take precedence; only allow non-theme overrides
+            if value ~= nil and key ~= "hoverGlowColor" and key ~= "hoverBarColor" and key ~= "accentColor" then
                 resolved[key] = type(value) == "table" and CopyTable(value) or value
             end
         end

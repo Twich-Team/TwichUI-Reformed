@@ -37,7 +37,7 @@ local ROW_CAP = 350
 local DEFAULT_TIMESTAMP_WIDTH = 58
 local DEFAULT_ROW_GAP = 8
 local VIEWPORT_TOP_INSET = 26
-local VIEWPORT_BOTTOM_INSET = 10
+local VIEWPORT_BOTTOM_INSET = 3
 local CONTENT_TOP_PADDING = 4
 local CONTENT_BOTTOM_PADDING = 8
 local LIVE_BUTTON_BOTTOM_INSET = 8
@@ -358,6 +358,29 @@ function ChatRendererModule:CacheClassFromEvent(chatEvent, message, sender, lang
     local shortKey = key:match("^([^%-]+)")
     if shortKey and shortKey ~= key then
         self.classCache[shortKey] = classToken
+    end
+    -- Invalidate cached measurements for existing rows belonging to this sender so
+    -- RelayoutRenderer re-measures them with the correct icon offset applied.  Without
+    -- this, a long message that arrived before the class was cached is measured at full
+    -- bodyWidth, resulting in a too-small rowHeight and text overflow once the icon is
+    -- rendered at the next layout pass (most visible in /instance chat in Mythic+).
+    if CHAT_FRAMES then
+        for _, frameName in ipairs(CHAT_FRAMES) do
+            local frame = _G[frameName]
+            local renderer = frame and frame.TwichUICustomRenderer
+            if renderer then
+                local needsLayout = false
+                for _, entry in ipairs(renderer.entries or {}) do
+                    if entry.speakerKey == key or entry.speakerKey == shortKey then
+                        entry.measuredWidth = nil
+                        needsLayout = true
+                    end
+                end
+                if needsLayout then
+                    self:RelayoutRenderer(renderer)
+                end
+            end
+        end
     end
 end
 
@@ -888,7 +911,7 @@ function ChatRendererModule:EnsureRow(renderer, index)
     renderer.rows[index] = row
     CreateBackdrop(row)
     row:SetBackdropColor(0.03, 0.05, 0.07, 0.72)
-    row:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.08)
+    row:SetBackdropBorderColor(0, 0, 0, 0)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row.isKeywordMatch = false
     -- Required for the frame to fire OnHyperlinkEnter / OnHyperlinkLeave /
@@ -901,7 +924,7 @@ function ChatRendererModule:EnsureRow(renderer, index)
     row.Highlight = row:CreateTexture(nil, "ARTWORK")
     row.Highlight:SetPoint("TOPLEFT", row, "TOPLEFT", 1, -1)
     row.Highlight:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -1, 1)
-    row.Highlight:SetColorTexture(BORDER[1], BORDER[2], BORDER[3], 0)
+    row.Highlight:SetColorTexture(1, 1, 1, 0)
 
     row.Bar = row:CreateTexture(nil, "BORDER")
     row.Bar:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
@@ -995,7 +1018,7 @@ function ChatRendererModule:EnsureRow(renderer, index)
             local hR, hG, hB = hc.r or 0.95, hc.g or 0.76, hc.b or 0.26
             selfRow:SetBackdropBorderColor(hR, hG, hB, 0.90)
         else
-            selfRow:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.18)
+            selfRow:SetBackdropBorderColor(1, 1, 1, 0.10)
         end
         -- Animate faded rows back to full visibility on hover.
         if selfRow:GetAlpha() < 0.99 then
@@ -1012,7 +1035,7 @@ function ChatRendererModule:EnsureRow(renderer, index)
             local hR, hG, hB = hc.r or 0.95, hc.g or 0.76, hc.b or 0.26
             selfRow:SetBackdropBorderColor(hR, hG, hB, 0.60)
         else
-            selfRow:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.08)
+            selfRow:SetBackdropBorderColor(0, 0, 0, 0)
         end
         selfRow.HoverFadeIn:Stop()
         selfRow.HoverFadeOut:Stop()
@@ -1193,7 +1216,7 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
         row.Bar:Show()
     else
         row:SetBackdropColor(mbR, mbG, mbB, mbA * (grouped and 0.55 or 0.92))
-        row:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.08)
+        row:SetBackdropBorderColor(0, 0, 0, 0)
         row.Bar:SetShown(self.settings.showAccentBar)
         row.Bar:SetColorTexture(accentR, accentG, accentB, grouped and 0.52 or 0.96)
     end
@@ -1369,6 +1392,16 @@ function ChatRendererModule:PushMessage(frame, message, r, g, b, accessID)
     end
 
     local stickToBottom = self:IsAtBottom(renderer)
+    -- A new message arriving while stuck to the bottom should restart the fade-delay
+    -- timer so the freshly-arrived row is never immediately faded out.  We only reset
+    -- when the renderer is not actively hovered (hovered state prevents fading anyway).
+    if stickToBottom then
+        local rendererHovered = (renderer.Viewport and renderer.Viewport.IsMouseOver and renderer.Viewport:IsMouseOver()) or
+            (renderer.IsMouseOver and renderer:IsMouseOver()) or false
+        if not rendererHovered then
+            renderer.unhoveredAt = nil
+        end
+    end
     local entry = self:CreateEntry(message, r, g, b, accessID)
     local previousEntry = renderer.entries[#renderer.entries]
     entry.groupedWithPrevious = previousEntry ~= nil and previousEntry.speakerKey ~= nil and
@@ -1477,15 +1510,15 @@ function ChatRendererModule:EnsureRenderer(frame)
     renderer.ScrollTrack:SetWidth(SCROLLBAR_WIDTH)
     CreateBackdrop(renderer.ScrollTrack)
     renderer.ScrollTrack:SetBackdropColor(0.02, 0.03, 0.05, 0.82)
-    renderer.ScrollTrack:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.14)
+    renderer.ScrollTrack:SetBackdropBorderColor(1, 1, 1, 0.08)
 
     renderer.ScrollThumb = CreateFrame("Frame", nil, renderer.ScrollTrack, "BackdropTemplate")
     renderer.ScrollThumb:SetPoint("TOPLEFT", renderer.ScrollTrack, "TOPLEFT", 0, 0)
     renderer.ScrollThumb:SetPoint("TOPRIGHT", renderer.ScrollTrack, "TOPRIGHT", 0, 0)
     renderer.ScrollThumb:SetHeight(40)
     CreateBackdrop(renderer.ScrollThumb)
-    renderer.ScrollThumb:SetBackdropColor(BORDER[1], BORDER[2], BORDER[3], 0.3)
-    renderer.ScrollThumb:SetBackdropBorderColor(BORDER[1], BORDER[2], BORDER[3], 0.45)
+    renderer.ScrollThumb:SetBackdropColor(1, 1, 1, 0.12)
+    renderer.ScrollThumb:SetBackdropBorderColor(1, 1, 1, 0.18)
 
     -- Scrollbar fade: start hidden (alpha 0) and reveal on renderer hover.
     renderer.ScrollTrack:SetAlpha(0)
@@ -1516,9 +1549,9 @@ function ChatRendererModule:EnsureRenderer(frame)
     do
         local accentR, accentG, accentB = self:GetShellAccentColor()
         T.Tools.UI.SkinTwichButton(renderer.LiveButton, { accentR, accentG, accentB })
-        renderer.ScrollThumb:SetBackdropColor(accentR, accentG, accentB, 0.3)
-        renderer.ScrollThumb:SetBackdropBorderColor(accentR, accentG, accentB, 0.45)
-        renderer.ScrollTrack:SetBackdropBorderColor(accentR, accentG, accentB, 0.14)
+        renderer.ScrollThumb:SetBackdropColor(1, 1, 1, 0.12)
+        renderer.ScrollThumb:SetBackdropBorderColor(1, 1, 1, 0.18)
+        renderer.ScrollTrack:SetBackdropBorderColor(1, 1, 1, 0.08)
     end
     renderer.LiveButton:GetFontString():SetTextColor(TEXT_ACTIVE[1], TEXT_ACTIVE[2], TEXT_ACTIVE[3])
     renderer.LiveButton:SetScript("OnClick", function()
@@ -1736,11 +1769,11 @@ function ChatRendererModule:RefreshFrame(frame)
             T.Tools.UI.SkinTwichButton(renderer.LiveButton, { accentR, accentG, accentB })
         end
         if renderer.ScrollThumb then
-            renderer.ScrollThumb:SetBackdropColor(accentR, accentG, accentB, 0.3)
-            renderer.ScrollThumb:SetBackdropBorderColor(accentR, accentG, accentB, 0.45)
+            renderer.ScrollThumb:SetBackdropColor(1, 1, 1, 0.12)
+            renderer.ScrollThumb:SetBackdropBorderColor(1, 1, 1, 0.18)
         end
         if renderer.ScrollTrack then
-            renderer.ScrollTrack:SetBackdropBorderColor(accentR, accentG, accentB, 0.14)
+            renderer.ScrollTrack:SetBackdropBorderColor(1, 1, 1, 0.08)
         end
     end
 

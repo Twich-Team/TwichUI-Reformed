@@ -218,11 +218,13 @@ local function GetTrackerHeaderFontSettings()
     local trackerHeaderFont = choresOptions and choresOptions.GetTrackerHeaderFont and
         choresOptions:GetTrackerHeaderFont() or
         "__tooltipHeader"
+    local trackerHeaderFontSize = choresOptions and choresOptions.GetTrackerHeaderFontSize and
+        choresOptions:GetTrackerHeaderFontSize() or tooltipFontSettings.headerFontSize
 
     if trackerHeaderFont == "__tooltipHeader" then
         return {
             font = tooltipFontSettings.headerFont,
-            fontSize = tooltipFontSettings.headerFontSize,
+            fontSize = trackerHeaderFontSize,
         }
     end
 
@@ -233,7 +235,33 @@ local function GetTrackerHeaderFontSettings()
 
     return {
         font = resolvedFont,
-        fontSize = tooltipFontSettings.headerFontSize,
+        fontSize = trackerHeaderFontSize,
+    }
+end
+
+local function GetTrackerEntryFontSettings()
+    local tooltipFontSettings = GetTooltipFontSettings()
+    local choresOptions = GetChoresOptions()
+    local trackerEntryFont = choresOptions and choresOptions.GetTrackerEntryFont and choresOptions:GetTrackerEntryFont() or
+        "__tooltipEntry"
+    local trackerEntryFontSize = choresOptions and choresOptions.GetTrackerEntryFontSize and
+        choresOptions:GetTrackerEntryFontSize() or tooltipFontSettings.entryFontSize
+
+    if trackerEntryFont == "__tooltipEntry" then
+        return {
+            font = tooltipFontSettings.entryFont,
+            fontSize = trackerEntryFontSize,
+        }
+    end
+
+    local resolvedFont = LSM and trackerEntryFont and LSM:Fetch("font", trackerEntryFont, true) or nil
+    if not resolvedFont or resolvedFont == "" then
+        resolvedFont = tooltipFontSettings.entryFont or STANDARD_TEXT_FONT
+    end
+
+    return {
+        font = resolvedFont,
+        fontSize = trackerEntryFontSize,
     }
 end
 
@@ -268,20 +296,41 @@ end
 local function GetBackdropColors()
     local bgR, bgG, bgB, bgA = 0.06, 0.06, 0.08, 0.98
     local borderR, borderG, borderB = 0.25, 0.25, 0.3
-    local E = _G.ElvUI and _G.ElvUI[1]
-    if E and E.media then
-        if E.media.backdropcolor then
-            bgR, bgG, bgB = unpack(E.media.backdropcolor)
-        elseif E.media.backdropfadecolor then
-            bgR, bgG, bgB = unpack(E.media.backdropfadecolor)
-        end
+    local primaryR, primaryG, primaryB = 0.16, 0.78, 0.78
+    local accentR, accentG, accentB = 0.95, 0.76, 0.26
+    local ThemeModule = T:GetModule("Theme", true)
+    if ThemeModule then
+        local background = ThemeModule:GetColor("backgroundColor")
+        local border = ThemeModule:GetColor("borderColor")
+        local primary = ThemeModule:GetColor("primaryColor")
+        local accent = ThemeModule:GetColor("accentColor")
+        local backgroundAlpha = ThemeModule:Get("backgroundAlpha")
 
-        if E.media.bordercolor then
-            borderR, borderG, borderB = unpack(E.media.bordercolor)
+        if type(background) == "table" then
+            bgR, bgG, bgB = background[1] or bgR, background[2] or bgG, background[3] or bgB
+        end
+        if type(border) == "table" then
+            borderR, borderG, borderB = border[1] or borderR, border[2] or borderG, border[3] or borderB
+        end
+        if type(primary) == "table" then
+            primaryR, primaryG, primaryB = primary[1] or primaryR, primary[2] or primaryG, primary[3] or primaryB
+        end
+        if type(accent) == "table" then
+            accentR, accentG, accentB = accent[1] or accentR, accent[2] or accentG, accent[3] or accentB
+        end
+        if type(backgroundAlpha) == "number" then
+            bgA = math.min(1, math.max(0.55, backgroundAlpha))
         end
     end
 
-    return bgR, bgG, bgB, bgA, borderR, borderG, borderB
+    return {
+        surface = { bgR, bgG, bgB, bgA },
+        border = { borderR, borderG, borderB },
+        primary = { primaryR, primaryG, primaryB },
+        accent = { accentR, accentG, accentB },
+        text = { 1, 0.94, 0.82 },
+        muted = { 0.72, 0.76, 0.84 },
+    }
 end
 
 local function GetTrackerAppearanceSettings()
@@ -951,19 +1000,23 @@ local function CreateBackdrop(frame)
         insets = { left = 1, right = 1, top = 1, bottom = 1 },
     })
 
-    local bgR, bgG, bgB, bgA, borderR, borderG, borderB = GetBackdropColors()
+    local colors = GetBackdropColors()
+    local surface = colors.surface
+    local border = colors.border
+    local primary = colors.primary
 
-    frame:SetBackdropColor(bgR, bgG, bgB, bgA)
-    frame:SetBackdropBorderColor(borderR, borderG, borderB, 1)
+    frame:SetBackdropColor(surface[1], surface[2], surface[3], surface[4])
+    frame:SetBackdropBorderColor(border[1], border[2], border[3], 0.95)
 
     frame.BackgroundFill = frame:CreateTexture(nil, "BACKGROUND", nil, -1)
     frame.BackgroundFill:SetAllPoints(frame)
-    frame.BackgroundFill:SetColorTexture(bgR, bgG, bgB, math.min(1, math.max(bgA, 0.96)))
+    frame.BackgroundFill:SetColorTexture(surface[1] * 0.88, surface[2] * 0.9, surface[3] * 0.96,
+        math.min(1, math.max(surface[4], 0.96)))
 
     frame.InnerGlow = frame:CreateTexture(nil, "BORDER")
     frame.InnerGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
     frame.InnerGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
-    frame.InnerGlow:SetColorTexture(borderR, borderG, borderB, 0.08)
+    frame.InnerGlow:SetColorTexture(primary[1], primary[2], primary[3], 0.08)
     frame.backdropApplied = true
 end
 
@@ -985,10 +1038,12 @@ local function SetLockButtonTextures(button, isLocked)
     end
 end
 
-local function SkinScrollBar(scrollFrame)
+local function SkinScrollBar(scrollFrame, color, hideButtons)
     local UI = T.Tools and T.Tools.UI
-    if UI and UI.SkinScrollBar then
-        UI.SkinScrollBar(scrollFrame)
+    if UI and UI.SkinTwichScrollBar then
+        UI.SkinTwichScrollBar(scrollFrame, color, hideButtons)
+    elseif UI and UI.SkinScrollBar then
+        UI.SkinScrollBar(scrollFrame, color, true, hideButtons)
     end
 end
 
@@ -1307,7 +1362,11 @@ local function CreateTrackerFrame(name)
     frame:Hide()
     CreateBackdrop(frame)
 
-    local bgR, bgG, bgB, _, borderR, borderG, borderB = GetBackdropColors()
+    local colors = GetBackdropColors()
+    local surface = colors.surface
+    local border = colors.border
+    local primary = colors.primary
+    local accent = colors.accent
 
     frame.TitleBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     frame.TitleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
@@ -1319,14 +1378,19 @@ local function CreateTrackerFrame(name)
         edgeSize = 1,
         insets = { left = 0, right = 0, top = 0, bottom = 1 },
     })
-    frame.TitleBar:SetBackdropColor(bgR * 0.75, bgG * 0.75, bgB * 0.75, 0.98)
-    frame.TitleBar:SetBackdropBorderColor(borderR, borderG, borderB, 0.35)
+    frame.TitleBar:SetBackdropColor(surface[1] * 0.78, surface[2] * 0.8, surface[3] * 0.88, 0.98)
+    frame.TitleBar:SetBackdropBorderColor(border[1], border[2], border[3], 0.28)
 
     frame.TitleAccent = frame.TitleBar:CreateTexture(nil, "ARTWORK")
     frame.TitleAccent:SetPoint("TOPLEFT", frame.TitleBar, "TOPLEFT", 0, 0)
     frame.TitleAccent:SetPoint("TOPRIGHT", frame.TitleBar, "TOPRIGHT", 0, 0)
     frame.TitleAccent:SetHeight(2)
-    frame.TitleAccent:SetColorTexture(0.96, 0.78, 0.24, 0.95)
+    frame.TitleAccent:SetColorTexture(accent[1], accent[2], accent[3], 0.95)
+
+    frame.TitleBarGlow = frame.TitleBar:CreateTexture(nil, "BACKGROUND")
+    frame.TitleBarGlow:SetPoint("TOPLEFT", frame.TitleBar, "TOPLEFT", 1, -1)
+    frame.TitleBarGlow:SetPoint("BOTTOMRIGHT", frame.TitleBar, "BOTTOMRIGHT", -1, 1)
+    frame.TitleBarGlow:SetColorTexture(primary[1], primary[2], primary[3], 0.06)
 
     frame.TitleIcon = frame.TitleBar:CreateTexture(nil, "OVERLAY")
     frame.TitleIcon:SetPoint("LEFT", frame.TitleBar, "LEFT", 10, 0)
@@ -1338,15 +1402,15 @@ local function CreateTrackerFrame(name)
     frame.Title:SetPoint("LEFT", frame.TitleIcon, "RIGHT", 8, 0)
     frame.Title:SetPoint("RIGHT", frame.TitleBar, "RIGHT", -154, 0)
     frame.Title:SetJustifyH("LEFT")
-    frame.Title:SetText("Weekly Chores")
+    frame.Title:SetText("Chores Tracker")
     if frame.Title.SetTextColor then
-        frame.Title:SetTextColor(1, 0.94, 0.82)
+        frame.Title:SetTextColor(colors.text[1], colors.text[2], colors.text[3])
     end
 
     frame.TitleStatus = frame.TitleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.TitleStatus:SetPoint("RIGHT", frame.TitleBar, "RIGHT", -98, 0)
     frame.TitleStatus:SetJustifyH("RIGHT")
-    frame.TitleStatus:SetTextColor(0.96, 0.82, 0.35)
+    frame.TitleStatus:SetTextColor(accent[1], accent[2], accent[3])
 
     frame.SettingsButton = CreateFrame("Button", nil, frame.TitleBar)
     frame.SettingsButton:SetSize(28, 28)
@@ -1407,13 +1471,18 @@ local function CreateTrackerFrame(name)
         edgeSize = 1,
         insets = { left = 1, right = 1, top = 1, bottom = 1 },
     })
-    frame.ContentInset:SetBackdropColor(bgR * 0.82, bgG * 0.82, bgB * 0.82, 0.98)
-    frame.ContentInset:SetBackdropBorderColor(borderR, borderG, borderB, 0.45)
+    frame.ContentInset:SetBackdropColor(surface[1] * 0.84, surface[2] * 0.86, surface[3] * 0.9, 0.98)
+    frame.ContentInset:SetBackdropBorderColor(border[1], border[2], border[3], 0.28)
+
+    frame.ContentInsetGlow = frame.ContentInset:CreateTexture(nil, "BACKGROUND")
+    frame.ContentInsetGlow:SetPoint("TOPLEFT", frame.ContentInset, "TOPLEFT", 1, -1)
+    frame.ContentInsetGlow:SetPoint("BOTTOMRIGHT", frame.ContentInset, "BOTTOMRIGHT", -1, 1)
+    frame.ContentInsetGlow:SetColorTexture(primary[1], primary[2], primary[3], 0.04)
 
     frame.ScrollFrame = CreateFrame("ScrollFrame", nil, frame.ContentInset, "UIPanelScrollFrameTemplate")
     frame.ScrollFrame:SetPoint("TOPLEFT", frame.ContentInset, "TOPLEFT", 8, -8)
     frame.ScrollFrame:SetPoint("BOTTOMRIGHT", frame.ContentInset, "BOTTOMRIGHT", -20, 8)
-    SkinScrollBar(frame.ScrollFrame)
+    SkinScrollBar(frame.ScrollFrame, accent, true)
 
     frame.ScrollChild = CreateFrame("Frame", nil, frame.ScrollFrame)
     frame.ScrollChild:SetSize(1, 1)
@@ -1430,7 +1499,7 @@ local function CreateTrackerFrame(name)
     frame.ResizeGlyph = frame.ResizeHandle:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     frame.ResizeGlyph:SetPoint("CENTER", frame.ResizeHandle, "CENTER", 0, 0)
     frame.ResizeGlyph:SetText("//")
-    frame.ResizeGlyph:SetTextColor(1, 0.88, 0.45)
+    frame.ResizeGlyph:SetTextColor(accent[1], accent[2], accent[3])
 
     frame.ResizeHighlight = frame.ResizeHandle:CreateTexture(nil, "HIGHLIGHT")
     frame.ResizeHighlight:SetAllPoints(frame.ResizeHandle)
@@ -1456,19 +1525,23 @@ local function EnsureTrackerSection(frame, index)
         edgeSize = 1,
         insets = { left = 1, right = 1, top = 1, bottom = 1 },
     })
-    section:SetBackdropColor(0.92, 0.74, 0.18, 0.06)
-    section:SetBackdropBorderColor(0.92, 0.74, 0.18, 0.16)
+    local colors = GetBackdropColors()
+    local surface = colors.surface
+    local primary = colors.primary
+    local accent = colors.accent
+    section:SetBackdropColor(surface[1] * 0.82, surface[2] * 0.84, surface[3] * 0.9, 0.72)
+    section:SetBackdropBorderColor(primary[1], primary[2], primary[3], 0.16)
 
     section.BackgroundFill = section:CreateTexture(nil, "BACKGROUND")
     section.BackgroundFill:SetPoint("TOPLEFT", section, "TOPLEFT", 1, -1)
     section.BackgroundFill:SetPoint("BOTTOMRIGHT", section, "BOTTOMRIGHT", -1, 1)
-    section.BackgroundFill:SetColorTexture(0.06, 0.06, 0.08, 0)
+    section.BackgroundFill:SetColorTexture(surface[1] * 0.88, surface[2] * 0.9, surface[3] * 0.96, 0)
 
     section.HeaderGlow = section:CreateTexture(nil, "BORDER")
     section.HeaderGlow:SetPoint("TOPLEFT", section, "TOPLEFT", 1, -1)
     section.HeaderGlow:SetPoint("TOPRIGHT", section, "TOPRIGHT", -1, -1)
     section.HeaderGlow:SetHeight(26)
-    section.HeaderGlow:SetColorTexture(1, 0.82, 0.2, 0.06)
+    section.HeaderGlow:SetColorTexture(accent[1], accent[2], accent[3], 0.07)
 
     section.HeaderButton = CreateFrame("Button", nil, section)
     section.HeaderButton:SetPoint("TOPLEFT", section, "TOPLEFT", 1, -1)
@@ -1481,11 +1554,11 @@ local function EnsureTrackerSection(frame, index)
 
     section.HeaderHighlight = section.HeaderButton:CreateTexture(nil, "HIGHLIGHT")
     section.HeaderHighlight:SetAllPoints(section.HeaderButton)
-    section.HeaderHighlight:SetColorTexture(1, 1, 1, 0.04)
+    section.HeaderHighlight:SetColorTexture(accent[1], accent[2], accent[3], 0.05)
 
     section.Arrow = section.HeaderButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     section.Arrow:SetPoint("LEFT", section.HeaderButton, "LEFT", 10, 0)
-    section.Arrow:SetTextColor(1, 0.88, 0.45)
+    section.Arrow:SetTextColor(accent[1], accent[2], accent[3])
 
     section.Title = section:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     section.Title:SetPoint("TOPLEFT", section, "TOPLEFT", 28, -10)
@@ -1578,9 +1651,13 @@ function CDT:ApplyTrackerAppearance(frame)
     end
 
     local appearance = GetTrackerAppearanceSettings()
-    local bgR, bgG, bgB, baseBgA, borderR, borderG, borderB = GetBackdropColors()
+    local colors = GetBackdropColors()
+    local surface = colors.surface
+    local border = colors.border
+    local primary = colors.primary
+    local accent = colors.accent
     local isMinimal = appearance.mode == "minimal"
-    local outerAlpha = isMinimal and 0 or (baseBgA * appearance.backgroundAlpha)
+    local outerAlpha = isMinimal and 0 or (surface[4] * appearance.backgroundAlpha)
     local titleAlpha = isMinimal and 0 or (0.98 * appearance.backgroundAlpha)
     local insetAlpha = isMinimal and 0 or (0.98 * appearance.backgroundAlpha)
     local sectionBackdropAlpha = isMinimal and 0.18 or 0.06
@@ -1588,29 +1665,36 @@ function CDT:ApplyTrackerAppearance(frame)
     local sectionGlowAlpha = isMinimal and 0.12 or 0.06
     local sectionDividerAlpha = isMinimal and 0.08 or 0.05
     local sectionFillAlpha = isMinimal and 0.96 or 0
-    local sectionFillR = isMinimal and math.max(0, bgR * 0.45) or bgR
-    local sectionFillG = isMinimal and math.max(0, bgG * 0.45) or bgG
-    local sectionFillB = isMinimal and math.max(0, bgB * 0.45) or bgB
+    local sectionFillR = isMinimal and math.max(0, surface[1] * 0.62) or surface[1] * 0.88
+    local sectionFillG = isMinimal and math.max(0, surface[2] * 0.62) or surface[2] * 0.9
+    local sectionFillB = isMinimal and math.max(0, surface[3] * 0.62) or surface[3] * 0.96
 
     frame:SetAlpha(isMinimal and 1 or appearance.frameAlpha)
-    frame:SetBackdropColor(bgR, bgG, bgB, outerAlpha)
-    frame:SetBackdropBorderColor(borderR, borderG, borderB, isMinimal and 0 or 1)
+    frame:SetBackdropColor(surface[1], surface[2], surface[3], outerAlpha)
+    frame:SetBackdropBorderColor(border[1], border[2], border[3], isMinimal and 0 or 0.95)
 
     if frame.BackgroundFill then
-        frame.BackgroundFill:SetColorTexture(bgR, bgG, bgB, outerAlpha)
+        frame.BackgroundFill:SetColorTexture(surface[1] * 0.88, surface[2] * 0.9, surface[3] * 0.96, outerAlpha)
     end
     if frame.InnerGlow then
-        frame.InnerGlow:SetColorTexture(borderR, borderG, borderB, isMinimal and 0 or (0.08 * appearance.backgroundAlpha))
+        frame.InnerGlow:SetColorTexture(primary[1], primary[2], primary[3],
+            isMinimal and 0 or (0.08 * appearance.backgroundAlpha))
     end
 
-    frame.TitleBar:SetBackdropColor(bgR * 0.75, bgG * 0.75, bgB * 0.75, titleAlpha)
-    frame.TitleBar:SetBackdropBorderColor(borderR, borderG, borderB,
+    frame.TitleBar:SetBackdropColor(surface[1] * 0.78, surface[2] * 0.8, surface[3] * 0.88, titleAlpha)
+    frame.TitleBar:SetBackdropBorderColor(border[1], border[2], border[3],
         isMinimal and 0 or (0.35 * math.max(appearance.backgroundAlpha, 0.15)))
     frame.TitleAccent:SetAlpha(isMinimal and 0 or appearance.backgroundAlpha)
+    if frame.TitleBarGlow then
+        frame.TitleBarGlow:SetColorTexture(primary[1], primary[2], primary[3], isMinimal and 0 or 0.06)
+    end
 
-    frame.ContentInset:SetBackdropColor(bgR * 0.82, bgG * 0.82, bgB * 0.82, insetAlpha)
-    frame.ContentInset:SetBackdropBorderColor(borderR, borderG, borderB,
+    frame.ContentInset:SetBackdropColor(surface[1] * 0.84, surface[2] * 0.86, surface[3] * 0.9, insetAlpha)
+    frame.ContentInset:SetBackdropBorderColor(border[1], border[2], border[3],
         isMinimal and 0 or (0.45 * math.max(appearance.backgroundAlpha, 0.15)))
+    if frame.ContentInsetGlow then
+        frame.ContentInsetGlow:SetColorTexture(primary[1], primary[2], primary[3], isMinimal and 0 or 0.04)
+    end
 
     if isMinimal then
         frame.TitleIcon:Hide()
@@ -1650,15 +1734,16 @@ function CDT:ApplyTrackerAppearance(frame)
         frame.ResizeHandle:SetAlpha(isMinimal and math.max(0.65, appearance.frameAlpha) or 1)
     end
 
+    SkinScrollBar(frame.ScrollFrame, accent, true)
     SetScrollBarTrackTransparency(frame.ScrollFrame, isMinimal)
 
     for _, section in ipairs(frame.Sections or {}) do
         if section.BackgroundFill then
             section.BackgroundFill:SetColorTexture(sectionFillR, sectionFillG, sectionFillB, sectionFillAlpha)
         end
-        section:SetBackdropColor(0.92, 0.74, 0.18, sectionBackdropAlpha)
-        section:SetBackdropBorderColor(0.92, 0.74, 0.18, sectionBorderAlpha)
-        section.HeaderGlow:SetColorTexture(1, 0.82, 0.2, sectionGlowAlpha)
+        section:SetBackdropColor(surface[1] * 0.82, surface[2] * 0.84, surface[3] * 0.9, sectionBackdropAlpha)
+        section:SetBackdropBorderColor(primary[1], primary[2], primary[3], sectionBorderAlpha)
+        section.HeaderGlow:SetColorTexture(accent[1], accent[2], accent[3], sectionGlowAlpha)
         section.Divider:SetColorTexture(1, 1, 1, sectionDividerAlpha)
     end
 
@@ -1921,8 +2006,8 @@ function CDT:RenderTrackerFrame()
     local showCompleted = choresOptions and choresOptions.GetShowCompleted and choresOptions:GetShowCompleted() or false
     local sections = BuildTrackerSections(state, showCompleted)
     local emptyText = GetTrackerEmptyText(state, #sections)
-    local fontSettings = GetTooltipFontSettings()
     local trackerHeaderFontSettings = GetTrackerHeaderFontSettings()
+    local trackerEntryFontSettings = GetTrackerEntryFontSettings()
     local contentHeight = 0
     local contentWidth = math.max(1, (frame.ScrollFrame:GetWidth() or 1) - 8)
 
@@ -1931,6 +2016,7 @@ function CDT:RenderTrackerFrame()
     frame.ScrollFrame:SetVerticalScroll(0)
     frame.Title:SetFont(trackerHeaderFontSettings.font, math.max(trackerHeaderFontSettings.fontSize + 2, 12), "")
     frame.TitleStatus:SetFont(trackerHeaderFontSettings.font, math.max(trackerHeaderFontSettings.fontSize - 1, 10), "")
+    frame.EmptyText:SetFont(trackerEntryFontSettings.font, trackerEntryFontSettings.fontSize, "")
     frame.TitleStatus:SetText(state and state.enabled and ("%d remaining"):format(state.totalRemaining or 0) or "Paused")
     frame.EmptyText:SetShown(emptyText ~= nil)
     frame.EmptyText:SetText(emptyText or "")
@@ -1938,8 +2024,9 @@ function CDT:RenderTrackerFrame()
     for sectionIndex, sectionData in ipairs(sections) do
         local section = EnsureTrackerSection(frame, sectionIndex)
         local summary = sectionData.summary
+        local hasEntries = #sectionData.displayEntries > 0
         local lineIndex = 1
-        local isCollapsed = self:IsTrackerSectionCollapsed(summary.key)
+        local isCollapsed = hasEntries and self:IsTrackerSectionCollapsed(summary.key)
         local yOffset = isCollapsed and 0 or 38
         local sectionHeight = 32
 
@@ -1957,14 +2044,17 @@ function CDT:RenderTrackerFrame()
                 end
             end
 
-            self:ToggleTrackerSection(section.summaryKey)
+            if hasEntries then
+                self:ToggleTrackerSection(section.summaryKey)
+            end
         end)
         section.Title:SetFont(trackerHeaderFontSettings.font, trackerHeaderFontSettings.fontSize, "")
         section.Progress:SetFont(trackerHeaderFontSettings.font, trackerHeaderFontSettings.fontSize, "")
+        section.Arrow:SetShown(hasEntries)
         section.Arrow:SetText(isCollapsed and ">" or "v")
         section.Title:SetText(BuildSummaryLabel(summary))
         section.Progress:SetText(BuildProgressText(summary))
-        section.Divider:SetShown(not isCollapsed)
+        section.Divider:SetShown(hasEntries and not isCollapsed)
         section.ActionButton:SetShown(summary.key == "raidFinder")
         if summary.key == "raidFinder" then
             local satchelsConfigured = IsSatchelWatchConfiguredForTrackedRaidWings()
@@ -1987,7 +2077,7 @@ function CDT:RenderTrackerFrame()
             section.ActionButton:ClearAllPoints()
             section.ActionButton:SetPoint("RIGHT", section.Progress, "LEFT", -8, 0)
             section.Title:ClearAllPoints()
-            section.Title:SetPoint("TOPLEFT", section, "TOPLEFT", 28, -10)
+            section.Title:SetPoint("TOPLEFT", section, "TOPLEFT", hasEntries and 28 or 12, -10)
             section.Title:SetPoint("RIGHT", section.ActionButton, "LEFT", -8, 0)
         else
             section.HeaderButton:ClearAllPoints()
@@ -1996,19 +2086,19 @@ function CDT:RenderTrackerFrame()
             section.Progress:ClearAllPoints()
             section.Progress:SetPoint("TOPRIGHT", section, "TOPRIGHT", -12, -11)
             section.Title:ClearAllPoints()
-            section.Title:SetPoint("TOPLEFT", section, "TOPLEFT", 28, -10)
+            section.Title:SetPoint("TOPLEFT", section, "TOPLEFT", hasEntries and 28 or 12, -10)
             section.Title:SetPoint("RIGHT", section, "RIGHT", -82, 0)
         end
 
-        if not isCollapsed then
+        if hasEntries and not isCollapsed then
             for _, entry in ipairs(sectionData.displayEntries) do
                 local line = EnsureTrackerLine(section, lineIndex)
                 local entryColor = GetEntryColorHex(summary, entry.state.status)
                 line:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -yOffset)
                 line:SetPoint("TOPRIGHT", section, "TOPRIGHT", -14, 0)
-                line.Text:SetFont(fontSettings.entryFont, fontSettings.entryFontSize, "")
+                line.Text:SetFont(trackerEntryFontSettings.font, trackerEntryFontSettings.fontSize, "")
                 line.Text:SetText(T.Tools.Text.Color(entryColor, "• " .. BuildEntryDisplayTitle(summary, entry)))
-                line:SetHeight(math.max(line.Text:GetStringHeight(), fontSettings.entryFontSize))
+                line:SetHeight(math.max(line.Text:GetStringHeight(), trackerEntryFontSettings.fontSize))
                 ApplyTrackerLineInteraction(line, GetTrackerEntryTooltipData(entry), GetTrackerEntryActionData(entry))
                 line:Show()
                 yOffset = yOffset + line:GetHeight() + 4
@@ -2019,11 +2109,11 @@ function CDT:RenderTrackerFrame()
                         local objectiveLine = EnsureTrackerLine(section, lineIndex)
                         objectiveLine:SetPoint("TOPLEFT", section, "TOPLEFT", 14, -yOffset)
                         objectiveLine:SetPoint("TOPRIGHT", section, "TOPRIGHT", -14, 0)
-                        objectiveLine.Text:SetFont(fontSettings.entryFont, fontSettings.entryFontSize, "")
+                        objectiveLine.Text:SetFont(trackerEntryFontSettings.font, trackerEntryFontSettings.fontSize, "")
                         objectiveLine.Text:SetText(T.Tools.Text.Color(T.Tools.Colors.GRAY,
                             "    • " .. BuildObjectiveText(objective)))
-                        objectiveLine:SetHeight(math.max(objectiveLine.Text:GetStringHeight(), fontSettings
-                            .entryFontSize))
+                        objectiveLine:SetHeight(math.max(objectiveLine.Text:GetStringHeight(),
+                            trackerEntryFontSettings.fontSize))
                         ApplyTrackerLineInteraction(objectiveLine, GetTrackerObjectiveTooltipData(entry, objective),
                             nil)
                         objectiveLine:Show()

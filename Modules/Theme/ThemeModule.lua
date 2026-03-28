@@ -12,6 +12,8 @@ local TwichRx = _G.TwichRx
 local T = unpack(TwichRx)
 
 local CopyTable = _G.CopyTable
+local UnitClass = _G.UnitClass
+local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 
 ---@class ThemeModule : AceModule, AceEvent-3.0
 local ThemeModule = T:NewModule("Theme", "AceEvent-3.0")
@@ -26,6 +28,7 @@ local DEFAULT_THEME = {
     -- Core palette
     primaryColor     = { 0.10, 0.72, 0.74 }, -- TwichUI Teal — chat chrome, primary borders
     accentColor      = { 0.96, 0.76, 0.24 }, -- Gold — panel accents, active indicators
+    useClassColor    = false,
     backgroundColor  = { 0.05, 0.06, 0.08 }, -- Near-black surface
     borderColor      = { 0.24, 0.26, 0.32 }, -- Cool-grey border
     textColor        = { 1.00, 0.95, 0.85 }, -- Warm white labels
@@ -52,6 +55,17 @@ local DEFAULT_THEME = {
 
 -- Expose defaults so other modules can use them as typed fallbacks.
 ThemeModule.DEFAULT_THEME = DEFAULT_THEME
+
+local function ResolvePlayerClassColor()
+    if type(UnitClass) ~= "function" then return end
+    local _, classToken = UnitClass("player")
+    if not classToken then return end
+    local colorTable = _G.CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS
+    local classColor = colorTable and colorTable[classToken]
+    if classColor then
+        return { classColor.r or 1, classColor.g or 1, classColor.b or 1 }
+    end
+end
 
 -- ─── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -82,6 +96,12 @@ end
 --- For table values (colors) this returns a fresh copy each time.
 function ThemeModule:Get(key)
     local db = self:GetDB()
+    if (key == "primaryColor" or key == "accentColor") and db.useClassColor == true then
+        local classColor = ResolvePlayerClassColor()
+        if classColor then
+            return classColor
+        end
+    end
     local val = db[key]
     if val ~= nil then
         if type(val) == "table" then

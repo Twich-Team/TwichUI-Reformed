@@ -1,3 +1,4 @@
+---@diagnostic disable: undefined-global, return-type-mismatch
 local E = unpack(ElvUI)
 local T = unpack(TwichRx)
 
@@ -17,6 +18,14 @@ local DEFAULT_DETAILS_TEXT = "Select an item..."
 ---@return BestInSlotModule
 local function GetBISModule()
     return T:GetModule("BestInSlot")
+end
+
+local function GetWidgetColors()
+    local ThemeModule = T:GetModule("Theme", true)
+    local accent = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("accentColor") or { 0.95, 0.76, 0.26 }
+    local border = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("borderColor") or { 0.24, 0.26, 0.32 }
+    local bg = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("backgroundColor") or { 0.06, 0.06, 0.08 }
+    return accent, border, bg
 end
 
 ---Builds the Gear Slot AceGUI Widget.
@@ -69,11 +78,33 @@ local function Constructor()
     frame.Check:Hide()
 
     -- apply the elvui template
-    frame:SetTemplate("Transparent")
+    if frame.SetTemplate then
+        frame:SetTemplate("Transparent")
+    else
+        frame:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+    end
+
+    do
+        local accent, border, bg = GetWidgetColors()
+        if frame.SetBackdropColor then
+            frame:SetBackdropColor(bg[1] * 0.7, bg[2] * 0.72, bg[3] * 0.8, 0.9)
+        end
+        if frame.SetBackdropBorderColor then
+            frame:SetBackdropBorderColor(border[1], border[2], border[3], 0.28)
+        end
+        frame.Details:SetTextColor(accent[1], accent[2], accent[3], 0.72)
+    end
 
     frame:SetScript("OnEnter", function(self)
-        -- change border to elvui value color
-        self:SetBackdropBorderColor(unpack(E.media.rgbvaluecolor))
+        local accent = GetWidgetColors()
+        if self.SetBackdropBorderColor then
+            self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.9)
+        end
 
         -- show tooltip if this slot has a selected item
         local obj = self.obj
@@ -99,7 +130,10 @@ local function Constructor()
     frame:SetScript("OnLeave", function(self)
         -- hide tooltip and change border color back to the default
         GameTooltip:Hide()
-        self:SetBackdropBorderColor(unpack(E.media.bordercolor))
+        local _, border = GetWidgetColors()
+        if self.SetBackdropBorderColor then
+            self:SetBackdropBorderColor(border[1], border[2], border[3], 0.28)
+        end
 
         if not self.ClearButton:IsMouseOver() then
             self.ClearButton:Hide()

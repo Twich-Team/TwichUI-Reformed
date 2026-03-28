@@ -42,6 +42,3 @@ local function BuildAboutConfiguration()
 
     return optionsTab
 end
-
--- register the configuration menu with the configuration module for display when shown.
-ConfigurationModule:RegisterConfigurationFunction("About", BuildAboutConfiguration)

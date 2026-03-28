@@ -36,55 +36,6 @@ local NAV_ITEMS = {
         accent = { 0.97, 0.76, 0.24 },
     },
     {
-        id = "qualityOfLife",
-        title = "Weekly and Utility",
-        description = "Chores, gathering, teleports, and daily-use tools.",
-        accent = { 0.98, 0.68, 0.26 },
-        path = { "Quality of Life" },
-    },
-    {
-        id = "mythicPlusTools",
-        title = "Mythic+ Tools",
-        description = "Timer, interrupts, keystone helpers, and dungeon-focused notifications.",
-        accent = { 0.48, 0.82, 1.0 },
-        path = { "Mythic+ Tools" },
-    },
-    {
-        id = "datatexts",
-        title = "Data Panels",
-        description = "Panel layout, datatext customization, and related shortcuts.",
-        accent = { 0.44, 0.82, 0.98 },
-        path = { "DataTexts" },
-    },
-    {
-        id = "notifications",
-        title = "Notifications",
-        description = "Visual delivery, sounds, and per-feature toasts.",
-        accent = { 0.42, 0.89, 0.63 },
-        path = { "Notification Panel" },
-    },
-    {
-        id = "raidFrames",
-        title = "Unit Frames",
-        description = "Raid and party frame tweaks with live visual testing.",
-        accent = { 0.91, 0.45, 0.45 },
-        path = { "raidFrames" },
-    },
-    {
-        id = "chat",
-        title = "Chat",
-        description = "Messaging polish and interaction helpers.",
-        accent = { 0.81, 0.58, 0.95 },
-        path = { "Chat" },
-    },
-    {
-        id = "media",
-        title = "Fonts & Media",
-        description = "Add supplemental fonts, textures, and sounds to other addons.",
-        accent = { 0.95, 0.58, 0.76 },
-        path = { "Media" },
-    },
-    {
         id = "theme",
         title = "Appearance",
         description = "Shared color palette, surface opacity, and config sound profile.",
@@ -99,6 +50,34 @@ local NAV_ITEMS = {
         path = { "Best In Slot" },
     },
     {
+        id = "chat",
+        title = "Chat",
+        description = "Messaging polish and interaction helpers.",
+        accent = { 0.81, 0.58, 0.95 },
+        path = { "Chat" },
+    },
+    {
+        id = "datatexts",
+        title = "Data Panels",
+        description = "Panel layout, datatext customization, and related shortcuts.",
+        accent = { 0.44, 0.82, 0.98 },
+        path = { "DataTexts" },
+    },
+    {
+        id = "mythicPlusTools",
+        title = "Mythic+ Tools",
+        description = "Timer, interrupts, keystone helpers, and dungeon-focused notifications.",
+        accent = { 0.48, 0.82, 1.0 },
+        path = { "Mythic+ Tools" },
+    },
+    {
+        id = "notifications",
+        title = "Notifications",
+        description = "Visual delivery, sounds, and per-feature toasts.",
+        accent = { 0.42, 0.89, 0.63 },
+        path = { "Notification Panel" },
+    },
+    {
         id = "profiles",
         title = "Profiles",
         description = "Profile storage and switching.",
@@ -106,18 +85,25 @@ local NAV_ITEMS = {
         path = { "profile" },
     },
     {
-        id = "about",
-        title = "About",
-        description = "Addon information and version notes.",
-        accent = { 0.72, 0.74, 0.9 },
-        path = { "About" },
+        id = "qualityOfLife",
+        title = "Quality of Life",
+        description = "Chores, smart mount, easy fish, teleports, and daily-use tools.",
+        accent = { 0.98, 0.68, 0.26 },
+        path = { "Quality of Life" },
+    },
+    {
+        id = "raidFrames",
+        title = "Unit Frames",
+        description = "Raid and party frame tweaks with live visual testing.",
+        accent = { 0.91, 0.45, 0.45 },
+        path = { "raidFrames" },
     },
 }
 
 local FEATURE_CARDS = {
     {
         title = "Chores Tracker",
-        subtitle = "Pinned weekly tracker with datatext access and key-aware delve counts.",
+        subtitle = "Pinned tracker styling, weekly visibility, and quick access to the systems you check every reset.",
         accent = { 0.98, 0.76, 0.2 },
         pageId = "qualityOfLife",
         path = { "Quality of Life", "choresTab", "trackerFrame" },
@@ -142,31 +128,64 @@ local FEATURE_CARDS = {
         end,
     },
     {
-        title = "Interrupt Tracker",
-        subtitle = "Preview class colors, cooldown bars, and status text while tuning Mythic+ tools.",
-        accent = { 0.48, 0.82, 1.0 },
-        pageId = "mythicPlusTools",
-        path = { "Mythic+ Tools" },
+        title = "Smart Mount",
+        subtitle = "Spotlight flight, ground, and travel-form routing without digging through the full tree.",
+        accent = { 0.46, 0.83, 0.98 },
+        pageId = "qualityOfLife",
+        path = { "Quality of Life", "smartMountTab" },
         status = function()
-            local options = ConfigurationModule.Options and ConfigurationModule.Options.MythicPlusTools
+            local options = ConfigurationModule.Options and ConfigurationModule.Options.SmartMount
             if not options then
                 return "Unavailable"
             end
 
-            local enabled = options.GetEnabled and options:GetEnabled()
-            return enabled and "Enabled" or "Disabled"
+            local binding = options.GetSmartMountKeybinding and options:GetSmartMountKeybinding() or ""
+            return ("%s%s"):format(
+                options.GetEnabled and options:GetEnabled() and "Enabled" or "Disabled",
+                binding ~= "" and ("  •  Toggle: " .. binding) or "")
         end,
-        actionLabel = "Open Debug",
+    },
+    {
+        title = "Easy Fish",
+        subtitle = "Surface the one-button fishing flow, keybind, and sound controls right from the overview.",
+        accent = { 0.42, 0.89, 0.63 },
+        pageId = "qualityOfLife",
+        path = { "Quality of Life", "easyFishTab" },
+        status = function()
+            local options = ConfigurationModule.Options and ConfigurationModule.Options.EasyFish
+            if not options then
+                return "Unavailable"
+            end
+
+            local binding = options.GetEasyFishKeybinding and options:GetEasyFishKeybinding() or ""
+            return ("%s%s"):format(
+                options.GetEnabled and options:GetEnabled() and "Enabled" or "Disabled",
+                binding ~= "" and ("  •  Cast: " .. binding) or "")
+        end,
+    },
+    {
+        title = "Setup Wizard",
+        subtitle = "Re-run the onboarding flow whenever you want to re-apply a layout or theme preset.",
+        accent = { 0.95, 0.77, 0.28 },
+        status = function()
+            local wizard = T:GetModule("SetupWizard", true)
+            if not wizard then
+                return "Unavailable"
+            end
+
+            return wizard:ShouldShow() and "Ready to run" or "Completed"
+        end,
+        actionLabel = "Toggle Wizard",
         action = function()
-            local options = ConfigurationModule.Options and ConfigurationModule.Options.MythicPlusTools
-            if options and options.OpenDebugConsole then
-                options:OpenDebugConsole()
+            local wizard = T:GetModule("SetupWizard", true)
+            if wizard and wizard.Toggle then
+                wizard:Toggle()
             end
         end,
     },
     {
-        title = "Notifications",
-        subtitle = "Style your panel and immediately test fake toasts from inside config.",
+        title = "Notification Panel",
+        subtitle = "Tune toast styling and quickly jump into your notification categories.",
         accent = { 0.42, 0.89, 0.63 },
         pageId = "notifications",
         path = { "Notification Panel" },
@@ -177,37 +196,24 @@ local FEATURE_CARDS = {
             end
 
             local width = options.GetPanelWidth and options:GetPanelWidth() or 0
-            return ("Panel width: %s"):format(tostring(width))
-        end,
-        actionLabel = "Test Toast",
-        action = function()
-            local options = ConfigurationModule.Options and ConfigurationModule.Options.NotificationPanel
-            if options and options.TestKeystoneNotification then
-                options:TestKeystoneNotification()
-            end
+            local maxToasts = options.GetMaxToasts and options:GetMaxToasts() or 0
+            return ("Width %d | Max %d toasts"):format(width, maxToasts)
         end,
     },
     {
-        title = "Raid Glow",
-        subtitle = "Adjust glow style, color, and spark density with a matching visual preview.",
-        accent = { 0.91, 0.45, 0.45 },
-        pageId = "raidFrames",
-        path = { "raidFrames", "dispellableDebuffsTab" },
+        title = "Currency Panels",
+        subtitle = "Control data panel currency display styles and tooltip behavior.",
+        accent = { 0.44, 0.82, 0.98 },
+        pageId = "datatexts",
+        path = { "DataTexts", "currencies" },
         status = function()
-            local options = ConfigurationModule.Options and ConfigurationModule.Options.RaidFrames
+            local options = ConfigurationModule.Options and ConfigurationModule.Options.Datatext
             if not options then
                 return "Unavailable"
             end
 
-            local style = options.GetGlowStyle and options:GetGlowStyle() or "classic"
-            return ("Style: %s"):format(style)
-        end,
-        actionLabel = "Run Test",
-        action = function()
-            local options = ConfigurationModule.Options and ConfigurationModule.Options.RaidFrames
-            if options and options.TestGlow then
-                options:TestGlow()
-            end
+            local displayed = options.GetDisplayedCurrency and options:GetDisplayedCurrency() or "GOLD"
+            return ("Displayed: %s"):format(tostring(displayed))
         end,
     },
 }
@@ -438,7 +444,7 @@ local function MeasureButtonWidth(label, minWidth, maxWidth)
     return math.max(minWidth or 90, math.min(maxWidth or 260, 36 + (#text * 7)))
 end
 
-local function SkinScrollBar(scrollFrame, color)
+local function SkinScrollBar(scrollFrame, color, hideButtons)
     if not scrollFrame then
         return
     end
@@ -452,14 +458,28 @@ local function SkinScrollBar(scrollFrame, color)
     scrollBar:SetWidth(16)
 
     if scrollBar.ScrollUpButton then
-        SkinScrollArrowButton(scrollBar.ScrollUpButton, color, "^")
-        scrollBar.ScrollUpButton:ClearAllPoints()
-        scrollBar.ScrollUpButton:SetPoint("TOP", scrollBar, "TOP", 0, -1)
+        if hideButtons then
+            scrollBar.ScrollUpButton:Hide()
+            scrollBar.ScrollUpButton:EnableMouse(false)
+        else
+            SkinScrollArrowButton(scrollBar.ScrollUpButton, color, "^")
+            scrollBar.ScrollUpButton:ClearAllPoints()
+            scrollBar.ScrollUpButton:SetPoint("TOP", scrollBar, "TOP", 0, -1)
+            scrollBar.ScrollUpButton:Show()
+            scrollBar.ScrollUpButton:EnableMouse(true)
+        end
     end
     if scrollBar.ScrollDownButton then
-        SkinScrollArrowButton(scrollBar.ScrollDownButton, color, "v")
-        scrollBar.ScrollDownButton:ClearAllPoints()
-        scrollBar.ScrollDownButton:SetPoint("BOTTOM", scrollBar, "BOTTOM", 0, 1)
+        if hideButtons then
+            scrollBar.ScrollDownButton:Hide()
+            scrollBar.ScrollDownButton:EnableMouse(false)
+        else
+            SkinScrollArrowButton(scrollBar.ScrollDownButton, color, "v")
+            scrollBar.ScrollDownButton:ClearAllPoints()
+            scrollBar.ScrollDownButton:SetPoint("BOTTOM", scrollBar, "BOTTOM", 0, 1)
+            scrollBar.ScrollDownButton:Show()
+            scrollBar.ScrollDownButton:EnableMouse(true)
+        end
     end
 
     if not scrollBar.Track then
@@ -467,7 +487,7 @@ local function SkinScrollBar(scrollFrame, color)
         scrollBar.Track:SetColorTexture(0.08, 0.09, 0.12, 0.9)
     end
     scrollBar.Track:ClearAllPoints()
-    if scrollBar.ScrollUpButton and scrollBar.ScrollDownButton then
+    if (not hideButtons) and scrollBar.ScrollUpButton and scrollBar.ScrollDownButton then
         scrollBar.Track:SetPoint("TOPLEFT", scrollBar.ScrollUpButton, "BOTTOMLEFT", 2, -4)
         scrollBar.Track:SetPoint("BOTTOMRIGHT", scrollBar.ScrollDownButton, "TOPRIGHT", -2, 4)
     else
@@ -1202,7 +1222,7 @@ function UI:EnsureFrame()
 
     frame.Title = frame.TitleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     frame.Title:SetPoint("TOPLEFT", frame.TitleBar, "TOPLEFT", 18, -10)
-    frame.Title:SetText("TwichUI Configuration")
+    frame.Title:SetText("TwichUI: Reloaded Configuration")
     frame.Title:SetTextColor(1, 0.95, 0.82)
 
     frame.Subtitle = frame.TitleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -1339,36 +1359,42 @@ function UI:EnsureFrame()
     frame.Dashboard = CreateFrame("Frame", nil, frame.Body)
     frame.Dashboard:SetAllPoints(frame.Body)
 
-    frame.Hero = CreatePanel(frame.Dashboard, 0.08, 0.08, 0.12, 0.98, 0.16)
-    frame.Hero:SetPoint("TOPLEFT", frame.Dashboard, "TOPLEFT", 0, 0)
-    frame.Hero:SetPoint("TOPRIGHT", frame.Dashboard, "TOPRIGHT", 0, 0)
-    frame.Hero:SetHeight(120)
+    frame.DashboardScrollFrame = CreateFrame("ScrollFrame", nil, frame.Dashboard, "UIPanelScrollFrameTemplate")
+    frame.DashboardScrollFrame:SetPoint("TOPLEFT", frame.Dashboard, "TOPLEFT", 0, 0)
+    frame.DashboardScrollFrame:SetPoint("BOTTOMRIGHT", frame.Dashboard, "BOTTOMRIGHT", -24, 0)
+    SkinScrollBar(frame.DashboardScrollFrame, { 0.98, 0.76, 0.22 })
+
+    frame.DashboardScrollChild = CreateFrame("Frame", nil, frame.DashboardScrollFrame)
+    frame.DashboardScrollChild:SetSize(1, 1)
+    frame.DashboardScrollFrame:SetScrollChild(frame.DashboardScrollChild)
+    frame.DashboardScrollFrame:HookScript("OnSizeChanged", function(scroll)
+        local width = math.max(1, (scroll:GetWidth() or 1) - 8)
+        if frame.DashboardScrollChild then
+            frame.DashboardScrollChild:SetWidth(width)
+        end
+        if self.currentPageId == "dashboard" then
+            self:RefreshDashboard()
+        end
+    end)
+
+    frame.Hero = CreatePanel(frame.DashboardScrollChild, 0.08, 0.08, 0.12, 0.98, 0.16)
+    frame.Hero:SetPoint("TOPLEFT", frame.DashboardScrollChild, "TOPLEFT", 0, 0)
+    frame.Hero:SetPoint("TOPRIGHT", frame.DashboardScrollChild, "TOPRIGHT", 0, 0)
+    frame.Hero:SetHeight(1)
 
     frame.HeroGlow = frame.Hero:CreateTexture(nil, "BACKGROUND")
     frame.HeroGlow:SetPoint("TOPLEFT", frame.Hero, "TOPLEFT", 1, -1)
     frame.HeroGlow:SetPoint("BOTTOMRIGHT", frame.Hero, "BOTTOMRIGHT", -1, 1)
-    frame.HeroGlow:SetColorTexture(0.98, 0.76, 0.22, 0.06)
-
-    frame.HeroTitle = frame.Hero:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    frame.HeroTitle:SetPoint("TOPLEFT", frame.Hero, "TOPLEFT", 18, -16)
-    frame.HeroTitle:SetTextColor(1, 0.95, 0.82)
-    frame.HeroTitle:SetText("A cleaner home for every setting.")
-
-    frame.HeroText = frame.Hero:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.HeroText:SetPoint("TOPLEFT", frame.HeroTitle, "BOTTOMLEFT", 0, -10)
-    frame.HeroText:SetPoint("RIGHT", frame.Hero, "RIGHT", -18, 0)
-    frame.HeroText:SetJustifyH("LEFT")
-    frame.HeroText:SetTextColor(0.74, 0.76, 0.82)
-    frame.HeroText:SetText(
-        "Use the left rail to move between systems, then use the top tabs inside each page for deeper areas. The new view renders its own controls and shuts down cleanly when hidden, so you do not keep the old Ace dialog tree alive in the background.")
+    frame.HeroGlow:SetColorTexture(0.98, 0.76, 0.22, 0)
 
     frame.HeroMeta = frame.Hero:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     frame.HeroMeta:SetPoint("BOTTOMLEFT", frame.Hero, "BOTTOMLEFT", 18, 16)
     frame.HeroMeta:SetTextColor(0.95, 0.8, 0.38)
+    frame.HeroMeta:Hide()
 
-    frame.CardContainer = CreateFrame("Frame", nil, frame.Dashboard)
-    frame.CardContainer:SetPoint("TOPLEFT", frame.Hero, "BOTTOMLEFT", 0, -14)
-    frame.CardContainer:SetPoint("TOPRIGHT", frame.Hero, "BOTTOMRIGHT", 0, -14)
+    frame.CardContainer = CreateFrame("Frame", nil, frame.DashboardScrollChild)
+    frame.CardContainer:SetPoint("TOPLEFT", frame.DashboardScrollChild, "TOPLEFT", 0, -8)
+    frame.CardContainer:SetPoint("TOPRIGHT", frame.DashboardScrollChild, "TOPRIGHT", 0, -8)
     frame.CardContainer:SetHeight(470)
     frame.Cards = {}
 
@@ -1527,12 +1553,19 @@ function UI:RefreshDashboard()
     local frame = self:EnsureFrame()
     local filter = self:GetCurrentFilter()
     local shown = 0
+    local cardHeight = 170
+    local cardGapX = 18
+    local cardGapY = 14
+    local childWidth = math.max(1,
+        (frame.DashboardScrollChild and frame.DashboardScrollChild:GetWidth()) or (frame.Dashboard:GetWidth() or 1))
+    local innerWidth = math.max(640, childWidth - 4)
+    local cardWidth = math.max(280, math.floor((innerWidth - cardGapX) / 2))
 
     for index, card in ipairs(FEATURE_CARDS) do
         local widget = frame.Cards[index]
         if not widget then
             widget = CreatePanel(frame.CardContainer, 0.08, 0.08, 0.11, 0.98, 0.14)
-            widget:SetHeight(170)
+            widget:SetHeight(cardHeight)
             widget.Accent = widget:CreateTexture(nil, "BORDER")
             widget.Accent:SetPoint("TOPLEFT", widget, "TOPLEFT", 1, -1)
             widget.Accent:SetPoint("TOPRIGHT", widget, "TOPRIGHT", -1, -1)
@@ -1568,17 +1601,32 @@ function UI:RefreshDashboard()
             local column = shown % 2
             local row = math.floor(shown / 2)
             widget:ClearAllPoints()
-            widget:SetPoint("TOPLEFT", frame.CardContainer, "TOPLEFT", column * 474, -(row * 184))
-            widget:SetWidth(456)
+            widget:SetPoint("TOPLEFT", frame.CardContainer, "TOPLEFT", column * (cardWidth + cardGapX),
+                -(row * (cardHeight + cardGapY)))
+            widget:SetWidth(cardWidth)
             widget.Accent:SetColorTexture(unpackValues(card.accent))
             widget.Title:SetText(card.title)
             widget.Subtitle:SetText(card.subtitle)
             widget.Status:SetText(type(card.status) == "function" and card.status() or "")
-            widget.OpenButton:SetScript("OnClick", function()
-                self:OpenPage(card.pageId, card.path)
-            end)
+            if card.pageId then
+                widget.OpenButton:SetScript("OnClick", function()
+                    self:OpenPage(card.pageId, card.path)
+                end)
+                widget.OpenButton:ClearAllPoints()
+                widget.OpenButton:SetPoint("BOTTOMLEFT", widget, "BOTTOMLEFT", 14, 14)
+                widget.OpenButton:Show()
+            else
+                widget.OpenButton:SetScript("OnClick", nil)
+                widget.OpenButton:Hide()
+            end
             SetButtonText(widget.ActionButton, card.actionLabel or "Action")
             widget.ActionButton:SetScript("OnClick", card.action)
+            widget.ActionButton:ClearAllPoints()
+            if card.pageId then
+                widget.ActionButton:SetPoint("LEFT", widget.OpenButton, "RIGHT", 8, 0)
+            else
+                widget.ActionButton:SetPoint("BOTTOMLEFT", widget, "BOTTOMLEFT", 14, 14)
+            end
             widget.ActionButton:SetShown(type(card.action) == "function")
             widget:Show()
             shown = shown + 1
@@ -1587,8 +1635,12 @@ function UI:RefreshDashboard()
         end
     end
 
-    frame.HeroMeta:SetText(("%d sections | %d featured systems | search filters the whole shell"):format(#NAV_ITEMS - 1,
-        shown))
+    local rows = math.max(1, math.ceil(shown / 2))
+    local containerHeight = rows * (cardHeight + cardGapY) - cardGapY
+    frame.CardContainer:SetWidth(innerWidth)
+    frame.CardContainer:SetHeight(math.max(cardHeight, containerHeight))
+    frame.DashboardScrollChild:SetHeight(math.max(frame.CardContainer:GetHeight() + 16, frame.Dashboard:GetHeight()))
+    frame.HeroMeta:SetText("")
 end
 
 function UI:PlayConfiguredSound(soundKey)
@@ -1964,6 +2016,19 @@ local function GetChoresPreviewFontSettings()
             headerFont = LSM:Fetch("font", trackerHeaderFont, true) or headerFont
         end
     end
+    if choresOptions and choresOptions.GetTrackerHeaderFontSize then
+        headerFontSize = choresOptions:GetTrackerHeaderFontSize() or headerFontSize
+    end
+
+    if choresOptions and choresOptions.GetTrackerEntryFont then
+        local trackerEntryFont = choresOptions:GetTrackerEntryFont()
+        if trackerEntryFont and trackerEntryFont ~= "" and trackerEntryFont ~= "__tooltipEntry" and LSM then
+            entryFont = LSM:Fetch("font", trackerEntryFont, true) or entryFont
+        end
+    end
+    if choresOptions and choresOptions.GetTrackerEntryFontSize then
+        entryFontSize = choresOptions:GetTrackerEntryFontSize() or entryFontSize
+    end
 
     return {
         headerFont = headerFont,
@@ -2111,7 +2176,9 @@ local function CreateChoresPreviewSection(parent, index)
 
     section.Title = section:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     section.Title:SetPoint("TOPLEFT", section, "TOPLEFT", 28, -10)
+    section.Title:SetPoint("RIGHT", section, "RIGHT", -82, 0)
     section.Title:SetJustifyH("LEFT")
+    section.Title:SetWordWrap(false)
 
     section.Progress = section:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     section.Progress:SetPoint("TOPRIGHT", section, "TOPRIGHT", -12, -11)
@@ -2148,6 +2215,7 @@ local function EnsureChoresPreviewLine(section, index)
     line.Text:SetPoint("TOPRIGHT", line, "TOPRIGHT", 0, 0)
     line.Text:SetJustifyH("LEFT")
     line.Text:SetJustifyV("TOP")
+    line.Text:SetWordWrap(true)
     section.lines[index] = line
     return line
 end
@@ -2247,11 +2315,15 @@ local function CreateChoresPreviewShell(parent, width, height)
     frame.ScrollFrame = CreateFrame("ScrollFrame", nil, frame.ContentInset, "UIPanelScrollFrameTemplate")
     frame.ScrollFrame:SetPoint("TOPLEFT", frame.ContentInset, "TOPLEFT", 8, -8)
     frame.ScrollFrame:SetPoint("BOTTOMRIGHT", frame.ContentInset, "BOTTOMRIGHT", -20, 8)
-    SkinScrollBar(frame.ScrollFrame, { 0.98, 0.76, 0.22 })
+    SkinScrollBar(frame.ScrollFrame, { 0.98, 0.76, 0.22 }, true)
 
     frame.ScrollChild = CreateFrame("Frame", nil, frame.ScrollFrame)
     frame.ScrollChild:SetSize(1, 1)
     frame.ScrollFrame:SetScrollChild(frame.ScrollChild)
+    frame.ScrollFrame:HookScript("OnSizeChanged", function(scroll)
+        local availableWidth = math.max(1, (scroll:GetWidth() or 1) - 8)
+        frame.ScrollChild:SetWidth(availableWidth)
+    end)
 
     frame.ResizeHandle = CreateFrame("Button", nil, frame)
     frame.ResizeHandle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -3, 3)
@@ -2281,13 +2353,16 @@ local function PopulateChoresPreviewShell(shell)
     local sections = GetChoresPreviewSections(state, showCompleted)
     local fonts = GetChoresPreviewFontSettings()
     local contentHeight = 0
-    local contentWidth = math.max(1, (shell.ScrollFrame:GetWidth() or shell:GetWidth() or 1) - 8)
+    local scrollWidth = shell.ScrollFrame:GetWidth() or 0
+    local contentWidth = math.max(1, ((scrollWidth > 1 and scrollWidth) or (shell:GetWidth() or 1)) - 8)
+    local maxContentHeight = math.max(1, (shell.ScrollFrame:GetHeight() or 1) - 2)
 
     if choresDataText and choresDataText.ApplyTrackerAppearance then
         choresDataText:ApplyTrackerAppearance(shell)
     end
 
     shell.ScrollChild:SetWidth(contentWidth)
+    shell.ScrollFrame:SetVerticalScroll(0)
     shell.Title:SetFont(fonts.headerFont, math.max(fonts.headerFontSize + 2, 12), "")
     shell.TitleStatus:SetFont(fonts.headerFont, math.max(fonts.headerFontSize - 1, 10), "")
     shell.TitleStatus:SetText(state and state.enabled and string.format("%d remaining", state.totalRemaining or 0) or
@@ -2295,28 +2370,35 @@ local function PopulateChoresPreviewShell(shell)
 
     local emptyText = GetChoresPreviewEmptyText(state, #sections)
     shell.EmptyText:SetShown(emptyText ~= nil)
+    shell.EmptyText:SetFont(fonts.entryFont, fonts.entryFontSize, "")
     shell.EmptyText:SetText(emptyText or "")
 
     local sectionLimit = 3
+    local visibleSectionCount = 0
     for sectionIndex = 1, math.min(#sections, sectionLimit) do
         local sectionData = sections[sectionIndex]
         local summary = sectionData.summary
         local section = EnsureChoresPreviewSection(shell, sectionIndex)
-        local yOffset = 38
+        local hasEntries = #(sectionData.displayEntries or {}) > 0
+        local yOffset = hasEntries and 38 or 0
         local lineIndex = 1
         local headerR, headerG, headerB = GetChoresStatusColor(summary and summary.status or 0)
 
         section:ClearAllPoints()
         section:SetPoint("TOPLEFT", shell.ScrollChild, "TOPLEFT", 0, -contentHeight)
         section:SetPoint("RIGHT", shell.ScrollChild, "RIGHT", 0, 0)
+        section.Arrow:SetShown(hasEntries)
         section.Arrow:SetText("v")
         section.Title:SetFont(fonts.headerFont, fonts.headerFontSize, "")
+        section.Title:ClearAllPoints()
+        section.Title:SetPoint("TOPLEFT", section, "TOPLEFT", hasEntries and 28 or 12, -10)
+        section.Title:SetPoint("RIGHT", section, "RIGHT", -82, 0)
         section.Title:SetText(summary and summary.name or "Weekly chores")
         section.Title:SetTextColor(1, 0.95, 0.82)
         section.Progress:SetFont(fonts.headerFont, fonts.headerFontSize, "")
         section.Progress:SetText(BuildChoresPreviewProgress(summary))
         section.Progress:SetTextColor(headerR, headerG, headerB)
-        section.Divider:Show()
+        section.Divider:SetShown(hasEntries)
 
         for _, entry in ipairs(sectionData.displayEntries or {}) do
             if lineIndex > 4 then
@@ -2359,12 +2441,19 @@ local function PopulateChoresPreviewShell(shell)
             section.lines[hiddenIndex].Text:SetText("")
         end
 
-        section:SetHeight(math.max(42, yOffset + 10))
+        local sectionHeight = math.max(32, yOffset + 10)
+        if visibleSectionCount > 0 and contentHeight + sectionHeight + 10 > maxContentHeight then
+            section:Hide()
+            break
+        end
+
+        section:SetHeight(sectionHeight)
         section:Show()
         contentHeight = contentHeight + section:GetHeight() + 10
+        visibleSectionCount = visibleSectionCount + 1
     end
 
-    for sectionIndex = math.min(#sections, sectionLimit) + 1, #(shell.Sections or {}) do
+    for sectionIndex = visibleSectionCount + 1, #(shell.Sections or {}) do
         shell.Sections[sectionIndex]:Hide()
     end
 
@@ -3501,6 +3590,9 @@ function UI:ShowDashboard(item)
         self.previewRoot = nil
     end
     frame.OptionsHost:Hide()
+    if frame.DashboardScrollFrame then
+        frame.DashboardScrollFrame:SetVerticalScroll(0)
+    end
     frame.OptionsScrollFrame:SetVerticalScroll(0)
     frame.PreviewHost:Hide()
     frame.Dashboard:Show()

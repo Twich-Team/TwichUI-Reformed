@@ -84,6 +84,3 @@ local function BuildMediaConfiguration()
 
     return optionsTab
 end
-
--- register the configuration menu with the configuration module for display when shown.
-ConfigurationModule:RegisterConfigurationFunction("Media", BuildMediaConfiguration)

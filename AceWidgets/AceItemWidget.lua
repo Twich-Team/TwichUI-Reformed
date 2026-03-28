@@ -1,3 +1,4 @@
+---@diagnostic disable: undefined-global, undefined-field, return-type-mismatch
 local E = _G.ElvUI and _G.ElvUI[1]
 local T = unpack(TwichRx)
 
@@ -14,6 +15,14 @@ local Type, Version = ACEGUI_ITEM_TYPE, 1
 
 local NO_ITEM_TEXT = "No Item"
 
+local function GetWidgetColors()
+    local ThemeModule = T:GetModule("Theme", true)
+    local accent = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("accentColor") or { 0.95, 0.76, 0.26 }
+    local border = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("borderColor") or { 0.24, 0.26, 0.32 }
+    local bg = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("backgroundColor") or { 0.06, 0.06, 0.08 }
+    return accent, border, bg
+end
+
 ---Builds a simple AceGUI widget for displaying an item in lists.
 ---@return AceGUIWidget
 local function Constructor()
@@ -21,7 +30,26 @@ local function Constructor()
     frame:Hide()
 
     frame:SetSize(WIDGET_WIDTH, WIDGET_HEIGHT)
-    frame:SetTemplate("Transparent")
+    if frame.SetTemplate then
+        frame:SetTemplate("Transparent")
+    else
+        frame:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+    end
+
+    do
+        local _, border, bg = GetWidgetColors()
+        if frame.SetBackdropColor then
+            frame:SetBackdropColor(bg[1] * 0.7, bg[2] * 0.72, bg[3] * 0.8, 0.9)
+        end
+        if frame.SetBackdropBorderColor then
+            frame:SetBackdropBorderColor(border[1], border[2], border[3], 0.28)
+        end
+    end
 
     frame:EnableMouse(true)
     frame:RegisterForClicks("AnyUp")
@@ -204,8 +232,9 @@ local function Constructor()
     end
 
     frame:SetScript("OnEnter", function(self)
-        if E and E.media and E.media.rgbvaluecolor then
-            self:SetBackdropBorderColor(unpack(E.media.rgbvaluecolor))
+        local accent = GetWidgetColors()
+        if self.SetBackdropBorderColor then
+            self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.9)
         end
         local obj = self.obj
         if not obj or (not obj.itemID and not obj.itemLink) then return end
@@ -220,8 +249,9 @@ local function Constructor()
 
     frame:SetScript("OnLeave", function(self)
         GameTooltip:Hide()
-        if E and E.media and E.media.bordercolor then
-            self:SetBackdropBorderColor(unpack(E.media.bordercolor))
+        local _, border = GetWidgetColors()
+        if self.SetBackdropBorderColor then
+            self:SetBackdropBorderColor(border[1], border[2], border[3], 0.28)
         end
     end)
 

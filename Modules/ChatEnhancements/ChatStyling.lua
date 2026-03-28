@@ -787,7 +787,7 @@ function ChatStylingModule:ApplyChatHeaderDatatextBar(frame)
         textB = hdt.textColor.b or textB
     end
     DataTextMod:RefreshEmbeddedBar(barID, panelDefinition, {
-        font     = self.settings and self.settings.tabFont,
+        font     = hdt.font or (self.settings and self.settings.tabFont),
         fontSize = hdtFontSize,
         accentR  = accentR,
         accentG  = accentG,
@@ -906,8 +906,10 @@ function ChatStylingModule:ResolveChannelKeyFromChatType(chatType, channelTarget
 end
 
 function ChatStylingModule:GetEditBoxAccentColor(editBox)
-    local chatType = editBox and editBox.chatType or nil
-    local channelTarget = editBox and (editBox.channelTarget or editBox.tellTarget) or nil
+    local chatType = editBox and ((editBox.GetAttribute and editBox:GetAttribute("chatType")) or editBox.chatType) or nil
+    local channelTarget = editBox and
+        ((editBox.GetAttribute and (editBox:GetAttribute("channelTarget") or editBox:GetAttribute("tellTarget"))) or
+            editBox.channelTarget or editBox.tellTarget) or nil
     local key = self:ResolveChannelKeyFromChatType(chatType, channelTarget)
     if not key and editBox then
         local headerText = editBox.header and editBox.header:GetText() or ""
@@ -1493,14 +1495,13 @@ function ChatStylingModule:EnsureFrameChrome(frame)
     chrome.TopGlow:SetPoint("TOPLEFT", chrome, "TOPLEFT", 1, -1)
     chrome.TopGlow:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -1, -1)
     chrome.TopGlow:SetHeight(18)
-    SetVerticalGradient(chrome.TopGlow, PRIMARY_BORDER[1], PRIMARY_BORDER[2], PRIMARY_BORDER[3], 0.14, PRIMARY_BORDER[1],
-        PRIMARY_BORDER[2], PRIMARY_BORDER[3], 0)
+    SetVerticalGradient(chrome.TopGlow, 1, 1, 1, 0.035, 1, 1, 1, 0)
 
     chrome.BottomShade = chrome:CreateTexture(nil, "ARTWORK")
     chrome.BottomShade:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", 1, 1)
     chrome.BottomShade:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -1, 1)
     chrome.BottomShade:SetHeight(22)
-    SetVerticalGradient(chrome.BottomShade, 0, 0, 0, 0, GOLD_ACCENT[1], GOLD_ACCENT[2], GOLD_ACCENT[3], 0.08)
+    SetVerticalGradient(chrome.BottomShade, 0, 0, 0, 0, 0, 0, 0, 0.05)
 
     chrome.LeftAccent = chrome:CreateTexture(nil, "BORDER")
     chrome.LeftAccent:SetPoint("TOPLEFT", chrome, "TOPLEFT", 1, -1)
@@ -1510,7 +1511,7 @@ function ChatStylingModule:EnsureFrameChrome(frame)
     chrome.InnerGlow = chrome:CreateTexture(nil, "ARTWORK")
     chrome.InnerGlow:SetPoint("TOPLEFT", chrome, "TOPLEFT", 1, -1)
     chrome.InnerGlow:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -1, 1)
-    chrome.InnerGlow:SetColorTexture(PRIMARY_BORDER[1], PRIMARY_BORDER[2], PRIMARY_BORDER[3], 0.03)
+    chrome.InnerGlow:SetColorTexture(1, 1, 1, 0.018)
 
     chrome.DragHint = chrome:CreateFontString(nil, "OVERLAY")
     chrome.DragHint:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -14, -8)
@@ -1565,7 +1566,7 @@ function ChatStylingModule:EnsureFrameChrome(frame)
     chrome.ResizeHandle:RegisterForDrag("LeftButton")
     CreateBackdrop(chrome.ResizeHandle)
     chrome.ResizeHandle:SetBackdropColor(0.03, 0.05, 0.07, 0.92)
-    chrome.ResizeHandle:SetBackdropBorderColor(PRIMARY_BORDER[1], PRIMARY_BORDER[2], PRIMARY_BORDER[3], 0.18)
+    chrome.ResizeHandle:SetBackdropBorderColor(1, 1, 1, 0.12)
     chrome.ResizeHandle.Fill = chrome.ResizeHandle:CreateTexture(nil, "BACKGROUND")
     chrome.ResizeHandle.Fill:SetAllPoints(chrome.ResizeHandle)
     SetVerticalGradient(chrome.ResizeHandle.Fill, 0.08, 0.11, 0.14, 0.92, 0.03, 0.05, 0.07, 0.92)
@@ -1644,8 +1645,8 @@ function ChatStylingModule:ApplyFrameChrome(frame)
         frame.TwichUIChrome:SetBackdropColor(bgR, bgG, bgB, bgA)
         if frame.TwichUIChrome.Fill then
             SetVerticalGradient(frame.TwichUIChrome.Fill,
-                bgR * 1.5, bgG * 1.5, bgB * 1.5, bgA,
-                bgR * 0.5, bgG * 0.5, bgB * 0.5, bgA)
+                math.min(1, bgR * 1.08), math.min(1, bgG * 1.08), math.min(1, bgB * 1.08), bgA,
+                bgR * 0.92, bgG * 0.92, bgB * 0.92, bgA)
         end
         local bd = self.settings and self.settings.chatBorderColor or nil
         local bdR = bd and bd.r or PRIMARY_BORDER[1]
@@ -1658,10 +1659,16 @@ function ChatStylingModule:ApplyFrameChrome(frame)
         if frame.TwichUIChrome.DragHint then
             frame.TwichUIChrome.DragHint:SetTextColor(accentR, accentG, accentB)
         end
-        SetVerticalGradient(frame.TwichUIChrome.BottomShade, 0, 0, 0, 0, accentR, accentG, accentB,
-            showChromeAccent and 0.08 or 0)
+        SetVerticalGradient(frame.TwichUIChrome.BottomShade, 0, 0, 0, 0, 0, 0, 0,
+            showChromeAccent and 0.05 or 0)
+        if frame.TwichUIChrome.TopGlow then
+            SetVerticalGradient(frame.TwichUIChrome.TopGlow, 1, 1, 1, showChromeAccent and 0.035 or 0.02, 1, 1, 1, 0)
+        end
+        if frame.TwichUIChrome.InnerGlow then
+            frame.TwichUIChrome.InnerGlow:SetColorTexture(1, 1, 1, showChromeAccent and 0.018 or 0.01)
+        end
         if frame.TwichUIChrome.ResizeHandle then
-            frame.TwichUIChrome.ResizeHandle:SetBackdropBorderColor(accentR, accentG, accentB, 0.2)
+            frame.TwichUIChrome.ResizeHandle:SetBackdropBorderColor(1, 1, 1, 0.12)
             frame.TwichUIChrome.ResizeHandle:SetShown(not locked)
         end
         if frame.TwichUIChrome.AccentDragHandle then
@@ -1794,6 +1801,15 @@ function ChatStylingModule:EnsureEditBoxChrome()
     editBox:HookScript("OnHide", function(self)
         if self.TwichUIChrome then
             self.TwichUIChrome:Hide()
+        end
+    end)
+    -- Re-apply chrome accent whenever the channel type attribute changes (e.g. Tab to
+    -- switch between Say/Guild/Whisper).  WoW sets chatType/tellTarget via SetAttribute,
+    -- so OnAttributeChanged is the most reliable trigger and fires even when the Blizzard
+    -- ChatEdit_UpdateHeader global has been renamed or removed in newer clients.
+    editBox:HookScript("OnAttributeChanged", function(_, name, _)
+        if name == "chatType" or name == "tellTarget" or name == "channelTarget" then
+            ChatStylingModule:ApplyEditBoxChrome()
         end
     end)
     -- Re-apply our custom position whenever the chat frame is repositioned/resized by WoW.

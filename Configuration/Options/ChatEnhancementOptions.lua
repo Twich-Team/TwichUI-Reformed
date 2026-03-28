@@ -862,9 +862,19 @@ end
 -- Message row background color (the per-row backdrop inside the renderer).
 local DEFAULT_MSG_BG = { r = 0.03, g = 0.05, b = 0.07, a = 0.72 }
 
+local function GetThemeLinkedMsgBg(self)
+    local chatBg = self:GetResolvedChatBgColor()
+    return {
+        r = chatBg and chatBg.r or DEFAULT_MSG_BG.r,
+        g = chatBg and chatBg.g or DEFAULT_MSG_BG.g,
+        b = chatBg and chatBg.b or DEFAULT_MSG_BG.b,
+        a = 0.30,
+    }
+end
+
 function Options:GetMsgBgColor()
     local db = self:GetChatEnhancementDB()
-    local c = db.msgBgColor or DEFAULT_MSG_BG
+    local c = db.msgBgColor or GetThemeLinkedMsgBg(self)
     return c.r or DEFAULT_MSG_BG.r, c.g or DEFAULT_MSG_BG.g, c.b or DEFAULT_MSG_BG.b,
         c.a ~= nil and c.a or DEFAULT_MSG_BG.a
 end
@@ -876,7 +886,7 @@ end
 
 function Options:GetResolvedMsgBgColor()
     local db = self:GetChatEnhancementDB()
-    local c = db.msgBgColor or DEFAULT_MSG_BG
+    local c = db.msgBgColor or GetThemeLinkedMsgBg(self)
     return {
         r = c.r or DEFAULT_MSG_BG.r,
         g = c.g or DEFAULT_MSG_BG.g,
@@ -1078,6 +1088,7 @@ function Options:GetHeaderDatatextSettings()
         enabled            = hdt.enabled == true,
         slotCount          = math.max(1, math.min(3, tonumber(hdt.slotCount) or 1)),
         slotWidth          = math.max(32, math.min(200, tonumber(hdt.slotWidth) or 68)),
+        font               = (type(hdt.font) == "string" and hdt.font ~= "") and hdt.font or nil,
         fontSize           = math.max(8, math.min(18, tonumber(hdt.fontSize) or 11)),
         useCustomTextColor = hdt.useCustomTextColor == true,
         textColor          = textColor and { r = textColor.r or 0.92, g = textColor.g or 0.94, b = textColor.b or 0.96 } or
@@ -1114,6 +1125,20 @@ end
 
 function Options:SetHeaderDatatextSlot(n, name)
     self:GetHeaderDatatextDB()["slot" .. n] = (name ~= "NONE" and name) or "NONE"
+    self:RefreshChatStylingModule()
+end
+
+function Options:GetHeaderDatatextFont()
+    local hdt = self:GetHeaderDatatextDB()
+    if type(hdt.font) == "string" and hdt.font ~= "" then
+        return hdt.font
+    end
+    return self:GetTabFont()
+end
+
+function Options:SetHeaderDatatextFont(info, value)
+    local hdt = self:GetHeaderDatatextDB()
+    hdt.font = (type(value) == "string" and value ~= "") and value or nil
     self:RefreshChatStylingModule()
 end
 

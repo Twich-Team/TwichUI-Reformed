@@ -1,3 +1,4 @@
+---@diagnostic disable: undefined-field, undefined-global
 local E = unpack(ElvUI)
 local TwichRx = _G.TwichRx
 ---@type TwichUI
@@ -31,6 +32,53 @@ local BISFrame = BIS.Frame
 local Tab = BISFrame.Tabs.GearSearch or {}
 BISFrame.Tabs.GearSearch = Tab
 Tab.Buttons = {}
+
+local function GetThemeColors()
+    local ThemeModule = T:GetModule("Theme", true)
+    local accent = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("accentColor") or { 0.95, 0.76, 0.26 }
+    local border = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("borderColor") or { 0.24, 0.26, 0.32 }
+    local surface = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("backgroundColor") or
+    { 0.06, 0.06, 0.08 }
+    return accent, border, surface
+end
+
+local function ApplyPanelStyle(frame, alpha)
+    if not frame then
+        return
+    end
+
+    local _, border, surface = GetThemeColors()
+    if frame.SetTemplate then
+        frame:SetTemplate("Transparent")
+    elseif frame.SetBackdrop then
+        frame:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+    end
+
+    if frame.SetBackdropColor then
+        frame:SetBackdropColor(surface[1] * 0.72, surface[2] * 0.74, surface[3] * 0.82, alpha or 0.88)
+    end
+    if frame.SetBackdropBorderColor then
+        frame:SetBackdropBorderColor(border[1], border[2], border[3], 0.28)
+    end
+end
+
+local function StyleAceButton(widget, color)
+    if not (widget and widget.frame) then
+        return
+    end
+
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichButton then
+        T.Tools.UI.SkinTwichButton(widget.frame, color)
+    end
+    if widget.text and widget.text.SetTextColor then
+        widget.text:SetTextColor(1, 0.95, 0.84)
+    end
+end
 
 ---@type table<string, table<integer, boolean>>
 local EQUIP_TO_SLOTS = {
@@ -128,6 +176,10 @@ function Tab:ShowCustomItemConfig()
     itemSearchGroup:SetFullWidth(true)
     itemSearchGroup:SetLayout("List")
     self.ItemGroup:AddChild(itemSearchGroup)
+    ApplyPanelStyle(itemSearchGroup.frame, 0.84)
+    if itemSearchGroup.titletext then
+        itemSearchGroup.titletext:SetTextColor(0.95, 0.95, 0.98)
+    end
 
     -- description
     local desc = AceGUI:Create("Label")
@@ -165,6 +217,10 @@ function Tab:ShowCustomItemConfig()
     sourceGroup:SetFullWidth(true)
     sourceGroup:SetLayout("List")
     self.ItemGroup:AddChild(sourceGroup)
+    ApplyPanelStyle(sourceGroup.frame, 0.84)
+    if sourceGroup.titletext then
+        sourceGroup.titletext:SetTextColor(0.95, 0.95, 0.98)
+    end
     local sourceLabel = AceGUI:Create("Label")
     sourceLabel:SetText(
         "You can optionally set the source of the item, which will appear in the gear tracker underneath the item.")
@@ -289,6 +345,7 @@ function Tab:CreateSourceFrame(container)
             self:PopulateItems(instanceName)
             self.Selected.sourceInstance = instanceName
         end)
+        StyleAceButton(button, { 0.42, 0.82, 0.98 })
         return button
     end
 
@@ -381,6 +438,10 @@ function Tab:Create(container, slotData)
     sourceGroup:SetFullHeight(true)
     sourceGroup:SetLayout("Fill")
     rowGroup:AddChild(sourceGroup)
+    ApplyPanelStyle(sourceGroup.frame, 0.84)
+    if sourceGroup.titletext then
+        sourceGroup.titletext:SetTextColor(0.95, 0.95, 0.98)
+    end
 
     local leftScroll = AceGUI:Create("ScrollFrame")
     leftScroll:SetFullWidth(true)
@@ -396,6 +457,10 @@ function Tab:Create(container, slotData)
     itemGroup:SetLayout("Fill")
     self.ItemGroupParent = itemGroup
     rowGroup:AddChild(itemGroup)
+    ApplyPanelStyle(itemGroup.frame, 0.84)
+    if itemGroup.titletext then
+        itemGroup.titletext:SetTextColor(0.95, 0.95, 0.98)
+    end
 
     local rightScroll = AceGUI:Create("ScrollFrame")
     rightScroll:SetFullWidth(true)
@@ -422,6 +487,7 @@ function Tab:Create(container, slotData)
         -- this same tab container.
         BISFrame:SelectGroup(container, nil, "gearSelector")
     end)
+    StyleAceButton(backButton, { 0.95, 0.76, 0.26 })
     footerGroup:AddChild(backButton)
 
     -- custom item button
@@ -432,6 +498,7 @@ function Tab:Create(container, slotData)
     customItemButton:SetCallback("OnClick", function()
         self:ShowCustomItemConfig()
     end)
+    StyleAceButton(customItemButton, { 0.16, 0.78, 0.78 })
     footerGroup:AddChild(customItemButton)
 
     -- selected container (will be sized/positioned in ResizeFooter)

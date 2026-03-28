@@ -1143,6 +1143,18 @@ local function BuildChatEnhancementConfiguration()
                     get = "GetHeaderDatatextFontSize",
                     set = "SetHeaderDatatextFontSize",
                 },
+                headerDatatextFont = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Font",
+                    desc = "Override font used by the header datatext cells.",
+                    order = 6.5,
+                    width = "half",
+                    handler = Options,
+                    get = "GetHeaderDatatextFont",
+                    set = "SetHeaderDatatextFont",
+                    values = function() return LibStub("LibSharedMedia-3.0"):HashTable("font") or {} end,
+                },
                 headerDatatextCustomColor = {
                     type = "toggle",
                     name = "Custom Text Color",

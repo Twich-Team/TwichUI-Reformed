@@ -9,20 +9,26 @@
       Increment WIZARD_VERSION below. All users whose completedVersion is less than
       the new value will see the wizard again on next login.
 ]]
-local TwichRx           = _G.TwichRx
+local TwichRx               = _G.TwichRx
 ---@type TwichUI
-local T                 = unpack(TwichRx)
+local T                     = unpack(TwichRx)
 
-local C_Timer           = _G.C_Timer
-local InCombatLockdown  = _G.InCombatLockdown
-local GetScreenWidth    = _G.GetScreenWidth
-local GetScreenHeight   = _G.GetScreenHeight
+local C_Timer               = _G.C_Timer
+local InCombatLockdown      = _G.InCombatLockdown
+local C_AddOns              = _G.C_AddOns
+local GetScreenWidth        = _G.GetScreenWidth
+local GetScreenHeight       = _G.GetScreenHeight
+local GetPhysicalScreenSize = _G.GetPhysicalScreenSize
+local ReloadUI              = _G.ReloadUI
+local CopyTable             = _G.CopyTable
+local SetCVar               = _G.SetCVar
+local wipe                  = _G.wipe
 
 --- Increment to re-show the wizard for all users (e.g. when a new setup step is added).
-local WIZARD_VERSION    = 1
+local WIZARD_VERSION        = 1
 
 ---@class SetupWizardModule : AceModule, AceEvent-3.0
-local SetupWizardModule = T:NewModule("SetupWizard", "AceEvent-3.0")
+local SetupWizardModule     = T:NewModule("SetupWizard", "AceEvent-3.0")
 SetupWizardModule:SetEnabledState(true)
 
 -- UI namespace populated by WizardUI.lua
@@ -69,6 +75,29 @@ function SetupWizardModule:Reset()
     self:GetDB().completedVersion = 0
 end
 
+--- Wipes the entire TwichUI saved-variable table and reloads the UI.
+--- Intended for first-run recovery when the user wants a clean slate.
+function SetupWizardModule:ResetAddonDatabase()
+    if type(InCombatLockdown) == "function" and InCombatLockdown() then
+        T:Print("Cannot reset TwichUI database while in combat.")
+        return false
+    end
+
+    local sv = T.db and rawget(T.db, "sv")
+    if type(sv) == "table" and type(wipe) == "function" then
+        wipe(sv)
+    end
+
+    self._completedThisSession = false
+    self.layoutFrames = {}
+
+    if type(ReloadUI) == "function" then
+        ReloadUI()
+    end
+
+    return true
+end
+
 -- ─── Layout frame registry ─────────────────────────────────────────────────
 
 -- layoutFrames stores { frame = <Frame>, persist = <fn|nil> } per key.
@@ -96,12 +125,62 @@ function SetupWizardModule:RestoreConfigSnapshot(snapshot)
     local CM = T:GetModule("Configuration")
     if not CM then return end
     local config = CM:GetProfileDB()
+    local applyOptions = self._layoutApplyOptions
     for sectionKey, sectionVal in pairs(snapshot) do
-        if sectionKey ~= "setupWizard" then
+        if sectionKey ~= "setupWizard" and not (sectionKey == "chatEnhancement" and applyOptions and applyOptions.applyChat == false) then
             config[sectionKey] = sectionVal
         end
     end
     T:SendMessage("TWICH_CONFIG_RESTORED")
+end
+
+local function Clamp(value, minV, maxV)
+    if value < minV then return minV end
+    if value > maxV then return maxV end
+    return value
+end
+
+--- Returns an auto-calculated UI scale similar to Blizzard/Elv-style auto-scaling.
+---@return number
+function SetupWizardModule:GetAutoUIScale()
+    local physicalH = nil
+    if type(GetPhysicalScreenSize) == "function" then
+        local _, h = GetPhysicalScreenSize()
+        physicalH = h
+    end
+    local h = tonumber(physicalH) or tonumber(GetScreenHeight and GetScreenHeight()) or 1080
+    return Clamp(768 / math.max(1, h), 0.64, 1)
+end
+
+--- Applies UI scale mode/value from wizard and stores the selection in wizard state.
+---@param mode string|nil  "skip"|"auto"|"manual"
+---@param value number|nil Manual scale value when mode="manual"
+function SetupWizardModule:ApplyUIScale(mode, value)
+    local db = self:GetDB()
+    mode = mode or "auto"
+
+    if mode == "skip" then
+        db.appliedUIScaleMode = "skip"
+        db.appliedUIScaleValue = nil
+        return
+    end
+
+    if type(SetCVar) ~= "function" then
+        return
+    end
+
+    if mode == "auto" then
+        pcall(SetCVar, "useUiScale", "0")
+        db.appliedUIScaleMode = "auto"
+        db.appliedUIScaleValue = self:GetAutoUIScale()
+        return
+    end
+
+    local scaleValue = Clamp(tonumber(value) or self:GetAutoUIScale(), 0.64, 1)
+    pcall(SetCVar, "useUiScale", "1")
+    pcall(SetCVar, "uiScale", string.format("%.2f", scaleValue))
+    db.appliedUIScaleMode = "manual"
+    db.appliedUIScaleValue = scaleValue
 end
 
 --- Returns the current screen dimensions.
@@ -119,6 +198,10 @@ end
 function SetupWizardModule:ApplyLayoutData(layoutData)
     if type(layoutData) ~= "table" or type(layoutData.frames) ~= "table" then return end
     local sw, sh = GetScreenWidth(), GetScreenHeight()
+    local referenceResolution = layoutData.referenceResolution
+    local refW = type(referenceResolution) == "table" and tonumber(referenceResolution.w) or sw
+    local refH = type(referenceResolution) == "table" and tonumber(referenceResolution.h) or sh
+    local hasRefResolution = refW and refW > 0 and refH and refH > 0
     for key, fd in pairs(layoutData.frames) do
         local entry = self.layoutFrames[key]
         local frame = entry and entry.frame
@@ -127,13 +210,72 @@ function SetupWizardModule:ApplyLayoutData(layoutData)
             local absY = (fd.y or 0) * sh
             local absW = fd.w and fd.w * sw
             local absH = fd.h and fd.h * sh
+            local scaleMode = fd.scaleMode
+
+            -- Backward-compatible chat behavior for older captures:
+            -- if no scale metadata exists, preserve snapshot size from layout.apply()
+            -- and only reposition the chat frame.
+            if key == "ChatFrame1" and scaleMode == nil and not hasRefResolution then
+                absW = nil
+                absH = nil
+            end
+
+            if hasRefResolution and fd.w and fd.h then
+                if key == "ChatFrame1" and scaleMode == nil then
+                    scaleMode = "height"
+                end
+                if scaleMode == "height" then
+                    local s = sh / refH
+                    absW = fd.w * refW * s
+                    absH = fd.h * refH * s
+                elseif scaleMode == "width" then
+                    local s = sw / refW
+                    absW = fd.w * refW * s
+                    absH = fd.h * refH * s
+                elseif scaleMode == "uniform" then
+                    local s = math.min(sw / refW, sh / refH)
+                    absW = fd.w * refW * s
+                    absH = fd.h * refH * s
+                end
+            end
+
+            if absW and absW > sw * 0.98 then absW = sw * 0.98 end
+            if absH and absH > sh * 0.98 then absH = sh * 0.98 end
+            if absW and absX + absW > sw then
+                absX = math.max(0, sw - absW - 2)
+            end
+            if absH and absY + absH > sh then
+                absY = math.max(0, sh - absH - 2)
+            end
+
+            -- Layout captures for ChatFrame1 are recorded from the chat chrome shell
+            -- bottom-left. Convert back to the underlying frame anchor before SetPoint.
+            if key == "ChatFrame1" then
+                local chrome = frame.TwichUIChrome
+                local offsetX, offsetY = -8, -8
+                if chrome and chrome.GetLeft and chrome.GetBottom and frame.GetLeft and frame.GetBottom then
+                    local frameLeft = frame:GetLeft()
+                    local frameBottom = frame:GetBottom()
+                    local chromeLeft = chrome:GetLeft()
+                    local chromeBottom = chrome:GetBottom()
+                    if frameLeft and frameBottom and chromeLeft and chromeBottom then
+                        offsetX = chromeLeft - frameLeft
+                        offsetY = chromeBottom - frameBottom
+                    end
+                end
+                absX = absX - offsetX
+                absY = absY - offsetY
+            end
+
             frame:ClearAllPoints()
             -- Always BOTTOMLEFT so persist callbacks receive consistent values.
             frame:SetPoint("BOTTOMLEFT", _G.UIParent, "BOTTOMLEFT", absX, absY)
             if absW then frame:SetWidth(absW) end
             if absH then frame:SetHeight(absH) end
             if entry.persist then
-                entry.persist(absX, absY, absW or 0, absH or 0)
+                local persistW = absW or (frame.GetWidth and frame:GetWidth() or 0)
+                local persistH = absH or (frame.GetHeight and frame:GetHeight() or 0)
+                entry.persist(absX, absY, persistW, persistH)
             end
         end
     end
@@ -146,16 +288,25 @@ end
 --- write position data into module DB sections) write into the freshly-replaced
 --- tables rather than tables that would immediately be overwritten by the snapshot.
 ---@param layoutId string
-function SetupWizardModule:ApplyLayout(layoutId)
+---@param options table|nil
+function SetupWizardModule:ApplyLayout(layoutId, options)
     local layout = self:GetLayout(layoutId)
     if not layout then return end
+    self._layoutApplyOptions = options
     -- 1. Apply the config snapshot: replaces chatEnhancement, datatext, etc.
     if type(layout.apply) == "function" then
         layout.apply()
     end
+    self._layoutApplyOptions = nil
     -- 2. Apply frame positions: persist callbacks now write into the new tables.
     self:ApplyLayoutData(layout)
     self:GetDB().appliedLayout = layoutId
+
+    -- 3. Refresh datatext panels immediately so they appear in the wizard
+    local datatextModule = T:GetModule("Datatexts", true)
+    if datatextModule and type(datatextModule.RefreshStandalonePanels) == "function" then
+        pcall(datatextModule.RefreshStandalonePanels, datatextModule)
+    end
 end
 
 --- Applies a theme preset to ThemeModule and broadcasts TWICH_THEME_CHANGED.
@@ -165,13 +316,235 @@ function SetupWizardModule:ApplyThemePreset(presetId)
     if not preset then return end
     local ThemeModule = T:GetModule("Theme")
     if not ThemeModule then return end
-    local colorKeys = { "primaryColor", "accentColor", "backgroundColor", "borderColor" }
-    for _, key in ipairs(colorKeys) do
-        if preset[key] then
-            ThemeModule:Set(key, preset[key])
+    local db = ThemeModule:GetDB()
+    local themeKeys = {
+        "primaryColor", "accentColor", "backgroundColor", "borderColor",
+        "textColor", "successColor", "warningColor", "dangerColor",
+        "backgroundAlpha", "borderAlpha", "statusBarTexture", "classIconStyle",
+        "globalFont", "soundProfile", "uiSoundsEnabled", "soundVolume",
+        "useClassColor",
+    }
+    for _, key in ipairs(themeKeys) do
+        if preset[key] ~= nil then
+            if type(preset[key]) == "table" and type(CopyTable) == "function" then
+                db[key] = CopyTable(preset[key])
+            else
+                db[key] = preset[key]
+            end
         end
     end
+
+    -- Keep chat message row background aligned with the active theme background,
+    -- but at a lightweight readability alpha.
+    local chatOpts = T:GetModule("Configuration", true) and T:GetModule("Configuration", true).Options and
+        T:GetModule("Configuration", true).Options.ChatEnhancement
+    if chatOpts and type(chatOpts.GetChatEnhancementDB) == "function" then
+        local chatDB = chatOpts:GetChatEnhancementDB()
+        local bg = db.backgroundColor or { 0.05, 0.06, 0.08 }
+        chatDB.msgBgColor = {
+            r = bg[1] or 0.05,
+            g = bg[2] or 0.06,
+            b = bg[3] or 0.08,
+            a = 0.30,
+        }
+        if type(chatOpts.RefreshChatStylingModule) == "function" then
+            pcall(chatOpts.RefreshChatStylingModule, chatOpts)
+        end
+    end
+
+    db.appliedThemePreset = presetId
+    ThemeModule:SendMessage("TWICH_THEME_CHANGED", nil)
     self:GetDB().appliedThemePreset = presetId
+
+    -- Immediately refresh datatext panels to show new theme colors
+    local datatextModule = T:GetModule("Datatexts", true)
+    if datatextModule then
+        -- Directly refresh panels if they exist
+        if type(datatextModule.RefreshStandalonePanels) == "function" then
+            pcall(datatextModule.RefreshStandalonePanels, datatextModule)
+        end
+        -- Also try to update the theme colors in its stored panels
+        if datatextModule.standalonePanels then
+            for panelID, frame in pairs(datatextModule.standalonePanels) do
+                if frame and type(datatextModule.ApplyStandalonePanelStyle) == "function" then
+                    local panelDB = datatextModule.GetStandaloneDB and datatextModule:GetStandaloneDB()
+                    local panelDefinition = panelDB and panelDB.panels and panelDB.panels[panelID]
+                    pcall(datatextModule.ApplyStandalonePanelStyle, datatextModule, frame, panelDefinition)
+                end
+            end
+        end
+    end
+end
+
+--- Returns whether ElvUI is installed and currently loaded.
+---@return boolean
+function SetupWizardModule:IsElvUIActive()
+    local isLoaded = type(C_AddOns) == "table" and type(C_AddOns.IsAddOnLoaded) == "function" and
+        C_AddOns.IsAddOnLoaded("ElvUI")
+    local E = _G.ElvUI and _G.ElvUI[1]
+    return isLoaded == true and type(E) == "table"
+end
+
+--- Detects ElvUI module states that are likely to conflict with TwichUI systems.
+---@return table
+function SetupWizardModule:DetectElvUIConflicts()
+    local result = {
+        available = false,
+        chatEnabled = false,
+        datatextEnabled = false,
+    }
+    if not self:IsElvUIActive() then
+        return result
+    end
+
+    local E = _G.ElvUI and _G.ElvUI[1]
+    local private = E and E.private or nil
+    local db = E and E.db or nil
+
+    -- ElvUI chat typically uses private.chat.enable
+    local chatEnabled = true
+    if type(private) == "table" and type(private.chat) == "table" and private.chat.enable ~= nil then
+        chatEnabled = private.chat.enable ~= false
+    end
+
+    -- Datatexts are usually controlled via private/datatext containers.
+    local datatextEnabled = true
+    if type(private) == "table" and type(private.datatexts) == "table" and private.datatexts.enable ~= nil then
+        datatextEnabled = private.datatexts.enable ~= false
+    elseif type(db) == "table" and type(db.datatexts) == "table" and db.datatexts.enable ~= nil then
+        datatextEnabled = db.datatexts.enable ~= false
+    end
+
+    result.available = true
+    result.chatEnabled = chatEnabled
+    result.datatextEnabled = datatextEnabled
+    return result
+end
+
+--- Applies wizard ownership choices between TwichUI and ElvUI for overlapping features.
+---@param choices table|nil
+function SetupWizardModule:ApplyElvUIConflictChoices(choices)
+    local selected = choices or {}
+    local useTwichChat = selected.useTwichChat ~= false
+    local useTwichDatatext = selected.useTwichDatatext ~= false
+
+    local CM = T:GetModule("Configuration", true)
+    if not CM then return end
+
+    local chatOpts = CM.Options and CM.Options.ChatEnhancement
+    if chatOpts and type(chatOpts.GetChatEnhancementDB) == "function" then
+        chatOpts:GetChatEnhancementDB().stylingEnabled = useTwichChat
+        if type(chatOpts.RefreshChatStylingModule) == "function" then
+            pcall(chatOpts.RefreshChatStylingModule, chatOpts)
+        end
+    end
+
+    local datatextOpts = CM.Options and CM.Options.Datatext
+    if datatextOpts and type(datatextOpts.GetDB) == "function" then
+        datatextOpts:GetDB().enabled = useTwichDatatext
+        local datatextModule = T:GetModule("Datatexts", true)
+        if datatextModule then
+            if useTwichDatatext and type(datatextModule.Enable) == "function" and not datatextModule:IsEnabled() then
+                pcall(datatextModule.Enable, datatextModule)
+            elseif (not useTwichDatatext) and type(datatextModule.Disable) == "function" and datatextModule:IsEnabled() then
+                pcall(datatextModule.Disable, datatextModule)
+            end
+            if type(datatextModule.RefreshStandalonePanels) == "function" then
+                pcall(datatextModule.RefreshStandalonePanels, datatextModule)
+            end
+        end
+    end
+
+    -- Disable ElvUI modules when TwichUI is chosen
+    local E = _G.ElvUI and _G.ElvUI[1]
+    if E then
+        if useTwichChat and E.private and E.private.chat then
+            E.private.chat.enable = false
+        end
+        if useTwichDatatext then
+            -- Disable main datatext system
+            if E.private and E.private.datatexts then
+                E.private.datatexts.enable = false
+            end
+            -- Disable all individual datatext panels
+            local DT = E:GetModule('DataTexts')
+            if DT and DT.db and DT.db.panels then
+                for panelName in pairs(DT.db.panels) do
+                    DT.db.panels[panelName].enable = false
+                end
+            end
+            -- Disable ElvUI bottom panel when using TwichUI datatexts
+            if E.db and E.db.general then
+                E.db.general.bottomPanel = false
+            end
+        end
+    end
+
+    local wizardDB = self:GetDB()
+    wizardDB.elvuiChoice = {
+        useTwichChat = useTwichChat,
+        useTwichDatatext = useTwichDatatext,
+        appliedAt = _G.time and _G.time() or nil,
+    }
+end
+
+--- Applies font size settings to chat, chat header, and datatext modules.
+---@param sizes {chatFontSize: number, chatHeaderFontSize: number, datatextFontSize: number}
+function SetupWizardModule:ApplyFontSizes(sizes)
+    local selected = sizes or {}
+    local chatFontSize = tonumber(selected.chatFontSize) or 11
+    local chatHeaderFontSize = tonumber(selected.chatHeaderFontSize) or 11
+    local datatextFontSize = tonumber(selected.datatextFontSize) or 11
+
+    -- Apply chat message font size
+    local chatOpts = T:GetModule("Configuration", true) and T:GetModule("Configuration", true).Options and
+    T:GetModule("Configuration", true).Options.ChatEnhancement
+    if chatOpts and type(chatOpts.GetChatEnhancementDB) == "function" then
+        local chatDB = chatOpts:GetChatEnhancementDB()
+        if chatDB then
+            chatDB.chatFontSize = chatFontSize
+        end
+        if type(chatOpts.RefreshChatStylingModule) == "function" then
+            pcall(chatOpts.RefreshChatStylingModule, chatOpts)
+        end
+    end
+
+    -- Apply chat header (tab + header datatext) font size
+    if chatOpts and type(chatOpts.GetChatEnhancementDB) == "function" then
+        local chatDB = chatOpts:GetChatEnhancementDB()
+        if chatDB then
+            chatDB.tabFontSize = chatHeaderFontSize
+        end
+        local hdt = chatDB and type(chatOpts.GetHeaderDatatextDB) == "function" and chatOpts:GetHeaderDatatextDB() or nil
+        if hdt then
+            hdt.fontSize = chatHeaderFontSize
+        end
+        if type(chatOpts.RefreshChatStylingModule) == "function" then
+            pcall(chatOpts.RefreshChatStylingModule, chatOpts)
+        end
+    end
+
+    -- Apply standalone datatext panel font size
+    local datatextOpts = T:GetModule("Configuration", true) and T:GetModule("Configuration", true).Options and
+    T:GetModule("Configuration", true).Options.Datatext
+    if datatextOpts and type(datatextOpts.GetStandaloneDB) == "function" then
+        local standaloneDB = datatextOpts:GetStandaloneDB()
+        if standaloneDB and standaloneDB.style then
+            standaloneDB.style.fontSize = datatextFontSize
+        end
+        local datatextModule = T:GetModule("Datatexts", true)
+        if datatextModule and type(datatextModule.RefreshStandalonePanels) == "function" then
+            pcall(datatextModule.RefreshStandalonePanels, datatextModule)
+        end
+    end
+
+    local wizardDB = self:GetDB()
+    wizardDB.appliedFontSizes = {
+        chatFontSize = chatFontSize,
+        chatHeaderFontSize = chatHeaderFontSize,
+        datatextFontSize = datatextFontSize,
+        appliedAt = _G.time and _G.time() or nil,
+    }
 end
 
 -- ─── Lifecycle ──────────────────────────────────────────────────────────────
@@ -201,4 +574,23 @@ end
 function SetupWizardModule:Show()
     if not self.UI then return end
     self.UI:Show()
+end
+
+function SetupWizardModule:Hide()
+    if not self.UI or not self.UI._Close then return end
+    self.UI:_Close()
+end
+
+function SetupWizardModule:IsShown()
+    local frame = self.UI and self.UI.frame or nil
+    return frame and frame.IsShown and frame:IsShown() or false
+end
+
+function SetupWizardModule:Toggle()
+    if self:IsShown() then
+        self:Hide()
+        return
+    end
+
+    self:Show()
 end

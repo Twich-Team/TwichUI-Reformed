@@ -14,6 +14,13 @@ local AceDBOptions = LibStub("AceDBOptions-3.0")
 local StaticPopup_Show = StaticPopup_Show
 local StaticPopupDialogs = StaticPopupDialogs
 local ReloadUI = ReloadUI
+local C_Timer = _G.C_Timer
+local GetCurrentBindingSet = _G.GetCurrentBindingSet
+local SaveBindings = _G.SaveBindings
+local SetBinding = _G.SetBinding
+local SetBindingClick = _G.SetBindingClick
+local ACCOUNT_BINDINGS = 1
+local CHARACTER_BINDINGS = 2
 
 --- @class ConfigurationOptions
 --- @field ChatEnhancement ChatEnhancementConfigurationOptions
@@ -67,7 +74,7 @@ function ConfigurationModule:OnInitialize()
     self.optionsTable = {
         type = "group",
         name = T.Tools.Text.Color(T.Tools.Colors.WHITE,
-            "Twich" .. T.Tools.Text.Color(T.Tools.Colors.PRIMARY, "UI") .. ": Redux"),
+            "Twich" .. T.Tools.Text.Color(T.Tools.Colors.PRIMARY, "UI") .. ": Reloaded Configuration"),
         childGroups = "tab",
         order = 99,
         args = {
@@ -266,6 +273,16 @@ function ConfigurationModule:ToggleOptionsUI(...)
     self:OpenLegacyOptionsUI(...)
 end
 
+function ConfigurationModule:OpenOptionsUI(...)
+    if self.StandaloneUI and type(self.StandaloneUI.IsAvailable) == "function" and self.StandaloneUI:IsAvailable()
+        and type(self.StandaloneUI.Show) == "function" then
+        self.StandaloneUI:Show(...)
+        return
+    end
+
+    self:OpenLegacyOptionsUI(...)
+end
+
 function ConfigurationModule:EnsureChoresTrackerConfigButton()
     if self.choresTrackerConfigButton then
         return self.choresTrackerConfigButton
@@ -287,11 +304,49 @@ function ConfigurationModule:EnsureChoresTrackerConfigButton()
     return button
 end
 
+local function GetActiveBindingSet()
+    local bindingSet = type(GetCurrentBindingSet) == "function" and GetCurrentBindingSet() or nil
+    if bindingSet == ACCOUNT_BINDINGS or bindingSet == CHARACTER_BINDINGS then
+        return bindingSet
+    end
+
+    return nil
+end
+
+function ConfigurationModule:ApplyPendingBindingUpdates()
+    if not self.pendingChoresTrackerBindingUpdate then
+        return
+    end
+
+    if not GetActiveBindingSet() then
+        if self.bindingRetryQueued or not (C_Timer and C_Timer.After) then
+            return
+        end
+
+        self.bindingRetryQueued = true
+        C_Timer.After(0.5, function()
+            self.bindingRetryQueued = nil
+            self:ApplyPendingBindingUpdates()
+        end)
+        return
+    end
+
+    self.pendingChoresTrackerBindingUpdate = nil
+    self:SetChoresTrackerConfigKeybinding()
+end
+
 function ConfigurationModule:SetChoresTrackerConfigKeybinding()
     local options = self.Options and self.Options.Chores
     local keybinding = options and options.GetTrackerFrameConfigKeybinding and options:GetTrackerFrameConfigKeybinding() or
     ""
     local button = self:EnsureChoresTrackerConfigButton()
+    local bindingSet = GetActiveBindingSet()
+
+    if not bindingSet then
+        self.pendingChoresTrackerBindingUpdate = true
+        self:ApplyPendingBindingUpdates()
+        return
+    end
 
     if self.currentChoresTrackerConfigBinding and self.currentChoresTrackerConfigBinding ~= "" then
         SetBinding(self.currentChoresTrackerConfigBinding)
@@ -299,13 +354,13 @@ function ConfigurationModule:SetChoresTrackerConfigKeybinding()
     end
 
     if not keybinding or keybinding == "" then
-        SaveBindings(GetCurrentBindingSet())
+        SaveBindings(bindingSet)
         return
     end
 
     SetBindingClick(keybinding, button:GetName(), "LeftButton")
     self.currentChoresTrackerConfigBinding = keybinding
-    SaveBindings(GetCurrentBindingSet())
+    SaveBindings(bindingSet)
 end
 
 --- add the toggle options function to the globals so it can be set as the addon compartment function

@@ -44,6 +44,7 @@ SetupWizardModule.THEME_PRESETS = {
         id              = "twich_default",
         name            = "TwichUI",
         description     = "The signature teal and gold scheme.",
+        useClassColor   = false,
         primaryColor    = { 0.10, 0.72, 0.74 },
         accentColor     = { 0.96, 0.76, 0.24 },
         backgroundColor = { 0.05, 0.06, 0.08 },
@@ -53,6 +54,7 @@ SetupWizardModule.THEME_PRESETS = {
         id              = "midnight",
         name            = "Midnight",
         description     = "Deep violet with a cobalt accent.",
+        useClassColor   = false,
         primaryColor    = { 0.47, 0.30, 0.88 },
         accentColor     = { 0.29, 0.62, 1.00 },
         backgroundColor = { 0.04, 0.04, 0.10 },
@@ -62,6 +64,7 @@ SetupWizardModule.THEME_PRESETS = {
         id              = "crimson",
         name            = "Crimson",
         description     = "Bold red tones for a combat-ready feel.",
+        useClassColor   = false,
         primaryColor    = { 0.85, 0.22, 0.22 },
         accentColor     = { 0.96, 0.74, 0.22 },
         backgroundColor = { 0.08, 0.04, 0.04 },
@@ -71,10 +74,21 @@ SetupWizardModule.THEME_PRESETS = {
         id              = "verdant",
         name            = "Verdant",
         description     = "Natural greens for a calm, composed look.",
+        useClassColor   = false,
         primaryColor    = { 0.29, 0.76, 0.50 },
         accentColor     = { 0.74, 0.94, 0.18 },
         backgroundColor = { 0.04, 0.07, 0.05 },
         borderColor     = { 0.18, 0.30, 0.20 },
+    },
+    {
+        id              = "classbound",
+        name            = "Classbound",
+        description     = "Uses your class color for primary and accent while keeping a neutral surface.",
+        useClassColor   = true,
+        primaryColor    = { 0.10, 0.72, 0.74 },
+        accentColor     = { 0.10, 0.72, 0.74 },
+        backgroundColor = { 0.05, 0.06, 0.08 },
+        borderColor     = { 0.24, 0.26, 0.32 },
     },
 }
 
@@ -85,19 +99,23 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
     -- Captured: 2026-03-27  |  3440x1440  |  layout id: standard
     -- Captured: 2026-03-27  |  3440x1440  |  layout id: standard
     -- Captured: 2026-03-27  |  3440x1440  |  layout id: standard
+    -- Captured: 2026-03-28  |  3440x1440  |  layout id: standard
     {
-        id          = "standard",
-        name        = "Standard",
-        description = "Add a description here.",
-        role        = "any", -- "any" | "dps" | "healer" | "tank"
-        frames      = {
-            ChatFrame1 = { x = 0.00233, y = 0.02639, w = 0.17035, h = 0.16458 },
+        id                  = "standard",
+        name                = "Standard",
+        description         = "Add a description here.",
+        role                = "any", -- "any" | "dps" | "healer" | "tank"
+        referenceResolution = { w = 3440, h = 1440 },
+        frames              = {
+            ChatFrame1 = { x = 0.00233, y = 0.02639, w = 0.17035, h = 0.16458, scaleMode = "height" },
         },
-        apply       = function()
+        apply               = function()
             local T = unpack(_G.TwichRx)
             T:GetModule("SetupWizard"):RestoreConfigSnapshot({
                 bestInSlot = {
-                    displayTime = 30
+                    displayTime = 30,
+                    enabled = true,
+                    soundEnabled = true
                 },
                 chatEnhancement = {
                     ["Battle.netChatAlertEnabled"] = true,
@@ -113,10 +131,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     alertsEnabled = true,
                     channelColors = {},
                     chatBgColor = {
-                        a = 1,
-                        b = 0.0784314,
-                        g = 0.0666667,
-                        r = 0.0588235
+                        a = 0.7,
+                        b = 0.12549,
+                        g = 0.0941177,
+                        r = 0.0823529
                     },
                     chatBorderColor = {
                         a = 0.85,
@@ -134,13 +152,14 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     classIconStyle = "pixel",
                     controlButtons = {},
                     headerBgColor = {
-                        a = 0.9,
-                        b = 0.12,
-                        g = 0.09,
-                        r = 0.06
+                        a = 0.8,
+                        b = 0.12549,
+                        g = 0.0941177,
+                        r = 0.0823529
                     },
                     headerDatatext = {
                         enabled = true,
+                        font = "Inter Bold",
                         fontSize = 14,
                         slot1 = "TwichUI: Friends",
                         slotWidth = 80
@@ -151,9 +170,9 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     messageFadesEnabled = true,
                     msgBgColor = {
                         a = 1,
-                        b = 0.0784314,
-                        g = 0.0666667,
-                        r = 0.0588235
+                        b = 0.12549,
+                        g = 0.0941177,
+                        r = 0.0823529
                     },
                     routingEntries = {},
                     rowGap = 2,
@@ -168,6 +187,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         g = 0.168627,
                         r = 0.145098
                     },
+                    tabFont = "Inter ExtraBold",
                     tabFontSize = 14,
                     tabNameFade = true,
                     tabStyle = "unified",
@@ -196,7 +216,14 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         tooltipEntryFont = "Inter",
                         tooltipHeaderFont = "Inter Bold",
                         tracker = {
-                            collapsedSections = {},
+                            collapsedSections = {
+                                abundance = true,
+                                dungeon = false,
+                                professionEnchanting = false,
+                                professionJewelcrafting = false,
+                                specialAssignment = false,
+                                stormarion = true
+                            },
                             locked = true,
                             position = {
                                 point = "TOPLEFT",
@@ -207,7 +234,11 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             size = {},
                             visible = false
                         },
-                        trackerMode = "minimal"
+                        trackerBackgroundTransparency = 0.8,
+                        trackerEntryFont = "Inter Bold",
+                        trackerFrameTransparency = 1,
+                        trackerHeaderFont = "Inter ExtraBold",
+                        trackerMode = "framed"
                     },
                     currencies = {
                         customDatatexts = {},
@@ -216,7 +247,17 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         showGoldInTooltip = false,
                         showMax = true,
                         textColor = { 1, 1, 1, 1 },
-                        tooltipCurrencyIDs = { 3383, 3343, 3341, 3345, 3347 }
+                        tooltipCurrencyIDs = {
+                            [1] = 3383,
+                            [2] = 3343,
+                            [3] = 3341,
+                            [4] = 3345,
+                            [5] = 3347,
+                            [6] = 3378,
+                            [7] = 3212,
+                            [8] = 3028,
+                            [9] = 3310
+                        }
                     },
                     enabled = true,
                     friends = {
@@ -304,6 +345,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 slot4 = "TwichUI: Mail",
                                 slot5 = "TwichUI: Gold Goblin",
                                 style = {
+                                    hoverBarAlpha = 0.92,
+                                    hoverBarColor = { 0.94902, 0.776471, 0.439216, 1 },
+                                    hoverGlowAlpha = 0.09,
+                                    hoverGlowColor = { 0.94902, 0.776471, 0.439216, 1 },
                                     menuFont = "Inter",
                                     tooltipFont = "Inter",
                                     tooltipFontSize = 12
@@ -313,9 +358,35 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 width = 602,
                                 x = 0,
                                 y = 0
+                            },
+                            panel4 = {
+                                enabled = true,
+                                height = 28,
+                                id = "panel4",
+                                name = "Center",
+                                point = "BOTTOM",
+                                relativePoint = "BOTTOM",
+                                segments = 1,
+                                slot1 = "TwichUI: TwichUI",
+                                slot2 = "NONE",
+                                slot3 = "NONE",
+                                slot4 = "NONE",
+                                slot5 = "NONE",
+                                style = {
+                                    hoverBarAlpha = 0.92,
+                                    hoverBarColor = { 0.94902, 0.776471, 0.439216, 1 },
+                                    hoverGlowAlpha = 0.1,
+                                    hoverGlowColor = { 0.94902, 0.776471, 0.439216, 1 }
+                                },
+                                transparentTheme = true,
+                                useStyleOverrides = true,
+                                width = 100,
+                                x = 0,
+                                y = 0
                             }
                         },
                         style = {
+                            fontSize = 13,
                             tooltipFont = "Inter"
                         }
                     },
@@ -336,7 +407,8 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                 dungeonTracking = {
                     classIconStyle = "pixel",
                     enabled = true,
-                    leavePhrase = "tyfp"
+                    leavePhrase = "tyfp",
+                    notificationDisplayTime = 45
                 },
                 easyFish = {
                     enabled = false
@@ -373,6 +445,12 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     panelWidth = 600,
                     useFriendNoteAsName = true
                 },
+                preyTweaks = {
+                    barOffsetY = -60,
+                    displayMode = "bar",
+                    enabled = true,
+                    valueFontSize = 16
+                },
                 questAutomation = {
                     automaticTurnIn = true,
                     enabled = true,
@@ -380,6 +458,20 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         meta = true,
                         repeatable = true
                     }
+                },
+                satchelWatch = {
+                    enabled = false,
+                    ignoredDungeonIDs = {},
+                    notifyForHealers = true,
+                    notifyForHeroicDungeon = true,
+                    notifyOnlyForRaids = true,
+                    notifyOnlyWhenNotCompleted = true,
+                    notifyOnlyWhenNotInGroup = true,
+                    periodicCheckEnabled = true,
+                    raid_3126 = true,
+                    raid_3156 = true,
+                    raid_3159 = true,
+                    sound = "TwichUI Alert 2"
                 },
                 smartMount = {
                     dismountIfMounted = true,
@@ -400,18 +492,20 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                 },
                 theme = {
                     accentColor = { 0.94902, 0.776471, 0.439216 },
-                    backgroundAlpha = 1,
+                    backgroundAlpha = 0.8,
                     backgroundColor = { 0.0823529, 0.0941177, 0.12549 },
                     borderAlpha = 0.85,
                     borderColor = { 0.24, 0.26, 0.32 },
                     classIconStyle = "pixel",
                     globalFont = "Inter Bold",
-                    primaryColor = { 0.458824, 0.537255, 0.74902 },
+                    primaryColor = { 0.94902, 0.776471, 0.439216 },
+                    soundProfile = "Standard",
                     statusBarTexture = "TwichUI Bright"
                 },
             })
         end,
     },
+    -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua

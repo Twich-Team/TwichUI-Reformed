@@ -261,6 +261,53 @@ function Options:SetTrackerHeaderFont(info, value)
     RefreshChores()
 end
 
+function Options:GetTrackerHeaderFontSize(info)
+    local value = GetTrackerFrameDB().trackerHeaderFontSize
+    if type(value) == "number" then
+        return math.min(24, math.max(8, value))
+    end
+
+    local configurationModule = T:GetModule("Configuration")
+    local datatextOptions = configurationModule and configurationModule.Options and configurationModule.Options.Datatext or
+    nil
+    local defaultValue = datatextOptions and datatextOptions.GetChoresTooltipHeaderFontSize and
+        datatextOptions:GetChoresTooltipHeaderFontSize() or 11
+    return math.min(24, math.max(8, defaultValue))
+end
+
+function Options:SetTrackerHeaderFontSize(info, value)
+    GetTrackerFrameDB().trackerHeaderFontSize = math.min(24, math.max(8, tonumber(value) or 11))
+    RefreshChores()
+end
+
+function Options:GetTrackerEntryFont(info)
+    return GetTrackerFrameDB().trackerEntryFont or "__tooltipEntry"
+end
+
+function Options:SetTrackerEntryFont(info, value)
+    GetTrackerFrameDB().trackerEntryFont = value or "__tooltipEntry"
+    RefreshChores()
+end
+
+function Options:GetTrackerEntryFontSize(info)
+    local value = GetTrackerFrameDB().trackerEntryFontSize
+    if type(value) == "number" then
+        return math.min(24, math.max(8, value))
+    end
+
+    local configurationModule = T:GetModule("Configuration")
+    local datatextOptions = configurationModule and configurationModule.Options and configurationModule.Options.Datatext or
+    nil
+    local defaultValue = datatextOptions and datatextOptions.GetChoresTooltipEntryFontSize and
+        datatextOptions:GetChoresTooltipEntryFontSize() or 11
+    return math.min(24, math.max(8, defaultValue))
+end
+
+function Options:SetTrackerEntryFontSize(info, value)
+    GetTrackerFrameDB().trackerEntryFontSize = math.min(24, math.max(8, tonumber(value) or 11))
+    RefreshChores()
+end
+
 function Options:GetTrackerFrameConfigKeybinding(info)
     return self:GetDB().trackerFrameConfigKeybinding or ""
 end

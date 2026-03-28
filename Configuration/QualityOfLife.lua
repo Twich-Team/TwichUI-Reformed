@@ -2248,11 +2248,59 @@ local function BuildChoresTab()
                         get = "GetTrackerHeaderFont",
                         set = "SetTrackerHeaderFont",
                     },
+                    headerFontSize = {
+                        type = "range",
+                        name = "Header Font Size",
+                        desc = "Font size used for the tracker title and category headers.",
+                        order = 4,
+                        min = 8,
+                        max = 24,
+                        step = 1,
+                        handler = ChoresOptions,
+                        get = "GetTrackerHeaderFontSize",
+                        set = "SetTrackerHeaderFontSize",
+                    },
+                    entryFont = {
+                        type = "select",
+                        dialogControl = "LSM30_Font",
+                        name = "Content Font",
+                        desc =
+                        "Font used for tracker entries and empty-state text. Tooltip Entry reuses the Chores tooltip entry font.",
+                        order = 5,
+                        width = 2,
+                        values = function()
+                            local fonts = LibStub("LibSharedMedia-3.0"):HashTable("font") or {}
+                            local values = {
+                                __tooltipEntry = "Tooltip Entry",
+                            }
+
+                            for key, value in pairs(fonts) do
+                                values[key] = value
+                            end
+
+                            return values
+                        end,
+                        handler = ChoresOptions,
+                        get = "GetTrackerEntryFont",
+                        set = "SetTrackerEntryFont",
+                    },
+                    entryFontSize = {
+                        type = "range",
+                        name = "Content Font Size",
+                        desc = "Font size used for tracker entries and empty-state text.",
+                        order = 6,
+                        min = 8,
+                        max = 24,
+                        step = 1,
+                        handler = ChoresOptions,
+                        get = "GetTrackerEntryFontSize",
+                        set = "SetTrackerEntryFontSize",
+                    },
                     frameTransparency = {
                         type = "range",
                         name = "Frame Transparency",
                         desc = "Controls the overall opacity of the pinned tracker window.",
-                        order = 4,
+                        order = 7,
                         min = 0.2,
                         max = 1,
                         step = 0.01,
@@ -2265,7 +2313,7 @@ local function BuildChoresTab()
                         type = "range",
                         name = "Background Transparency",
                         desc = "Controls the opacity of the tracker backgrounds and category panels.",
-                        order = 5,
+                        order = 8,
                         min = 0,
                         max = 1,
                         step = 0.01,
@@ -2278,12 +2326,12 @@ local function BuildChoresTab()
                         type = "keybinding",
                         name = "Toggle Tracker Frame",
                         desc = "Optional keybinding that opens or closes the pinned Chores tracker frame.",
-                        order = 6,
+                        order = 9,
                         handler = ChoresOptions,
                         get = "GetTrackerFrameConfigKeybinding",
                         set = "SetTrackerFrameConfigKeybinding",
                     },
-                    helper = W.Description(6,
+                    helper = W.Description(10,
                         T.Tools.Text.Color(T.Tools.Colors.GRAY,
                             "Right-click the Chores datatext to open the pinned tracker. Drag the bottom-right corner to resize it, and use the lock icon to pin it in place.")),
                 },

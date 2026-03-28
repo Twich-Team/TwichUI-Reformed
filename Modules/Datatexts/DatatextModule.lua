@@ -1000,6 +1000,9 @@ function DataTextModule:OnEnable()
 
     -- Re-build standalone panels when a layout snapshot is restored by the wizard.
     self:RegisterMessage("TWICH_CONFIG_RESTORED", "OnConfigRestored")
+
+    -- Update panels when theme changes
+    self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
 end
 
 function DataTextModule:OnConfigRestored()
@@ -1008,8 +1011,15 @@ function DataTextModule:OnConfigRestored()
     end
 end
 
+function DataTextModule:OnThemeChanged(event, changedKey)
+    if self.RefreshStandalonePanels then
+        self:RefreshStandalonePanels()
+    end
+end
+
 function DataTextModule:OnDisable()
     self:UnregisterMessage("TWICH_CONFIG_RESTORED")
+    self:UnregisterMessage("TWICH_THEME_CHANGED")
     -- Called when the module is disabled
     for name, _ in pairs(self.DatatextRegistry) do
         self:RemoveDatatext(name)

@@ -7,7 +7,8 @@ local Tools = T.Tools
 ---@class UISkins
 ---@field GetElvUISkins fun():any|nil
 ---@field SkinCloseButton fun(btn:Button|nil)
----@field SkinScrollBar fun(scrollFrameOrSlider:any)
+---@field SkinScrollBar fun(scrollFrameOrSlider:any, color:number[]|nil, preferInternal:boolean|nil, hideButtons:boolean|nil)
+---@field SkinTwichScrollBar fun(scrollFrameOrSlider:any, color:number[]|nil, hideButtons:boolean|nil)
 ---@field SkinEditBox fun(editBox:EditBox|nil)
 ---@field SkinButton fun(btn:Button|nil)
 ---@field SkinTwichButton fun(btn:Button|nil, color:number[]|nil)
@@ -79,6 +80,162 @@ local function ResolveScrollBar(scrollFrameOrSlider)
     return nil
 end
 
+---@param button any
+---@param color number[]|nil
+---@param glyph string
+local function SkinInternalScrollArrowButton(button, color, glyph)
+    if not button then
+        return
+    end
+
+    local r, g, b = unpackValues(color or { 0.98, 0.76, 0.24 })
+
+    if button.SetNormalTexture then
+        button:SetNormalTexture("")
+    end
+    if button.SetPushedTexture then
+        button:SetPushedTexture("")
+    end
+    if button.SetDisabledTexture then
+        button:SetDisabledTexture("")
+    end
+    if button.SetHighlightTexture then
+        button:SetHighlightTexture("")
+    end
+
+    if button.GetRegions then
+        for _, region in ipairs({ button:GetRegions() }) do
+            if region and region.GetObjectType and region:GetObjectType() == "Texture" then
+                HideTexture(region)
+            end
+        end
+    end
+
+    if not button.__twichuiChrome then
+        button.__twichuiChrome = CreateFrame("Frame", nil, button, "BackdropTemplate")
+        button.__twichuiChrome:SetAllPoints(button)
+        button.__twichuiChrome:EnableMouse(false)
+    end
+
+    if button.GetFrameLevel and button.__twichuiChrome.SetFrameLevel then
+        button.__twichuiChrome:SetFrameLevel(math.max(0, button:GetFrameLevel() - 1))
+    end
+
+    button.__twichuiChrome:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    button.__twichuiChrome:SetBackdropColor(0.05, 0.05, 0.07, 0.92)
+    button.__twichuiChrome:SetBackdropBorderColor(r, g, b, 0.18)
+
+    if not button.__twichuiGlow then
+        button.__twichuiGlow = button:CreateTexture(nil, "ARTWORK")
+        button.__twichuiGlow:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+        button.__twichuiGlow:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+    end
+    button.__twichuiGlow:SetColorTexture(r, g, b, 0.08)
+
+    if not button.__twichuiGlyph then
+        button.__twichuiGlyph = button:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        button.__twichuiGlyph:SetPoint("CENTER", button, "CENTER", 0, 0)
+    end
+    button.__twichuiGlyph:SetText(glyph)
+    button.__twichuiGlyph:SetTextColor(1, 0.95, 0.84)
+end
+
+---@param scrollFrameOrSlider any
+---@param color number[]|nil
+---@param hideButtons boolean|nil
+local function ApplyInternalScrollBarSkin(scrollFrameOrSlider, color, hideButtons)
+    local scrollBar = ResolveScrollBar(scrollFrameOrSlider)
+    if not scrollBar then
+        return
+    end
+
+    local r, g, b = unpackValues(color or { 0.98, 0.76, 0.24 })
+    local thumb = scrollBar.ThumbTexture or (scrollBar.GetThumbTexture and scrollBar:GetThumbTexture()) or nil
+
+    scrollBar:SetWidth(16)
+
+    if scrollBar.GetRegions then
+        for _, region in ipairs({ scrollBar:GetRegions() }) do
+            if region and region ~= thumb and region.GetObjectType and region:GetObjectType() == "Texture" then
+                HideTexture(region)
+            end
+        end
+    end
+
+    if scrollBar.ScrollUpButton then
+        scrollBar.ScrollUpButton:SetSize(16, 16)
+        if hideButtons then
+            scrollBar.ScrollUpButton:Hide()
+            scrollBar.ScrollUpButton:EnableMouse(false)
+        else
+            SkinInternalScrollArrowButton(scrollBar.ScrollUpButton, color, "^")
+            scrollBar.ScrollUpButton:ClearAllPoints()
+            scrollBar.ScrollUpButton:SetPoint("TOP", scrollBar, "TOP", 0, -1)
+            scrollBar.ScrollUpButton:Show()
+            scrollBar.ScrollUpButton:EnableMouse(true)
+        end
+    end
+
+    if scrollBar.ScrollDownButton then
+        scrollBar.ScrollDownButton:SetSize(16, 16)
+        if hideButtons then
+            scrollBar.ScrollDownButton:Hide()
+            scrollBar.ScrollDownButton:EnableMouse(false)
+        else
+            SkinInternalScrollArrowButton(scrollBar.ScrollDownButton, color, "v")
+            scrollBar.ScrollDownButton:ClearAllPoints()
+            scrollBar.ScrollDownButton:SetPoint("BOTTOM", scrollBar, "BOTTOM", 0, 1)
+            scrollBar.ScrollDownButton:Show()
+            scrollBar.ScrollDownButton:EnableMouse(true)
+        end
+    end
+
+    if not scrollBar.Track then
+        scrollBar.Track = scrollBar:CreateTexture(nil, "BACKGROUND")
+    end
+    scrollBar.Track:ClearAllPoints()
+    if (not hideButtons) and scrollBar.ScrollUpButton and scrollBar.ScrollDownButton then
+        scrollBar.Track:SetPoint("TOPLEFT", scrollBar.ScrollUpButton, "BOTTOMLEFT", 2, -4)
+        scrollBar.Track:SetPoint("BOTTOMRIGHT", scrollBar.ScrollDownButton, "TOPRIGHT", -2, 4)
+    else
+        scrollBar.Track:SetPoint("TOPLEFT", scrollBar, "TOPLEFT", 2, -2)
+        scrollBar.Track:SetPoint("BOTTOMRIGHT", scrollBar, "BOTTOMRIGHT", -2, 2)
+    end
+    scrollBar.Track:SetColorTexture(0.08, 0.09, 0.12, 0.92)
+
+    if not scrollBar.Glow then
+        scrollBar.Glow = scrollBar:CreateTexture(nil, "ARTWORK")
+    end
+    scrollBar.Glow:ClearAllPoints()
+    scrollBar.Glow:SetPoint("TOPLEFT", scrollBar.Track, "TOPLEFT", 0, 0)
+    scrollBar.Glow:SetPoint("BOTTOMRIGHT", scrollBar.Track, "BOTTOMRIGHT", 0, 0)
+    scrollBar.Glow:SetColorTexture(r, g, b, 0.08)
+
+    if thumb then
+        scrollBar.ThumbTexture = thumb
+        thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
+        thumb:SetSize(10, 26)
+        thumb:SetVertexColor(r, g, b, 0.95)
+        thumb:SetAlpha(1)
+    end
+
+    if scrollBar.SetBackdrop then
+        scrollBar:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        scrollBar:SetBackdropColor(0.05, 0.05, 0.07, 0.9)
+        scrollBar:SetBackdropBorderColor(r, g, b, 0.2)
+    end
+end
+
 ---@param btn Button|nil
 function UI.SkinCloseButton(btn)
     local skins = UI.GetElvUISkins()
@@ -88,16 +245,32 @@ function UI.SkinCloseButton(btn)
 end
 
 ---@param scrollFrameOrSlider any
-function UI.SkinScrollBar(scrollFrameOrSlider)
-    local skins = UI.GetElvUISkins()
-    if not skins or not skins.HandleScrollBar then
+---@param color number[]|nil
+---@param preferInternal boolean|nil
+---@param hideButtons boolean|nil
+function UI.SkinScrollBar(scrollFrameOrSlider, color, preferInternal, hideButtons)
+    if preferInternal then
+        ApplyInternalScrollBarSkin(scrollFrameOrSlider, color, hideButtons)
         return
     end
 
-    local sb = ResolveScrollBar(scrollFrameOrSlider)
-    if sb then
-        pcall(skins.HandleScrollBar, skins, sb)
+    local skins = UI.GetElvUISkins()
+    if skins and skins.HandleScrollBar then
+        local sb = ResolveScrollBar(scrollFrameOrSlider)
+        if sb then
+            pcall(skins.HandleScrollBar, skins, sb)
+            return
+        end
     end
+
+    ApplyInternalScrollBarSkin(scrollFrameOrSlider, color, hideButtons)
+end
+
+---@param scrollFrameOrSlider any
+---@param color number[]|nil
+---@param hideButtons boolean|nil
+function UI.SkinTwichScrollBar(scrollFrameOrSlider, color, hideButtons)
+    ApplyInternalScrollBarSkin(scrollFrameOrSlider, color, hideButtons)
 end
 
 ---@param editBox EditBox|nil
@@ -105,6 +278,7 @@ function UI.SkinEditBox(editBox)
     local skins = UI.GetElvUISkins()
     if skins and skins.HandleEditBox and editBox then
         pcall(skins.HandleEditBox, skins, editBox)
+        return
     end
 end
 

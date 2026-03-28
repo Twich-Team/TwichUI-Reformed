@@ -70,6 +70,7 @@ function SetupWizardModule:CaptureLayoutFrames(layoutId, layoutName)
     add(string.format('    name        = "%s",', layoutName))
     add('    description = "Add a description here.",')
     add('    role        = "any",   -- "any" | "dps" | "healer" | "tank"')
+    add(string.format('    referenceResolution = { w = %d, h = %d },', sw, sh))
     add('    frames = {')
 
     -- Sort keys for deterministic output
@@ -85,10 +86,22 @@ function SetupWizardModule:CaptureLayoutFrames(layoutId, layoutName)
             -- Use GetLeft/GetBottom (absolute screen coords) so the stored values are
             -- always BOTTOMLEFT-relative and resolution-independent.  This is anchor-agnostic
             -- and consistent with how modules like ChatStyling store their own positions.
-            local left               = frame:GetLeft() or 0
-            local bottom             = frame:GetBottom() or 0
-            local fw                 = frame:GetWidth() or 0
-            local fh                 = frame:GetHeight() or 0
+            local left   = frame:GetLeft() or 0
+            local bottom = frame:GetBottom() or 0
+            local fw     = frame:GetWidth() or 0
+            local fh     = frame:GetHeight() or 0
+
+            -- ChatFrame1 captures should anchor to the visible chrome shell, not the raw
+            -- chat frame, so layout positioning lines up with surrounding elements.
+            if key == "ChatFrame1" then
+                local chrome = frame.TwichUIChrome
+                if chrome and chrome.GetLeft and chrome.GetBottom and chrome.GetWidth and chrome.GetHeight then
+                    left = chrome:GetLeft() or left
+                    bottom = chrome:GetBottom() or bottom
+                    fw = chrome:GetWidth() or fw
+                    fh = chrome:GetHeight() or fh
+                end
+            end
 
             -- Clamp NaN
             left                     = (left == left) and left or 0
@@ -98,10 +111,14 @@ function SetupWizardModule:CaptureLayoutFrames(layoutId, layoutName)
 
             capturedFrameValues[key] = { x = left, y = bottom, w = fw, h = fh }
 
+            local extra              = ""
+            if key == "ChatFrame1" then
+                extra = ', scaleMode = "height"'
+            end
             add(string.format(
-                "        %-32s = { x = %9.5f, y = %9.5f, w = %9.5f, h = %9.5f },",
+                "        %-32s = { x = %9.5f, y = %9.5f, w = %9.5f, h = %9.5f%s },",
                 key,
-                left / sw, bottom / sh, fw / sw, fh / sh
+                left / sw, bottom / sh, fw / sw, fh / sh, extra
             ))
         else
             add(string.format("        -- %-30s  (frame unavailable at capture time)", key))
@@ -117,7 +134,7 @@ function SetupWizardModule:CaptureLayoutFrames(layoutId, layoutName)
 
     -- ── Serializer helpers ────────────────────────────────────────────────
     local function FormatNumber(v)
-        if v ~= v then return "0" end              -- NaN
+        if v ~= v then return "0" end -- NaN
         if v == math.huge then return "1e308" end
         if v == -math.huge then return "-1e308" end
         if math.floor(v) == v and math.abs(v) <= 2147483647 then
