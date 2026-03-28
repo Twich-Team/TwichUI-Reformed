@@ -1250,7 +1250,31 @@ function UI:EnsureFrame()
     end)
     AttachTooltip(frame.ReloadButton, "Reload UI", "Apply changes that require a full interface refresh.")
 
-    frame.Subtitle:SetPoint("RIGHT", frame.ReloadButton, "LEFT", -12, 0)
+    frame.ErrorLogButton = CreateFrame("Button", nil, frame.TitleBar, "BackdropTemplate")
+    frame.ErrorLogButton:SetSize(86, 24)
+    frame.ErrorLogButton:SetPoint("RIGHT", frame.ReloadButton, "LEFT", -6, 0)
+    SkinActionButton(frame.ErrorLogButton, { 0.98, 0.56, 0.5 })
+    SetButtonText(frame.ErrorLogButton, "Error Log")
+    frame.ErrorLogButton:SetScript("OnClick", function()
+        local viewer = T.Tools and T.Tools.UI and T.Tools.UI.ErrorLogViewer
+        if viewer then viewer:Toggle() end
+    end)
+    AttachTooltip(frame.ErrorLogButton, "Error Log", "View errors captured from TwichUI_Reformed.")
+
+    -- Update error count badge on the button label dynamically
+    frame.ErrorLogButton:SetScript("OnShow", function()
+        local el = T.Tools and (T.Tools --[[@as any]]).ErrorLog
+        local count = el and el:GetCount() or 0
+        if count > 0 then
+            SetButtonText(frame.ErrorLogButton, "Error Log (" .. count .. ")")
+            frame.ErrorLogButton:SetBackdropBorderColor(0.98, 0.40, 0.35, 0.80)
+        else
+            SetButtonText(frame.ErrorLogButton, "Error Log")
+            frame.ErrorLogButton:SetBackdropBorderColor(0.98, 0.56, 0.5, 0.40)
+        end
+    end)
+
+    frame.Subtitle:SetPoint("RIGHT", frame.ErrorLogButton, "LEFT", -12, 0)
 
     frame.Sidebar = CreatePanel(frame, 0.055, 0.055, 0.08, 0.985, 0.18)
     frame.Sidebar:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -68)

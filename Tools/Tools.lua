@@ -13,6 +13,7 @@ local T = unpack(TwichRx)
 ---@field UI UISkins
 ---@field Quest QuestTools
 ---@field Game GameTool
+---@field ErrorLog TwichUIErrorLog
 local Tools = T.Tools or {}
 T.Tools = Tools
 

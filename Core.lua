@@ -73,6 +73,12 @@ end
 function T:OnInitialize()
     self.db = LibStub("AceDB-3.0"):New("TwichDB")
 
+    -- Install error handler now that the DB is available
+    local errorLog = T.Tools and (T.Tools --[[@as any]]).ErrorLog --[[@as TwichUIErrorLog|nil]]
+    if errorLog then
+        errorLog:Install()
+    end
+
     ---@type ConfigurationModule
     local CM = self:GetModule("Configuration")
 

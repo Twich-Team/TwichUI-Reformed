@@ -77,6 +77,32 @@ local function OpenConfigurationPanel(input)
         return
     end
 
+    if primaryCommand == "errors" then
+        if remainder == "test" then
+            local el = T.Tools and (T.Tools --[[@as any]]).ErrorLog --[[@as TwichUIErrorLog|nil]]
+            if not el then
+                T:Print("[TwichUI] Error log is unavailable")
+                return
+            end
+            local fakeStack =
+                "Interface\\AddOns\\TwichUI_Reformed\\Modules\\ChatEnhancements\\ChatRenderer.lua:1183: attempt to index a nil value (field 'settings')\n" ..
+                "stack traceback:\n" ..
+                "\tInterface\\AddOns\\TwichUI_Reformed\\Modules\\ChatEnhancements\\ChatRenderer.lua:1183: in method 'RefreshRow'\n" ..
+                "\tInterface\\AddOns\\TwichUI_Reformed\\Modules\\ChatEnhancements\\ChatRenderer.lua:842: in method 'LayoutRenderer'\n" ..
+                "\tInterface\\AddOns\\TwichUI_Reformed\\Core.lua:95: in function <TwichUI_Reformed\\Core.lua:74>"
+            el:_InjectTestError(fakeStack)
+            T:Print("[TwichUI] Test error injected into log.")
+            return
+        end
+        local viewer = T.Tools and T.Tools.UI and T.Tools.UI.ErrorLogViewer
+        if not viewer then
+            T:Print("[TwichUI] Error log viewer is unavailable")
+            return
+        end
+        viewer:Toggle()
+        return
+    end
+
     if primaryCommand == "legacy" then
         ---@type ConfigurationModule
         local ConfigurationModule = T:GetModule("Configuration")
