@@ -155,12 +155,12 @@ function Options:GetDB()
     -- After migration these keys are nil, so GetTrackerBarTexture() falls back
     -- to the global statusBarTexture from the theme.
     if db._mptSchemaV ~= 1 then
-        if not db._trackerBarTextureExplicitlySet   then db.trackerBarTexture          = nil end
-        if not db._timerBarTextureExplicitlySet     then db.mythicPlusTimerBarTexture  = nil end
-        if not db._trackerFontExplicitlySet         then db.trackerFont                = nil end
-        if not db._statusTextFontExplicitlySet      then db.statusTextFont             = nil end
-        if not db._readyTextFontExplicitlySet       then db.readyTextFont              = nil end
-        if not db._timerFontExplicitlySet           then db.mythicPlusTimerFont        = nil end
+        if not db._trackerBarTextureExplicitlySet then db.trackerBarTexture = nil end
+        if not db._timerBarTextureExplicitlySet then db.mythicPlusTimerBarTexture = nil end
+        if not db._trackerFontExplicitlySet then db.trackerFont = nil end
+        if not db._statusTextFontExplicitlySet then db.statusTextFont = nil end
+        if not db._readyTextFontExplicitlySet then db.readyTextFont = nil end
+        if not db._timerFontExplicitlySet then db.mythicPlusTimerFont = nil end
         db._mptSchemaV = 1
     end
 
@@ -524,7 +524,7 @@ end
 
 function Options:SetInterruptReadyBarColor(info, red, green, blue, alpha)
     self:GetDB().interruptReadyBarColor = NormalizeColor(
-    self:GetDB().interruptReadyBarColor or DEFAULTS.interruptReadyBarColor, red, green, blue, alpha)
+        self:GetDB().interruptReadyBarColor or DEFAULTS.interruptReadyBarColor, red, green, blue, alpha)
     self:RefreshModuleAppearance()
 end
 
@@ -717,13 +717,13 @@ end
 
 function Options:GetMythicPlusTimerFontColor()
     local color = self:GetDB().mythicPlusTimerFontColor or self:GetDB().statusTextColor or
-    DEFAULTS.mythicPlusTimerFontColor
+        DEFAULTS.mythicPlusTimerFontColor
     return color.r, color.g, color.b, color.a or 1
 end
 
 function Options:SetMythicPlusTimerFontColor(info, red, green, blue, alpha)
     self:GetDB().mythicPlusTimerFontColor = NormalizeColor(
-    self:GetDB().mythicPlusTimerFontColor or DEFAULTS.mythicPlusTimerFontColor, red, green, blue, alpha)
+        self:GetDB().mythicPlusTimerFontColor or DEFAULTS.mythicPlusTimerFontColor, red, green, blue, alpha)
     self:RefreshModuleAppearance()
 end
 
@@ -763,7 +763,7 @@ end
 
 function Options:SetMythicPlusTimerBarColor(info, red, green, blue, alpha)
     self:GetDB().mythicPlusTimerBarColor = NormalizeColor(
-    self:GetDB().mythicPlusTimerBarColor or DEFAULTS.mythicPlusTimerBarColor, red, green, blue, alpha)
+        self:GetDB().mythicPlusTimerBarColor or DEFAULTS.mythicPlusTimerBarColor, red, green, blue, alpha)
     self:RefreshModuleAppearance()
 end
 
@@ -873,7 +873,7 @@ end
 
 function Options:SetMythicPlusTimerNotificationDisplayTime(info, value)
     self:GetDB().mythicPlusTimerNotificationDisplayTime = tonumber(value) or
-    DEFAULTS.mythicPlusTimerNotificationDisplayTime
+        DEFAULTS.mythicPlusTimerNotificationDisplayTime
 end
 
 function Options:GetInterruptTrackerLocked()
@@ -916,20 +916,20 @@ function Options:ResetMythicPlusTimerPosition()
 end
 
 function Options:ResetMythicPlusTimerAppearance()
-    local db = self:GetDB()
-    db.mythicPlusTimerFont                = nil
-    db._timerFontExplicitlySet            = nil
-    db.mythicPlusTimerFontSize            = nil
-    db.mythicPlusTimerFontOutline         = nil
-    db.mythicPlusTimerFontColor           = nil
-    db.mythicPlusTimerShowHeader          = nil
-    db.mythicPlusTimerBarTexture          = nil
-    db._timerBarTextureExplicitlySet      = nil
-    db.mythicPlusTimerBarColorMode        = nil
-    db.mythicPlusTimerBarColor            = nil
-    db.mythicPlusTimerRowGap              = nil
-    db.mythicPlusTimerBarHeight           = nil
-    db.mythicPlusTimerLayout              = nil
+    local db                         = self:GetDB()
+    db.mythicPlusTimerFont           = nil
+    db._timerFontExplicitlySet       = nil
+    db.mythicPlusTimerFontSize       = nil
+    db.mythicPlusTimerFontOutline    = nil
+    db.mythicPlusTimerFontColor      = nil
+    db.mythicPlusTimerShowHeader     = nil
+    db.mythicPlusTimerBarTexture     = nil
+    db._timerBarTextureExplicitlySet = nil
+    db.mythicPlusTimerBarColorMode   = nil
+    db.mythicPlusTimerBarColor       = nil
+    db.mythicPlusTimerRowGap         = nil
+    db.mythicPlusTimerBarHeight      = nil
+    db.mythicPlusTimerLayout         = nil
     self:RefreshModuleAppearance()
 end
 

@@ -101,7 +101,8 @@ local function BuildConfiguration()
                 autoStart = {
                     type = "toggle",
                     name = "Auto Start After Pull Timer",
-                    desc = "Start the key when a BigWigs or DBM pull timer ends if your keystone is already slotted and you can start the run.",
+                    desc =
+                    "Start the key when a BigWigs or DBM pull timer ends if your keystone is already slotted and you can start the run.",
                     order = 3,
                     width = 1.75,
                     handler = MPTOptions,
@@ -154,7 +155,8 @@ local function BuildConfiguration()
                 layout = {
                     type = "select",
                     name = "Screen Side Alignment",
-                    desc = "Choose whether the top timer text block aligns for a frame placed on the left or right side of the screen. Bar row ordering stays the same.",
+                    desc =
+                    "Choose whether the top timer text block aligns for a frame placed on the left or right side of the screen. Bar row ordering stays the same.",
                     order = 5,
                     width = 1.6,
                     values = {
@@ -341,14 +343,6 @@ local function BuildConfiguration()
                         order = 10,
                         handler = MPTOptions,
                         func = "ResetMythicPlusTimerAppearance",
-                    },
-                    openSection = {
-                        type = "execute",
-                        name = "Open Timer Settings Section",
-                        desc = "Open the Mythic+ Tools page in the standalone configuration UI.",
-                        order = 11,
-                        handler = MPTOptions,
-                        func = "OpenMythicPlusTimerSettings",
                     },
                 }),
             },

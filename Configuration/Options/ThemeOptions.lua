@@ -240,11 +240,11 @@ function Options:ResetAllFrameOverrides()
     -- to the global statusBarTexture and globalFont settings.
     local mptOpts = ConfigurationModule.Options.MythicPlusTools
     if mptOpts then
-        local mptDB = mptOpts:GetDB()
-        mptDB.trackerFont                    = nil; mptDB._trackerFontExplicitlySet         = nil
-        mptDB.statusTextFont                 = nil; mptDB._statusTextFontExplicitlySet      = nil
-        mptDB.readyTextFont                  = nil; mptDB._readyTextFontExplicitlySet        = nil
-        mptDB.trackerBarTexture              = nil; mptDB._trackerBarTextureExplicitlySet    = nil
+        local mptDB                           = mptOpts:GetDB()
+        mptDB.trackerFont                     = nil; mptDB._trackerFontExplicitlySet = nil
+        mptDB.statusTextFont                  = nil; mptDB._statusTextFontExplicitlySet = nil
+        mptDB.readyTextFont                   = nil; mptDB._readyTextFontExplicitlySet = nil
+        mptDB.trackerBarTexture               = nil; mptDB._trackerBarTextureExplicitlySet = nil
         if type(mptOpts.ResetMythicPlusTimerAppearance) == "function" then
             mptOpts:ResetMythicPlusTimerAppearance()
         else

@@ -3,6 +3,7 @@
 - When a new message comes in to chat, make sure the new message is not faded out. ive had messages come in that i cannot see. new messages should have their own fade out timer.
 - Our edit box used to change the color of its accent to represent the channel you are typing in. Can we please re-enable that.
 - FOr the messages inside the chat frame, can we make sure they reach the bottom of the frame? theres a good maybe 10 pixels between the bottom of the bottom chat and the bottom of the frame. There's also what looks like a slightly different color in that area
+- When in Mythic+ dungeons, the chat message background fails to properly size for messages that overflow onto the following line. The row does not expand vertically, so text overflows it, and causes each row to potentially overlap.
 
 ## Notifications
 
@@ -20,13 +21,9 @@
 
 ## Mythic+
 
-- Can we add a helper text panel attached to the right on the keystone frame that appears when you place a keystone explaining that the dungeon will start automatically at the end of a pull (if enabled), along with a button to start a ready check and a button to start a pull timer, as well as checkbox to auto-start when the timer ends.
-- In the mythic plus config, theres a button that says open timer settings section. we dont need that.. its already in that section..
-
 ## Apperance
 
-- I changed the status bar texture in global and the texture of the bars on the mythic+ tracker did not change.
-- I want you to go through the entire configuration. Each thing that can be configured with an option from global should be effected by it, if the overrides are disabled. When I click Reset Overrides, I expect that for example, the status texture i choose in the global appearance section to be used everywhere in the addon that there is a status texture.
+- The font of notifications does not change when I change the global appearance font.
 
 ## Other
 

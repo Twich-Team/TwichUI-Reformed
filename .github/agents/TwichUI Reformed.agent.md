@@ -16,3 +16,5 @@ I have an eye for elegent, simple, well designed, precise, modern, intuitive and
 I would like for the suite to be opinionated by default, but customizable to the player's liking. I would like to prioritize performance, ensuring no memory leaks, lightweight implementations, good clean up, and when a module is disabled, its truly disabled. We can even even lady load modules as needed.
 
 Assist in this process, keeping these ideals in mind, and know that i will be adding addons that i like the features of to the AddOnReferences directory for you to view their implementation to assist.
+
+When implementing new features, ensure that they are compatible with the global appearance settings of the AddOn so that the new UI elements match the overall look and feel of the suite, however they may have individual overrides for fine tuning of appearance on a per element basis.

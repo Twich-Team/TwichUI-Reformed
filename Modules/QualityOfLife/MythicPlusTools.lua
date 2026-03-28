@@ -489,7 +489,7 @@ local function GetInterruptNameLookup()
     local lookup = {}
     for spellID in pairs(SUPPORTED_INTERRUPT_SPELLS or {}) do
         local spellName = (C_Spell and type(C_Spell.GetSpellName) == "function" and C_Spell.GetSpellName(spellID)) or
-        GetSpellInfo(spellID)
+            GetSpellInfo(spellID)
         if type(spellName) == "string" and spellName ~= "" then
             lookup[spellName] = spellID
         end
@@ -563,10 +563,10 @@ function MPT:GetTrackerAppearance()
 
     -- Use options getters so that unset values fall back to global theme settings
     -- (globalFont for fonts, statusBarTexture for bar textures).
-    local resolvedFont           = options and options:GetTrackerFont()           or db.trackerFont
-    local resolvedBarTextureName = options and options:GetTrackerBarTexture()     or "Blizzard"
-    local resolvedStatusFont     = options and options:GetStatusTextFont()        or db.statusTextFont
-    local resolvedReadyFont      = options and options:GetReadyTextFont()         or db.readyTextFont
+    local resolvedFont           = options and options:GetTrackerFont() or db.trackerFont
+    local resolvedBarTextureName = options and options:GetTrackerBarTexture() or "Blizzard"
+    local resolvedStatusFont     = options and options:GetStatusTextFont() or db.statusTextFont
+    local resolvedReadyFont      = options and options:GetReadyTextFont() or db.readyTextFont
 
     c.fontPath                   = GetTrackerFontPath(resolvedFont)
     c.fontSize                   = ClampNumber(db.trackerFontSize, 8, 24, 12)
@@ -628,7 +628,8 @@ function MPT:GetMythicPlusTimerAppearance()
     local mutedColor = self.trackerAppearanceCache.timerMutedTextColor
     local customBarColor = self.trackerAppearanceCache.timerBarColor
 
-    appearance.timerFontPath = GetTrackerFontPath(options and options:GetMythicPlusTimerFont() or (db.mythicPlusTimerFont or db.trackerFont))
+    appearance.timerFontPath = GetTrackerFontPath(options and options:GetMythicPlusTimerFont() or
+    (db.mythicPlusTimerFont or db.trackerFont))
     appearance.timerFontSize = ClampNumber(db.mythicPlusTimerFontSize, 8, 28, appearance.fontSize)
     appearance.timerOutline = GetOutlineFlag(db.mythicPlusTimerFontOutline or db.trackerFontOutline)
     appearance.timerRowGap = ClampNumber(db.mythicPlusTimerRowGap, 0, 30, appearance.rowGap)
@@ -1470,7 +1471,8 @@ function MPT:BuildDebugReport()
     local instanceName, instanceType, difficultyID, _, _, _, _, instanceID = GetInstanceInfo()
     local lines = {
         "TwichUI Mythic+ Tools Debug",
-        format("Timestamp: %s", date and type(date) == "function" and date("%Y-%m-%d %H:%M:%S") or format("%.3f", GetTime())),
+        format("Timestamp: %s",
+            date and type(date) == "function" and date("%Y-%m-%d %H:%M:%S") or format("%.3f", GetTime())),
         "",
         "Runtime",
         format("enabled=%s debugCapture=%s directEvents=%s previewInterrupts=%s",
@@ -1853,6 +1855,12 @@ function MPT:EnsureDynamicHooks()
         keystoneFrame:HookScript("OnShow", function()
             self:LogDebug("hooked event=ChallengesKeystoneFrame.OnShow", false)
             self:TryAutoSlotKeystone()
+            self:RefreshKeystoneHelperPanel()
+        end)
+        keystoneFrame:HookScript("OnHide", function()
+            if self.keystoneHelperPanel then
+                self.keystoneHelperPanel:Hide()
+            end
         end)
         self.keystoneFrameHooked = true
     end
@@ -1861,6 +1869,261 @@ end
 function MPT:EnsureFrames()
     self:EnsureInterruptFrame()
     self:EnsureMythicPlusTimerFrame()
+end
+
+-- ─── Keystone Helper Panel ───────────────────────────────────────────────────
+-- A compact floating panel that attaches to the right of the Blizzard keystone
+-- frame whenever a keystone is slotted. Provides a ready-check button, a pull-
+-- timer button, and a quick toggle for the auto-start-on-pull-timer setting.
+
+local function GetThemeAccentColor()
+    local theme = T:GetModule("Theme", true)
+    if theme and theme.GetColor then
+        local c = theme:GetColor("accentColor")
+        if c then return c[1] or 0.96, c[2] or 0.76, c[3] or 0.24 end
+    end
+    return 0.96, 0.76, 0.24
+end
+
+local function GetGlobalFontPath()
+    local theme = T:GetModule("Theme", true)
+    local fontKey = theme and theme.Get and theme:Get("globalFont")
+    return GetTrackerFontPath(fontKey) -- reuse existing LSM fetch helper
+end
+
+function MPT:EnsureKeystoneHelperPanel()
+    if self.keystoneHelperPanel then
+        return self.keystoneHelperPanel
+    end
+
+    -- ── Layout constants ──────────────────────────────────────────────────
+    local PAD                                         = 12
+    local W                                           = 264
+    -- INFO_H must comfortably fit 4–5 wrapped lines of helper text.
+    local INFO_H                                      = 68
+    local BTN_H                                       = 26
+    local ROW_H                                       = 20
+    local BTN_W                                       = math.floor((W - 2 * PAD - 6) / 2)
+
+    -- Y offsets from TOPLEFT (negative = downward)
+    local titleY                                      = -PAD -- -12
+    local divY                                        = titleY - 16 - 6 -- -34
+    local infoY                                       = divY - 1 - 8 -- -43
+    local btnY                                        = infoY - INFO_H - 8 -- -119
+    local togY                                        = btnY - BTN_H - 8 -- -153
+    local TOTAL_H                                     = -(togY - ROW_H - PAD) --  185
+
+    local bgR, bgG, bgB, _, borderR, borderG, borderB = GetBackdropColors()
+
+    -- ── Frame ─────────────────────────────────────────────────────────────
+    local frame                                       = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    frame:SetSize(W, TOTAL_H)
+    frame:SetFrameStrata("HIGH")
+    frame:SetClampedToScreen(true)
+    CreateBackdrop(frame)
+
+    -- Accent stripe (color applied in Refresh so it follows theme changes)
+    local accentStripe = frame:CreateTexture(nil, "ARTWORK")
+    accentStripe:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+    accentStripe:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
+    accentStripe:SetHeight(2)
+    frame.AccentStripe = accentStripe
+
+    -- Title
+    local title = frame:CreateFontString(nil, "OVERLAY")
+    title:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, titleY)
+    title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, titleY)
+    title:SetJustifyH("LEFT")
+    title:SetText("DUNGEON SETUP")
+    frame.TitleText = title
+
+    -- Thin separator under title
+    local div = frame:CreateTexture(nil, "ARTWORK")
+    div:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, divY)
+    div:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, divY)
+    div:SetHeight(1)
+    div:SetColorTexture(borderR, borderG, borderB, 0.30)
+
+    -- Info / status text — no SetHeight so text never clips with "..."
+    local info = frame:CreateFontString(nil, "OVERLAY")
+    info:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, infoY)
+    info:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, infoY)
+    info:SetJustifyH("LEFT")
+    info:SetJustifyV("TOP")
+    info:SetWordWrap(true)
+    info:SetSpacing(1)
+    info:SetTextColor(0.75, 0.75, 0.80)
+    frame.InfoText = info
+
+    -- ── Action buttons ────────────────────────────────────────────────────
+    local btnReady = CreateFrame("Button", nil, frame)
+    btnReady:SetSize(BTN_W, BTN_H)
+    btnReady:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, btnY)
+    local fsReady = btnReady:CreateFontString(nil, "OVERLAY")
+    btnReady:SetFontString(fsReady)
+    fsReady:SetText("Ready Check")
+    frame.ReadyBtn = btnReady
+    frame.FSReady  = fsReady
+
+    local btnPull  = CreateFrame("Button", nil, frame)
+    btnPull:SetSize(BTN_W, BTN_H)
+    btnPull:SetPoint("TOPLEFT", btnReady, "TOPRIGHT", 6, 0)
+    local fsPull = btnPull:CreateFontString(nil, "OVERLAY")
+    btnPull:SetFontString(fsPull)
+    fsPull:SetText("Pull Timer (5s)")
+    frame.PullBtn = btnPull
+    frame.FSPull  = fsPull
+
+    local UI      = T.Tools and T.Tools.UI
+    if UI and UI.SkinTwichButton then
+        UI.SkinTwichButton(btnReady)
+        UI.SkinTwichButton(btnPull)
+    end
+
+    -- ── Auto-start toggle row ─────────────────────────────────────────────
+    local toggleRow = CreateFrame("Frame", nil, frame)
+    toggleRow:SetHeight(ROW_H)
+    toggleRow:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, togY)
+    toggleRow:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, togY)
+    frame.ToggleRow = toggleRow
+
+    -- Checkbox border + fill
+    local checkBg = CreateFrame("Frame", nil, toggleRow, "BackdropTemplate")
+    checkBg:SetSize(13, 13)
+    checkBg:SetPoint("LEFT", toggleRow, "LEFT", 0, 0)
+    checkBg:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    checkBg:SetBackdropColor(bgR, bgG, bgB, 0.95)
+    checkBg:SetBackdropBorderColor(borderR, borderG, borderB, 0.70)
+    frame.CheckBg = checkBg
+
+    local checkFill = checkBg:CreateTexture(nil, "ARTWORK")
+    checkFill:SetPoint("TOPLEFT", checkBg, "TOPLEFT", 1, -1)
+    checkFill:SetPoint("BOTTOMRIGHT", checkBg, "BOTTOMRIGHT", -1, 1)
+    checkFill:SetColorTexture(0, 0, 0, 0)
+    frame.CheckFill = checkFill
+
+    -- Label
+    local togLabel = toggleRow:CreateFontString(nil, "OVERLAY")
+    togLabel:SetPoint("LEFT", checkBg, "RIGHT", 6, 0)
+    togLabel:SetPoint("RIGHT", toggleRow, "RIGHT", 0, 0)
+    togLabel:SetJustifyH("LEFT")
+    togLabel:SetText("Auto-start when timer ends")
+    togLabel:SetTextColor(0.75, 0.75, 0.80)
+    frame.ToggleLabel = togLabel
+
+    -- Invisible button covering the toggle row for click handling
+    local togBtn = CreateFrame("Button", nil, frame)
+    togBtn:SetPoint("TOPLEFT", toggleRow, "TOPLEFT", -2, 2)
+    togBtn:SetPoint("BOTTOMRIGHT", toggleRow, "BOTTOMRIGHT", 2, -2)
+    local togHL = togBtn:CreateTexture(nil, "HIGHLIGHT")
+    togHL:SetAllPoints(togBtn)
+    togHL:SetColorTexture(1, 1, 1, 0.05)
+    frame.ToggleBtn = togBtn
+
+    -- ── Anchor to right of keystone receptacle frame ──────────────────────
+    local ksFrame = _G.ChallengesKeystoneFrame
+    if ksFrame then
+        frame:SetPoint("LEFT", ksFrame, "RIGHT", 10, 0)
+    else
+        frame:SetPoint("CENTER", UIParent, "CENTER", 300, 0)
+    end
+
+    frame:Hide()
+    self.keystoneHelperPanel = frame
+
+    -- ── Button handlers ───────────────────────────────────────────────────
+    btnReady:SetScript("OnClick", function()
+        if type(_G.DoReadyCheck) == "function" then
+            _G.DoReadyCheck()
+        end
+    end)
+
+    btnPull:SetScript("OnClick", function()
+        local cp = _G.C_PartyInfo
+        if cp and type(cp.DoCountdown) == "function" then
+            cp.DoCountdown(5)
+        end
+    end)
+
+    togBtn:SetScript("OnClick", function()
+        local db = MPT:GetDB()
+        db.autoStartDungeon = not (db.autoStartDungeon == true)
+        MPT:RefreshKeystoneHelperPanel()
+    end)
+
+    return frame
+end
+
+function MPT:RefreshKeystoneHelperPanel()
+    local ksFrame   = _G.ChallengesKeystoneFrame
+    local ksVisible = ksFrame and ksFrame.IsShown and ksFrame:IsShown()
+    local hasKey    = HasSlottedKeystone()
+
+    -- Only show when the keystone UI is open and a key is actually slotted.
+    if not ksVisible or not hasKey then
+        if self.keystoneHelperPanel then
+            self.keystoneHelperPanel:Hide()
+        end
+        return
+    end
+
+    local panel = self:EnsureKeystoneHelperPanel()
+    if not panel then return end
+
+    local db        = self:GetDB()
+    local autoStart = db.autoStartDungeon == true
+    local isLeader  = IsLeaderOrAssistant()
+
+    -- ── Apply global font to every text element ───────────────────────────
+    local fontPath  = GetGlobalFontPath()
+    panel.TitleText:SetFont(fontPath, 10, "")
+    panel.InfoText:SetFont(fontPath, 11, "")
+    panel.ToggleLabel:SetFont(fontPath, 11, "")
+    panel.FSReady:SetFont(fontPath, 11, "")
+    panel.FSPull:SetFont(fontPath, 11, "")
+
+    -- ── Apply theme accent ────────────────────────────────────────────────
+    local aR, aG, aB = GetThemeAccentColor()
+    panel.AccentStripe:SetColorTexture(aR, aG, aB, 0.95)
+    panel.TitleText:SetTextColor(aR, aG, aB, 0.90)
+
+    -- ── Info text ─────────────────────────────────────────────────────────
+    if autoStart then
+        panel.InfoText:SetText(
+            "Auto-start is |cff" ..
+            format("%02x%02x%02x", aR * 255, aG * 255, aB * 255) ..
+            "ON|r. The run will begin automatically when a pull timer ends, " ..
+            "if your keystone is slotted and you are leader or assist.")
+    else
+        panel.InfoText:SetText(
+            "Auto-start is |cffaa6666OFF|r. Enable the toggle below to " ..
+            "automatically start the run when a pull timer ends.")
+    end
+
+    -- ── Checkbox visual ───────────────────────────────────────────────────
+    local _, _, _, _, borderR, borderG, borderB = GetBackdropColors()
+    if autoStart then
+        panel.CheckFill:SetColorTexture(aR, aG, aB, 0.90)
+        panel.CheckBg:SetBackdropBorderColor(aR, aG, aB, 0.90)
+        panel.ToggleLabel:SetTextColor(1.0, 0.94, 0.82)
+    else
+        panel.CheckFill:SetColorTexture(0, 0, 0, 0)
+        panel.CheckBg:SetBackdropBorderColor(borderR, borderG, borderB, 0.70)
+        panel.ToggleLabel:SetTextColor(0.75, 0.75, 0.80)
+    end
+
+    -- ── Enable/disable action buttons based on group role ─────────────────
+    panel.ReadyBtn:SetEnabled(isLeader)
+    panel.PullBtn:SetEnabled(isLeader)
+
+    if not panel:IsShown() then
+        panel:Show()
+    end
 end
 
 function MPT:CreateBaseFrame(width, height, titleText, titleIcon)
@@ -2679,7 +2942,8 @@ function MPT:PlayMythicPlusTimerUpgradeAnimation(segmentKey)
     local frame = self:EnsureMythicPlusTimerFrame()
     self:EnsureMythicPlusTimerAnimationSurfaces(frame)
 
-    local segment = frame.MilestoneRow and frame.MilestoneRow.Segments and frame.MilestoneRow.Segments[segmentKey or "plusOne"]
+    local segment = frame.MilestoneRow and frame.MilestoneRow.Segments and
+    frame.MilestoneRow.Segments[segmentKey or "plusOne"]
     if segment and segment.Flash then
         local color = segment.barColor or TIMER_PLUS_ONE_COLOR
         segment.Flash:SetColorTexture(color[1] or 1, color[2] or 1, color[3] or 1, 1)
@@ -2815,9 +3079,9 @@ function MPT:BuildMythicPlusTimerPreviewState()
         deathText = "Deaths 4  |  +20s",
         milestoneBar = {
             segments = {
-                { key = "plusOne", label = "+1", widthFraction = plusOneFraction, timeLimit = plusOneLimit, nextLimit = plusTwoLimit, value = "", progress = 0, color = TIMER_PLUS_ONE_COLOR },
-                { key = "plusTwo", label = "+2", widthFraction = plusTwoFraction, timeLimit = plusTwoLimit, nextLimit = plusThreeLimit, value = "", progress = 0, color = TIMER_PLUS_TWO_COLOR },
-                { key = "plusThree", label = "+3", widthFraction = plusThreeFraction, timeLimit = plusThreeLimit, nextLimit = 0, value = "01:06", progress = 0.94, color = TIMER_PLUS_THREE_COLOR },
+                { key = "plusOne",   label = "+1", widthFraction = plusOneFraction,   timeLimit = plusOneLimit,   nextLimit = plusTwoLimit,   value = "",      progress = 0,    color = TIMER_PLUS_ONE_COLOR },
+                { key = "plusTwo",   label = "+2", widthFraction = plusTwoFraction,   timeLimit = plusTwoLimit,   nextLimit = plusThreeLimit, value = "",      progress = 0,    color = TIMER_PLUS_TWO_COLOR },
+                { key = "plusThree", label = "+3", widthFraction = plusThreeFraction, timeLimit = plusThreeLimit, nextLimit = 0,              value = "01:06", progress = 0.94, color = TIMER_PLUS_THREE_COLOR },
             },
         },
         forcesBar = {
@@ -2828,9 +3092,9 @@ function MPT:BuildMythicPlusTimerPreviewState()
             color = TIMER_FORCES_COLOR,
         },
         checkpoints = {
-            { name = "E.D.N.A.", time = "[04:26]", completed = true },
-            { name = "Skarmorak", time = "[09:41]", completed = true },
-            { name = "Master Machinists", time = "Pending", completed = false },
+            { name = "E.D.N.A.",            time = "[04:26]", completed = true },
+            { name = "Skarmorak",           time = "[09:41]", completed = true },
+            { name = "Master Machinists",   time = "Pending", completed = false },
             { name = "Void Speaker Eirich", time = "Pending", completed = false },
         },
         completedCheckpointCount = 2,
@@ -2911,7 +3175,8 @@ function MPT:BuildActiveMythicPlusTimerState()
     end
 
     local plusOneLimit, plusTwoLimit, plusThreeLimit = GetMythicPlusTimeLimits(timeLimit, hasChallengersPeril)
-    local plusOneFraction, plusTwoFraction, plusThreeFraction = GetMythicPlusTimerBarFractions(timeLimit, hasChallengersPeril)
+    local plusOneFraction, plusTwoFraction, plusThreeFraction = GetMythicPlusTimerBarFractions(timeLimit,
+        hasChallengersPeril)
     local milestoneSegments = {
         {
             key = "plusOne",
@@ -2920,7 +3185,8 @@ function MPT:BuildActiveMythicPlusTimerState()
             timeLimit = plusOneLimit,
             nextLimit = plusTwoLimit,
             value = elapsed > plusTwoLimit and FormatSignedClock(plusOneLimit - elapsed) or "",
-            progress = plusOneLimit > plusTwoLimit and ClampNumber((elapsed - plusTwoLimit) / (plusOneLimit - plusTwoLimit), 0, 1, 0) or 0,
+            progress = plusOneLimit > plusTwoLimit and
+            ClampNumber((elapsed - plusTwoLimit) / (plusOneLimit - plusTwoLimit), 0, 1, 0) or 0,
             color = TIMER_PLUS_ONE_COLOR,
         },
         {
@@ -2930,7 +3196,8 @@ function MPT:BuildActiveMythicPlusTimerState()
             timeLimit = plusTwoLimit,
             nextLimit = plusThreeLimit,
             value = elapsed > plusThreeLimit and elapsed <= plusTwoLimit and FormatClock(plusTwoLimit - elapsed) or "",
-            progress = plusTwoLimit > plusThreeLimit and ClampNumber((elapsed - plusThreeLimit) / (plusTwoLimit - plusThreeLimit), 0, 1, 0) or 0,
+            progress = plusTwoLimit > plusThreeLimit and
+            ClampNumber((elapsed - plusThreeLimit) / (plusTwoLimit - plusThreeLimit), 0, 1, 0) or 0,
             color = TIMER_PLUS_TWO_COLOR,
         },
         {
@@ -2953,9 +3220,11 @@ function MPT:BuildActiveMythicPlusTimerState()
     -- beyond what GetStepInfo()'s numCriteria reports in some dungeons (e.g.
     -- Tazavesh multi-wing).  Hard-capping at 10 ensures we always find the
     -- isWeightedProgress forces criterion even if numCriteria is wrong.
-    local stepCount = C_Scenario and type(C_Scenario.GetStepInfo) == "function" and select(3, C_Scenario.GetStepInfo()) or 0
+    local stepCount = C_Scenario and type(C_Scenario.GetStepInfo) == "function" and select(3, C_Scenario.GetStepInfo()) or
+    0
     for index = 1, max(10, tonumber(stepCount) or 0) do
-        local info = C_ScenarioInfo and type(C_ScenarioInfo.GetCriteriaInfo) == "function" and C_ScenarioInfo.GetCriteriaInfo(index)
+        local info = C_ScenarioInfo and type(C_ScenarioInfo.GetCriteriaInfo) == "function" and
+        C_ScenarioInfo.GetCriteriaInfo(index)
         if type(info) == "table" then
             if info.isWeightedProgress and type(info.totalQuantity) == "number" and info.totalQuantity > 0 then
                 totalCount = info.totalQuantity
@@ -2984,7 +3253,8 @@ function MPT:BuildActiveMythicPlusTimerState()
 
                 checkpoints[#checkpoints + 1] = {
                     name = tostring(info.description or ("Boss " .. index)),
-                    time = info.completed and ("[" .. FormatClock(self.mythicPlusTimerState.bossCheckpoints[key] or 0) .. "]") or "Pending",
+                    time = info.completed and
+                    ("[" .. FormatClock(self.mythicPlusTimerState.bossCheckpoints[key] or 0) .. "]") or "Pending",
                     completed = info.completed == true,
                 }
             end
@@ -2993,7 +3263,8 @@ function MPT:BuildActiveMythicPlusTimerState()
 
     local forcesBar = {
         label = "Forces",
-        detail = totalCount > 0 and format("%d / %d enemy forces", currentCount, totalCount) or "Enemy forces unavailable",
+        detail = totalCount > 0 and format("%d / %d enemy forces", currentCount, totalCount) or
+        "Enemy forces unavailable",
         value = totalCount > 0 and format("%.1f%%", min(100, (currentCount / totalCount) * 100)) or "--",
         progress = totalCount > 0 and ClampNumber(currentCount / totalCount, 0, 1, 0) or 0,
         color = TIMER_FORCES_COLOR,
@@ -3191,7 +3462,8 @@ function MPT:LayoutMythicPlusTimerFrame(frame, checkpointCount)
     for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
         local segment = frame.MilestoneRow.Segments[key]
         local fraction = segment.widthFraction or 0
-        local segmentWidth = key == "plusThree" and max(24, availableWidth - xOffset) or max(24, floor(availableWidth * fraction))
+        local segmentWidth = key == "plusThree" and max(24, availableWidth - xOffset) or
+        max(24, floor(availableWidth * fraction))
         segment:ClearAllPoints()
         segment:SetPoint("TOPLEFT", frame.MilestoneRow, "TOPLEFT", xOffset, 0)
         segment:SetWidth(segmentWidth)
@@ -3232,36 +3504,52 @@ function MPT:LayoutMythicPlusTimerFrame(frame, checkpointCount)
     frame.ScrollChild:SetHeight(max(1, abs(yOffset) + 12))
     self:UpdateFrameScrollState(frame)
 
-    ApplyFontString(frame.Title, appearance.timerFontPath, appearance.timerFontSize + 2, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(frame.KeyText, appearance.timerFontPath, appearance.timerFontSize + 4, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(frame.AffixText, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1)
-    ApplyFontString(frame.ElapsedText, appearance.timerFontPath, appearance.timerFontSize + 2, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.Title, appearance.timerFontPath, appearance.timerFontSize + 2, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.KeyText, appearance.timerFontPath, appearance.timerFontSize + 4, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.AffixText, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline,
+        appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1)
+    ApplyFontString(frame.ElapsedText, appearance.timerFontPath, appearance.timerFontSize + 2, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
     ApplyFontString(frame.DeathText, appearance.timerFontPath, appearance.timerFontSize, outline, 0.96, 0.36, 0.36, 1)
-    ApplyFontString(frame.BarsHeader, appearance.timerFontPath, appearance.timerFontSize, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(frame.CheckpointHeader, appearance.timerFontPath, appearance.timerFontSize, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.BarsHeader, appearance.timerFontPath, appearance.timerFontSize, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.CheckpointHeader, appearance.timerFontPath, appearance.timerFontSize, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
 
-    ApplyFontString(forcesRow.label, appearance.timerFontPath, appearance.timerFontSize, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(forcesRow.value, appearance.timerFontPath, appearance.timerFontSize, outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(forcesRow.detail, appearance.timerFontPath, max(10, appearance.timerFontSize - 2), outline, appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1)
+    ApplyFontString(forcesRow.label, appearance.timerFontPath, appearance.timerFontSize, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(forcesRow.value, appearance.timerFontPath, appearance.timerFontSize, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(forcesRow.detail, appearance.timerFontPath, max(10, appearance.timerFontSize - 2), outline,
+        appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1)
 
     for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
         local segment = frame.MilestoneRow.Segments[key]
-        ApplyFontString(segment.Label, appearance.timerFontPath, max(9, appearance.timerFontSize - 2), outline, appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-        ApplyFontString(segment.Value, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, 1, 1, 1, 1)
+        ApplyFontString(segment.Label, appearance.timerFontPath, max(9, appearance.timerFontSize - 2), outline,
+            appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+        ApplyFontString(segment.Value, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, 1, 1, 1,
+            1)
     end
 
     for _, row in ipairs(frame.CheckpointRows) do
-        local nameColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or { appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1 }
-        local timeColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or { appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1 }
-        ApplyFontString(row.Name, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, nameColor[1], nameColor[2], nameColor[3], nameColor[4])
-        ApplyFontString(row.Time, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, timeColor[1], timeColor[2], timeColor[3], timeColor[4])
+        local nameColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or
+        { appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1 }
+        local timeColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or
+        { appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1 }
+        ApplyFontString(row.Name, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, nameColor[1],
+            nameColor[2], nameColor[3], nameColor[4])
+        ApplyFontString(row.Time, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, timeColor[1],
+            timeColor[2], timeColor[3], timeColor[4])
     end
 end
 
 function MPT:RefreshMythicPlusTimerFrame()
     local frame = self:EnsureMythicPlusTimerFrame()
     local appearance = self:GetMythicPlusTimerAppearance()
-    local state = self.preview.mythicPlusTimer and self:BuildMythicPlusTimerPreviewState() or self:BuildActiveMythicPlusTimerState()
+    local state = self.preview.mythicPlusTimer and self:BuildMythicPlusTimerPreviewState() or
+    self:BuildActiveMythicPlusTimerState()
     local shouldShow = self.preview.mythicPlusTimer or
         (IsModuleConfiguredEnabled() and self:IsFeatureEnabled("mythicPlusTimer") and state and self:ShouldShowTrackerFrames())
 
@@ -3329,7 +3617,8 @@ function MPT:RefreshMythicPlusTimerFrame()
             segment.Label:SetText(segmentState.label or "")
             segment.Value:SetText(segmentState.value or "")
             segment.bar:SetValue(1 - ClampNumber(segmentState.progress, 0, 1, 0))
-            segment.barColor = appearance.timerBarColorMode == "custom" and appearance.timerBarColor or (segmentState.color or ACTIVE_COLOR)
+            segment.barColor = appearance.timerBarColorMode == "custom" and appearance.timerBarColor or
+            (segmentState.color or ACTIVE_COLOR)
             SetStatusBarColor(segment.bar, segment.barColor)
             local progress = ClampNumber(segmentState.progress, 0, 1, 0)
             local detailLine = ""
@@ -3348,7 +3637,8 @@ function MPT:RefreshMythicPlusTimerFrame()
                 detailLine,
             }
             if segment.Flash then
-                segment.Flash:SetColorTexture(segment.barColor[1] or 1, segment.barColor[2] or 1, segment.barColor[3] or 1, 1)
+                segment.Flash:SetColorTexture(segment.barColor[1] or 1, segment.barColor[2] or 1,
+                    segment.barColor[3] or 1, 1)
             end
         end
     end
@@ -3366,7 +3656,8 @@ function MPT:RefreshMythicPlusTimerFrame()
     frame.ForcesRow.bar:SetMinMaxValues(0, 1)
     frame.ForcesRow.bar:SetValue(ClampNumber(state.forcesBar and state.forcesBar.progress or 0, 0, 1, 0))
     SetStatusBarColor(frame.ForcesRow.bar,
-        appearance.timerBarColorMode == "custom" and appearance.timerBarColor or ((state.forcesBar and state.forcesBar.color) or TIMER_FORCES_COLOR))
+        appearance.timerBarColorMode == "custom" and appearance.timerBarColor or
+        ((state.forcesBar and state.forcesBar.color) or TIMER_FORCES_COLOR))
 
     local showBossCheckpoints = self:GetDB().mythicPlusTimerShowBossCheckpoints ~= false
     frame.CheckpointHeader:SetShown(showBossCheckpoints)
@@ -3393,7 +3684,8 @@ function MPT:RefreshMythicPlusTimerFrame()
             row.IsCompleted = rowState.completed == true
             row.tooltipTitle = tostring(rowState.name or "Boss")
             row.tooltipLines = {
-                row.IsCompleted and ("Defeated at " .. tostring(rowState.time or "unknown time") .. ".") or "Not defeated yet.",
+                row.IsCompleted and ("Defeated at " .. tostring(rowState.time or "unknown time") .. ".") or
+                "Not defeated yet.",
             }
             visibleCheckpointCount = visibleCheckpointCount + 1
         end
@@ -3708,7 +4000,7 @@ function MPT:INSPECT_READY(_, guid)
 
     local member = self.interruptMembers[self.activeInspectName or ""]
     local specID = type(GetInspectSpecialization) == "function" and GetInspectSpecialization(self.activeInspectUnit) or
-    nil
+        nil
     if member and type(specID) == "number" and specID > 0 then
         member.specID = specID
         self:ApplyInterruptSpellData(member)
@@ -3731,7 +4023,7 @@ function MPT:TryResolvePendingInspect()
 
     local member = self.interruptMembers[self.activeInspectName or ""]
     local specID = type(GetInspectSpecialization) == "function" and GetInspectSpecialization(self.activeInspectUnit) or
-    nil
+        nil
     if member and type(specID) == "number" and specID > 0 then
         member.specID = specID
         self:ApplyInterruptSpellData(member)
@@ -3797,7 +4089,7 @@ function MPT:TryAutoSlotKeystone()
         for slotIndex = 1, tonumber(numSlots) or 0 do
             local itemID = C_Container.GetContainerItemID(bagIndex, slotIndex)
             local itemLink = C_Container.GetContainerItemLink and C_Container.GetContainerItemLink(bagIndex, slotIndex) or
-            nil
+                nil
             local isKeystone = MYTHIC_KEYSTONE_ITEM_IDS[itemID or 0] == true or
                 (type(itemLink) == "string" and itemLink:find("|Hkeystone:", 1, true) ~= nil)
             if isKeystone then
@@ -4052,7 +4344,8 @@ function MPT:ResolvePartyUnitBySource(sourceGUID, sourceName)
         if UnitExists(unit) then
             local unitGUID = UnitGUID(unit)
             if SafeStringsEqual(sourceGUID, unitGUID) then
-                self:LogDebugf(false, "interrupt resolve unit=%s via=guid source=%s guid=%s", tostring(unit), tostring(sourceName),
+                self:LogDebugf(false, "interrupt resolve unit=%s via=guid source=%s guid=%s", tostring(unit),
+                    tostring(sourceName),
                     tostring(sourceGUID))
                 return unit
             end
@@ -4061,7 +4354,8 @@ function MPT:ResolvePartyUnitBySource(sourceGUID, sourceName)
             local shortName = fullName and GetShortName(fullName) or nil
             local rawName = type(UnitName) == "function" and UnitName(unit) or nil
             if SafeStringsEqual(sourceName, fullName) or SafeStringsEqual(sourceName, shortName) or SafeStringsEqual(sourceName, rawName) then
-                self:LogDebugf(false, "interrupt resolve unit=%s via=name source=%s guid=%s", tostring(unit), tostring(sourceName),
+                self:LogDebugf(false, "interrupt resolve unit=%s via=name source=%s guid=%s", tostring(unit),
+                    tostring(sourceName),
                     tostring(sourceGUID))
                 return unit
             end
@@ -4145,7 +4439,7 @@ function MPT:GetMemberBySource(sourceGUID, sourceName)
     for _, member in pairs(self.interruptMembers or {}) do
         if SafeStringsEqual(sourceGUID, member.guid) then
             self:LogDebug(
-            format("interrupt member match=%s via=guid guid=%s", tostring(member.name), tostring(sourceGUID)), false)
+                format("interrupt member match=%s via=guid guid=%s", tostring(member.name), tostring(sourceGUID)), false)
             return member
         end
     end
@@ -4153,7 +4447,8 @@ function MPT:GetMemberBySource(sourceGUID, sourceName)
     for _, member in pairs(self.interruptMembers or {}) do
         if SafeStringsEqual(sourceName, member.name) or SafeStringsEqual(sourceName, GetShortName(member.name)) then
             self:LogDebug(
-            format("interrupt member match=%s via=name source=%s", tostring(member.name), tostring(sourceName)), false)
+                format("interrupt member match=%s via=name source=%s", tostring(member.name), tostring(sourceName)),
+                false)
             return member
         end
     end
@@ -4162,7 +4457,7 @@ function MPT:GetMemberBySource(sourceGUID, sourceName)
     if unit then
         local member = self:EnsureInterruptMemberForUnit(unit, sourceName)
         self:LogDebug(
-        format("interrupt member match=%s via=unit unit=%s", tostring(member and member.name), tostring(unit)), false)
+            format("interrupt member match=%s via=unit unit=%s", tostring(member and member.name), tostring(unit)), false)
         return member
     end
 
@@ -4209,7 +4504,8 @@ end
 
 function MPT:ApplyInterruptToMember(member, subEvent, sourceName, spellID, isSupportedInterruptSpell)
     if subEvent == "SPELL_INTERRUPT" and not isSupportedInterruptSpell and not member.spellID then
-        self:LogDebugf(false, "interrupt ignored member=%s spellID=%s reason=no tracked spell", tostring(member.name), tostring(spellID))
+        self:LogDebugf(false, "interrupt ignored member=%s spellID=%s reason=no tracked spell", tostring(member.name),
+            tostring(spellID))
         return false
     end
 
@@ -4269,7 +4565,7 @@ function MPT:ApplyInterruptToMember(member, subEvent, sourceName, spellID, isSup
     member.learnedFromCombatLog = member.learnedFromCombatLog or isSupportedInterruptSpell
     if isSupportedInterruptSpell then
         member.spellIcon = C_Spell and type(C_Spell.GetSpellTexture) == "function" and C_Spell.GetSpellTexture(spellID) or
-        member.spellIcon
+            member.spellIcon
     end
 
     local alreadyTracked = false
@@ -4321,7 +4617,7 @@ function MPT:HookExistingNameplateCastbars(nameplatesModule)
         local plates = C_NamePlate.GetNamePlates()
         for _, plateFrame in ipairs(plates or {}) do
             local castbar = plateFrame and
-            ((plateFrame.UnitFrame and plateFrame.UnitFrame.Castbar) or plateFrame.Castbar) or nil
+                ((plateFrame.UnitFrame and plateFrame.UnitFrame.Castbar) or plateFrame.Castbar) or nil
             if self:HookNameplateCastbarInstance(castbar) then
                 hookedAny = true
             end
@@ -4439,7 +4735,7 @@ function MPT:HandleObservedInterruptFromCastbar(host, castbar, interruptedUnit, 
 
     local sourceName = sourceUnit and GetFullUnitName(sourceUnit) or nil
     local castbarText = castbar and castbar.Text and type(castbar.Text.GetText) == "function" and castbar.Text:GetText() or
-    nil
+        nil
     if not sourceName and type(castbarText) == "string" and IsUsablePlainString(castbarText) then
         local bracketedName = castbarText:match("%[([^%]]+)%]%s*$")
         if IsUsablePlainString(bracketedName) then
@@ -4460,7 +4756,7 @@ function MPT:HandleObservedInterruptFromCastbar(host, castbar, interruptedUnit, 
     )
 
     local member = sourceUnit and self:EnsureInterruptMemberForUnit(sourceUnit, sourceName) or
-    self:GetMemberBySource(nil, sourceName)
+        self:GetMemberBySource(nil, sourceName)
     local resolutionMethod = sourceUnit and "source-unit" or (sourceName and "castbar-text" or nil)
     if not member then
         local recentMember, recentRecord = self:GetRecentPartyCastMember(now, RECENT_INTERRUPT_CAST_WINDOW)
@@ -4536,8 +4832,8 @@ function MPT:HandlePossibleInterrupt(subEvent, sourceGUID, sourceName, spellID)
 
     if not member then
         self:LogDebug(
-        format("interrupt drop event=%s source=%s guid=%s spellID=%s reason=no-member", tostring(subEvent),
-            tostring(sourceName), tostring(sourceGUID), tostring(spellID)), false)
+            format("interrupt drop event=%s source=%s guid=%s spellID=%s reason=no-member", tostring(subEvent),
+                tostring(sourceName), tostring(sourceGUID), tostring(spellID)), false)
         return
     end
 
@@ -4894,7 +5190,7 @@ end
 function MPT:RefreshInterruptFrame()
     local frame = self:EnsureInterruptFrame()
     local showFrame = (IsModuleConfiguredEnabled() and self:ShouldShowTrackerFrames() and self:IsFeatureEnabled("interruptTracker")) or
-    self.preview.interrupts
+        self.preview.interrupts
     if not showFrame then
         frame:Hide()
         return
@@ -4951,6 +5247,12 @@ function MPT:OnTick()
 
     if self.preview.mythicPlusTimer or IsChallengeModeActive() or (self.mythicPlusTimerFrame and self.mythicPlusTimerFrame:IsShown()) then
         self:RefreshMythicPlusTimerFrame()
+    end
+
+    -- Keep the keystone setup helper panel in sync while the receptacle UI is open.
+    local ksFrame = _G.ChallengesKeystoneFrame
+    if ksFrame and ksFrame.IsShown and ksFrame:IsShown() then
+        self:RefreshKeystoneHelperPanel()
     end
 
     if not IsChallengeModeActive() then
