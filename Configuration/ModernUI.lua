@@ -92,9 +92,16 @@ local NAV_ITEMS = {
         path = { "Quality of Life" },
     },
     {
-        id = "raidFrames",
+        id = "unitFrames",
         title = "Unit Frames",
-        description = "Raid and party frame tweaks with live visual testing.",
+        description = "Standalone oUF unit frames, test mode, and full layout controls.",
+        accent = { 0.91, 0.45, 0.45 },
+        path = { "unitFrames" },
+    },
+    {
+        id = "raidFrames",
+        title = "Raid Frame Tweaks",
+        description = "Legacy ElvUI raid/party highlight tweaks.",
         accent = { 0.91, 0.45, 0.45 },
         path = { "raidFrames" },
     },
@@ -244,6 +251,13 @@ local PAGE_NAME_OVERRIDES = {
     },
     raidFrames = {
         dispellableDebuffsTab = "Dispellable Glow",
+    },
+    unitFrames = {
+        singles = "Single Units",
+        groups = "Group Units",
+        castbar = "Castbar",
+        generalGroup = "General",
+        colors = "Colors",
     },
 }
 

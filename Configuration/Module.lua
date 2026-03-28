@@ -36,6 +36,7 @@ local CHARACTER_BINDINGS = 2
 --- @field BestInSlot BestInSlotConfigurationOptions
 --- @field NotificationPanel NotificationPanelConfigurationOptions
 --- @field RaidFrames RaidFramesConfigurationOptions
+--- @field UnitFrames UnitFramesConfigurationOptions
 --- @field MythicPlusTools MythicPlusToolsConfigurationOptions
 --- @field About AboutConfigurationOptions
 --- @field SatchelWatch SatchelWatchConfigurationOptions
@@ -174,11 +175,20 @@ function ConfigurationModule:Refresh()
 
     local ACR = GetAceConfigRegistry()
     if ACR and ACR.NotifyChange then
-        pcall(ACR.NotifyChange, ACR, "ElvUI")
+        pcall(ACR.NotifyChange, ACR, self:GetStandaloneOptionsAppName())
+        pcall(ACR.NotifyChange, ACR, "TwichUIRx")
     end
 
     local E = GetElvUIEngine()
-    if E and type(E.RefreshOptions) == "function" then
+    local shouldRefreshElvUI = false
+    do
+        local ACD = _G.LibStub("AceConfigDialog-3.0-ElvUI", true)
+        if ACD and ACD.OpenFrames and ACD.OpenFrames.ElvUI then
+            shouldRefreshElvUI = true
+        end
+    end
+
+    if shouldRefreshElvUI and E and type(E.RefreshOptions) == "function" then
         pcall(E.RefreshOptions, E)
     end
 

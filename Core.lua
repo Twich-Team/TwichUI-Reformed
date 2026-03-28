@@ -81,20 +81,22 @@ function T:OnInitialize()
 
     ---@type ConfigurationModule
     local CM = self:GetModule("Configuration")
+    local Options = CM.Options --[[@as any]]
 
     --- Enable optional modules based on user settings
     ---@type table<AceModule, boolean>
     local moduleRegistry = {
-        { module = self:GetModule("ChatEnhancements"):GetModule("ChatStyling"),  enabled = CM.Options.ChatEnhancement:IsStylingEnabled() },
-        { module = self:GetModule("ChatEnhancements"):GetModule("ChatRenderer"), enabled = CM.Options.ChatEnhancement:IsStylingEnabled() },
-        { module = self:GetModule("ChatEnhancements"):GetModule("ChatAlerts"),   enabled = CM.Options.ChatEnhancement:IsAlertsEnabled() },
-        { module = self:GetModule("Chores"),                                     enabled = CM.Options.Chores:GetEnabled() },
-        { module = self:GetModule("SmartMount"),                                 enabled = CM.Options.SmartMount:GetEnabled() },
-        { module = self:GetModule("EasyFish"),                                   enabled = CM.Options.EasyFish:GetEnabled() },
-        { module = self:GetModule("Datatexts"),                                  enabled = CM.Options.Datatext:IsModuleEnabled() },
-        { module = self:GetModule("RaidFrames"),                                 enabled = CM.Options.RaidFrames:GetEnabled() },
-        { module = self:GetModule("BestInSlot"),                                 enabled = CM.Options.BestInSlot:IsBestInSlotModuleEnabled() },
-        { module = self:GetModule("QualityOfLife"):GetModule("Gathering"),       enabled = CM.Options.Gathering:GetEnabled() },
+        { module = self:GetModule("ChatEnhancements"):GetModule("ChatStyling"),  enabled = Options.ChatEnhancement:IsStylingEnabled() },
+        { module = self:GetModule("ChatEnhancements"):GetModule("ChatRenderer"), enabled = Options.ChatEnhancement:IsStylingEnabled() },
+        { module = self:GetModule("ChatEnhancements"):GetModule("ChatAlerts"),   enabled = Options.ChatEnhancement:IsAlertsEnabled() },
+        { module = self:GetModule("Chores"),                                     enabled = Options.Chores:GetEnabled() },
+        { module = self:GetModule("SmartMount"),                                 enabled = Options.SmartMount:GetEnabled() },
+        { module = self:GetModule("EasyFish"),                                   enabled = Options.EasyFish:GetEnabled() },
+        { module = self:GetModule("Datatexts"),                                  enabled = Options.Datatext:IsModuleEnabled() },
+        { module = self:GetModule("RaidFrames"),                                 enabled = Options.RaidFrames:GetEnabled() },
+        { module = self:GetModule("UnitFrames"),                                 enabled = Options.UnitFrames:GetEnabled() },
+        { module = self:GetModule("BestInSlot"),                                 enabled = Options.BestInSlot:IsBestInSlotModuleEnabled() },
+        { module = self:GetModule("QualityOfLife"):GetModule("Gathering"),       enabled = Options.Gathering:GetEnabled() },
     }
 
     for _, entry in ipairs(moduleRegistry) do

@@ -11,6 +11,7 @@
     <Include file='EasyFish\!load.xml' />
     <Include file='SmartMount\!load.xml' />
     <Include file='RaidFrames\!load.xml' />
+    <Include file='UnitFrames\!load.xml' />
     <Include file='ThirdPartyAPI\!load.xml' />
     <Include file='QualityOfLife\!load.xml' />
     <Include file='BestInSlot\!load.xml' />

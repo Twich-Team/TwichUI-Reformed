@@ -5,7 +5,15 @@
 
 ## Onboarding & Wizard
 
+### Layouts
+
+- Durability in default Layout
+- Muted versions
+
 ## Chat
+
+- Battle net whispers are colored the same color as normal whispers, can we make them the battle net tell color
+- Not seeing incoming messages during boss fights
 
 ## Notifications
 
@@ -17,9 +25,10 @@
 
 ## Other
 
-- For Prey, remove the Ring display style and default to bar. Set the default bar offset y to -60. Se tthe default value font size to 16.
-- For satchel watch, set the default notification sound to "TwichUI Alert 2"
-
 ## Chores
 
 ## Errors
+
+## Unit Frames
+
+- I need to be able to test both party and raid frames

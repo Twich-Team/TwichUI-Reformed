@@ -9,6 +9,7 @@
     <Include file='SmartMount.lua' />
     <Include file='Datatexts.lua' />
     <Include file='RaidFrames.lua' />
+    <Include file='UnitFrames.lua' />
     <Include file='Gathering.lua' />
     <Include file='QualityOfLife.lua' />
     <Include file='MythicPlusTools.lua' />
