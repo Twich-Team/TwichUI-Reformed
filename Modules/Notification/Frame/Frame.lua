@@ -31,6 +31,17 @@ local function GetNotificationFontSettings()
     end
 
     local fontKey = options.GetNotificationFont and options:GetNotificationFont() or "__default"
+
+    -- When no per-notification font is chosen, fall back to the global font
+    -- from the Theme module so that the global appearance setting propagates.
+    if (not fontKey or fontKey == "__default") then
+        local theme = T:GetModule("Theme", true)
+        local globalFont = theme and theme.Get and theme:Get("globalFont")
+        if globalFont and globalFont ~= "__default" then
+            fontKey = globalFont
+        end
+    end
+
     local fontPath = nil
     if fontKey and fontKey ~= "__default" and LSM and type(LSM.Fetch) == "function" then
         fontPath = LSM:Fetch("font", fontKey, true)

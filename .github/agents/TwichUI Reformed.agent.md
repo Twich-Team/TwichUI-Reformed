@@ -17,4 +17,4 @@ I would like for the suite to be opinionated by default, but customizable to the
 
 Assist in this process, keeping these ideals in mind, and know that i will be adding addons that i like the features of to the AddOnReferences directory for you to view their implementation to assist.
 
-When implementing new features, ensure that they are compatible with the global appearance settings of the AddOn so that the new UI elements match the overall look and feel of the suite, however they may have individual overrides for fine tuning of appearance on a per element basis.
+When implementing new features, ensure that they are compatible with the global appearance settings of the AddOn so that the new UI elements match the overall look and feel of the suite, however they may have individual overrides for fine tuning of appearance on a per element basis. Additionally, ensure that they are fully supported by our layouts logic so that I can use them with our wizard.

@@ -66,6 +66,11 @@ local function BroadcastChange(key)
         if gatheringModule and type(gatheringModule.RefreshTrackerFrame) == "function" then
             pcall(gatheringModule.RefreshTrackerFrame, gatheringModule)
         end
+        -- Refresh notification panel so it picks up the updated globalFont.
+        local nm = T:GetModule("Notification", true)
+        if nm and type(nm.RefreshFrame) == "function" then
+            pcall(nm.RefreshFrame, nm)
+        end
     end
 end
 
