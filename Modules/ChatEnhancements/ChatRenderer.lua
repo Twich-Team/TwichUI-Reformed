@@ -342,6 +342,32 @@ function ChatRendererModule:RefreshSettings()
         tabStyle = options:GetTabStyle(),
         routingRules = options:GetParsedRoutingRules(),
     }
+    -- Override the manual timestamp width with a dynamically measured value so the
+    -- column is always exactly wide enough for the formatted string at the current font.
+    if self.settings.timestampsEnabled then
+        self.settings.timestampWidth = self:ComputeTimestampWidth()
+    else
+        self.settings.timestampWidth = 0
+    end
+end
+
+--- Measure the pixel width needed to display the timestamp at the current font and format.
+--- Creates a hidden FontString once and reuses it across calls.
+function ChatRendererModule:ComputeTimestampWidth()
+    if not self._tsMeasureFrame then
+        local f = CreateFrame("Frame", nil, UIParent)
+        f:SetSize(1, 1)
+        f:SetPoint("TOPLEFT", UIParent, "TOPLEFT", -9999, 9999)
+        f:Hide()
+        self._tsMeasureFrame = f
+        self._tsMeasure = f:CreateFontString(nil, "OVERLAY")
+    end
+    local size = mathMax(10, (self.settings.chatFontSize or 13) - 2)
+    ApplyResolvedFont(self._tsMeasure, self.settings.chatFont, size, 1, 1, 1, "")
+    self._tsMeasure:SetText(date(self.settings.timestampFormat))
+    local w = self._tsMeasure:GetStringWidth()
+    -- 10px left inset + measured text + 4px right breathing room before the separator
+    return mathMax(30, math.ceil(w) + 14)
 end
 
 --- Cache the class token for a message sender using the event GUID.
