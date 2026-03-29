@@ -26,6 +26,8 @@
 
 - Increase the maximum allowed texts to six per panel
 - In the configuration, we try to be simple with naming the slots, "Left Slot", "Middle Slot", but then we lose consistency after "Right Slot". Lets lose this and just go with "Slot 1", "Slot 2", where slot one starts on the left.
+- Friends is not showing my friends that are online in the game
+- The currencies datatext capped logic isnt working very well. So there is a season maximum for a currency, say 500. you can collect upt o 500 at that point. but you can also spend them, which doesnt increase the amount you can spend. so say i have 500/500 collected as the max. If i spendd 50, i have 450 on hand, but i have still collected 500/500 and cannot collect more.
 
 ## Mythic+
 
@@ -47,6 +49,8 @@
 
 - I am in a group, and the party frames are not displaying.
 
+- My cast bar is displaying the background while casting, but not the bar itself.
+
 - Can we add a way to copy settings from one frame type to another? for example if i design my player frame, and i want to mimic its design for the target as a starting point. Should work across all single unit frames. Similarly with Group UNits. if i design a party frame, and want to mimic it in raid to start with.,
 
 ### Texts
@@ -55,3 +59,5 @@
 
 - MVP: Start with basic filters for getting going
 - MVP+: Customize auras with advanced filtering and determine if the aura should show an icon, change the color, show a border, a glow, etc.
+
+* DandersFrames (inlcuded in addon references), while doesnt use oUF, they provide a nice aura designer. It allows you to specify which auras you want toa ppear on the frame, how you want it to be displayed (as an icon, a square colored block, or a bar). It lets you anchor them to different parts of the frame, as well as apply frame level effects such as border, alpha, glow, color change, etc. It shows the auras you can apply to the frame and lets you drag and drop where you want them, has sizing, alpha, offsets, etc. It even lets you specify exactly which auras you want to show and group them up, beyond just "dispellable" or "boss". We need something similar. Look into Danders, and see what we can do in our configuration to replicate.

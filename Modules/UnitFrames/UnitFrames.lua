@@ -417,19 +417,42 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
         elseif type(healthScope.color) == "table" then
             palette.health = CopyColor(healthScope.color)
         end
+        UFDebug(string.format("GetPalette: scope=%s unit=%s mode=custom r=%.2f g=%.2f b=%.2f",
+            tostring(resolvedScope), tostring(unit),
+            palette.health[1], palette.health[2], palette.health[3]))
     elseif mode == "class" then
         local classToken = nil
-        if unit and UnitIsPlayer and UnitIsPlayer(unit) then
-            _, classToken = UnitClass(unit)
-        elseif unitKey == "player" then
-            _, classToken = UnitClass("player")
+        if unit then
+            -- Call UnitClass directly — it returns nil for non-player units so no
+            -- UnitIsPlayer pre-check is needed. Removing that check means party/raid
+            -- member frames no longer depend on UnitIsPlayer returning truthy.
+            local _, ct = UnitClass(unit)
+            classToken = ct
+        end
+        if not classToken and unitKey == "player" then
+            -- Fallback for player-scoped frames when the unit string wasn't passed.
+            local _, ct = UnitClass("player")
+            classToken = ct
         end
         -- Fall back to the caller-supplied mock class (used by test mode previews).
         if not classToken then classToken = mockClass end
-        local classColor = (_G.CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[classToken or ""]
-        if classColor then
-            palette.health = { classColor.r, classColor.g, classColor.b, 1 }
+        local classColor = nil
+        if classToken then
+            -- Prefer the modern namespaced API (available since BFA). Fall back to the
+            -- legacy RAID_CLASS_COLORS global so both APIs are covered.
+            if C_ClassColor and type(C_ClassColor.GetClassColor) == "function" then
+                classColor = C_ClassColor.GetClassColor(classToken)
+            end
+            if not classColor then
+                classColor = (_G.CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS or {})[classToken]
+            end
+            if classColor and type(classColor.r) == "number" then
+                palette.health = { classColor.r, classColor.g, classColor.b, 1 }
+            end
         end
+        UFDebug(string.format("GetPalette: scope=%s unit=%s mode=class token=%s found=%s",
+            tostring(resolvedScope), tostring(unit),
+            tostring(classToken), tostring(classColor ~= nil)))
     end
 
     return palette
@@ -1402,13 +1425,17 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     frame:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
     frame:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
 
-    -- In test mode all live frames are hidden; dedicated preview frames handle visuals.
-    local shouldShow = settings.enabled ~= false
-    if db.testMode == true then
-        shouldShow = false
+    -- Header children (party/raid/tank members) have their visibility fully managed
+    -- by SecureGroupHeaderTemplate + RegisterUnitWatch.  Calling SetShown from insecure
+    -- code interferes with that mechanism and can cause frames to stay hidden even when
+    -- the unit exists.  Only apply explicit show/hide for standalone (non-header) frames.
+    if not frame.isHeaderChild then
+        local shouldShow = settings.enabled ~= false
+        if db.testMode == true then
+            shouldShow = false
+        end
+        frame:SetShown(shouldShow)
     end
-
-    frame:SetShown(shouldShow)
 
     self:ApplyStatusBarTexture(frame)
     self:ApplyFrameColors(frame, unitKey)
@@ -1425,6 +1452,12 @@ end
 function UnitFrames:ApplyHeaderSettings(header, groupKey)
     local settings = self:GetGroupSettings(groupKey)
     local layout = self:GetLayoutSettings(groupKey)
+
+    local enabled = settings.enabled ~= false
+    UFDebug(string.format("ApplyHeaderSettings: key=%s enabled=%s layout=(%s,%s,%.0f,%.0f)",
+        groupKey, tostring(enabled),
+        tostring(layout.point or "CENTER"), tostring(layout.relativePoint or "CENTER"),
+        tonumber(layout.x) or 0, tonumber(layout.y) or 0))
 
     header:ClearAllPoints()
     header:SetPoint(
@@ -1444,29 +1477,64 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
     header:SetAttribute("columnAnchorPoint", settings.columnAnchorPoint or "LEFT")
 
     if groupKey == "party" then
-        header:SetAttribute("showParty", settings.enabled ~= false)
+        header:SetAttribute("showParty", enabled)
         header:SetAttribute("showPlayer", settings.showPlayer == true)
         header:SetAttribute("showSolo", settings.showSolo == true)
+        UFDebug(string.format("ApplyHeaderSettings: party showParty=%s showPlayer=%s showSolo=%s",
+            tostring(enabled), tostring(settings.showPlayer == true), tostring(settings.showSolo == true)))
+        -- Register a macro-conditional visibility driver so SecureGroupHeaderTemplate
+        -- will automatically show/hide and SPAWN CHILDREN when the player is in a group.
+        -- Without this call the header stays 0x0/hidden and no child frames are ever created.
+        if enabled then
+            header:SetVisibility('party')
+        else
+            header:SetVisibility('custom hide')
+        end
     elseif groupKey == "raid" then
-        header:SetAttribute("showRaid", settings.enabled ~= false)
+        header:SetAttribute("showRaid", enabled)
         header:SetAttribute("showParty", false)
         header:SetAttribute("showSolo", settings.showSolo == true)
         header:SetAttribute("groupBy", settings.groupBy or "GROUP")
         header:SetAttribute("groupingOrder", settings.groupingOrder or "1,2,3,4,5,6,7,8")
+        if enabled then
+            header:SetVisibility('raid')
+        else
+            header:SetVisibility('custom hide')
+        end
     elseif groupKey == "tank" then
-        header:SetAttribute("showRaid", settings.enabled ~= false)
+        header:SetAttribute("showRaid", enabled)
         header:SetAttribute("showParty", false)
         header:SetAttribute("showSolo", settings.showSolo == true)
         header:SetAttribute("groupFilter", settings.groupFilter or "MAINTANK,MAINASSIST")
+        if enabled then
+            header:SetVisibility('raid')
+        else
+            header:SetVisibility('custom hide')
+        end
     end
 
     header:SetScale(Clamp(self:GetDB().scale or 1, 0.6, 1.6))
     header:SetAlpha(Clamp(self:GetDB().frameAlpha or 1, 0.15, 1))
-    -- Propagate highlight visual settings to all spawned member frames
+
+    -- Determine the unitKey used for member frames of this group.
+    local memberUnitKey = (groupKey == "party" and "partyMember")
+        or (groupKey == "raid"  and "raidMember")
+        or (groupKey == "tank"  and "tankMember")
+
+    -- Propagate appearance changes to all already-spawned member frames.
+    -- ApplyFrameColors is called so that health/power color mode changes (class,
+    -- custom, etc.) take effect immediately rather than waiting for the next
+    -- health event to trigger PostUpdate.
     for i = 1, select('#', header:GetChildren()) do
         local child = select(i, header:GetChildren())
-        if child and child.TwichTargetHighlight then
-            self:ApplyHighlightSettings(child)
+        if child then
+            if child.TwichTargetHighlight then
+                self:ApplyHighlightSettings(child)
+            end
+            if child.Health and memberUnitKey then
+                self:ApplyFrameColors(child, memberUnitKey)
+                self:ApplyStatusBarTexture(child)
+            end
         end
     end
 end
@@ -2161,10 +2229,14 @@ function UnitFrames:UpdateMovers()
             local rowH = Clamp(gs.height or entry.defaultH, 14, 120)
             local yOff = math_abs(tonumber(gs.yOffset) or 6)
             local rows = math_max(1, tonumber(gs.unitsPerColumn) or entry.defaultRows)
-            local cols = (key == "raid") and math_max(1, tonumber(gs.maxColumns) or 4) or 1
-            local colSpacing = (key == "raid") and (tonumber(gs.columnSpacing) or 6) or 0
+            -- Use the configured maxColumns for ALL group types (not just raid) so
+            -- horizontally-arranged party/tank layouts get an accurate mover size.
+            local cols = math_max(1, tonumber(gs.maxColumns) or 1)
+            local colSpacing = (cols > 1) and (tonumber(gs.columnSpacing) or 8) or 0
             local mw = (w + colSpacing) * cols - colSpacing
             local mh = rowH * rows + yOff * math_max(0, rows - 1)
+            UFDebug(string.format("UpdateMovers: %s mover  rows=%d cols=%d mw=%d mh=%d enabled=%s",
+                key, rows, cols, mw, mh, tostring(gs.enabled ~= false)))
             PlaceMover(mover,
                 layout.point or "CENTER", layout.relativePoint or layout.point or "CENTER",
                 tonumber(layout.x) or 0, tonumber(layout.y) or 0,
@@ -3121,8 +3193,11 @@ end
 
 function UnitFrames:SpawnHeaders(oUF)
     if self.headers.party then
+        UFDebug("SpawnHeaders: skipped (already spawned)")
         return
     end
+
+    UFDebug("SpawnHeaders: creating party/raid/tank headers")
 
     self.headers.party = oUF:SpawnHeader(
         "TwichUIUF_PartyHeader",
@@ -3133,6 +3208,7 @@ function UnitFrames:SpawnHeaders(oUF)
         "yOffset", -8,
         "point", "TOP"
     )
+    UFDebug(string.format("SpawnHeaders: party header = %s", tostring(self.headers.party and self.headers.party:GetName() or "nil")))
 
     self.headers.raid = oUF:SpawnHeader(
         "TwichUIUF_RaidHeader",
@@ -3164,6 +3240,7 @@ function UnitFrames:SpawnHeaders(oUF)
     self:RegisterLayoutFrame("party", self.headers.party)
     self:RegisterLayoutFrame("raid", self.headers.raid)
     self:RegisterLayoutFrame("tank", self.headers.tank)
+    UFDebug("SpawnHeaders: done")
 end
 
 function UnitFrames:EnsureStyle()
@@ -3268,9 +3345,73 @@ function UnitFrames:BuildDebugReport()
     end
     tinsert(lines, "")
 
+    -- Group Headers (party / raid / tank)
+    local headerKeys = {}
+    for k in pairs(self.headers or {}) do tinsert(headerKeys, k) end
+    table.sort(headerKeys)
+    tinsert(lines, string.format("Group headers: %d", #headerKeys))
+    for _, k in ipairs(headerKeys) do
+        local h = self.headers[k]
+        if h then
+            local shown     = h.IsShown and h:IsShown() or false
+            local w         = h.GetWidth  and math.floor(h:GetWidth()  + 0.5) or 0
+            local hgt       = h.GetHeight and math.floor(h:GetHeight() + 0.5) or 0
+            local showAttr  = h.GetAttribute and h:GetAttribute("showParty") or h:GetAttribute("showRaid")
+            local childCount = 0
+            for _ in pairs({h:GetChildren()}) do childCount = childCount + 1 end
+            -- Count how many children are shown (i.e. have a live unit)
+            local shownChildren = 0
+            for i = 1, select("#", h:GetChildren()) do
+                local c = select(i, h:GetChildren())
+                if c and c.IsShown and c:IsShown() then shownChildren = shownChildren + 1 end
+            end
+            local posStr = "(no pos)"
+            if h.GetPoint and h:GetNumPoints() > 0 then
+                local pt, _, rpt, ox, oy = h:GetPoint(1)
+                posStr = string.format("%s/%s %.0f,%.0f", pt or "?", rpt or "?", ox or 0, oy or 0)
+            end
+            tinsert(lines, string.format("  [%s]  %dx%d  visible:%s  show=%s  children:%d(shown:%d)  pos:%s",
+                k, w, hgt, shown and "yes" or "no",
+                tostring(showAttr), childCount, shownChildren, posStr))
+            -- List each styled child
+            for i = 1, select("#", h:GetChildren()) do
+                local c = select(i, h:GetChildren())
+                if c and c.Health then
+                    local cu = c.unit and tostring(c.unit) or "(none)"
+                    local cs = c.IsShown and c:IsShown() or false
+                    local cw = c.GetWidth  and math.floor(c:GetWidth()  + 0.5) or 0
+                    local ch = c.GetHeight and math.floor(c:GetHeight() + 0.5) or 0
+                    tinsert(lines, string.format("    child%d: unit=%-8s %dx%d shown=%s",
+                        i, cu, cw, ch, tostring(cs)))
+                end
+            end
+        end
+    end
+    tinsert(lines, "")
+
     -- Movers
     local lockFrames = db.lockFrames
-    tinsert(lines, string.format("Lock frames: %s", tostring(lockFrames)))
+    tinsert(lines, string.format("Lock frames: %s  (movers %s)",
+        tostring(lockFrames), lockFrames == false and "SHOWN" or "hidden"))
+    local moverKeys = {}
+    for k in pairs(self.movers or {}) do tinsert(moverKeys, k) end
+    table.sort(moverKeys)
+    tinsert(lines, string.format("Movers: %d", #moverKeys))
+    for _, k in ipairs(moverKeys) do
+        local mv = self.movers[k]
+        if mv then
+            local mvShown = mv.IsShown and mv:IsShown() or false
+            local mvW = mv.GetWidth  and math.floor(mv:GetWidth()  + 0.5) or 0
+            local mvH = mv.GetHeight and math.floor(mv:GetHeight() + 0.5) or 0
+            local mvPos = "(no pos)"
+            if mv.GetNumPoints and mv:GetNumPoints() > 0 then
+                local pt, _, rpt, ox, oy = mv:GetPoint(1)
+                mvPos = string.format("%s/%s %.0f,%.0f", pt or "?", rpt or "?", ox or 0, oy or 0)
+            end
+            tinsert(lines, string.format("  [%s]  %dx%d  visible:%s  pos:%s",
+                k, mvW, mvH, mvShown and "yes" or "no", mvPos))
+        end
+    end
 
     return table.concat(lines, "\n")
 end
