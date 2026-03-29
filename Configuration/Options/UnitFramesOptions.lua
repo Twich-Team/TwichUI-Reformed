@@ -80,6 +80,8 @@ local GROUP_BY_VALUES = {
 local COLOR_DEFAULTS = {
     health = { 0.34, 0.84, 0.54, 1 },
     power = { 0.10, 0.72, 0.74, 1 },
+    powerBackground = { 0.05, 0.06, 0.08, 0.85 },
+    powerBorder = { 0.24, 0.26, 0.32, 0.9 },
     cast = { 0.96, 0.76, 0.24, 1 },
     background = { 0.05, 0.06, 0.08, 1 },
     border = { 0.24, 0.26, 0.32, 1 },
@@ -1295,15 +1297,23 @@ BuildColorScopeTab = function(scopeKey, label)
                     true, {
                         disabled = disabled,
                     }),
-                cast = BuildColor(2, "Cast", "Castbar color.", ExtendPath(colorPath, "cast"), COLOR_DEFAULTS.cast, true,
+                powerBackground = BuildColor(2, "Power Background", "Power bar empty area tint.",
+                    ExtendPath(colorPath, "powerBackground"), COLOR_DEFAULTS.powerBackground, true, {
+                        disabled = disabled,
+                    }),
+                powerBorder = BuildColor(3, "Power Border", "Power bar border tint.",
+                    ExtendPath(colorPath, "powerBorder"), COLOR_DEFAULTS.powerBorder, true, {
+                        disabled = disabled,
+                    }),
+                cast = BuildColor(4, "Cast", "Castbar color.", ExtendPath(colorPath, "cast"), COLOR_DEFAULTS.cast, true,
                     {
                         disabled = disabled,
                     }),
-                background = BuildColor(3, "Background", "Frame background tint.", ExtendPath(colorPath, "background"),
+                background = BuildColor(5, "Background", "Frame background tint.", ExtendPath(colorPath, "background"),
                     COLOR_DEFAULTS.background, true, {
                         disabled = disabled,
                     }),
-                border = BuildColor(4, "Border", "Frame border tint.", ExtendPath(colorPath, "border"),
+                border = BuildColor(6, "Border", "Frame border tint.", ExtendPath(colorPath, "border"),
                     COLOR_DEFAULTS.border, true, {
                         disabled = disabled,
                     }),
@@ -1344,15 +1354,23 @@ BuildUnitColorTab = function(order, unitKey)
                     ExtendPath(colorPath, "power"), COLOR_DEFAULTS.power, true, {
                         disabled = disabled,
                     }),
-                cast = BuildColor(2, "Cast", "Override the castbar color for this unit.", ExtendPath(colorPath, "cast"),
+                powerBackground = BuildColor(2, "Power Background", "Override the power bar empty area tint for this unit.",
+                    ExtendPath(colorPath, "powerBackground"), COLOR_DEFAULTS.powerBackground, true, {
+                        disabled = disabled,
+                    }),
+                powerBorder = BuildColor(3, "Power Border", "Override the power bar border tint for this unit.",
+                    ExtendPath(colorPath, "powerBorder"), COLOR_DEFAULTS.powerBorder, true, {
+                        disabled = disabled,
+                    }),
+                cast = BuildColor(4, "Cast", "Override the castbar color for this unit.", ExtendPath(colorPath, "cast"),
                     COLOR_DEFAULTS.cast, true, {
                         disabled = disabled,
                     }),
-                background = BuildColor(3, "Background", "Override the frame background tint for this unit.",
+                background = BuildColor(5, "Background", "Override the frame background tint for this unit.",
                     ExtendPath(colorPath, "background"), COLOR_DEFAULTS.background, true, {
                         disabled = disabled,
                     }),
-                border = BuildColor(4, "Border", "Override the frame border tint for this unit.",
+                border = BuildColor(6, "Border", "Override the frame border tint for this unit.",
                     ExtendPath(colorPath, "border"), COLOR_DEFAULTS.border, true, {
                         disabled = disabled,
                     }),

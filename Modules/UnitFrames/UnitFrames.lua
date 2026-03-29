@@ -362,20 +362,26 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
     end
 
     local palette = {
-        health     = CopyColor(scopeColors.health or db.colors.health or
+        health          = CopyColor(scopeColors.health or db.colors.health or
         GetThemeColor("successColor", { 0.34, 0.84, 0.54, 1 })),
-        power      = CopyColor(scopeColors.power or db.colors.power or
+        power           = CopyColor(scopeColors.power or db.colors.power or
         GetThemeColor("primaryColor", { 0.10, 0.72, 0.74, 1 })),
-        cast       = CopyColor(scopeColors.cast or db.colors.cast or
+        powerBackground = CopyColor(scopeColors.powerBackground or db.colors.powerBackground or
+        GetThemeColor("backgroundColor", { 0.05, 0.06, 0.08, 0.85 })),
+        powerBorder     = CopyColor(scopeColors.powerBorder or db.colors.powerBorder or
+        GetThemeColor("borderColor", { 0.24, 0.26, 0.32, 0.9 })),
+        cast            = CopyColor(scopeColors.cast or db.colors.cast or
         GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })),
-        background = CopyColor(scopeColors.background or db.colors.background or
+        background      = CopyColor(scopeColors.background or db.colors.background or
         GetThemeColor("backgroundColor", { 0.05, 0.06, 0.08, 1 })),
-        border     = CopyColor(scopeColors.border or db.colors.border or
+        border          = CopyColor(scopeColors.border or db.colors.border or
         GetThemeColor("borderColor", { 0.24, 0.26, 0.32, 1 })),
     }
 
     if unitColors then
         if type(unitColors.power) == "table" then palette.power = CopyColor(unitColors.power) end
+        if type(unitColors.powerBackground) == "table" then palette.powerBackground = CopyColor(unitColors.powerBackground) end
+        if type(unitColors.powerBorder) == "table" then palette.powerBorder = CopyColor(unitColors.powerBorder) end
         if type(unitColors.cast) == "table" then palette.cast = CopyColor(unitColors.cast) end
         if type(unitColors.background) == "table" then palette.background = CopyColor(unitColors.background) end
         if type(unitColors.border) == "table" then palette.border = CopyColor(unitColors.border) end
@@ -450,6 +456,14 @@ function UnitFrames:ApplyFrameColors(frame, unitKey)
     end
     if frame.Power and frame.Power.SetStatusBarColor then
         frame.Power:SetStatusBarColor(palette.power[1], palette.power[2], palette.power[3], 1)
+    end
+    if frame.Power and frame.Power.bg then
+        local pb = palette.powerBackground
+        frame.Power.bg:SetVertexColor(pb[1], pb[2], pb[3], pb[4] or 0.85)
+    end
+    if frame.Power and frame.Power.border then
+        local pb = palette.powerBorder
+        frame.Power.border:SetBackdropBorderColor(pb[1], pb[2], pb[3], pb[4] or 0.9)
     end
     if frame.Castbar and frame.Castbar.SetStatusBarColor then
         frame.Castbar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 1)
@@ -2570,6 +2584,17 @@ function UnitFrames:StyleFrame(frame)
     power:SetPoint("TOPLEFT", health, "BOTTOMLEFT", 0, -1)
     power:SetPoint("TOPRIGHT", health, "BOTTOMRIGHT", 0, -1)
     power:SetHeight(10)
+    local powerBg = power:CreateTexture(nil, "BACKGROUND")
+    powerBg:SetAllPoints(power)
+    powerBg:SetTexture("Interface\\Buttons\\WHITE8x8")
+    power.bg = powerBg
+    local powerBorder = CreateFrame("Frame", nil, power, "BackdropTemplate")
+    powerBorder:SetPoint("TOPLEFT", power, "TOPLEFT", -1, 1)
+    powerBorder:SetPoint("BOTTOMRIGHT", power, "BOTTOMRIGHT", 1, -1)
+    powerBorder:SetFrameLevel(math_max(0, power:GetFrameLevel() - 1))
+    powerBorder:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    powerBorder:SetBackdropBorderColor(0.24, 0.26, 0.32, 0.9)
+    power.border = powerBorder
     power.colorClass = false; power.colorDisconnected = false
     power.colorReaction = false; power.colorTapping = false; power.colorPower = false
     power.frequentUpdates = true
