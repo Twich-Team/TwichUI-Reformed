@@ -95,6 +95,17 @@ local UNIT_HEALTH_MODE_VALUES = {
     custom = "Custom",
 }
 
+local POWER_COLOR_MODES = {
+    custom    = "Custom",
+    powertype = "Power Type",
+}
+
+local UNIT_POWER_COLOR_MODES = {
+    inherit   = "Inherit",
+    custom    = "Custom",
+    powertype = "Power Type",
+}
+
 local GROUP_BY_VALUES = {
     GROUP = "Group",
     CLASS = "Class",
@@ -1732,9 +1743,13 @@ BuildColorScopeTab = function(scopeKey, label)
     local healthModePath = { "healthColorByScope", scopeKey, "mode" }
     local healthColorPath = { "healthColorByScope", scopeKey, "color" }
     local colorPath = { "colors", "scopes", scopeKey }
+    local powerModePath = ExtendPath(colorPath, "powerColorMode")
     local disabled = ModuleDisabled()
     local function defaultMode()
         return GetPathValue({ "useClassColor" }, false) == true and "class" or "theme"
+    end
+    local function defaultPowerMode()
+        return GetPathValue({ "powerColorMode" }, "custom")
     end
 
     return {
@@ -1756,9 +1771,18 @@ BuildColorScopeTab = function(scopeKey, label)
                     }),
             }),
             palette = Widgets.IGroup(2, "Palette", {
-                power = BuildColor(1, "Power", "Power bar color.", ExtendPath(colorPath, "power"), COLOR_DEFAULTS.power,
-                    true, {
+                powerMode = BuildSelect(0.5, "Power Color Mode",
+                    "How the power bar colour is determined for this scope.\n\nCustom: use the colour below.\nPower Type: automatically match the WoW power type colour (Mana=blue, Rage=red, etc.).",
+                    powerModePath, defaultPowerMode, POWER_COLOR_MODES, {
                         disabled = disabled,
+                        refreshConfig = true,
+                    }),
+                power = BuildColor(1, "Power", "Power bar color (used when mode is Custom).",
+                    ExtendPath(colorPath, "power"), COLOR_DEFAULTS.power,
+                    true, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(powerModePath, defaultPowerMode()) == "powertype"
+                        end),
                     }),
                 powerBackground = BuildColor(2, "Power Background", "Power bar empty area tint.",
                     ExtendPath(colorPath, "powerBackground"), COLOR_DEFAULTS.powerBackground, true, {
@@ -1790,6 +1814,7 @@ BuildUnitColorTab = function(order, unitKey)
     local healthModePath = ExtendPath(unitPath, "healthColor", "mode")
     local healthColorPath = ExtendPath(unitPath, "healthColor", "color")
     local colorPath = ExtendPath(unitPath, "colors")
+    local powerModePath = ExtendPath(colorPath, "powerColorMode")
     local disabled = ModuleDisabled()
 
     return {
@@ -1813,9 +1838,17 @@ BuildUnitColorTab = function(order, unitKey)
                     }),
             }),
             palette = Widgets.IGroup(2, "Palette", {
-                power = BuildColor(1, "Power", "Override the power bar color for this unit.",
-                    ExtendPath(colorPath, "power"), COLOR_DEFAULTS.power, true, {
+                powerMode = BuildSelect(0.5, "Power Color Mode",
+                    "How this unit's power bar colour is determined.\n\nInherit: use the scope or global rule.\nCustom: use the colour below.\nPower Type: automatically match the WoW power type colour (Mana=blue, Rage=red, etc.).",
+                    powerModePath, "inherit", UNIT_POWER_COLOR_MODES, {
                         disabled = disabled,
+                        refreshConfig = true,
+                    }),
+                power = BuildColor(1, "Power", "Override the power bar color for this unit (used when mode is Custom).",
+                    ExtendPath(colorPath, "power"), COLOR_DEFAULTS.power, true, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(powerModePath, "inherit") == "powertype"
+                        end),
                     }),
                 powerBackground = BuildColor(2, "Power Background", "Override the power bar empty area tint for this unit.",
                     ExtendPath(colorPath, "powerBackground"), COLOR_DEFAULTS.powerBackground, true, {
@@ -2129,7 +2162,17 @@ local function BuildColorsTab()
             palette = Widgets.IGroup(1, "Palette", {
                 health = BuildColor(1, "Health", "Fallback health color used when a scope is in Theme mode.",
                     { "colors", "health" }, COLOR_DEFAULTS.health, true),
-                power = BuildColor(2, "Power", "Fallback power color.", { "colors", "power" }, COLOR_DEFAULTS.power, true),
+                powerMode = BuildSelect(1.5, "Power Color Mode",
+                    "How the power bar colour is determined globally.\n\nCustom: use the colour below.\nPower Type: automatically match the WoW power type colour (Mana=blue, Rage=red, Energy=yellow, etc.).",
+                    { "powerColorMode" }, "custom", POWER_COLOR_MODES, {
+                        refreshConfig = true,
+                    }),
+                power = BuildColor(2, "Power", "Fallback power color (used when mode is Custom).",
+                    { "colors", "power" }, COLOR_DEFAULTS.power, true, {
+                        disabled = function()
+                            return GetPathValue({ "powerColorMode" }, "custom") == "powertype"
+                        end,
+                    }),
                 cast = BuildColor(3, "Cast", "Fallback castbar color.", { "colors", "cast" }, COLOR_DEFAULTS.cast, true),
                 background = BuildColor(4, "Background", "Fallback frame background tint.", { "colors", "background" },
                     COLOR_DEFAULTS.background, true),

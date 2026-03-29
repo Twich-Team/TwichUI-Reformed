@@ -2,6 +2,7 @@
 
 - When I open the Debugger or Error Log from within the configuration, please place it so that it is on the left or right side of the configuration, whichever has more space so it looks clean and is easy to get to without having to drag the window off the top of the configuration interface.
 - When I drag the configuration window, it can snap around. For example if i click and drag it might work fine. Then I click and drag again and it feels "offset" from where my mouse is.
+- PLease remove the legacy Raid Frame Tweaks from the configuraiton UI and the functional code, make sure it doesnt effect our new unit frames and aura system.
 
 ## Onboarding & Wizard
 
@@ -47,17 +48,12 @@
 
 - In the configuraiton for unit frames, we say "standalone ouf..." can we make this simpler to understand for new players? SOmething that explains that this is where you configure your health bars and party and raid frames
 
-- I am in a group, and the party frames are not displaying.
-
-- My cast bar is displaying the background while casting, but not the bar itself.
-
-- Can we add a way to copy settings from one frame type to another? for example if i design my player frame, and i want to mimic its design for the target as a starting point. Should work across all single unit frames. Similarly with Group UNits. if i design a party frame, and want to mimic it in raid to start with.,
+- Add the ability to configure the frames to only show mana bars for healers. ElvUI does this. SHould be on party and raid frames.
+- When i change the texts in the party frames, tehy do not update on the frames themselves until after i reload.
+- We need the ability to set the castbar icon position, side, and ask masque skinning to the target and boss cast bars, just like the player cast bars.
+- I need to be able to configure the aura bar texture, font and font size, bar color, background color, whether it shows time left or stacks. Also, the icon representing the aura on the bar looks to have a low alpha or be behind the bar
+- Add in the top level colors config within unit frames, color pickers for each of the game's power types so they can be overridden (mana, rage, energy,... )
 
 ### Texts
 
 ### Auras
-
-- MVP: Start with basic filters for getting going
-- MVP+: Customize auras with advanced filtering and determine if the aura should show an icon, change the color, show a border, a glow, etc.
-
-* DandersFrames (inlcuded in addon references), while doesnt use oUF, they provide a nice aura designer. It allows you to specify which auras you want toa ppear on the frame, how you want it to be displayed (as an icon, a square colored block, or a bar). It lets you anchor them to different parts of the frame, as well as apply frame level effects such as border, alpha, glow, color change, etc. It shows the auras you can apply to the frame and lets you drag and drop where you want them, has sizing, alpha, offsets, etc. It even lets you specify exactly which auras you want to show and group them up, beyond just "dispellable" or "boss". We need something similar. Look into Danders, and see what we can do in our configuration to replicate.

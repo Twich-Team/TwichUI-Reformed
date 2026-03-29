@@ -20,6 +20,7 @@ local UIParent = _G.UIParent
 local UnitExists = _G.UnitExists
 local UnitClass = _G.UnitClass
 local UnitIsPlayer = _G.UnitIsPlayer
+local UnitPowerType = _G.UnitPowerType
 local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
 local StatusBarInterpolation = (_G.Enum and _G.Enum.StatusBarInterpolation) or _G.StatusBarInterpolation
@@ -46,6 +47,21 @@ end
 local function UFDebug(msg)
     local dc = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
     if dc and dc.Log then dc:Log("unitframes", msg, false) end
+end
+
+-- Returns the WoW-native PowerBarColor entry for a unit's current power type,
+-- or nil if the type is not found in the global table.
+-- PowerBarColor is keyed by token string ("MANA", "RAGE", etc.) or numeric type.
+local function GetPowerTypeColor(unit)
+    if not unit then return nil end
+    local powerType, powerToken = UnitPowerType(unit)
+    local pbc = _G.PowerBarColor
+    if not pbc then return nil end
+    local c = (powerToken and pbc[powerToken]) or (powerType ~= nil and pbc[powerType])
+    if c and type(c.r) == "number" then
+        return { c.r, c.g, c.b, 1 }
+    end
+    return nil
 end
 
 local STYLE_NAME = "TwichUI_Reformed_UnitFrames"
@@ -463,6 +479,39 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
     return palette
 end
 
+-- Returns the resolved power bar fill colour for unitKey/unit, honouring
+-- powerColorMode at per-unit → per-scope → global cascade level.
+--   "custom"    — use the configured palette colour (default)
+--   "powertype" — look up WoW's PowerBarColor for the unit's active resource
+-- Falls back to palette.power when mode = "powertype" but no mapping exists.
+function UnitFrames:ResolvePowerColor(unitKey, unit)
+    local db      = self:GetDB()
+    local palette = self:GetPalette(unitKey, unit)
+
+    local resolvedScope = ResolveScopeByUnitKey(unitKey or "")
+    local unitColors    = nil
+    if unitKey and unitKey ~= "partyMember" and unitKey ~= "raidMember" and unitKey ~= "tankMember" then
+        db.units = db.units or {}
+        db.units[unitKey] = db.units[unitKey] or {}
+        unitColors = db.units[unitKey].colors or nil
+    end
+    db.colors        = db.colors        or {}
+    db.colors.scopes = db.colors.scopes or {}
+    local scopeColors = db.colors.scopes[resolvedScope] or {}
+
+    local mode = (unitColors and unitColors.powerColorMode and unitColors.powerColorMode ~= "inherit" and unitColors.powerColorMode)
+        or (scopeColors.powerColorMode and scopeColors.powerColorMode ~= "" and scopeColors.powerColorMode)
+        or db.powerColorMode
+        or "custom"
+
+    if mode == "powertype" then
+        local ptColor = GetPowerTypeColor(unit)
+        if ptColor then return ptColor end
+    end
+
+    return palette.power
+end
+
 function UnitFrames:ApplyStatusBarTexture(frame)
     local db = self:GetDB()
 
@@ -525,7 +574,8 @@ function UnitFrames:ApplyFrameColors(frame, unitKey)
         frame.Health.bg:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 0.9)
     end
     if frame.Power and frame.Power.SetStatusBarColor then
-        frame.Power:SetStatusBarColor(palette.power[1], palette.power[2], palette.power[3], 1)
+        local powerCol = self:ResolvePowerColor(unitKey, resolvedUnit)
+        frame.Power:SetStatusBarColor(powerCol[1], powerCol[2], powerCol[3], 1)
     end
     if frame.Power and frame.Power.bg then
         local pb = palette.powerBackground
@@ -2813,15 +2863,15 @@ function UnitFrames:StyleFrame(frame)
     -- which left the bar permanently empty. We name the 4th param _min and take max 5th.
     power.PostUpdate = function(powerBar, unit2, cur, _min, max)
         UnitFrames:ApplySmoothBarValue(powerBar, cur, max)
-        local palette = UnitFrames:GetPalette(capturedUnitKey, unit2)
-        powerBar:SetStatusBarColor(palette.power[1], palette.power[2], palette.power[3], 1)
+        local col = UnitFrames:ResolvePowerColor(capturedUnitKey, unit2)
+        powerBar:SetStatusBarColor(col[1], col[2], col[3], 1)
     end
     -- PostUpdateColor fires from oUF's UpdateColor path (e.g. power type changes,
     -- zone transitions). When all colorXxx flags are false oUF skips SetStatusBarColor
-    -- entirely, so we must force our palette color here to avoid a black bar.
+    -- entirely, so we must force our resolved color here to avoid a black bar.
     power.PostUpdateColor = function(powerBar, unit2, _color, _r, _g, _b)
-        local palette = UnitFrames:GetPalette(capturedUnitKey, unit2)
-        powerBar:SetStatusBarColor(palette.power[1], palette.power[2], palette.power[3], 1)
+        local col = UnitFrames:ResolvePowerColor(capturedUnitKey, unit2)
+        powerBar:SetStatusBarColor(col[1], col[2], col[3], 1)
     end
     frame.Power = power
 
