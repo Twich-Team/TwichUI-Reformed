@@ -1,3 +1,6 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Include file='UnitFrames.lua' />
+    <Include file='AuraWatcher.lua' />
+    <Include file='AuraWatcherCatalog.lua' />
+    <Include file='AuraWatcherUI.lua' />
 </Ui>

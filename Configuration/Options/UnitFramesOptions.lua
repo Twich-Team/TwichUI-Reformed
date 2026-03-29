@@ -57,6 +57,31 @@ local AURA_FILTER_VALUES = {
     DISPELLABLE_OR_BOSS = "Dispellable or Boss",
 }
 
+-- Aura Watcher constants
+local INDICATOR_TYPES = {
+    icons  = "Icon Cluster",
+    border = "Border Highlight",
+}
+local INDICATOR_SOURCES = {
+    group              = "Spell Group",
+    HELPFUL            = "Helpful",
+    HARMFUL            = "Harmful",
+    DISPELLABLE        = "Dispellable",
+    DISPELLABLE_OR_BOSS = "Dispellable or Boss",
+    ALL                = "All",
+}
+local GROW_DIR_VALUES = {
+    RIGHT = "Right →",
+    LEFT  = "← Left",
+    UP    = "↑ Up",
+    DOWN  = "↓ Down",
+}
+local MAX_SPELL_GROUPS = 8
+local MAX_INDICATORS   = 6
+-- Group-key list (g1..g8)
+local SPELL_GROUP_KEYS = {}
+for i = 1, MAX_SPELL_GROUPS do SPELL_GROUP_KEYS[#SPELL_GROUP_KEYS + 1] = "g" .. i end
+
 local HEALTH_MODE_VALUES = {
     theme = "Theme",
     class = "Class",
@@ -814,6 +839,233 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
     })
 end
 
+-- ============================================================
+-- Aura Watcher: Spell Groups section (global)
+-- ============================================================
+
+-- Returns a display-name→key map of spell groups that have a label set.
+local function GetSpellGroupValues()
+    local db  = Options:GetDB()
+    local out = {}
+    for _, key in ipairs(SPELL_GROUP_KEYS) do
+        local grp = db.spellGroups and db.spellGroups[key]
+        local lbl = grp and grp.label
+        if lbl and lbl ~= "" then
+            out[key] = lbl
+        else
+            out[key] = "Group " .. key:sub(2)  -- "g3" → "Group 3"
+        end
+    end
+    return out
+end
+
+local function BuildSpellGroupSlot(order, groupKey)
+    local disabled = ModuleDisabled()
+    local basePath = { "spellGroups", groupKey }
+    local idx      = tonumber(groupKey:sub(2)) or 0
+    return Widgets.IGroup(order, "Group " .. idx, {
+        label = BuildInput(1, "Name",
+            "A short display name for this spell group (shown in indicator dropdowns).",
+            ExtendPath(basePath, "label"), "", {
+                disabled = disabled,
+                width    = "normal",
+            }),
+        spellIds = BuildInput(2, "Spell IDs",
+            "Comma-separated spell IDs to track. Example: 5484, 339, 118",
+            ExtendPath(basePath, "spellIds"), "", {
+                disabled  = disabled,
+                width     = "full",
+            }),
+    })
+end
+
+local function BuildSpellGroupsSection(order)
+    local args = {}
+    for i, key in ipairs(SPELL_GROUP_KEYS) do
+        args[key] = BuildSpellGroupSlot(i, key)
+    end
+    return {
+        type     = "group",
+        name     = "Spell Groups",
+        order    = order,
+        inline   = false,
+        childGroups = "flow",
+        args     = args,
+    }
+end
+
+-- ============================================================
+-- Aura Watcher: per-scope indicator slots
+-- ============================================================
+
+local function BuildIndicatorSlot(order, slotIdx, basePath)
+    local disabled = ModuleDisabled()
+    local path     = ExtendPath(basePath, slotIdx)
+    local itype    = function() return GetPathValue(ExtendPath(path, "type"), "icons") end
+    local source   = function() return GetPathValue(ExtendPath(path, "source"), "HARMFUL") end
+    local isIcons  = function() return itype() == "icons" end
+    local isBorder = function() return itype() == "border" end
+    local isGroup  = function() return source() == "group" end
+
+    return Widgets.IGroup(order, "Indicator " .. slotIdx, {
+        enabled = BuildToggle(1, "Enable",
+            "Activate this indicator slot.",
+            ExtendPath(path, "enabled"), false, {
+                disabled     = disabled,
+                refreshConfig = true,
+            }),
+        itype = BuildSelect(2, "Type",
+            "How to display the tracked aura(s).",
+            ExtendPath(path, "type"), "icons", INDICATOR_TYPES, {
+                disabled     = ModuleDisabled(function()
+                    return GetPathValue(ExtendPath(path, "enabled"), false) ~= true
+                end),
+                refreshConfig = true,
+            }),
+        source = BuildSelect(3, "Source",
+            "What to track: a named Spell Group or a generic aura filter.",
+            ExtendPath(path, "source"), "HARMFUL", INDICATOR_SOURCES, {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue(ExtendPath(path, "enabled"), false) ~= true
+                end),
+                refreshConfig = true,
+            }),
+        groupKey = BuildSelect(4, "Spell Group",
+            "Which Spell Group to watch (define groups in the Spell Groups tab).",
+            ExtendPath(path, "groupKey"), "g1",
+            GetSpellGroupValues, {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue(ExtendPath(path, "enabled"), false) ~= true
+                           or source() ~= "group"
+                end),
+            }),
+        onlyMine = BuildToggle(5, "Only Mine",
+            "Only show auras applied by you.",
+            ExtendPath(path, "onlyMine"), false, {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue(ExtendPath(path, "enabled"), false) ~= true
+                end),
+            }),
+        iconSettings = Widgets.IGroup(6, "Icon Settings", {
+            anchor = BuildSelect(1, "Anchor Point",
+                "The corner / edge of the icon cluster anchored to the frame.",
+                ExtendPath(path, "anchor"), "TOPLEFT", POINT_VALUES, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
+                    end),
+                }),
+            relativeAnchor = BuildSelect(2, "Frame Point",
+                "The matching point on the unit frame.",
+                ExtendPath(path, "relativeAnchor"), "TOPLEFT", POINT_VALUES, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
+                    end),
+                }),
+            offsetX = BuildRange(3, "X Offset", "Horizontal offset from the anchor.",
+                ExtendPath(path, "offsetX"), 0, -200, 200, 1, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
+                    end),
+                }),
+            offsetY = BuildRange(4, "Y Offset", "Vertical offset from the anchor.",
+                ExtendPath(path, "offsetY"), 0, -200, 200, 1, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
+                    end),
+                }),
+            iconSize = BuildRange(5, "Icon Size", "Pixel size of each aura icon.",
+                ExtendPath(path, "iconSize"), 18, 8, 40, 1, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
+                    end),
+                }),
+            spacing = BuildRange(6, "Spacing", "Gap between icons.",
+                ExtendPath(path, "spacing"), 2, 0, 12, 1, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
+                    end),
+                }),
+            maxCount = BuildRange(7, "Max Count", "Maximum number of icons to show.",
+                ExtendPath(path, "maxCount"), 5, 1, 12, 1, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
+                    end),
+                }),
+            growDirection = BuildSelect(8, "Grow Direction",
+                "Direction new icons are added in.",
+                ExtendPath(path, "growDirection"), "RIGHT", GROW_DIR_VALUES, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
+                    end),
+                }),
+        }),
+        borderSettings = Widgets.IGroup(7, "Border Settings", {
+            borderColor = BuildColor(1, "Color",
+                "Border color when the tracked aura is active.",
+                ExtendPath(path, "borderColor"), { 1, 0.5, 0, 1 }, true, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isBorder()
+                    end),
+                }),
+            borderWidth = BuildRange(2, "Width", "Border thickness in pixels.",
+                ExtendPath(path, "borderWidth"), 2, 1, 8, 1, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isBorder()
+                    end),
+                }),
+        }),
+    })
+end
+
+-- Resolve the unit-frame key for the indicator designer from a DB path.
+-- indicatorsPath is e.g. { "units", "player", "indicators" } or
+-- { "auras", "scopes", "party", "indicators" }
+local function DesignerFrameKeyFromPath(indicatorsPath)
+    if not indicatorsPath then return "partyMember" end
+    if indicatorsPath[1] == "units" then
+        return indicatorsPath[2] or "player"
+    elseif indicatorsPath[1] == "auras" and indicatorsPath[2] == "scopes" then
+        local scope = indicatorsPath[3] or "party"
+        -- Convert scope key → frame key used by the engine
+        local scopeToKey = { party = "partyMember", raid = "raidMember", tank = "tankMember" }
+        return scopeToKey[scope] or (scope .. "Member")
+    end
+    return "player"
+end
+
+local function BuildIndicatorsGroup(order, indicatorsPath)
+    -- Do NOT capture UnitFrames at build time — it may not have AWOpenDesigner yet.
+    -- Instead, resolve at click time so we always get the fully-initialised module.
+    local frameKey = DesignerFrameKeyFromPath(indicatorsPath)
+    return {
+        type    = "group",
+        name    = "Aura Indicators",
+        order   = order,
+        inline  = true,
+        args    = {
+            desc = {
+                type  = "description",
+                order = 1,
+                name  = "Design per-frame aura indicators using the graphical Aura Watcher Designer. "
+                     .. "Assign spells from your spec's catalogue to indicator slots, set anchor "
+                     .. "points, icon sizes, grow direction, and more.",
+            },
+            openDesigner = {
+                type    = "execute",
+                order   = 2,
+                name    = "Open Aura Watcher Designer",
+                desc    = "Opens the graphical indicator designer for this frame type.",
+                func    = function()
+                    local UF = T:GetModule("UnitFrames")
+                    if UF and UF.AWOpenDesigner then
+                        UF:AWOpenDesigner(frameKey)
+                    end
+                end,
+            },
+        },
+    }
+end
+
 local BuildColorScopeTab
 local BuildUnitColorTab
 
@@ -1095,7 +1347,8 @@ local function BuildSingleUnitTab(unitKey, label)
             }),
             text = BuildTextGroup(3, "Text", textPath, unitKey),
             auras = BuildAuraGroup(4, "Auras", auraPath, unitKey),
-            colors = BuildUnitColorTab(5, unitKey),
+            watchers = BuildIndicatorsGroup(5, { "units", unitKey, "indicators" }),
+            colors = BuildUnitColorTab(6, unitKey),
         },
     }
 
@@ -1309,6 +1562,7 @@ local function BuildGroupTab(groupKey, label)
             }),
             text = BuildTextGroup(3, "Text", textPath, groupKey .. "Member"),
             auras = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
+            watchers = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
             colors = colorsTab,
         },
     }
@@ -1366,6 +1620,7 @@ local function BuildBossTab()
             }),
             text = BuildTextGroup(3, "Text", { "text", "scopes", "boss" }, "boss"),
             auras = BuildAuraGroup(4, "Auras", { "auras", "scopes", "boss" }, "boss"),
+            watchers = BuildIndicatorsGroup(5, { "units", "boss", "indicators" }),
             colors = colorsTab,
         },
     }
@@ -1974,10 +2229,11 @@ function Options:BuildConfiguration()
         description = Widgets.Description(1,
             "Standalone oUF unit frames with live previews, party and raid layout control, castbar styling, shared text rules, and scope-based colors."),
         generalGroup = BuildGeneralTab(),
-        singles = BuildSinglesTab(),
-        groups = BuildGroupsTab(),
-        castbar = BuildCastbarTab(),
-        colors = BuildColorsTab(),
+        spellGroups  = BuildSpellGroupsSection(5),
+        singles      = BuildSinglesTab(),
+        groups       = BuildGroupsTab(),
+        castbar      = BuildCastbarTab(),
+        colors       = BuildColorsTab(),
     }
 
     return section

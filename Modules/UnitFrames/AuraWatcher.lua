@@ -1,0 +1,670 @@
+---@diagnostic disable: undefined-field, undefined-global, inject-field
+--[[
+    TwichUI Aura Watcher Engine
+
+    Custom per-frame aura tracking, complementary to oUF's generic Auras element.
+    Tracks specific spells by ID (via named Spell Groups) or generic filters, then
+    renders them as icon clusters anchored at any frame point, or as colored border
+    highlights triggered by aura presence.
+
+    Integration:
+      UnitFrames:AWAttach(frame)          -- StyleFrame: one-time setup
+      UnitFrames:AWConfigure(frame, key)  -- ApplyAuraSettings: push new config
+      UnitFrames:AWUpdate(frame)          -- oUF PostUpdate: scan & render
+      UnitFrames:AWHideAll(frame)         -- Clear all indicators
+]]
+
+local TwichRx = _G.TwichRx
+---@type TwichUI
+local T = unpack(TwichRx)
+
+---@type UnitFramesModule
+local UnitFrames = T:GetModule("UnitFrames")
+if not UnitFrames then return end
+
+-- ============================================================
+-- Upvalues
+-- ============================================================
+local CreateFrame     = _G.CreateFrame
+local GetTime         = _G.GetTime
+local C_UnitAuras     = _G.C_UnitAuras
+local math_max        = math.max
+local math_min        = math.min
+local math_floor      = math.floor
+local format          = string.format
+local Clamp           = _G.Clamp or function(v, lo, hi) return math.max(lo, math.min(hi, v)) end
+
+local MAX_INDICATORS  = 6    -- indicator slots per frame
+local MAX_ICONS       = 12   -- icon slots per indicator
+local TIMER_RATE      = 0.1  -- icon timer update frequency (seconds)
+
+-- ============================================================
+-- DB helpers
+-- ============================================================
+
+-- Returns the raw indicator array for a given unitKey.
+-- Singles / boss → db.units[unitKey].indicators
+-- Group members   → db.auras.scopes[scope].indicators
+function UnitFrames:AWGetIndicators(unitKey)
+    local db = self:GetDB()
+    if unitKey == "partyMember" then
+        db.auras        = db.auras or {}
+        db.auras.scopes = db.auras.scopes or {}
+        db.auras.scopes.party = db.auras.scopes.party or {}
+        return db.auras.scopes.party.indicators or {}
+    elseif unitKey == "raidMember" then
+        db.auras        = db.auras or {}
+        db.auras.scopes = db.auras.scopes or {}
+        db.auras.scopes.raid = db.auras.scopes.raid or {}
+        return db.auras.scopes.raid.indicators or {}
+    elseif unitKey == "tankMember" then
+        db.auras        = db.auras or {}
+        db.auras.scopes = db.auras.scopes or {}
+        db.auras.scopes.tank = db.auras.scopes.tank or {}
+        return db.auras.scopes.tank.indicators or {}
+    else
+        db.units         = db.units or {}
+        db.units[unitKey] = db.units[unitKey] or {}
+        return db.units[unitKey].indicators or {}
+    end
+end
+
+-- Parse a comma/newline-separated spell ID string into an array of numbers.
+local function ParseSpellIds(str)
+    local result = {}
+    if type(str) ~= "string" or str == "" then return result end
+    for token in str:gmatch("[^%s,\n]+") do
+        local n = tonumber(token)
+        if n then result[#result + 1] = n end
+    end
+    return result
+end
+
+-- Build a reverse lookup { [spellId] = true } from a parsed ID array.
+local function BuildLookup(ids)
+    local t = {}
+    for _, id in ipairs(ids) do t[id] = true end
+    return t
+end
+
+-- ============================================================
+-- Aura scanning
+-- ============================================================
+
+-- Scan unit auras matching a spell-ID lookup table.
+local function ScanBySpellIds(unit, lookup, onlyMine)
+    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then return {} end
+    local result = {}
+    for _, filter in ipairs({ "HELPFUL", "HARMFUL" }) do
+        local slots = { C_UnitAuras.GetAuraSlots(unit, filter) }
+        for i = 2, #slots do
+            local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
+            if data and data.spellId and lookup[data.spellId] then
+                if not onlyMine or data.isPlayerAura then
+                    result[#result + 1] = {
+                        icon           = data.icon,
+                        duration       = data.duration or 0,
+                        expirationTime = data.expirationTime or 0,
+                        applications   = data.applications or 0,
+                    }
+                end
+            end
+        end
+    end
+    return result
+end
+
+-- Scan unit auras matching a generic filter (HELPFUL / HARMFUL / DISPELLABLE / etc).
+local function ScanByFilter(unit, source, onlyMine)
+    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then return {} end
+    local result = {}
+    local filters
+    if source == "HELPFUL" then
+        filters = { "HELPFUL" }
+    elseif source == "HARMFUL" or source == "DISPELLABLE" or source == "DISPELLABLE_OR_BOSS" then
+        filters = { "HARMFUL" }
+    else
+        filters = { "HELPFUL", "HARMFUL" }
+    end
+    for _, f in ipairs(filters) do
+        local playerFilter = f .. "|PLAYER"
+        local slots = { C_UnitAuras.GetAuraSlots(unit, f) }
+        for i = 2, #slots do
+            local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
+            if data then
+                local passPlayer = not onlyMine or data.isPlayerAura
+                if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
+                    result[#result + 1] = {
+                        icon           = data.icon,
+                        duration       = data.duration or 0,
+                        expirationTime = data.expirationTime or 0,
+                        applications   = data.applications or 0,
+                    }
+                end
+            end
+        end
+    end
+    return result
+end
+
+-- Resolve which auras are active for a given indicator config on a frame.
+local function ResolveAuras(frame, cfg)
+    local unit = frame.unit
+    if not unit then return {} end
+    local source   = cfg.source or "HARMFUL"
+    local onlyMine = cfg.onlyMine and true or false
+
+    -- Catalog-assigned spells (source == "spell").
+    -- Supports spellIds array (new) and legacy spellId scalar.
+    if source == "spell" then
+        local ids = cfg.spellIds
+        if type(ids) == "table" and #ids > 0 then
+            return ScanBySpellIds(unit, BuildLookup(ids), onlyMine)
+        end
+        local sid = tonumber(cfg.spellId)
+        if sid and sid > 0 then
+            return ScanBySpellIds(unit, { [sid] = true }, onlyMine)
+        end
+        return {}
+    end
+
+    -- Named spell group  (source == "group", groupKey references db.spellGroups)
+    if source == "group" then
+        local db  = UnitFrames:GetDB()
+        local grp = db.spellGroups and cfg.groupKey and db.spellGroups[cfg.groupKey]
+        if grp and grp.spellIds and grp.spellIds ~= "" then
+            local ids = ParseSpellIds(grp.spellIds)
+            if #ids > 0 then
+                return ScanBySpellIds(unit, BuildLookup(ids), onlyMine)
+            end
+        end
+        return {}
+    end
+
+    return ScanByFilter(unit, source, onlyMine)
+end
+
+-- ============================================================
+-- Icon slot factory
+-- ============================================================
+
+local function CreateIconSlot(parent)
+    local slot = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    slot:SetSize(18, 18)
+    slot:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    slot:SetBackdropColor(0.06, 0.07, 0.09, 0.9)
+    slot:SetBackdropBorderColor(0.22, 0.24, 0.3, 0.85)
+
+    local tex = slot:CreateTexture(nil, "ARTWORK")
+    tex:SetPoint("TOPLEFT",     slot, "TOPLEFT",     1, -1)
+    tex:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", -1, 1)
+    tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    slot.icon = tex
+
+    local cnt = slot:CreateFontString(nil, "OVERLAY")
+    cnt:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", 1, 1)
+    cnt:SetFont(_G.STANDARD_TEXT_FONT, 9, "OUTLINE")
+    cnt:SetTextColor(1, 1, 1, 1)
+    slot.count = cnt
+
+    local dur = slot:CreateFontString(nil, "OVERLAY")
+    dur:SetPoint("TOPLEFT", slot, "TOPLEFT", 1, -1)
+    dur:SetFont(_G.STANDARD_TEXT_FONT, 7, "OUTLINE")
+    dur:SetTextColor(0.9, 0.9, 0.9, 0.85)
+    slot.dur = dur
+
+    slot:Hide()
+    return slot
+end
+
+local function UpdateDurationText(fs, expiry, duration)
+    if not expiry or expiry <= 0 or not duration or duration <= 0 then
+        fs:SetText(""); return
+    end
+    local rem = expiry - GetTime()
+    if rem <= 0 then
+        fs:SetText(""); return
+    end
+    if rem > 60 then
+        fs:SetText(math_floor(rem / 60) .. "m")
+    elseif rem > 10 then
+        fs:SetText(math_floor(rem))
+    else
+        fs:SetText(format("%.1f", rem))
+    end
+end
+
+-- ============================================================
+-- Lazy container creation
+-- ============================================================
+
+local function EnsureIconContainer(frame, idx)
+    local state = frame._awState
+    state.iconContainers = state.iconContainers or {}
+    if not state.iconContainers[idx] then
+        local c = CreateFrame("Frame", nil, frame)
+        c:SetSize(1, 1)
+        c._slots   = {}
+        c._lastTick = 0
+        c:SetScript("OnUpdate", function(self2, elapsed)
+            self2._lastTick = (self2._lastTick or 0) + elapsed
+            if self2._lastTick < TIMER_RATE then return end
+            self2._lastTick = 0
+            for _, slot in ipairs(self2._slots) do
+                if slot:IsShown() and slot.dur then
+                    UpdateDurationText(slot.dur, slot._expiry, slot._duration)
+                end
+            end
+        end)
+        state.iconContainers[idx] = c
+    end
+    return state.iconContainers[idx]
+end
+
+local function EnsureSlot(container, i)
+    if not container._slots[i] then
+        container._slots[i] = CreateIconSlot(container)
+    end
+    return container._slots[i]
+end
+
+local function EnsureBorderOverlay(frame, idx)
+    local state = frame._awState
+    state.borders = state.borders or {}
+    if not state.borders[idx] then
+        local b = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        b:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 4))
+        b:Hide()
+        state.borders[idx] = b
+    end
+    return state.borders[idx]
+end
+
+-- ============================================================
+-- Icon cluster rendering
+-- ============================================================
+
+-- Growth direction → per-slot x/y offset multipliers.
+local GROW_STEP = {
+    RIGHT = function(i, step) return (i - 1) * step, 0              end,
+    LEFT  = function(i, step) return -((i - 1) * step), 0           end,
+    UP    = function(i, step) return 0,               (i - 1) * step end,
+    DOWN  = function(i, step) return 0,              -((i - 1) * step) end,
+}
+
+local function UpdateIconIndicator(frame, idx, cfg, auras)
+    local container = EnsureIconContainer(frame, idx)
+    local size      = Clamp(cfg.iconSize or 18, 8, 40)
+    local spacing   = Clamp(cfg.spacing  or 2,  0, 12)
+    local maxCount  = Clamp(cfg.maxCount or 5,  1, MAX_ICONS)
+    local shown     = math_min(#auras, maxCount)
+    local step      = size + spacing
+    local growFn    = GROW_STEP[cfg.growDirection or "RIGHT"] or GROW_STEP.RIGHT
+
+    container:ClearAllPoints()
+    container:SetPoint(
+        cfg.anchor         or "TOPLEFT",
+        frame,
+        cfg.relativeAnchor or "TOPLEFT",
+        tonumber(cfg.offsetX) or 0,
+        tonumber(cfg.offsetY) or 0
+    )
+
+    for i = 1, shown do
+        local slot = EnsureSlot(container, i)
+        local data = auras[i]
+        local ox, oy = growFn(i, step)
+
+        slot:SetSize(size, size)
+        slot:ClearAllPoints()
+        slot:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", ox, oy)
+
+        slot.icon:SetTexture(data.icon)
+
+        local n = data.applications or 0
+        slot.count:SetText(n > 1 and tostring(n) or "")
+
+        slot._expiry   = data.expirationTime
+        slot._duration = data.duration
+        UpdateDurationText(slot.dur, data.expirationTime, data.duration)
+
+        slot:Show()
+    end
+
+    -- Hide unused slots
+    for i = shown + 1, #container._slots do
+        container._slots[i]:Hide()
+    end
+
+    if shown == 0 then
+        container:SetSize(1, 1)
+        container:Hide()
+    else
+        local isHoriz = (cfg.growDirection == "RIGHT" or cfg.growDirection == "LEFT"
+                         or cfg.growDirection == nil)
+        local tw = isHoriz and (shown * size + (shown - 1) * spacing) or size
+        local th = isHoriz and size or (shown * size + (shown - 1) * spacing)
+        container:SetSize(math_max(1, tw), math_max(1, th))
+        container:Show()
+    end
+end
+
+-- ============================================================
+-- Border overlay rendering
+-- ============================================================
+
+local function UpdateBorderIndicator(frame, idx, cfg, isActive)
+    local border = EnsureBorderOverlay(frame, idx)
+    local bw     = Clamp(cfg.borderWidth or 2, 1, 8)
+    local anim   = cfg.borderAnim or "solid"
+    local speed  = cfg.borderAnimSpeed or 1.0
+    local c      = type(cfg.borderColor) == "table" and cfg.borderColor or { 1, 0.5, 0, 1 }
+
+    border:ClearAllPoints()
+    border:SetPoint("TOPLEFT",     frame, "TOPLEFT",      -bw,  bw)
+    border:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",   bw, -bw)
+
+    if isActive then
+        border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = bw })
+        border._animSpeed   = speed
+        border._borderColor = c
+        border._bw          = bw
+
+        if anim == "pulse" then
+            border._animType  = "pulse"
+            border._pulseTime = border._pulseTime or 0
+            if not border._onUpdateSet then
+                border._onUpdateSet = true
+                border:SetScript("OnUpdate", function(self2, elapsed)
+                    local at = self2._animType
+                    local sp = self2._animSpeed or 1.0
+                    local bc = self2._borderColor or { 1, 0.5, 0, 1 }
+                    if at == "pulse" then
+                        self2._pulseTime = (self2._pulseTime or 0) + elapsed
+                        local alpha = 0.35 + 0.65 * math.abs(math.sin(
+                            self2._pulseTime * math.pi * sp))
+                        self2:SetBackdropBorderColor(bc[1], bc[2], bc[3], alpha)
+                    elseif at == "chase" then
+                        self2._chaseTime = (self2._chaseTime or 0) + elapsed * sp
+                        local t    = self2._chaseTime % 4
+                        local side = math_floor(t)
+                        local frac = t - side
+                        local dot  = self2._chaseDot
+                        if not dot then return end
+                        local ds = math_max(6, (self2._bw or 2) * 3)
+                        dot:SetSize(ds, ds)
+                        dot:SetColorTexture(
+                            math_min(1, bc[1] + 0.5),
+                            math_min(1, bc[2] + 0.5),
+                            math_min(1, bc[3] + 0.5), 1)
+                        dot:ClearAllPoints()
+                        local fw = self2:GetWidth()
+                        local fh = self2:GetHeight()
+                        if side == 0 then
+                            dot:SetPoint("TOPLEFT", self2, "TOPLEFT",
+                                frac * (fw - ds), 0)
+                        elseif side == 1 then
+                            dot:SetPoint("TOPRIGHT", self2, "TOPRIGHT",
+                                0, -(frac * (fh - ds)))
+                        elseif side == 2 then
+                            dot:SetPoint("BOTTOMRIGHT", self2, "BOTTOMRIGHT",
+                                -(frac * (fw - ds)), 0)
+                        else
+                            dot:SetPoint("BOTTOMLEFT", self2, "BOTTOMLEFT",
+                                0, frac * (fh - ds))
+                        end
+                    end
+                end)
+            end
+            border:SetBackdropBorderColor(c[1], c[2], c[3], 1)
+            if border._chaseDot then border._chaseDot:Hide() end
+
+        elseif anim == "chase" then
+            border._animType  = "chase"
+            border._chaseTime = border._chaseTime or 0
+            -- Ensure chase dot texture
+            if not border._chaseDot then
+                border._chaseDot = border:CreateTexture(nil, "OVERLAY")
+                border._chaseDot:SetColorTexture(1, 1, 1, 1)
+            end
+            if not border._onUpdateSet then
+                border._onUpdateSet = true
+                border:SetScript("OnUpdate", function(self2, elapsed)
+                    local at = self2._animType
+                    local sp = self2._animSpeed or 1.0
+                    local bc = self2._borderColor or { 1, 0.5, 0, 1 }
+                    if at == "pulse" then
+                        self2._pulseTime = (self2._pulseTime or 0) + elapsed
+                        local alpha = 0.35 + 0.65 * math.abs(math.sin(
+                            self2._pulseTime * math.pi * sp))
+                        self2:SetBackdropBorderColor(bc[1], bc[2], bc[3], alpha)
+                    elseif at == "chase" then
+                        self2._chaseTime = (self2._chaseTime or 0) + elapsed * sp
+                        local t    = self2._chaseTime % 4
+                        local side = math_floor(t)
+                        local frac = t - side
+                        local dot  = self2._chaseDot
+                        if not dot then return end
+                        local ds = math_max(6, (self2._bw or 2) * 3)
+                        dot:SetSize(ds, ds)
+                        dot:SetColorTexture(
+                            math_min(1, bc[1] + 0.5),
+                            math_min(1, bc[2] + 0.5),
+                            math_min(1, bc[3] + 0.5), 1)
+                        dot:ClearAllPoints()
+                        local fw = self2:GetWidth()
+                        local fh = self2:GetHeight()
+                        if side == 0 then
+                            dot:SetPoint("TOPLEFT", self2, "TOPLEFT",
+                                frac * (fw - ds), 0)
+                        elseif side == 1 then
+                            dot:SetPoint("TOPRIGHT", self2, "TOPRIGHT",
+                                0, -(frac * (fh - ds)))
+                        elseif side == 2 then
+                            dot:SetPoint("BOTTOMRIGHT", self2, "BOTTOMRIGHT",
+                                -(frac * (fw - ds)), 0)
+                        else
+                            dot:SetPoint("BOTTOMLEFT", self2, "BOTTOMLEFT",
+                                0, frac * (fh - ds))
+                        end
+                    end
+                end)
+            end
+            border:SetBackdropBorderColor(c[1], c[2], c[3], 0.9)
+            border._chaseDot:Show()
+
+        else  -- solid
+            border._animType = "solid"
+            if border._onUpdateSet then
+                border:SetScript("OnUpdate", nil)
+                border._onUpdateSet = false
+            end
+            if border._chaseDot then border._chaseDot:Hide() end
+            border:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
+        end
+        border:Show()
+    else
+        border:Hide()
+        if border._chaseDot then border._chaseDot:Hide() end
+    end
+end
+
+-- ============================================================
+-- Color overlay rendering
+-- ============================================================
+
+local function EnsureColorOverlay(frame, idx)
+    local state = frame._awState
+    state.overlays = state.overlays or {}
+    if not state.overlays[idx] then
+        local o = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        o:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 3))
+        o:SetAllPoints(frame)
+        o:Hide()
+        state.overlays[idx] = o
+    end
+    return state.overlays[idx]
+end
+
+local function UpdateColorOverlayIndicator(frame, idx, cfg, isActive)
+    local overlay = EnsureColorOverlay(frame, idx)
+    if isActive then
+        local c = type(cfg.overlayColor) == "table" and cfg.overlayColor or { 0.10, 0.72, 0.74 }
+        local alpha = tonumber(cfg.overlayAlpha) or 0.25
+        overlay:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+        overlay:SetBackdropColor(c[1], c[2], c[3], alpha)
+        overlay:Show()
+    else
+        overlay:Hide()
+    end
+end
+
+-- ============================================================
+-- Public API
+-- ============================================================
+
+-- Registry of all active frames so we can force-push config changes.
+local awFrameRegistry = {}
+
+--- Called once per frame in StyleFrame. Creates the per-frame state table.
+function UnitFrames:AWAttach(frame)
+    frame._awState = {
+        unitKey        = nil,
+        iconContainers = {},
+        borders        = {},
+        overlays       = {},
+    }
+end
+
+--- Called from ApplyAuraSettings. Stores the resolved unitKey and triggers
+--- an immediate update so indicators reflect the current aura state.
+function UnitFrames:AWConfigure(frame, unitKey)
+    if not frame._awState then return end
+    frame._awState.unitKey = unitKey
+    awFrameRegistry[frame]  = true
+    self:AWUpdate(frame)
+end
+
+--- Force-update all registered frames — called after designer config changes.
+function UnitFrames:AWForceUpdate()
+    for frame in pairs(awFrameRegistry) do
+        if frame and frame.IsShown and frame:IsShown() then
+            self:AWUpdate(frame)
+        end
+    end
+end
+
+--- Main update function — called from oUF's Auras.PostUpdate whenever a
+--- UNIT_AURA fires on this frame's unit. Scans auras and refreshes all indicators.
+function UnitFrames:AWUpdate(frame)
+    if not frame or not frame._awState then return end
+    local unit = frame.unit
+    if not unit then
+        self:AWHideAll(frame)
+        return
+    end
+
+    local unitKey    = frame._awState.unitKey
+    if not unitKey then return end
+
+    local indicators = self:AWGetIndicators(unitKey)
+
+    for idx = 1, MAX_INDICATORS do
+        local cfg = indicators[idx]
+        if cfg and cfg.enabled ~= false then
+            local auras = ResolveAuras(frame, cfg)
+            local itype = cfg.type or "icons"
+            if itype == "icons" then
+                UpdateIconIndicator(frame, idx, cfg, auras)
+                -- hide other indicator types for this slot
+                local bd = frame._awState.borders  and frame._awState.borders [idx]
+                local ov = frame._awState.overlays and frame._awState.overlays[idx]
+                if bd then bd:Hide() end
+                if ov then ov:Hide() end
+            elseif itype == "border" then
+                UpdateBorderIndicator(frame, idx, cfg, #auras > 0)
+                local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
+                local ov = frame._awState.overlays and frame._awState.overlays[idx]
+                if ic then ic:Hide() end
+                if ov then ov:Hide() end
+            elseif itype == "overlay" then
+                UpdateColorOverlayIndicator(frame, idx, cfg, #auras > 0)
+                local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
+                local bd = frame._awState.borders  and frame._awState.borders [idx]
+                if ic then ic:Hide() end
+                if bd then bd:Hide() end
+            end
+        else
+            -- Hide this slot's visuals
+            local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
+            if ic then ic:Hide() end
+            local bd = frame._awState.borders  and frame._awState.borders [idx]
+            if bd then bd:Hide() end
+            local ov = frame._awState.overlays and frame._awState.overlays[idx]
+            if ov then ov:Hide() end
+        end
+    end
+end
+
+--- Hides all indicator visuals on the frame (called when the unit is gone).
+function UnitFrames:AWHideAll(frame)
+    if not frame._awState then return end
+    for _, c in pairs(frame._awState.iconContainers or {}) do
+        if c then c:Hide() end
+    end
+    for _, b in pairs(frame._awState.borders or {}) do
+        if b then b:Hide() end
+    end
+    for _, o in pairs(frame._awState.overlays or {}) do
+        if o then o:Hide() end
+    end
+end
+
+--- Preview rendering — renders mock auras on a frame WITHOUT a real unit.
+--- Used by the designer's live preview panel.
+function UnitFrames:AWPreviewRender(frame, slotIdx, cfg)
+    if not frame or not frame._awState then return end
+    if not cfg then return end
+    local itype = cfg.type or "icons"
+    -- Build mock aura list from spell IDs (or 3 placeholder icons for filters)
+    local mockAuras = {}
+    local ids = cfg.spellIds or (cfg.spellId and { cfg.spellId }) or {}
+    local n   = math_min(cfg.maxCount or 3, math_max(#ids, 1), 3)
+    for i = 1, n do
+        local sid = ids[i]
+        local tex = nil
+        if sid and sid > 0 then
+            if _G.C_Spell and _G.C_Spell.GetSpellTexture then
+                tex = _G.C_Spell.GetSpellTexture(sid)
+            elseif _G.GetSpellTexture then
+                tex = _G.GetSpellTexture(sid)
+            end
+        end
+        mockAuras[i] = {
+            icon           = tex or 134400,
+            duration       = 60,
+            expirationTime = GetTime() + 45 + i * 7,
+            applications   = 0,
+        }
+    end
+    if itype == "icons" then
+        UpdateIconIndicator(frame, 1, cfg, mockAuras)
+    elseif itype == "border" then
+        UpdateBorderIndicator(frame, 1, cfg, true)
+    elseif itype == "overlay" then
+        UpdateColorOverlayIndicator(frame, 1, cfg, true)
+    end
+end
+
+--- Clear all previewed indicators.
+function UnitFrames:AWPreviewClear(frame)
+    self:AWHideAll(frame)
+end
+
+-- CheckAuraMatchesFilter is defined as a method in UnitFrames.lua where the
+-- local AuraMatchesDisplayMode function is in scope. AuraWatcher.lua calls
+-- self:CheckAuraMatchesFilter(mode, data) via ScanByFilter above.

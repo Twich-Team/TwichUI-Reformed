@@ -319,6 +319,11 @@ local function AuraMatchesDisplayMode(mode, data)
     return true
 end
 
+-- Method wrapper so AuraWatcher.lua (loaded after this file) can call it.
+function UnitFrames:CheckAuraMatchesFilter(mode, data)
+    return AuraMatchesDisplayMode(mode, data)
+end
+
 function UnitFrames:GetOptions()
     local configuration = T:GetModule("Configuration")
     return configuration and configuration.Options and configuration.Options.UnitFrames or nil
@@ -1065,12 +1070,16 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
         end
     end
 
-    -- Wire up PostUpdate to refresh bars when auras change
+    -- Wire up PostUpdate to refresh bars and trigger custom aura indicators.
     frame.Auras.PostUpdate = function()
         if aura.barMode == true and frame.AuraBars and frame.AuraBars:IsShown() then
             UnitFrames:RefreshAuraBarsForFrame(frame, capturedUK)
         end
+        UnitFrames:AWUpdate(frame)
     end
+
+    -- Configure custom aura watcher indicators for this frame/scope.
+    self:AWConfigure(frame, capturedUK)
 end
 
 function UnitFrames:ApplyClassBarSettings(frame, unitKey)
@@ -2914,6 +2923,10 @@ function UnitFrames:StyleFrame(frame)
         castbar.PostChannelStart = castbar.PostCastStart
         frame.Castbar = castbar
     end
+
+    -- Attach the Aura Watcher state table. Must come before EnsureBackdrop so that
+    -- AWUpdate can safely be called at any time after StyleFrame completes.
+    self:AWAttach(frame)
 
     EnsureBackdrop(frame)
 
