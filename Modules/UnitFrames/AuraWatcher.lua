@@ -25,18 +25,18 @@ if not UnitFrames then return end
 -- ============================================================
 -- Upvalues
 -- ============================================================
-local CreateFrame     = _G.CreateFrame
-local GetTime         = _G.GetTime
-local C_UnitAuras     = _G.C_UnitAuras
-local math_max        = math.max
-local math_min        = math.min
-local math_floor      = math.floor
-local format          = string.format
-local Clamp           = _G.Clamp or function(v, lo, hi) return math.max(lo, math.min(hi, v)) end
+local CreateFrame    = _G.CreateFrame
+local GetTime        = _G.GetTime
+local C_UnitAuras    = _G.C_UnitAuras
+local math_max       = math.max
+local math_min       = math.min
+local math_floor     = math.floor
+local format         = string.format
+local Clamp          = _G.Clamp or function(v, lo, hi) return math.max(lo, math.min(hi, v)) end
 
-local MAX_INDICATORS  = 6    -- indicator slots per frame
-local MAX_ICONS       = 12   -- icon slots per indicator
-local TIMER_RATE      = 0.1  -- icon timer update frequency (seconds)
+local MAX_INDICATORS = 6    -- indicator slots per frame
+local MAX_ICONS      = 12   -- icon slots per indicator
+local TIMER_RATE     = 0.1  -- icon timer update frequency (seconds)
 
 -- ============================================================
 -- DB helpers
@@ -48,22 +48,22 @@ local TIMER_RATE      = 0.1  -- icon timer update frequency (seconds)
 function UnitFrames:AWGetIndicators(unitKey)
     local db = self:GetDB()
     if unitKey == "partyMember" then
-        db.auras        = db.auras or {}
-        db.auras.scopes = db.auras.scopes or {}
+        db.auras              = db.auras or {}
+        db.auras.scopes       = db.auras.scopes or {}
         db.auras.scopes.party = db.auras.scopes.party or {}
         return db.auras.scopes.party.indicators or {}
     elseif unitKey == "raidMember" then
-        db.auras        = db.auras or {}
-        db.auras.scopes = db.auras.scopes or {}
+        db.auras             = db.auras or {}
+        db.auras.scopes      = db.auras.scopes or {}
         db.auras.scopes.raid = db.auras.scopes.raid or {}
         return db.auras.scopes.raid.indicators or {}
     elseif unitKey == "tankMember" then
-        db.auras        = db.auras or {}
-        db.auras.scopes = db.auras.scopes or {}
+        db.auras             = db.auras or {}
+        db.auras.scopes      = db.auras.scopes or {}
         db.auras.scopes.tank = db.auras.scopes.tank or {}
         return db.auras.scopes.tank.indicators or {}
     else
-        db.units         = db.units or {}
+        db.units          = db.units or {}
         db.units[unitKey] = db.units[unitKey] or {}
         return db.units[unitKey].indicators or {}
     end
@@ -99,13 +99,22 @@ local function ScanBySpellIds(unit, lookup, onlyMine)
         local slots = { C_UnitAuras.GetAuraSlots(unit, filter) }
         for i = 2, #slots do
             local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
-            if data and data.spellId and lookup[data.spellId] then
+            -- spellId can be a 'secret' type in combat — pcall the table lookup.
+            local _ok_cfg, _cfg = false, nil
+            if data and data.spellId then
+                _ok_cfg, _cfg = pcall(function() return lookup[data.spellId] end)
+            end
+            if _ok_cfg and _cfg then
                 if not onlyMine or data.isPlayerAura then
+                    -- duration / expirationTime / applications may also be secret type — strip via pcall.
+                    local _okd, _dur = pcall(function() return (data.duration or 0) + 0 end)
+                    local _oke, _exp = pcall(function() return (data.expirationTime or 0) + 0 end)
+                    local _oka, _app = pcall(function() return (data.applications or 0) + 0 end)
                     result[#result + 1] = {
                         icon           = data.icon,
-                        duration       = data.duration or 0,
-                        expirationTime = data.expirationTime or 0,
-                        applications   = data.applications or 0,
+                        duration       = _okd and type(_dur) == "number" and _dur or 0,
+                        expirationTime = _oke and type(_exp) == "number" and _exp or 0,
+                        applications   = _oka and type(_app) == "number" and _app or 0,
                     }
                 end
             end
@@ -134,11 +143,14 @@ local function ScanByFilter(unit, source, onlyMine)
             if data then
                 local passPlayer = not onlyMine or data.isPlayerAura
                 if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
+                    local _okd, _dur = pcall(function() return (data.duration or 0) + 0 end)
+                    local _oke, _exp = pcall(function() return (data.expirationTime or 0) + 0 end)
+                    local _oka, _app = pcall(function() return (data.applications or 0) + 0 end)
                     result[#result + 1] = {
                         icon           = data.icon,
-                        duration       = data.duration or 0,
-                        expirationTime = data.expirationTime or 0,
-                        applications   = data.applications or 0,
+                        duration       = _okd and type(_dur) == "number" and _dur or 0,
+                        expirationTime = _oke and type(_exp) == "number" and _exp or 0,
+                        applications   = _oka and type(_app) == "number" and _app or 0,
                     }
                 end
             end
@@ -200,7 +212,7 @@ local function CreateIconSlot(parent)
     slot:SetBackdropBorderColor(0.22, 0.24, 0.3, 0.85)
 
     local tex = slot:CreateTexture(nil, "ARTWORK")
-    tex:SetPoint("TOPLEFT",     slot, "TOPLEFT",     1, -1)
+    tex:SetPoint("TOPLEFT", slot, "TOPLEFT", 1, -1)
     tex:SetPoint("BOTTOMRIGHT", slot, "BOTTOMRIGHT", -1, 1)
     tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     slot.icon = tex
@@ -248,7 +260,7 @@ local function EnsureIconContainer(frame, idx)
     if not state.iconContainers[idx] then
         local c = CreateFrame("Frame", nil, frame)
         c:SetSize(1, 1)
-        c._slots   = {}
+        c._slots    = {}
         c._lastTick = 0
         c:SetScript("OnUpdate", function(self2, elapsed)
             self2._lastTick = (self2._lastTick or 0) + elapsed
@@ -290,17 +302,17 @@ end
 
 -- Growth direction → per-slot x/y offset multipliers.
 local GROW_STEP = {
-    RIGHT = function(i, step) return (i - 1) * step, 0              end,
-    LEFT  = function(i, step) return -((i - 1) * step), 0           end,
-    UP    = function(i, step) return 0,               (i - 1) * step end,
-    DOWN  = function(i, step) return 0,              -((i - 1) * step) end,
+    RIGHT = function(i, step) return (i - 1) * step, 0 end,
+    LEFT  = function(i, step) return -((i - 1) * step), 0 end,
+    UP    = function(i, step) return 0, (i - 1) * step end,
+    DOWN  = function(i, step) return 0, -((i - 1) * step) end,
 }
 
 local function UpdateIconIndicator(frame, idx, cfg, auras)
     local container  = EnsureIconContainer(frame, idx)
     local size       = Clamp(cfg.iconSize or 18, 8, 40)
-    local spacing    = Clamp(cfg.spacing  or 2,  0, 12)
-    local maxCount   = Clamp(cfg.maxCount or 5,  1, MAX_ICONS)
+    local spacing    = Clamp(cfg.spacing or 2, 0, 12)
+    local maxCount   = Clamp(cfg.maxCount or 5, 1, MAX_ICONS)
     local shown      = math_min(#auras, maxCount)
     local step       = size + spacing
     local growFn     = GROW_STEP[cfg.growDirection or "RIGHT"] or GROW_STEP.RIGHT
@@ -308,19 +320,25 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
     local durFont    = Clamp(cfg.durationFontSize or 7, 5, 14)
     local showCount  = cfg.showCount ~= false
     local countFont  = Clamp(cfg.countFontSize or 9, 5, 16)
-    local durAnchor  = cfg.durAnchor   or "TOPLEFT"
+    local durAnchor  = cfg.durAnchor or "TOPLEFT"
     local cntAnchor  = cfg.countAnchor or "BOTTOMRIGHT"
 
     -- Small inset offsets so text sits just inside the icon border
     local ANCHOR_OFS = {
-        TOPLEFT    = { 1, -1}, TOP     = { 0, -1}, TOPRIGHT    = {-1, -1},
-        LEFT       = { 1,  0}, CENTER  = { 0,  0}, RIGHT       = {-1,  0},
-        BOTTOMLEFT = { 1,  1}, BOTTOM  = { 0,  1}, BOTTOMRIGHT = {-1,  1},
+        TOPLEFT = { 1, -1 },
+        TOP = { 0, -1 },
+        TOPRIGHT = { -1, -1 },
+        LEFT = { 1, 0 },
+        CENTER = { 0, 0 },
+        RIGHT = { -1, 0 },
+        BOTTOMLEFT = { 1, 1 },
+        BOTTOM = { 0, 1 },
+        BOTTOMRIGHT = { -1, 1 },
     }
 
     container:ClearAllPoints()
     container:SetPoint(
-        cfg.anchor         or "TOPLEFT",
+        cfg.anchor or "TOPLEFT",
         frame,
         cfg.relativeAnchor or "TOPLEFT",
         tonumber(cfg.offsetX) or 0,
@@ -339,14 +357,14 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
         slot.icon:SetTexture(data.icon)
 
         local n = data.applications or 0
-        local daOfs = ANCHOR_OFS[durAnchor] or {0, 0}
+        local daOfs = ANCHOR_OFS[durAnchor] or { 0, 0 }
         slot.dur:ClearAllPoints()
         slot.dur:SetPoint(durAnchor, slot, durAnchor, daOfs[1], daOfs[2])
         slot.dur:SetFont(_G.STANDARD_TEXT_FONT, durFont, "OUTLINE")
         UpdateDurationText(slot.dur, data.expirationTime, data.duration)
         slot.dur:SetShown(showDur)
 
-        local caOfs = ANCHOR_OFS[cntAnchor] or {0, 0}
+        local caOfs = ANCHOR_OFS[cntAnchor] or { 0, 0 }
         slot.count:ClearAllPoints()
         slot.count:SetPoint(cntAnchor, slot, cntAnchor, caOfs[1], caOfs[2])
         slot.count:SetFont(_G.STANDARD_TEXT_FONT, countFont, "OUTLINE")
@@ -369,7 +387,7 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
         container:Hide()
     else
         local isHoriz = (cfg.growDirection == "RIGHT" or cfg.growDirection == "LEFT"
-                         or cfg.growDirection == nil)
+            or cfg.growDirection == nil)
         local tw = isHoriz and (shown * size + (shown - 1) * spacing) or size
         local th = isHoriz and size or (shown * size + (shown - 1) * spacing)
         container:SetSize(math_max(1, tw), math_max(1, th))
@@ -395,8 +413,8 @@ local function UpdateBorderIndicator(frame, idx, cfg, isActive)
     local c      = type(cfg.borderColor) == "table" and cfg.borderColor or { 1, 0.5, 0, 1 }
 
     border:ClearAllPoints()
-    border:SetPoint("TOPLEFT",     frame, "TOPLEFT",      -bw,  bw)
-    border:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",   bw, -bw)
+    border:SetPoint("TOPLEFT", frame, "TOPLEFT", -bw, bw)
+    border:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", bw, -bw)
 
     if not isActive then
         border:Hide()
@@ -437,12 +455,12 @@ local function UpdateBorderIndicator(frame, idx, cfg, isActive)
                 self2:SetBackdropBorderColor(bc[1], bc[2], bc[3], alpha)
             elseif at == "chase" then
                 self2._chaseTime = (self2._chaseTime or 0) + elapsed * sp
-                local t    = self2._chaseTime
-                local dots = self2._chaseDots
+                local t          = self2._chaseTime
+                local dots       = self2._chaseDots
                 if not dots then return end
                 local N      = self2._activeChaseCount or #dots
-                local dLen   = self2._chasePixelW or 6   -- length along travel direction
-                local dThick = self2._chasePixelH or 2   -- thickness perpendicular to travel
+                local dLen   = self2._chasePixelW or 6 -- length along travel direction
+                local dThick = self2._chasePixelH or 2 -- thickness perpendicular to travel
                 local cc     = self2._chaseColor
                 if not cc then
                     cc = {
@@ -454,13 +472,13 @@ local function UpdateBorderIndicator(frame, idx, cfg, isActive)
                 local fw = self2:GetWidth()
                 local fh = self2:GetHeight()
                 for di = 1, N do
-                    local dot      = dots[di]
-                    local phase    = (t + (di - 1) / N * 4) % 4
-                    local side     = math_floor(phase)
-                    local frac     = phase - side
-                    local isHoriz  = (side == 0 or side == 2)
-                    local dotW     = isHoriz and dLen or dThick
-                    local dotH     = isHoriz and dThick or dLen
+                    local dot     = dots[di]
+                    local phase   = (t + (di - 1) / N * 4) % 4
+                    local side    = math_floor(phase)
+                    local frac    = phase - side
+                    local isHoriz = (side == 0 or side == 2)
+                    local dotW    = isHoriz and dLen or dThick
+                    local dotH    = isHoriz and dThick or dLen
                     dot:SetSize(dotW, dotH)
                     dot:SetColorTexture(cc[1], cc[2], cc[3], cc[4] or 1)
                     dot:ClearAllPoints()
@@ -487,14 +505,14 @@ local function UpdateBorderIndicator(frame, idx, cfg, isActive)
         border._pulseTime = border._pulseTime or 0
         HideChaseDots(border)
         border:SetBackdropBorderColor(c[1], c[2], c[3], 1)
-    else  -- chase
+    else -- chase
         border._animType    = "chase"
         border._chaseTime   = border._chaseTime or 0
-        border._chasePixelW = Clamp(cfg.chasePixelW or 6, 1, 24)  -- length along edge
-        border._chasePixelH = Clamp(cfg.chasePixelH or 2, 1, 12)  -- thickness
+        border._chasePixelW = Clamp(cfg.chasePixelW or 6, 1, 24) -- length along edge
+        border._chasePixelH = Clamp(cfg.chasePixelH or 2, 1, 12) -- thickness
         border._chaseColor  = type(cfg.chaseColor) == "table" and cfg.chaseColor or nil
-        local count = Clamp(cfg.chaseCount or 3, 1, 8)
-        border._chaseDots = border._chaseDots or {}
+        local count         = Clamp(cfg.chaseCount or 3, 1, 8)
+        border._chaseDots   = border._chaseDots or {}
         for di = #border._chaseDots + 1, count do
             local dt = border:CreateTexture(nil, "OVERLAY")
             dt:SetColorTexture(1, 1, 1, 1)
@@ -564,7 +582,7 @@ end
 function UnitFrames:AWConfigure(frame, unitKey)
     if not frame._awState then return end
     frame._awState.unitKey = unitKey
-    awFrameRegistry[frame]  = true
+    awFrameRegistry[frame] = true
     self:AWUpdate(frame)
 end
 
@@ -587,7 +605,7 @@ function UnitFrames:AWUpdate(frame)
         return
     end
 
-    local unitKey    = frame._awState.unitKey
+    local unitKey = frame._awState.unitKey
     if not unitKey then return end
 
     local indicators = self:AWGetIndicators(unitKey)
@@ -601,7 +619,7 @@ function UnitFrames:AWUpdate(frame)
             local active = #auras > 0
             if itype == "icons" then
                 UpdateIconIndicator(frame, idx, cfg, auras)
-                local bd = frame._awState.borders  and frame._awState.borders [idx]
+                local bd = frame._awState.borders and frame._awState.borders[idx]
                 local ov = frame._awState.overlays and frame._awState.overlays[idx]
                 if bd then bd:Hide() end
                 if ov then ov:Hide() end
@@ -614,7 +632,7 @@ function UnitFrames:AWUpdate(frame)
             elseif itype == "overlay" then
                 UpdateColorOverlayIndicator(frame, idx, cfg, active)
                 local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
-                local bd = frame._awState.borders  and frame._awState.borders [idx]
+                local bd = frame._awState.borders and frame._awState.borders[idx]
                 if ic then ic:Hide() end
                 if bd then bd:Hide() end
             end
@@ -625,7 +643,7 @@ function UnitFrames:AWUpdate(frame)
                     local etype = extraCfg.type or "icons"
                     if etype == "icons" then
                         UpdateIconIndicator(frame, ei, extraCfg, auras)
-                        local bd2 = frame._awState.borders  and frame._awState.borders [ei]
+                        local bd2 = frame._awState.borders and frame._awState.borders[ei]
                         local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
                         if bd2 then bd2:Hide() end
                         if ov2 then ov2:Hide() end
@@ -638,7 +656,7 @@ function UnitFrames:AWUpdate(frame)
                     elseif etype == "overlay" then
                         UpdateColorOverlayIndicator(frame, ei, extraCfg, active)
                         local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
-                        local bd2 = frame._awState.borders  and frame._awState.borders [ei]
+                        local bd2 = frame._awState.borders and frame._awState.borders[ei]
                         if ic2 then ic2:Hide() end
                         if bd2 then bd2:Hide() end
                     end
@@ -659,7 +677,7 @@ function UnitFrames:AWUpdate(frame)
             -- Hide primary visuals and all potential extra layer slots
             local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
             if ic then ic:Hide() end
-            local bd = frame._awState.borders  and frame._awState.borders [idx]
+            local bd = frame._awState.borders and frame._awState.borders[idx]
             if bd then bd:Hide() end
             local ov = frame._awState.overlays and frame._awState.overlays[idx]
             if ov then ov:Hide() end
@@ -695,11 +713,11 @@ end
 function UnitFrames:AWPreviewRender(frame, slotIdx, cfg)
     if not frame or not frame._awState then return end
     if not cfg then return end
-    local itype = cfg.type or "icons"
+    local itype     = cfg.type or "icons"
     -- Build mock aura list from spell IDs (or 3 placeholder icons for filters)
     local mockAuras = {}
-    local ids = cfg.spellIds or (cfg.spellId and { cfg.spellId }) or {}
-    local n   = math_min(cfg.maxCount or 3, math_max(#ids, 1), 3)
+    local ids       = cfg.spellIds or (cfg.spellId and { cfg.spellId }) or {}
+    local n         = math_min(cfg.maxCount or 3, math_max(#ids, 1), 3)
     for i = 1, n do
         local sid = ids[i]
         local tex = nil

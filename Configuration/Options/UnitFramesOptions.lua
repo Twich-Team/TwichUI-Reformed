@@ -1,20 +1,20 @@
 ---@diagnostic disable: undefined-field, inject-field
-local TwichRx = _G.TwichRx
+local TwichRx                          = _G.TwichRx
 ---@type TwichUI
-local T = unpack(TwichRx)
+local T                                = unpack(TwichRx)
 
 ---@type ConfigurationModule
-local ConfigurationModule = T:GetModule("Configuration")
-local Widgets = ConfigurationModule.Widgets
-local LibStub = _G.LibStub
+local ConfigurationModule              = T:GetModule("Configuration")
+local Widgets                          = ConfigurationModule.Widgets
+local LibStub                          = _G.LibStub
 
 ---@class UnitFramesConfigurationOptions
-local Options = ConfigurationModule.Options.UnitFrames or {}
+local Options                          = ConfigurationModule.Options.UnitFrames or {}
 ConfigurationModule.Options.UnitFrames = Options
 
-local DEFAULT_SENTINEL = "__default"
+local DEFAULT_SENTINEL                 = "__default"
 
-local POINT_VALUES = {
+local POINT_VALUES                     = {
     TOPLEFT = "Top Left",
     TOP = "Top",
     TOPRIGHT = "Top Right",
@@ -26,7 +26,7 @@ local POINT_VALUES = {
     BOTTOMRIGHT = "Bottom Right",
 }
 
-local OUTLINE_VALUES = {
+local OUTLINE_VALUES                   = {
     OUTLINE = "Outline",
     THICKOUTLINE = "Thick Outline",
     MONOCHROME = "Monochrome",
@@ -35,13 +35,13 @@ local OUTLINE_VALUES = {
     NONE = "None",
 }
 
-local NAME_FORMAT_VALUES = {
+local NAME_FORMAT_VALUES               = {
     full = "Full Name",
     short = "Short Name",
     custom = "Custom Tag",
 }
 
-local RESOURCE_FORMAT_VALUES = {
+local RESOURCE_FORMAT_VALUES           = {
     percent = "Percent",
     current = "Current Value",
     currentPercent = "Current and Percent",
@@ -49,7 +49,7 @@ local RESOURCE_FORMAT_VALUES = {
     custom = "Custom Tag",
 }
 
-local AURA_FILTER_VALUES = {
+local AURA_FILTER_VALUES               = {
     ALL = "All",
     HELPFUL = "Helpful",
     HARMFUL = "Harmful",
@@ -58,28 +58,28 @@ local AURA_FILTER_VALUES = {
 }
 
 -- Aura Watcher constants
-local INDICATOR_TYPES = {
+local INDICATOR_TYPES                  = {
     icons  = "Icon Cluster",
     border = "Border Highlight",
 }
-local INDICATOR_SOURCES = {
-    group              = "Spell Group",
-    HELPFUL            = "Helpful",
-    HARMFUL            = "Harmful",
-    DISPELLABLE        = "Dispellable",
+local INDICATOR_SOURCES                = {
+    group               = "Spell Group",
+    HELPFUL             = "Helpful",
+    HARMFUL             = "Harmful",
+    DISPELLABLE         = "Dispellable",
     DISPELLABLE_OR_BOSS = "Dispellable or Boss",
-    ALL                = "All",
+    ALL                 = "All",
 }
-local GROW_DIR_VALUES = {
+local GROW_DIR_VALUES                  = {
     RIGHT = "Right →",
     LEFT  = "← Left",
     UP    = "↑ Up",
     DOWN  = "↓ Down",
 }
-local MAX_SPELL_GROUPS = 8
-local MAX_INDICATORS   = 6
+local MAX_SPELL_GROUPS                 = 8
+local MAX_INDICATORS                   = 6
 -- Group-key list (g1..g8)
-local SPELL_GROUP_KEYS = {}
+local SPELL_GROUP_KEYS                 = {}
 for i = 1, MAX_SPELL_GROUPS do SPELL_GROUP_KEYS[#SPELL_GROUP_KEYS + 1] = "g" .. i end
 
 local HEALTH_MODE_VALUES = {
@@ -104,6 +104,28 @@ local UNIT_POWER_COLOR_MODES = {
     inherit   = "Inherit",
     custom    = "Custom",
     powertype = "Power Type",
+}
+
+local ROLE_ICON_CORNER_VALUES = {
+    TOPLEFT     = "Top Left",
+    TOPRIGHT    = "Top Right",
+    BOTTOMLEFT  = "Bottom Left",
+    BOTTOMRIGHT = "Bottom Right",
+}
+
+local ROLE_ICON_FILTER_VALUES = {
+    all      = "All (fallback to DPS)",
+    assigned = "Assigned Roles Only",
+    nonDps   = "Healers & Tanks",
+    healers  = "Healers Only",
+    tanks    = "Tanks Only",
+}
+
+-- Default tag/justify for info bar text slots (mirrors INFO_BAR_TEXT_DEFAULTS in the engine)
+local INFO_BAR_SLOT_DEFAULTS = {
+    { tag = "[name]",     justify = "LEFT" },
+    { tag = "[perhp<$%]", justify = "CENTER" },
+    { tag = "",           justify = "RIGHT" },
 }
 
 local GROUP_BY_VALUES = {
@@ -720,21 +742,21 @@ local function BuildTextGroup(order, name, basePath, unitKey)
                     COLOR_DEFAULTS.shadow, true, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue(ExtendPath(basePath, "shadowEnabled"), textDefault("shadowEnabled")) ~=
-                            true
+                                true
                         end),
                     }),
                 shadowOffsetX = BuildRange(8, "Shadow X", "Horizontal text shadow offset.",
                     ExtendPath(basePath, "shadowOffsetX"), textDefault("shadowOffsetX"), -8, 8, 1, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue(ExtendPath(basePath, "shadowEnabled"), textDefault("shadowEnabled")) ~=
-                            true
+                                true
                         end),
                     }),
                 shadowOffsetY = BuildRange(9, "Shadow Y", "Vertical text shadow offset.",
                     ExtendPath(basePath, "shadowOffsetY"), textDefault("shadowOffsetY"), -8, 8, 1, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue(ExtendPath(basePath, "shadowEnabled"), textDefault("shadowEnabled")) ~=
-                            true
+                                true
                         end),
                     }),
                 nameColor = BuildColor(10, "Name Color", "Name text color.", ExtendPath(basePath, "nameColor"),
@@ -872,7 +894,8 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
                     return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
                 end),
             }),
-        barColor = BuildColor(14, "Bar Color", "Custom aura bar fill color (timed auras). Overrides the palette cast color.",
+        barColor = BuildColor(14, "Bar Color",
+            "Custom aura bar fill color (timed auras). Overrides the palette cast color.",
             ExtendPath(basePath, "barColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
                 disabled = ModuleDisabled(function()
                     return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
@@ -901,7 +924,7 @@ local function GetSpellGroupValues()
         if lbl and lbl ~= "" then
             out[key] = lbl
         else
-            out[key] = "Group " .. key:sub(2)  -- "g3" → "Group 3"
+            out[key] = "Group " .. key:sub(2) -- "g3" → "Group 3"
         end
     end
     return out
@@ -921,8 +944,8 @@ local function BuildSpellGroupSlot(order, groupKey)
         spellIds = BuildInput(2, "Spell IDs",
             "Comma-separated spell IDs to track. Example: 5484, 339, 118",
             ExtendPath(basePath, "spellIds"), "", {
-                disabled  = disabled,
-                width     = "full",
+                disabled = disabled,
+                width    = "full",
             }),
     })
 end
@@ -933,12 +956,12 @@ local function BuildSpellGroupsSection(order)
         args[key] = BuildSpellGroupSlot(i, key)
     end
     return {
-        type     = "group",
-        name     = "Spell Groups",
-        order    = order,
-        inline   = false,
+        type        = "group",
+        name        = "Spell Groups",
+        order       = order,
+        inline      = false,
         childGroups = "flow",
-        args     = args,
+        args        = args,
     }
 end
 
@@ -959,13 +982,13 @@ local function BuildIndicatorSlot(order, slotIdx, basePath)
         enabled = BuildToggle(1, "Enable",
             "Activate this indicator slot.",
             ExtendPath(path, "enabled"), false, {
-                disabled     = disabled,
+                disabled      = disabled,
                 refreshConfig = true,
             }),
         itype = BuildSelect(2, "Type",
             "How to display the tracked aura(s).",
             ExtendPath(path, "type"), "icons", INDICATOR_TYPES, {
-                disabled     = ModuleDisabled(function()
+                disabled      = ModuleDisabled(function()
                     return GetPathValue(ExtendPath(path, "enabled"), false) ~= true
                 end),
                 refreshConfig = true,
@@ -984,7 +1007,7 @@ local function BuildIndicatorSlot(order, slotIdx, basePath)
             GetSpellGroupValues, {
                 disabled = ModuleDisabled(function()
                     return GetPathValue(ExtendPath(path, "enabled"), false) ~= true
-                           or source() ~= "group"
+                        or source() ~= "group"
                 end),
             }),
         onlyMine = BuildToggle(5, "Only Mine",
@@ -1086,24 +1109,24 @@ local function BuildIndicatorsGroup(order, indicatorsPath)
     -- Instead, resolve at click time so we always get the fully-initialised module.
     local frameKey = DesignerFrameKeyFromPath(indicatorsPath)
     return {
-        type    = "group",
-        name    = "Aura Indicators",
-        order   = order,
-        inline  = true,
-        args    = {
+        type   = "group",
+        name   = "Aura Indicators",
+        order  = order,
+        inline = true,
+        args   = {
             desc = {
                 type  = "description",
                 order = 1,
                 name  = "Design per-frame aura indicators using the graphical Aura Watcher Designer. "
-                     .. "Assign spells from your spec's catalogue to indicator slots, set anchor "
-                     .. "points, icon sizes, grow direction, and more.",
+                    .. "Assign spells from your spec's catalogue to indicator slots, set anchor "
+                    .. "points, icon sizes, grow direction, and more.",
             },
             openDesigner = {
-                type    = "execute",
-                order   = 2,
-                name    = "Open Aura Watcher Designer",
-                desc    = "Opens the graphical indicator designer for this frame type.",
-                func    = function()
+                type  = "execute",
+                order = 2,
+                name  = "Open Aura Watcher Designer",
+                desc  = "Opens the graphical indicator designer for this frame type.",
+                func  = function()
                     local UF = T:GetModule("UnitFrames")
                     if UF and UF.AWOpenDesigner then
                         UF:AWOpenDesigner(frameKey)
@@ -1122,17 +1145,17 @@ local BuildUnitColorTab
 -- These tables hold the currently-selected source key in the AceGUI dropdowns.
 -- They are module-local (not persisted) because they are purely transient UI state.
 -- ---------------------------------------------------------------------------
-local _copyFromSingleSource = {}  -- [dstKey] = srcKey
-local _copyFromGroupSource  = {}  -- [dstKey] = srcKey
+local _copyFromSingleSource = {} -- [dstKey] = srcKey
+local _copyFromGroupSource  = {} -- [dstKey] = srcKey
 
-local SINGLE_COPY_KEYS = { "player", "target", "targettarget", "focus", "pet" }
-local GROUP_COPY_KEYS  = { "party", "raid", "tank" }
+local SINGLE_COPY_KEYS      = { "player", "target", "targettarget", "focus", "pet" }
+local GROUP_COPY_KEYS       = { "party", "raid", "tank" }
 
 -- Keys inside db.units[unitKey] that should NOT be copied (position / enabled toggle).
-local UNIT_SKIP_KEYS   = { enabled = true }
+local UNIT_SKIP_KEYS        = { enabled = true }
 -- Keys inside db.groups[groupKey] that should NOT be copied (enabled toggle; layout
 -- is stored separately in db.layout so it is already excluded).
-local GROUP_SKIP_KEYS  = { enabled = true }
+local GROUP_SKIP_KEYS       = { enabled = true }
 
 -- Deep-merge src into dst, skipping nil values.  Creates sub-tables as needed.
 local function DeepMerge(dst, src)
@@ -1222,21 +1245,26 @@ local function BuildCopyFromSingle(dstKey)
     local sourceValues = {}
     for _, k in ipairs(SINGLE_COPY_KEYS) do
         if k ~= dstKey then
-            local labels = { player = "Player", target = "Target",
-                             targettarget = "Target of Target", focus = "Focus", pet = "Pet" }
+            local labels = {
+                player = "Player",
+                target = "Target",
+                targettarget = "Target of Target",
+                focus = "Focus",
+                pet = "Pet"
+            }
             sourceValues[k] = labels[k] or k
         end
     end
 
     return Widgets.IGroup(99, "Copy From", {
         source = {
-            type    = "select",
-            name    = "Source Frame",
-            desc    = "Choose which unit frame to copy settings from.",
-            order   = 1,
-            values  = sourceValues,
-            get     = function() return _copyFromSingleSource[dstKey] end,
-            set     = function(_, v) _copyFromSingleSource[dstKey] = v end,
+            type     = "select",
+            name     = "Source Frame",
+            desc     = "Choose which unit frame to copy settings from.",
+            order    = 1,
+            values   = sourceValues,
+            get      = function() return _copyFromSingleSource[dstKey] end,
+            set      = function(_, v) _copyFromSingleSource[dstKey] = v end,
             disabled = ModuleDisabled(),
         },
         apply = BuildExecute(2, "Copy Settings",
@@ -1266,13 +1294,13 @@ local function BuildCopyFromGroup(dstKey)
 
     return Widgets.IGroup(99, "Copy From", {
         source = {
-            type    = "select",
-            name    = "Source Group",
-            desc    = "Choose which group frame to copy settings from.",
-            order   = 1,
-            values  = sourceValues,
-            get     = function() return _copyFromGroupSource[dstKey] end,
-            set     = function(_, v) _copyFromGroupSource[dstKey] = v end,
+            type     = "select",
+            name     = "Source Group",
+            desc     = "Choose which group frame to copy settings from.",
+            order    = 1,
+            values   = sourceValues,
+            get      = function() return _copyFromGroupSource[dstKey] end,
+            set      = function(_, v) _copyFromGroupSource[dstKey] = v end,
             disabled = ModuleDisabled(),
         },
         apply = BuildExecute(2, "Copy Settings",
@@ -1288,6 +1316,125 @@ local function BuildCopyFromGroup(dstKey)
                 end),
             }),
     })
+end
+
+--- Builds an inline Role Icon IGroup for a given base path (units/X/roleIcon or groups/X/roleIcon).
+local function BuildRoleIconGroup(order, basePath)
+    local disabled = ModuleDisabled()
+    local isRoleOff = ModuleDisabled(function()
+        return GetPathValue(ExtendPath(basePath, "enabled"), false) ~= true
+    end)
+    return Widgets.IGroup(order, "Role Icon", {
+        enabled = BuildToggle(1, "Show Role Icon",
+            "Display the player's dungeon role icon (tank, healer, dps) directly on this frame.",
+            ExtendPath(basePath, "enabled"), false, { disabled = disabled, refreshConfig = true }),
+        filter = BuildSelect(2, "Show For",
+            "Which roles will have the icon displayed.",
+            ExtendPath(basePath, "filter"), "all", ROLE_ICON_FILTER_VALUES, { disabled = isRoleOff }),
+        corner = BuildSelect(3, "Corner",
+            "Which corner of the frame to place the icon in.",
+            ExtendPath(basePath, "corner"), "TOPRIGHT", ROLE_ICON_CORNER_VALUES, { disabled = isRoleOff }),
+        size = BuildRange(4, "Size", "Role icon size in pixels.",
+            ExtendPath(basePath, "size"), 18, 8, 40, 1, { disabled = isRoleOff }),
+        insetX = BuildRange(5, "X Inset", "Horizontal inset from the corner edge.",
+            ExtendPath(basePath, "insetX"), 2, 0, 20, 1, { disabled = isRoleOff }),
+        insetY = BuildRange(6, "Y Inset", "Vertical inset from the corner edge.",
+            ExtendPath(basePath, "insetY"), 2, 0, 20, 1, { disabled = isRoleOff }),
+    })
+end
+
+--- Builds a full Info Bar tab for a given base path (units/X/infoBar or groups/X/infoBar).
+local function BuildInfoBarTab(order, basePath)
+    local disabled    = ModuleDisabled()
+    local isBarOff    = ModuleDisabled(function()
+        return GetPathValue(ExtendPath(basePath, "enabled"), false) ~= true
+    end)
+    local isShadowOff = ModuleDisabled(function()
+        return isBarOff()
+            or GetPathValue(ExtendPath(basePath, "shadowEnabled"), false) ~= true
+    end)
+
+    local function BuildTextSlot(slotOrder, slotIndex)
+        local def       = INFO_BAR_SLOT_DEFAULTS[slotIndex] or { tag = "", justify = "CENTER" }
+        local slotPath  = ExtendPath(basePath, "text" .. slotIndex)
+        local isClassOn = ModuleDisabled(function()
+            return isBarOff()
+                or GetPathValue(ExtendPath(slotPath, "useClassColor"), false) == true
+        end)
+        return Widgets.IGroup(slotOrder, "Text " .. slotIndex, {
+            tag = BuildInput(1, "Tag",
+                "oUF tag string for this slot. Leave blank to hide the slot.",
+                ExtendPath(slotPath, "tag"), def.tag,
+                { disabled = isBarOff, width = "full" }),
+            justify = BuildSelect(2, "Alignment", "Text alignment.",
+                ExtendPath(slotPath, "justify"), def.justify,
+                { LEFT = "Left", CENTER = "Center", RIGHT = "Right" },
+                { disabled = isBarOff }),
+            fontSize = BuildRange(3, "Size", "Font size for this slot.",
+                ExtendPath(slotPath, "fontSize"), 9, 6, 20, 1, { disabled = isBarOff }),
+            useClassColor = BuildToggle(4, "Class Color",
+                "Use the unit's class color for this text slot instead of a fixed color.",
+                ExtendPath(slotPath, "useClassColor"), false,
+                { disabled = isBarOff, refreshConfig = true }),
+            color = BuildColor(5, "Color", "Text color (overridden when Class Color is on).",
+                ExtendPath(slotPath, "color"), { 1, 1, 1, 1 }, true, { disabled = isClassOn }),
+        })
+    end
+
+    return {
+        type  = "group",
+        name  = "Info Bar",
+        order = order,
+        args  = {
+            settings = Widgets.IGroup(1, "Settings", {
+                enabled = BuildToggle(1, "Enable",
+                    "Extend the unit frame with an extra info row at the bottom. Defaults to off.",
+                    ExtendPath(basePath, "enabled"), false,
+                    { disabled = disabled, refreshConfig = true }),
+                height = BuildRange(2, "Height", "Height of the info bar in pixels.",
+                    ExtendPath(basePath, "height"), 18, 8, 40, 1, { disabled = isBarOff }),
+                numTexts = BuildSelect(3, "Text Slots",
+                    "How many text elements to display across the bar (1–3).",
+                    ExtendPath(basePath, "numTexts"), 3,
+                    { [1] = "1", [2] = "2", [3] = "3" },
+                    { disabled = isBarOff }),
+                bgColor = BuildColor(4, "Background", "Info bar background color.",
+                    ExtendPath(basePath, "bgColor"), { 0.05, 0.06, 0.08, 0.92 }, true,
+                    { disabled = isBarOff }),
+                texture = BuildTextureSelect(5, "Texture",
+                    "Optional status-bar texture drawn over the background.",
+                    ExtendPath(basePath, "texture"), "None", { disabled = isBarOff }),
+                borderSize = BuildRange(6, "Border Size",
+                    "Width of the info bar border in pixels (0 = no border).",
+                    ExtendPath(basePath, "borderSize"), 1, 0, 3, 1, { disabled = isBarOff }),
+                borderColor = BuildColor(7, "Border Color", "Info bar border color.",
+                    ExtendPath(basePath, "borderColor"), { 0.24, 0.26, 0.32, 0.9 }, true,
+                    { disabled = isBarOff }),
+                fontName = BuildFontSelect(8, "Font",
+                    "Override the font for all info bar text slots (nil = inherit from unit text config).",
+                    ExtendPath(basePath, "fontName"), "Inherit", { disabled = isBarOff }),
+                outlineMode = BuildSelect(9, "Outline", "Font outline mode for info bar text slots.",
+                    ExtendPath(basePath, "outlineMode"), "OUTLINE", OUTLINE_VALUES,
+                    { disabled = isBarOff }),
+                shadowEnabled = BuildToggle(10, "Shadow",
+                    "Enable drop shadow on info bar text slots.",
+                    ExtendPath(basePath, "shadowEnabled"), false,
+                    { disabled = isBarOff, refreshConfig = true }),
+                shadowColor = BuildColor(11, "Shadow Color", "Text shadow color.",
+                    ExtendPath(basePath, "shadowColor"), { 0, 0, 0, 0.85 }, true,
+                    { disabled = isShadowOff }),
+                shadowOffsetX = BuildRange(12, "Shadow X",
+                    "Horizontal shadow offset in pixels.",
+                    ExtendPath(basePath, "shadowOffsetX"), 1, -8, 8, 1, { disabled = isShadowOff }),
+                shadowOffsetY = BuildRange(13, "Shadow Y",
+                    "Vertical shadow offset in pixels.",
+                    ExtendPath(basePath, "shadowOffsetY"), -1, -8, 8, 1, { disabled = isShadowOff }),
+            }),
+            text1 = BuildTextSlot(2, 1),
+            text2 = BuildTextSlot(3, 2),
+            text3 = BuildTextSlot(4, 3),
+        },
+    }
 end
 
 local function BuildSingleUnitTab(unitKey, label)
@@ -1387,6 +1534,7 @@ local function BuildSingleUnitTab(unitKey, label)
                             "Show the mouseover highlight on this frame. Disable to hide it even when globally on.",
                             ExtendPath(basePath, "highlights", "showMouseover"), true, { disabled = disabled }),
                     }),
+                    roleIcon = BuildRoleIconGroup(4, ExtendPath(basePath, "roleIcon")),
                     copyFrom = BuildCopyFromSingle(unitKey),
                 },
             },
@@ -1397,6 +1545,7 @@ local function BuildSingleUnitTab(unitKey, label)
             auras = BuildAuraGroup(4, "Auras", auraPath, unitKey),
             watchers = BuildIndicatorsGroup(5, { "units", unitKey, "indicators" }),
             colors = BuildUnitColorTab(6, unitKey),
+            infoBar = BuildInfoBarTab(7, ExtendPath(basePath, "infoBar")),
         },
     }
 
@@ -1614,14 +1763,16 @@ local function BuildGroupTab(groupKey, label)
         order = 1,
         childGroups = "tab",
         args = {
-            frame = frameTab,
-            layout = BuildLayoutGroup(2, "Layout", groupKey, layoutDefaults, {
+            frame    = frameTab,
+            layout   = BuildLayoutGroup(2, "Layout", groupKey, layoutDefaults, {
                 disabled = disabled,
             }),
-            text = BuildTextGroup(3, "Text", textPath, groupKey .. "Member"),
-            auras = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
+            text     = BuildTextGroup(3, "Text", textPath, groupKey .. "Member"),
+            auras    = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
             watchers = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
-            colors = colorsTab,
+            colors   = colorsTab,
+            roleIcon = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon")),
+            infoBar  = BuildInfoBarTab(7, ExtendPath(basePath, "infoBar")),
         },
     }
 end
@@ -1913,7 +2064,8 @@ BuildUnitColorTab = function(order, unitKey)
                             return GetPathValue(powerModePath, "inherit") == "powertype"
                         end),
                     }),
-                powerBackground = BuildColor(2, "Power Background", "Override the power bar empty area tint for this unit.",
+                powerBackground = BuildColor(2, "Power Background",
+                    "Override the power bar empty area tint for this unit.",
                     ExtendPath(colorPath, "powerBackground"), COLOR_DEFAULTS.powerBackground, true, {
                         disabled = disabled,
                     }),
@@ -2164,7 +2316,7 @@ local function BuildCastbarTab()
                     { "castbar", "timeFontSize" }, PLAYER_CASTBAR_DEFAULTS.timeFontSize, 6, 24, 1, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue({ "castbar", "showTimeText" }, PLAYER_CASTBAR_DEFAULTS.showTimeText) ~=
-                            true
+                                true
                         end),
                     }),
                 texture = BuildTextureSelect(10, "Texture", "Optional texture override for the standalone castbar.",
@@ -2180,6 +2332,9 @@ local function BuildCastbarTab()
                                 true
                         end),
                     }),
+                masqueEnabled = BuildToggle(15, "Masque Skinning",
+                    "Enable Masque skinning for the castbar icon button. Requires the Masque addon to be installed. Disabled by default.",
+                    { "castbar", "masqueEnabled" }, false, { refreshConfig = true }),
             }),
             layout = BuildLayoutGroup(2, "Layout", "castbar", SINGLE_LAYOUT_DEFAULTS.castbar, {
                 disabled = ModuleDisabled(),
@@ -2243,22 +2398,36 @@ local function BuildColorsTab()
                     COLOR_DEFAULTS.border, true),
             }),
             powerTypeOverrides = Widgets.IGroup(2, "Power Type Colors", {
-                desc = Widgets.Description(0,
+                desc          = Widgets.Description(0,
                     "Override the default WoW color for each power type. These take effect when Power Color Mode is set to \"Power Type\"."),
-                mana          = BuildColor(1,  "Mana",           "Override color for Mana.",          { "powerTypeColors", "MANA" },          { 0.0,  0.44, 1.0,  1 }, false, { refreshConfig = true }),
-                rage          = BuildColor(2,  "Rage",           "Override color for Rage.",          { "powerTypeColors", "RAGE" },          { 1.0,  0.0,  0.0,  1 }, false, { refreshConfig = true }),
-                focus         = BuildColor(3,  "Focus",          "Override color for Focus.",         { "powerTypeColors", "FOCUS" },         { 1.0,  0.55, 0.0,  1 }, false, { refreshConfig = true }),
-                energy        = BuildColor(4,  "Energy",         "Override color for Energy.",        { "powerTypeColors", "ENERGY" },        { 1.0,  1.0,  0.0,  1 }, false, { refreshConfig = true }),
-                runicPower    = BuildColor(5,  "Runic Power",    "Override color for Runic Power.",   { "powerTypeColors", "RUNIC_POWER" },   { 0.0,  0.82, 1.0,  1 }, false, { refreshConfig = true }),
-                lunarPower    = BuildColor(6,  "Lunar Power",    "Override color for Lunar Power.",   { "powerTypeColors", "LUNAR_POWER" },   { 0.3,  0.52, 0.9,  1 }, false, { refreshConfig = true }),
-                holyPower     = BuildColor(7,  "Holy Power",     "Override color for Holy Power.",    { "powerTypeColors", "HOLY_POWER" },    { 0.95, 0.9,  0.6,  1 }, false, { refreshConfig = true }),
-                fury          = BuildColor(8,  "Fury",           "Override color for Fury.",          { "powerTypeColors", "FURY" },          { 0.79, 0.26, 0.99, 1 }, false, { refreshConfig = true }),
-                pain          = BuildColor(9,  "Pain",           "Override color for Pain.",          { "powerTypeColors", "PAIN" },          { 1.0,  0.61, 0.2,  1 }, false, { refreshConfig = true }),
-                maelstrom     = BuildColor(10, "Maelstrom",      "Override color for Maelstrom.",     { "powerTypeColors", "MAELSTROM" },     { 0.0,  0.5,  1.0,  1 }, false, { refreshConfig = true }),
-                chi           = BuildColor(11, "Chi",            "Override color for Chi.",           { "powerTypeColors", "CHI" },           { 0.71, 1.0,  0.92, 1 }, false, { refreshConfig = true }),
-                insanity      = BuildColor(12, "Insanity",       "Override color for Insanity.",      { "powerTypeColors", "INSANITY" },      { 0.4,  0.0,  0.8,  1 }, false, { refreshConfig = true }),
-                arcaneCharges = BuildColor(13, "Arcane Charges", "Override color for Arcane Charges.",{ "powerTypeColors", "ARCANE_CHARGES" },{ 0.19, 0.51, 1.0,  1 }, false, { refreshConfig = true }),
-                comboPoints   = BuildColor(14, "Combo Points",   "Override color for Combo Points.",  { "powerTypeColors", "COMBO_POINTS" },  { 1.0,  0.82, 0.0,  1 }, false, { refreshConfig = true }),
+                mana          = BuildColor(1, "Mana", "Override color for Mana.", { "powerTypeColors", "MANA" },
+                    { 0.0, 0.44, 1.0, 1 }, false, { refreshConfig = true }),
+                rage          = BuildColor(2, "Rage", "Override color for Rage.", { "powerTypeColors", "RAGE" },
+                    { 1.0, 0.0, 0.0, 1 }, false, { refreshConfig = true }),
+                focus         = BuildColor(3, "Focus", "Override color for Focus.", { "powerTypeColors", "FOCUS" },
+                    { 1.0, 0.55, 0.0, 1 }, false, { refreshConfig = true }),
+                energy        = BuildColor(4, "Energy", "Override color for Energy.", { "powerTypeColors", "ENERGY" },
+                    { 1.0, 1.0, 0.0, 1 }, false, { refreshConfig = true }),
+                runicPower    = BuildColor(5, "Runic Power", "Override color for Runic Power.",
+                    { "powerTypeColors", "RUNIC_POWER" }, { 0.0, 0.82, 1.0, 1 }, false, { refreshConfig = true }),
+                lunarPower    = BuildColor(6, "Lunar Power", "Override color for Lunar Power.",
+                    { "powerTypeColors", "LUNAR_POWER" }, { 0.3, 0.52, 0.9, 1 }, false, { refreshConfig = true }),
+                holyPower     = BuildColor(7, "Holy Power", "Override color for Holy Power.",
+                    { "powerTypeColors", "HOLY_POWER" }, { 0.95, 0.9, 0.6, 1 }, false, { refreshConfig = true }),
+                fury          = BuildColor(8, "Fury", "Override color for Fury.", { "powerTypeColors", "FURY" },
+                    { 0.79, 0.26, 0.99, 1 }, false, { refreshConfig = true }),
+                pain          = BuildColor(9, "Pain", "Override color for Pain.", { "powerTypeColors", "PAIN" },
+                    { 1.0, 0.61, 0.2, 1 }, false, { refreshConfig = true }),
+                maelstrom     = BuildColor(10, "Maelstrom", "Override color for Maelstrom.",
+                    { "powerTypeColors", "MAELSTROM" }, { 0.0, 0.5, 1.0, 1 }, false, { refreshConfig = true }),
+                chi           = BuildColor(11, "Chi", "Override color for Chi.", { "powerTypeColors", "CHI" },
+                    { 0.71, 1.0, 0.92, 1 }, false, { refreshConfig = true }),
+                insanity      = BuildColor(12, "Insanity", "Override color for Insanity.",
+                    { "powerTypeColors", "INSANITY" }, { 0.4, 0.0, 0.8, 1 }, false, { refreshConfig = true }),
+                arcaneCharges = BuildColor(13, "Arcane Charges", "Override color for Arcane Charges.",
+                    { "powerTypeColors", "ARCANE_CHARGES" }, { 0.19, 0.51, 1.0, 1 }, false, { refreshConfig = true }),
+                comboPoints   = BuildColor(14, "Combo Points", "Override color for Combo Points.",
+                    { "powerTypeColors", "COMBO_POINTS" }, { 1.0, 0.82, 0.0, 1 }, false, { refreshConfig = true }),
             }),
         },
     }
@@ -2350,8 +2519,8 @@ end
 function Options:BuildConfiguration()
     local section = Widgets.NewConfigurationSection(7, "Unit Frames")
     section.args = {
-        title = Widgets.TitleWidget(0, "Unit Frames"),
-        description = Widgets.Description(1,
+        title        = Widgets.TitleWidget(0, "Unit Frames"),
+        description  = Widgets.Description(1,
             "Standalone oUF unit frames with live previews, party and raid layout control, castbar styling, shared text rules, and scope-based colors."),
         generalGroup = BuildGeneralTab(),
         spellGroups  = BuildSpellGroupsSection(5),

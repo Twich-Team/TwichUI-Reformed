@@ -53,6 +53,12 @@
 - Can we add an optional area like ElvUI's extra info bar, which basically extends the unitframe out vertically to include a new row at the bottom that we can put custom texts with custom textures and what not. defaults off. allow custom texts using ouf tags, allow choice of font, font size, font color (including class color).
 - Add the ability to enable/disable masque support for the castbar icons, default it is disabled.
 
+- When i choose inside bar for target of target icon type cast bar,it moves the text to the right like the icon is there but its not there.
+- show only healer power bar for party does not change the frames until after reload, then it just shows an empty bar there isntead of resizing the healthbar to fit.
+- The shortened name tag doesnt shorten the name (like using [name(4)] will still return the full name even if its longer than 4 characters)
+- Does overheal and incoming heals still exist? Can we add that capability?
+- The only mine check does not work on auras when configured in the aura designer
+
 ### Texts
 
 ### Auras

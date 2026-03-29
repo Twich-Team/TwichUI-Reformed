@@ -31,40 +31,40 @@ local T = unpack(TwichRx)
 local UnitFrames = T:GetModule("UnitFrames")
 if not UnitFrames then return end
 
-local CreateFrame   = _G.CreateFrame
-local UIParent      = _G.UIParent
-local GameTooltip   = _G.GameTooltip
-local GetTime       = _G.GetTime
-local math_floor    = math.floor
-local tostring      = tostring
-local ipairs        = ipairs
-local pairs         = pairs
-local type          = type
-local wipe          = wipe
+local CreateFrame       = _G.CreateFrame
+local UIParent          = _G.UIParent
+local GameTooltip       = _G.GameTooltip
+local GetTime           = _G.GetTime
+local math_floor        = math.floor
+local tostring          = tostring
+local ipairs            = ipairs
+local pairs             = pairs
+local type              = type
+local wipe              = wipe
 
 -- ============================================================
 -- Visual constants  (match TwichUI wizard palette)
 -- ============================================================
-local W_TOTAL  = 860
-local H_TOTAL  = 700
-local HEADER_H = 40
-local PAD      = 12
+local W_TOTAL           = 860
+local H_TOTAL           = 700
+local HEADER_H          = 40
+local PAD               = 12
 
 -- Colours
-local C = {
-    bg      = { 0.05, 0.06, 0.08 },
-    panel   = { 0.08, 0.09, 0.12 },
-    card    = { 0.10, 0.11, 0.15 },
-    cardSel = { 0.09, 0.18, 0.20 },
-    cardHeld= { 0.18, 0.15, 0.07 },
-    border  = { 0.20, 0.22, 0.28 },
-    teal    = { 0.10, 0.72, 0.74 },
-    gold    = { 0.96, 0.76, 0.24 },
-    green   = { 0.42, 0.89, 0.63 },
-    red     = { 0.90, 0.30, 0.32 },
-    text    = { 1.00, 0.95, 0.85 },
-    muted   = { 0.50, 0.52, 0.58 },
-    danger  = { 0.90, 0.30, 0.32 },
+local C                 = {
+    bg       = { 0.05, 0.06, 0.08 },
+    panel    = { 0.08, 0.09, 0.12 },
+    card     = { 0.10, 0.11, 0.15 },
+    cardSel  = { 0.09, 0.18, 0.20 },
+    cardHeld = { 0.18, 0.15, 0.07 },
+    border   = { 0.20, 0.22, 0.28 },
+    teal     = { 0.10, 0.72, 0.74 },
+    gold     = { 0.96, 0.76, 0.24 },
+    green    = { 0.42, 0.89, 0.63 },
+    red      = { 0.90, 0.30, 0.32 },
+    text     = { 1.00, 0.95, 0.85 },
+    muted    = { 0.50, 0.52, 0.58 },
+    danger   = { 0.90, 0.30, 0.32 },
 }
 
 local SECTION_FONT_SIZE = 11
@@ -72,60 +72,67 @@ local LABEL_FONT_SIZE   = 12
 local BODY_FONT_SIZE    = 13
 
 -- Anchor point labels (for 3×3 grid)
-local ANCHOR_KEYS  = { "TOPLEFT","TOP","TOPRIGHT","LEFT","CENTER","RIGHT","BOTTOMLEFT","BOTTOM","BOTTOMRIGHT" }
-local ANCHOR_SHORT = {
-    TOPLEFT="TL",TOP="TC",TOPRIGHT="TR",
-    LEFT="ML",CENTER="CC",RIGHT="MR",
-    BOTTOMLEFT="BL",BOTTOM="BC",BOTTOMRIGHT="BR",
+local ANCHOR_KEYS       = { "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM",
+    "BOTTOMRIGHT" }
+local ANCHOR_SHORT      = {
+    TOPLEFT = "TL",
+    TOP = "TC",
+    TOPRIGHT = "TR",
+    LEFT = "ML",
+    CENTER = "CC",
+    RIGHT = "MR",
+    BOTTOMLEFT = "BL",
+    BOTTOM = "BC",
+    BOTTOMRIGHT = "BR",
 }
 
 -- Frame-key → human label mapping
-local FRAME_LABELS = {
-    player       = "Player",
-    target       = "Target",
-    focus        = "Focus",
-    pet          = "Pet",
-    mouseover    = "Mouseover",
-    boss         = "Boss",
-    partyMember  = "Party Member",
-    raidMember   = "Raid Member",
-    tankMember   = "Main Tank",
+local FRAME_LABELS      = {
+    player      = "Player",
+    target      = "Target",
+    focus       = "Focus",
+    pet         = "Pet",
+    mouseover   = "Mouseover",
+    boss        = "Boss",
+    partyMember = "Party Member",
+    raidMember  = "Raid Member",
+    tankMember  = "Main Tank",
 }
 -- Ordered list for the dropdown
-local FRAME_KEY_ORDER = {
-    "player","target","focus","pet","mouseover","boss",
-    "partyMember","raidMember","tankMember"
+local FRAME_KEY_ORDER   = {
+    "player", "target", "focus", "pet", "mouseover", "boss",
+    "partyMember", "raidMember", "tankMember"
 }
 
 -- ============================================================
 -- State
 -- ============================================================
-local designer = {}   -- namespace for public methods on UnitFrames:AW*
+local designer          = {} -- namespace for public methods on UnitFrames:AW*
 
 -- Persistent UI refs
-local root          -- root Frame
-local catalogScroll -- ScrollFrame for catalogue
-local catalogChild  -- content child of catalogScroll
-local slotCards     = {}   -- [1..6] = card Frame
-local detailPanel          -- Frame that shows slot detail
-local headerFrameLabel     -- FontString showing current frame type
+local root               -- root Frame
+local catalogScroll      -- ScrollFrame for catalogue
+local catalogChild       -- content child of catalogScroll
+local slotCards         = {} -- [1..6] = card Frame
+local detailPanel        -- Frame that shows slot detail
+local headerFrameLabel   -- FontString showing current frame type
 
 -- Runtime state
-local activeFrameKey= "partyMember"   -- which unit-frame type is being edited
-local heldEntry     = nil             -- catalog/generic entry currently "picked up"
-local selectedSlot  = 0               -- 1-6, currently selected indicator slot
-local tilePool      = {}              -- reused catalog tile frames
-local sectionLabels = {}              -- FontString section labels (tracked for cleanup)
-local previewHost       = nil         -- mock frame for live preview
-local previewSidePanel  = nil         -- right-side panel hosting the preview
-local activeDragCatcher = nil         -- global drag-release catcher frame
-local selectedLayer     = 1           -- 1=primary, 2+=extraLayers[n-1]
+local activeFrameKey    = "partyMember" -- which unit-frame type is being edited
+local heldEntry         = nil       -- catalog/generic entry currently "picked up"
+local selectedSlot      = 0         -- 1-6, currently selected indicator slot
+local tilePool          = {}        -- reused catalog tile frames
+local sectionLabels     = {}        -- FontString section labels (tracked for cleanup)
+local previewHost       = nil       -- mock frame for live preview
+local previewSidePanel  = nil       -- right-side panel hosting the preview
+local activeDragCatcher = nil       -- global drag-release catcher frame
+local selectedLayer     = 1         -- 1=primary, 2+=extraLayers[n-1]
 
 -- ============================================================
 -- Live-update flush — pushes config changes to all active frames
 -- ============================================================
-local flushPending = false
-local RefreshPreview  -- forward-declare
+local flushPending      = false
+local RefreshPreview -- forward-declare
 
 local function DeferredFlush()
     if not flushPending then
@@ -174,7 +181,7 @@ end
 local function Font(size, flags)
     local LSM  = T.Libs and T.Libs.LSM
     local path = (LSM and LSM.Fetch and LSM:Fetch("font", "Expressway"))
-             or "Fonts\\ARIALN.TTF"
+        or "Fonts\\ARIALN.TTF"
     return path, size or 12, flags or ""
 end
 
@@ -198,7 +205,7 @@ local function Backdrop(frame, bg, bdr, aBg, aBdr)
         edgeFile = "Interface\\Buttons\\WHITE8x8",
         edgeSize = 1,
     })
-    frame:SetBackdropColor(   bg[1],  bg[2],  bg[3],  aBg  or 1)
+    frame:SetBackdropColor(bg[1], bg[2], bg[3], aBg or 1)
     frame:SetBackdropBorderColor(bdr[1], bdr[2], bdr[3], aBdr or 1)
 end
 
@@ -221,26 +228,26 @@ end
 local function EnsureIndicatorsWritable(frameKey)
     local db = GetDB()
     if frameKey == "partyMember" then
-        db.auras        = db.auras or {}
-        db.auras.scopes = db.auras.scopes or {}
-        db.auras.scopes.party             = db.auras.scopes.party or {}
-        db.auras.scopes.party.indicators  = db.auras.scopes.party.indicators or {}
+        db.auras                         = db.auras or {}
+        db.auras.scopes                  = db.auras.scopes or {}
+        db.auras.scopes.party            = db.auras.scopes.party or {}
+        db.auras.scopes.party.indicators = db.auras.scopes.party.indicators or {}
         return db.auras.scopes.party.indicators
     elseif frameKey == "raidMember" then
-        db.auras        = db.auras or {}
-        db.auras.scopes = db.auras.scopes or {}
-        db.auras.scopes.raid             = db.auras.scopes.raid or {}
-        db.auras.scopes.raid.indicators  = db.auras.scopes.raid.indicators or {}
+        db.auras                        = db.auras or {}
+        db.auras.scopes                 = db.auras.scopes or {}
+        db.auras.scopes.raid            = db.auras.scopes.raid or {}
+        db.auras.scopes.raid.indicators = db.auras.scopes.raid.indicators or {}
         return db.auras.scopes.raid.indicators
     elseif frameKey == "tankMember" then
-        db.auras        = db.auras or {}
-        db.auras.scopes = db.auras.scopes or {}
-        db.auras.scopes.tank             = db.auras.scopes.tank or {}
-        db.auras.scopes.tank.indicators  = db.auras.scopes.tank.indicators or {}
+        db.auras                        = db.auras or {}
+        db.auras.scopes                 = db.auras.scopes or {}
+        db.auras.scopes.tank            = db.auras.scopes.tank or {}
+        db.auras.scopes.tank.indicators = db.auras.scopes.tank.indicators or {}
         return db.auras.scopes.tank.indicators
     else
-        db.units          = db.units or {}
-        db.units[frameKey] = db.units[frameKey] or {}
+        db.units                      = db.units or {}
+        db.units[frameKey]            = db.units[frameKey] or {}
         db.units[frameKey].indicators = db.units[frameKey].indicators or {}
         return db.units[frameKey].indicators
     end
@@ -254,8 +261,8 @@ end
 --- selectedLayer==1 → primary (the slot cfg itself)
 --- selectedLayer>1  → extraLayers[n-1]
 local function GetLayerCfg()
-    local inds     = GetIndicators(activeFrameKey)
-    local slotCfg  = inds[selectedSlot]
+    local inds    = GetIndicators(activeFrameKey)
+    local slotCfg = inds[selectedSlot]
     if not slotCfg then return nil end
     if selectedLayer == 1 then return slotCfg end
     local extra = slotCfg.extraLayers
@@ -299,18 +306,18 @@ local function EntryToIndicatorCfg(entry)
     if entry.source then
         -- Generic filter entry
         return {
-            enabled       = true,
-            type          = "icons",
-            source        = entry.source,
-            onlyMine      = false,
-            anchor        = "TOPLEFT",
-            relativeAnchor= "TOPLEFT",
-            offsetX       = 0,
-            offsetY       = 0,
-            iconSize      = 18,
-            spacing       = 2,
-            maxCount      = 5,
-            growDirection = "RIGHT",
+            enabled        = true,
+            type           = "icons",
+            source         = entry.source,
+            onlyMine       = false,
+            anchor         = "TOPLEFT",
+            relativeAnchor = "TOPLEFT",
+            offsetX        = 0,
+            offsetY        = 0,
+            iconSize       = 18,
+            spacing        = 2,
+            maxCount       = 5,
+            growDirection  = "RIGHT",
         }
     else
         -- Catalog spell entry
@@ -360,8 +367,11 @@ local function IndicatorLabel(cfg)
         return (grp and grp.label) or ("Group " .. (cfg.groupKey or "?"))
     else
         local labels = {
-            HELPFUL="Helpful",HARMFUL="Harmful",DISPELLABLE="Dispellable",
-            DISPELLABLE_OR_BOSS="Dispel/Boss",ALL="All Auras",
+            HELPFUL = "Helpful",
+            HARMFUL = "Harmful",
+            DISPELLABLE = "Dispellable",
+            DISPELLABLE_OR_BOSS = "Dispel/Boss",
+            ALL = "All Auras",
         }
         return labels[s] or s
     end
@@ -381,7 +391,7 @@ local function BuildSlotSummary(cfg)
     if #spellIds == 0 then return "Spell (unset)" end
     local lines = {}
     for i = 1, math.min(#spellIds, MAX_CARD_SPELL_LINES) do
-        local sid  = spellIds[i]
+        local sid = spellIds[i]
         local name
         if _G.C_Spell and _G.C_Spell.GetSpellName then
             name = _G.C_Spell.GetSpellName(sid)
@@ -413,9 +423,12 @@ local function IndicatorIcon(cfg)
     end
     -- Generic icon placeholders
     local icons = {
-        HELPFUL=135987, HARMFUL=136116, DISPELLABLE=135939,
-        DISPELLABLE_OR_BOSS=135939, ALL=134400,
-        group=134400,
+        HELPFUL = 135987,
+        HARMFUL = 136116,
+        DISPELLABLE = 135939,
+        DISPELLABLE_OR_BOSS = 135939,
+        ALL = 134400,
+        group = 134400,
     }
     return icons[cfg.source or "ALL"]
 end
@@ -444,7 +457,7 @@ local function EnsureCursor()
     Backdrop(cursor, C.card, C.gold, 1, 1)
 
     cursor.icon = cursor:CreateTexture(nil, "ARTWORK")
-    cursor.icon:SetPoint("TOPLEFT",     cursor, "TOPLEFT",     2, -2)
+    cursor.icon:SetPoint("TOPLEFT", cursor, "TOPLEFT", 2, -2)
     cursor.icon:SetPoint("BOTTOMRIGHT", cursor, "BOTTOMRIGHT", -2, 2)
     cursor.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
@@ -499,9 +512,9 @@ local function ReleaseTilePool()
     wipe(sectionLabels)
 end
 
-local TILE_SIZE  = 52
-local TILE_PAD   = 6
-local TILE_COLS  = 3
+local TILE_SIZE = 52
+local TILE_PAD  = 6
+local TILE_COLS = 3
 
 local function MakeTile(parent, entry, isFilter)
     local tile = CreateFrame("Button", nil, parent, "BackdropTemplate")
@@ -511,7 +524,7 @@ local function MakeTile(parent, entry, isFilter)
 
     -- Spell icon
     local tex = tile:CreateTexture(nil, "ARTWORK")
-    tex:SetPoint("TOPLEFT",  tile, "TOPLEFT",  2, -2)
+    tex:SetPoint("TOPLEFT", tile, "TOPLEFT", 2, -2)
     tex:SetSize(TILE_SIZE - 4, TILE_SIZE - 4)
     tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     tile.iconTex = tex
@@ -520,7 +533,7 @@ local function MakeTile(parent, entry, isFilter)
     local lbl = tile:CreateFontString(nil, "OVERLAY")
     lbl:SetFont(Font(10))
     lbl:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
-    lbl:SetPoint("TOPLEFT",  tile, "TOPLEFT",  2, -(TILE_SIZE - 2))
+    lbl:SetPoint("TOPLEFT", tile, "TOPLEFT", 2, -(TILE_SIZE - 2))
     lbl:SetPoint("TOPRIGHT", tile, "TOPRIGHT", -2, -(TILE_SIZE - 2))
     lbl:SetJustifyH("CENTER")
     lbl:SetWordWrap(true)
@@ -531,9 +544,9 @@ local function MakeTile(parent, entry, isFilter)
     -- Colour accent bar along the left edge
     local accent = tile:CreateTexture(nil, "BACKGROUND")
     accent:SetWidth(2)
-    accent:SetPoint("TOPLEFT",    tile, "TOPLEFT",    0, 0)
+    accent:SetPoint("TOPLEFT", tile, "TOPLEFT", 0, 0)
     accent:SetPoint("BOTTOMLEFT", tile, "BOTTOMLEFT", 0, 0)
-    tile.accent = accent
+    tile.accent   = accent
 
     tile.entry    = entry
     tile.isFilter = isFilter
@@ -572,9 +585,9 @@ local function MakeTile(parent, entry, isFilter)
         GameTooltip:Hide()
         local isHeld = heldEntry == self.entry
         self:SetBackdropBorderColor(
-            isHeld and C.gold[1]   or C.border[1],
-            isHeld and C.gold[2]   or C.border[2],
-            isHeld and C.gold[3]   or C.border[3], 1)
+            isHeld and C.gold[1] or C.border[1],
+            isHeld and C.gold[2] or C.border[2],
+            isHeld and C.gold[3] or C.border[3], 1)
     end)
 
     -- True click-drag: OnMouseDown picks up the entry + installs a global
@@ -607,14 +620,16 @@ local function MakeTile(parent, entry, isFilter)
             if btn ~= "LeftButton" then return end
             local catcher = activeDragCatcher
             activeDragCatcher = nil
-            if catcher then catcher:Hide(); catcher:SetParent(nil) end
+            if catcher then
+                catcher:Hide(); catcher:SetParent(nil)
+            end
             -- Check which slot card the cursor is over
-            local held  = heldEntry
+            local held = heldEntry
             if not held then return end
             for si = 1, 6 do
                 local card = slotCards[si]
                 if card and card:IsVisible() and card:IsMouseOver() then
-                    local inds    = EnsureIndicatorsWritable(activeFrameKey)
+                    local inds     = EnsureIndicatorsWritable(activeFrameKey)
                     local existing = inds[si]
                     if existing and existing.source == "spell"
                         and held.spellIds and not held.source then
@@ -622,7 +637,9 @@ local function MakeTile(parent, entry, isFilter)
                         if existing.spellId and existing.spellId > 0 then
                             local ok = false
                             for _, v in ipairs(existing.spellIds) do
-                                if v == existing.spellId then ok = true; break end
+                                if v == existing.spellId then
+                                    ok = true; break
+                                end
                             end
                             if not ok then
                                 table.insert(existing.spellIds, existing.spellId)
@@ -632,7 +649,9 @@ local function MakeTile(parent, entry, isFilter)
                         for _, sid in ipairs(held.spellIds) do
                             local ok = false
                             for _, v in ipairs(existing.spellIds) do
-                                if v == sid then ok = true; break end
+                                if v == sid then
+                                    ok = true; break
+                                end
                             end
                             if not ok then
                                 table.insert(existing.spellIds, sid)
@@ -658,7 +677,7 @@ local function MakeTile(parent, entry, isFilter)
     return tile
 end
 
-RefreshCatalog = function()
+RefreshCatalog  = function()
     if not catalogChild then return end
 
     ReleaseTilePool()
@@ -667,16 +686,16 @@ RefreshCatalog = function()
     local innerW = catalogChild:GetWidth()
     if innerW > 0 then
         TILE_SIZE = math_floor((innerW - PAD * 2 - TILE_PAD * (TILE_COLS - 1)) / TILE_COLS)
-        TILE_SIZE = math.max(40, TILE_SIZE)   -- never smaller than 40px
+        TILE_SIZE = math.max(40, TILE_SIZE) -- never smaller than 40px
     end
 
     local _, specKey = UnitFrames:AWGetPlayerCatalog()
-    local specName  = (specKey and UnitFrames:AWGetSpecName(specKey)) or "Unknown Spec"
-    local specCat   = UnitFrames:AWGetSpecCatalog(specKey or "")
-    local generic   = UnitFrames:AWGetGenericEntries()
+    local specName   = (specKey and UnitFrames:AWGetSpecName(specKey)) or "Unknown Spec"
+    local specCat    = UnitFrames:AWGetSpecCatalog(specKey or "")
+    local generic    = UnitFrames:AWGetGenericEntries()
 
     -- Collect all tiles to lay out
-    local tiles = {}
+    local tiles      = {}
 
     -- Section: spec auras
     local function AddSection(label, entries, isFilter)
@@ -690,18 +709,18 @@ RefreshCatalog = function()
     AddSection("Generic Filters", generic, true)
 
     -- Spell Groups section
-    local db       = GetDB()
+    local db        = GetDB()
     local sgEntries = {}
     if db.spellGroups then
         for key, grp in pairs(db.spellGroups) do
             if type(grp) == "table" and grp.spellIds and grp.spellIds ~= "" then
                 sgEntries[#sgEntries + 1] = {
-                    key     = key,
-                    display = grp.label or ("Group " .. (key:sub(2) or "?")),
-                    source  = "group",
-                    groupKey= key,
-                    icon    = 134400,
-                    color   = { 0.62, 0.47, 0.85 },
+                    key      = key,
+                    display  = grp.label or ("Group " .. (key:sub(2) or "?")),
+                    source   = "group",
+                    groupKey = key,
+                    icon     = 134400,
+                    color    = { 0.62, 0.47, 0.85 },
                 }
             end
         end
@@ -711,9 +730,9 @@ RefreshCatalog = function()
     end
 
     -- Layout tiles into the child
-    local x, y    = 0, -PAD
-    local maxW    = (TILE_SIZE + TILE_PAD) * TILE_COLS - TILE_PAD
-    local totalH  = PAD
+    local x, y   = 0, -PAD
+    local maxW   = (TILE_SIZE + TILE_PAD) * TILE_COLS - TILE_PAD
+    local totalH = PAD
 
     for _, item in ipairs(tiles) do
         if item.isLabel then
@@ -767,9 +786,9 @@ end
 -- ============================================================
 -- Slot cards rebuild
 -- ============================================================
-local SLOT_W  = 170
-local SLOT_H  = 100
-local SLOT_PAD= 8
+local SLOT_W    = 170
+local SLOT_H    = 100
+local SLOT_PAD  = 8
 local SLOT_COLS = 3
 
 local function BuildSlotCard(parent, slotIdx)
@@ -801,8 +820,8 @@ local function BuildSlotCard(parent, slotIdx)
         sf:SetSize(20, 20)
         sf:SetPoint("TOPLEFT", iconFrame, "TOPLEFT", 3 + gc * 22, -3 - gr * 22)
         local st = sf:CreateTexture(nil, "ARTWORK")
-        st:SetPoint("TOPLEFT",     sf, "TOPLEFT",     1, -1)
-        st:SetPoint("BOTTOMRIGHT", sf, "BOTTOMRIGHT", -1,  1)
+        st:SetPoint("TOPLEFT", sf, "TOPLEFT", 1, -1)
+        st:SetPoint("BOTTOMRIGHT", sf, "BOTTOMRIGHT", -1, 1)
         st:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         sf.tex = st
         card.iconSlots[gridIdx] = sf
@@ -815,7 +834,7 @@ local function BuildSlotCard(parent, slotIdx)
     local lblMain = card:CreateFontString(nil, "OVERLAY")
     lblMain:SetFont(Font(LABEL_FONT_SIZE))
     lblMain:SetTextColor(C.text[1], C.text[2], C.text[3])
-    lblMain:SetPoint("TOPLEFT",  card, "TOPLEFT",  60, -22)
+    lblMain:SetPoint("TOPLEFT", card, "TOPLEFT", 60, -22)
     lblMain:SetPoint("TOPRIGHT", card, "TOPRIGHT", -8, -22)
     lblMain:SetJustifyH("LEFT")
     lblMain:SetWordWrap(true)
@@ -825,7 +844,7 @@ local function BuildSlotCard(parent, slotIdx)
     local lblSlotName = card:CreateFontString(nil, "OVERLAY")
     lblSlotName:SetFont(Font(9, "OUTLINE"))
     lblSlotName:SetTextColor(C.gold[1], C.gold[2], C.gold[3])
-    lblSlotName:SetPoint("TOPLEFT",  card, "TOPLEFT",  60, -8)
+    lblSlotName:SetPoint("TOPLEFT", card, "TOPLEFT", 60, -8)
     lblSlotName:SetPoint("TOPRIGHT", card, "TOPRIGHT", -8, -8)
     lblSlotName:SetJustifyH("LEFT")
     lblSlotName:Hide()
@@ -861,7 +880,7 @@ local function BuildSlotCard(parent, slotIdx)
     delTex:SetJustifyH("CENTER")
     delTex:SetText("×")
     del:SetScript("OnEnter", function() delTex:SetTextColor(C.danger[1], C.danger[2], C.danger[3]) end)
-    del:SetScript("OnLeave", function() delTex:SetTextColor(C.muted[1],  C.muted[2],  C.muted[3])  end)
+    del:SetScript("OnLeave", function() delTex:SetTextColor(C.muted[1], C.muted[2], C.muted[3]) end)
     del:SetScript("OnClick", function()
         local inds = EnsureIndicatorsWritable(activeFrameKey)
         inds[slotIdx] = nil
@@ -907,7 +926,7 @@ local function BuildSlotCard(parent, slotIdx)
 
             -- If the slot already tracks spells AND the dropped entry is also a
             -- spell catalog entry, APPEND its IDs instead of replacing the slot.
-            local held = heldEntry  -- capture before SetHeld clears it
+            local held = heldEntry -- capture before SetHeld clears it
             if existing and existing.source == "spell"
                 and held.spellIds and not held.source then
                 -- Merge: add any spell IDs not already present
@@ -916,7 +935,9 @@ local function BuildSlotCard(parent, slotIdx)
                 if existing.spellId and existing.spellId > 0 then
                     local found = false
                     for _, v in ipairs(existing.spellIds) do
-                        if v == existing.spellId then found = true; break end
+                        if v == existing.spellId then
+                            found = true; break
+                        end
                     end
                     if not found then
                         table.insert(existing.spellIds, existing.spellId)
@@ -926,7 +947,9 @@ local function BuildSlotCard(parent, slotIdx)
                 for _, sid in ipairs(held.spellIds) do
                     local found = false
                     for _, v in ipairs(existing.spellIds) do
-                        if v == sid then found = true; break end
+                        if v == sid then
+                            found = true; break
+                        end
                     end
                     if not found then
                         table.insert(existing.spellIds, sid)
@@ -981,7 +1004,7 @@ RefreshSlots = function()
 
             -- Populate icon grid from spell ID list (up to 4)
             local spellIds = (cfg.source == "spell") and
-                (cfg.spellIds or (cfg.spellId and {cfg.spellId}) or {}) or {}
+                (cfg.spellIds or (cfg.spellId and { cfg.spellId }) or {}) or {}
             local iconCount = math.max(1, #spellIds)
             for gi = 1, 4 do
                 local sf = card.iconSlots[gi]
@@ -1018,10 +1041,10 @@ RefreshSlots = function()
             if cfg.slotName and cfg.slotName ~= "" then
                 card.lblSlotName:SetText(cfg.slotName)
                 card.lblSlotName:Show()
-                card.lblMain:SetPoint("TOPLEFT",  card, "TOPLEFT",  60, -20)
+                card.lblMain:SetPoint("TOPLEFT", card, "TOPLEFT", 60, -20)
             else
                 card.lblSlotName:Hide()
-                card.lblMain:SetPoint("TOPLEFT",  card, "TOPLEFT",  60, -22)
+                card.lblMain:SetPoint("TOPLEFT", card, "TOPLEFT", 60, -22)
             end
         else
             card.emptyText:Show()
@@ -1051,7 +1074,7 @@ end
 -- Detail panel
 -- ============================================================
 
-local detailWidgets = {}   -- child frames recycled on refresh
+local detailWidgets = {} -- child frames recycled on refresh
 
 local function ClearDetail()
     for _, w in ipairs(detailWidgets) do
@@ -1092,7 +1115,9 @@ local function DetailDropdown(parent, items, current, x, y, w, onChange)
 
     -- Set initial label
     for _, item in ipairs(items) do
-        if item.key == current then lbl:SetText(item.label); break end
+        if item.key == current then
+            lbl:SetText(item.label); break
+        end
     end
     if lbl:GetText() == "" then lbl:SetText(current or "?") end
 
@@ -1108,7 +1133,7 @@ local function DetailDropdown(parent, items, current, x, y, w, onChange)
         menu:SetFrameStrata("TOOLTIP")
         menu:SetFrameLevel(800)
         Backdrop(menu, C.panel, C.border, 1, 1)
-        local itemH  = 18
+        local itemH = 18
         menu:SetSize(w or 120, #items * itemH + 4)
         menu:SetPoint("TOPLEFT", self, "BOTTOMLEFT", 0, -2)
 
@@ -1234,7 +1259,7 @@ local function DetailSlider(parent, label, value, minV, maxV, step, x, y, w, onC
     Backdrop(eb, C.panel, C.border, 1, 1)
     eb:SetFont(Font(10))
     eb:SetAutoFocus(false)
-    eb:SetNumeric(false)          -- allow floats via GetText
+    eb:SetNumeric(false) -- allow floats via GetText
     eb:SetMaxLetters(8)
     eb:SetJustifyH("CENTER")
     eb:SetTextInsets(2, 2, 0, 0)
@@ -1278,11 +1303,11 @@ end
 
 -- 3×3 anchor point grid
 local function DetailAnchorGrid(parent, current, x, y, onChange)
-    local gridW       = 90
-    local gridH       = 58
-    local cellW       = gridW / 3
-    local cellH       = gridH / 3
-    local container   = PushDetail(CreateFrame("Frame", nil, parent, "BackdropTemplate"))
+    local gridW     = 90
+    local gridH     = 58
+    local cellW     = gridW / 3
+    local cellH     = gridH / 3
+    local container = PushDetail(CreateFrame("Frame", nil, parent, "BackdropTemplate"))
     container:SetSize(gridW, gridH)
     container:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     Backdrop(container, C.panel, C.border, 1, 1)
@@ -1296,8 +1321,8 @@ local function DetailAnchorGrid(parent, current, x, y, onChange)
 
         local isCurrent = current == key
         Backdrop(btn,
-            isCurrent and C.teal   or C.card,
-            isCurrent and C.teal   or C.border,
+            isCurrent and C.teal or C.card,
+            isCurrent and C.teal or C.border,
             isCurrent and 0.4 or 1, 1)
 
         local fs = btn:CreateFontString(nil, "OVERLAY")
@@ -1326,7 +1351,9 @@ local function DetailAnchorGrid(parent, current, x, y, onChange)
         end)
 
         col = col + 1
-        if col >= 3 then col = 0; row = row + 1 end
+        if col >= 3 then
+            col = 0; row = row + 1
+        end
     end
 
     return container
@@ -1336,9 +1363,9 @@ RefreshDetailPanel = function()
     if not detailPanel then return end
     ClearDetail()
 
-    local inds     = GetIndicators(activeFrameKey)
-    local slotCfg  = inds[selectedSlot]  -- full slot cfg (owns source/spells/extraLayers)
-    local cfg      = GetLayerCfg()       -- current layer's visual settings
+    local inds    = GetIndicators(activeFrameKey)
+    local slotCfg = inds[selectedSlot]  -- full slot cfg (owns source/spells/extraLayers)
+    local cfg     = GetLayerCfg()       -- current layer's visual settings
 
     if selectedSlot == 0 or not slotCfg then
         detailPanel:SetHeight(80)
@@ -1353,9 +1380,9 @@ RefreshDetailPanel = function()
     end
 
     -- Clamp selectedLayer in case layers were removed externally
-    local extraCount  = slotCfg.extraLayers and #slotCfg.extraLayers or 0
+    local extraCount = slotCfg.extraLayers and #slotCfg.extraLayers or 0
     if selectedLayer > 1 + extraCount then selectedLayer = 1 end
-    cfg = GetLayerCfg()   -- re-fetch after clamp
+    cfg = GetLayerCfg() -- re-fetch after clamp
 
     -- Title
     local layerSuffix = selectedLayer > 1 and ("  ·  Layer " .. selectedLayer) or ""
@@ -1403,16 +1430,19 @@ RefreshDetailPanel = function()
     end
 
     -- ── Layer tabs ──────────────────────────────────────────────────────────
-    local LAYER_TAB_H  = 22
-    local LAYER_TAB_W  = 110
-    local tabRowY      = -PAD - 20 - 6 - nameExtraH   -- just below title / label
-    local tabX         = PAD
-    local typeLabels   = { icons = "Icon Cluster", border = "Border", overlay = "Overlay" }
+    local LAYER_TAB_H = 22
+    local LAYER_TAB_W = 110
+    local tabRowY     = -PAD - 20 - 6 - nameExtraH  -- just below title / label
+    local tabX        = PAD
+    local typeLabels  = { icons = "Icon Cluster", border = "Border", overlay = "Overlay" }
 
     local function LayerTabLabel(layerIdx)
         local lcfg
-        if layerIdx == 1 then lcfg = slotCfg
-        elseif slotCfg.extraLayers then lcfg = slotCfg.extraLayers[layerIdx - 1] end
+        if layerIdx == 1 then
+            lcfg = slotCfg
+        elseif slotCfg.extraLayers then
+            lcfg = slotCfg.extraLayers[layerIdx - 1]
+        end
         local t = lcfg and (typeLabels[lcfg.type or "icons"] or "Layer") or "Layer"
         return "L" .. layerIdx .. "  " .. t
     end
@@ -1424,7 +1454,7 @@ RefreshDetailPanel = function()
         tab:SetSize(LAYER_TAB_W, LAYER_TAB_H)
         tab:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", tabX + (li - 1) * (LAYER_TAB_W + 4), tabRowY)
         Backdrop(tab,
-            isActive and { C.teal[1]*0.2, C.teal[2]*0.2, C.teal[3]*0.2 } or C.card,
+            isActive and { C.teal[1] * 0.2, C.teal[2] * 0.2, C.teal[3] * 0.2 } or C.card,
             isActive and C.teal or C.border, 1, 1)
         local tabLbl = tab:CreateFontString(nil, "OVERLAY")
         tabLbl:SetFont(Font(9))
@@ -1466,7 +1496,8 @@ RefreshDetailPanel = function()
     addLayerLbl:SetJustifyH("CENTER")
     addLayerLbl:SetJustifyV("MIDDLE")
     addLayerLbl:SetText("+ Layer")
-    AddTooltip(addLayerBtn, "Add Layer", "Add an additional indicator layer to this slot.\nEach layer tracks the same aura but shows a different visual type.")
+    AddTooltip(addLayerBtn, "Add Layer",
+        "Add an additional indicator layer to this slot.\nEach layer tracks the same aura but shows a different visual type.")
     addLayerBtn:SetScript("OnEnter", function(self2)
         self2:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 1)
     end)
@@ -1477,8 +1508,8 @@ RefreshDetailPanel = function()
         local i2 = EnsureIndicatorsWritable(activeFrameKey)
         i2[selectedSlot].extraLayers = i2[selectedSlot].extraLayers or {}
         table.insert(i2[selectedSlot].extraLayers, {
-            type   = "border",
-            anchor = slotCfg.anchor or "TOPLEFT",
+            type       = "border",
+            anchor     = slotCfg.anchor or "TOPLEFT",
             borderAnim = "solid",
         })
         selectedLayer = 1 + #i2[selectedSlot].extraLayers
@@ -1519,8 +1550,8 @@ RefreshDetailPanel = function()
     -- col2 (right): positioning (anchor / offsets) + chase dot options
     local col1X  = PAD
     local col2X  = PAD + 302
-    local row    = -PAD - 20 - LAYER_TAB_H - 10 - nameExtraH   -- below layer tabs row
-    local c2y    = row                              -- col2 top (same baseline as col1)
+    local row    = -PAD - 20 - LAYER_TAB_H - 10 - nameExtraH -- below layer tabs row
+    local c2y    = row                                       -- col2 top (same baseline as col1)
 
     -- Section banner: dark background + teal left accent + muted label
     local SEP_W  = col2X - col1X - PAD
@@ -1528,7 +1559,7 @@ RefreshDetailPanel = function()
     local function SectionHeader(label, y)
         -- Dark background band
         local bg = PushDetail(detailPanel:CreateTexture(nil, "BACKGROUND"))
-        bg:SetColorTexture(C.bg[1]*1.1, C.bg[2]*1.1, C.bg[3]*1.1, 0.95)
+        bg:SetColorTexture(C.bg[1] * 1.1, C.bg[2] * 1.1, C.bg[3] * 1.1, 0.95)
         bg:SetSize(SEP_W, BAND_H)
         bg:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", col1X, y)
         -- Teal left accent bar
@@ -1549,15 +1580,15 @@ RefreshDetailPanel = function()
     -- Textures live on detailPanel's draw layers (BACKGROUND/BORDER) so they
     -- always render behind any child Frame objects placed inside the group.
     local function OpenGroup(label, y)
-        local BOX_W = SEP_W + 8   -- 4 px padding on each side
-        local TOP_Y = y + 4        -- 4 px above the SectionHeader band
-        local grp   = { _topY = y }
+        local BOX_W       = SEP_W + 8 -- 4 px padding on each side
+        local TOP_Y       = y + 4 -- 4 px above the SectionHeader band
+        local grp         = { _topY = y }
         local br, bg2, bb = C.border[1], C.border[2], C.border[3]
         -- Fill
-        local fill = PushDetail(detailPanel:CreateTexture(nil, "BACKGROUND"))
+        local fill        = PushDetail(detailPanel:CreateTexture(nil, "BACKGROUND"))
         fill:SetColorTexture(C.panel[1], C.panel[2], C.panel[3], 0.25)
         fill:SetWidth(BOX_W)
-        fill:SetHeight(1)   -- actual height set by CloseGroup
+        fill:SetHeight(1) -- actual height set by CloseGroup
         fill:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", col1X - 4, TOP_Y)
         grp.fill = fill
         -- Top border line
@@ -1590,7 +1621,7 @@ RefreshDetailPanel = function()
     local function CloseGroup(grp, endRow)
         local TOP_Y = grp._topY + 4
         local BOT_Y = endRow - 4
-        local h     = TOP_Y - BOT_Y   -- positive: TOP_Y is less negative than BOT_Y
+        local h     = TOP_Y - BOT_Y -- positive: TOP_Y is less negative than BOT_Y
         if h < 2 then h = 2 end
         grp.fill:SetHeight(h)
         grp.leftL:SetHeight(h)
@@ -1601,14 +1632,14 @@ RefreshDetailPanel = function()
     -- ── Helpers ─────────────────────────────────────────────
     -- Shared preset swatch table (used for border colour, overlay colour, chase colour)
     local SWATCH_PRESETS = {
-        { 1.00, 0.50, 0.00 },  -- orange
-        { 0.10, 0.72, 0.74 },  -- teal
-        { 0.96, 0.76, 0.24 },  -- gold
-        { 0.42, 0.89, 0.63 },  -- green
-        { 0.90, 0.30, 0.32 },  -- red
-        { 1.00, 1.00, 1.00 },  -- white
-        { 0.50, 0.25, 1.00 },  -- purple
-        { 0.25, 0.50, 1.00 },  -- blue
+        { 1.00, 0.50, 0.00 }, -- orange
+        { 0.10, 0.72, 0.74 }, -- teal
+        { 0.96, 0.76, 0.24 }, -- gold
+        { 0.42, 0.89, 0.63 }, -- green
+        { 0.90, 0.30, 0.32 }, -- red
+        { 1.00, 1.00, 1.00 }, -- white
+        { 0.50, 0.25, 1.00 }, -- purple
+        { 0.25, 0.50, 1.00 }, -- blue
     }
 
     --- Render a row of colour swatches + a "..." custom-colour button.
@@ -1619,7 +1650,7 @@ RefreshDetailPanel = function()
             local swBtn = PushDetail(CreateFrame("Button", nil, detailPanel, "BackdropTemplate"))
             swBtn:SetSize(18, 18)
             swBtn:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", swX, py)
-            Backdrop(swBtn, { sw[1]*0.25, sw[2]*0.25, sw[3]*0.25 }, { sw[1], sw[2], sw[3] }, 1, 1)
+            Backdrop(swBtn, { sw[1] * 0.25, sw[2] * 0.25, sw[3] * 0.25 }, { sw[1], sw[2], sw[3] }, 1, 1)
             local cc = currentColor
             local isSel = cc
                 and math.abs((cc[1] or 0) - sw[1]) < 0.02
@@ -1627,7 +1658,7 @@ RefreshDetailPanel = function()
                 and math.abs((cc[3] or 0) - sw[3]) < 0.02
             if isSel then swBtn:SetBackdropBorderColor(1, 1, 1, 1) end
             local capSw = sw
-            swBtn:SetScript("OnEnter", function(s2) s2:SetBackdropBorderColor(1,1,1,1) end)
+            swBtn:SetScript("OnEnter", function(s2) s2:SetBackdropBorderColor(1, 1, 1, 1) end)
             swBtn:SetScript("OnLeave", function(s2)
                 local cur = currentColor
                 local sel = cur
@@ -1666,13 +1697,15 @@ RefreshDetailPanel = function()
             s2:SetBackdropBorderColor(C.border[1], C.border[2], C.border[3], 1)
         end)
         custBtn:SetScript("OnClick", function(s2)
-            local cur   = currentColor or { 1, 1, 1, 1 }
+            local cur                 = currentColor or { 1, 1, 1, 1 }
             local prevR, prevG, prevB = cur[1], cur[2], cur[3]
-            local cpf   = _G.ColorPickerFrame
+            local cpf                 = _G.ColorPickerFrame
             if not cpf then return end
 
             local info = {
-                r = prevR, g = prevG, b = prevB,
+                r = prevR,
+                g = prevG,
+                b = prevB,
                 hasOpacity = false,
                 func = function()
                     local r, g, b = cpf:GetColorRGB()
@@ -1702,7 +1735,7 @@ RefreshDetailPanel = function()
     DetailLabel(detailPanel, "Anchor Point", col2X, c2y - 18)
     AddTooltip(
         DetailAnchorGrid(detailPanel, cfg.anchor or "TOPLEFT", col2X, c2y - 34, function(key)
-            local layer = EnsureLayerWritable()
+            local layer          = EnsureLayerWritable()
             layer.anchor         = key
             layer.relativeAnchor = key
             RefreshSlots()
@@ -1714,18 +1747,18 @@ RefreshDetailPanel = function()
         col2X, c2y - 96, 136, function(v)
             EnsureLayerWritable().offsetX = v
             DeferredFlush()
-    end)
+        end)
     DetailSlider(detailPanel, "Offset Y", cfg.offsetY or 0, -80, 80, 1,
         col2X, c2y - 130, 136, function(v)
             EnsureLayerWritable().offsetY = v
             DeferredFlush()
-    end)
+        end)
 
     -- ── COL 1: Type + Only Mine ───────────────────────────────────────────────
     local typeItems = {
-        { key = "icons",   label = "Icon Cluster"    },
+        { key = "icons",   label = "Icon Cluster" },
         { key = "border",  label = "Border Highlight" },
-        { key = "overlay", label = "Color Overlay"    },
+        { key = "overlay", label = "Color Overlay" },
     }
     DetailLabel(detailPanel, "Indicator Type", col1X, row)
     local typeDD = DetailDropdown(detailPanel, typeItems, cfg.type or "icons", col1X, row - 14, 148, function(k)
@@ -1749,7 +1782,6 @@ RefreshDetailPanel = function()
 
     -- ── COL 1: Type-specific settings ────────────────────────────────────────
     if (cfg.type or "icons") == "icons" then
-
         -- ── APPEARANCE ────────────────────────────────────────────────────────
         local grp_app = OpenGroup("APPEARANCE", row)
         row = row - BAND_H - 6
@@ -1758,29 +1790,30 @@ RefreshDetailPanel = function()
             col1X, row, 130, function(v)
                 EnsureLayerWritable().iconSize = v
                 DeferredFlush()
-        end)
+            end)
         DetailSlider(detailPanel, "Max Count", cfg.maxCount or 5, 1, 12, 1,
             col1X + 148, row, 120, function(v)
                 EnsureLayerWritable().maxCount = v
                 DeferredFlush()
-        end)
+            end)
         row = row - 40
 
         local growItems = {
-            { key="RIGHT", label="Right →" }, { key="LEFT",  label="Left ←"  },
-            { key="UP",    label="Up ↑"    }, { key="DOWN",  label="Down ↓"  },
+            { key = "RIGHT", label = "Right →" }, { key = "LEFT", label = "Left ←" },
+            { key = "UP", label = "Up ↑" }, { key = "DOWN", label = "Down ↓" },
         }
         DetailLabel(detailPanel, "Grow Direction", col1X, row)
-        local dirDD = DetailDropdown(detailPanel, growItems, cfg.growDirection or "RIGHT", col1X, row - 14, 128, function(k)
-            EnsureLayerWritable().growDirection = k
-            DeferredFlush()
-        end)
+        local dirDD = DetailDropdown(detailPanel, growItems, cfg.growDirection or "RIGHT", col1X, row - 14, 128,
+            function(k)
+                EnsureLayerWritable().growDirection = k
+                DeferredFlush()
+            end)
         AddTooltip(dirDD, "Grow Direction", "Direction icons expand when multiple auras are active.")
         DetailSlider(detailPanel, "Gap", cfg.spacing or 2, 0, 12, 1,
             col1X + 148, row, 100, function(v)
                 EnsureLayerWritable().spacing = v
                 DeferredFlush()
-        end)
+            end)
         row = row - 40
         CloseGroup(grp_app, row)
 
@@ -1798,7 +1831,7 @@ RefreshDetailPanel = function()
             col1X + 140, row, 108, function(v)
                 EnsureLayerWritable().durationFontSize = v
                 DeferredFlush()
-        end)
+            end)
         row = row - 36
 
         DetailLabel(detailPanel, "Position", col1X, row)
@@ -1806,7 +1839,7 @@ RefreshDetailPanel = function()
             DetailAnchorGrid(detailPanel, cfg.durAnchor or "TOPLEFT", col1X, row - 16, function(key)
                 EnsureLayerWritable().durAnchor = key
                 RefreshDetailPanel()
-        end), "Duration Position", "Where the timer text sits on each icon.")
+            end), "Duration Position", "Where the timer text sits on each icon.")
         row = row - 82
         CloseGroup(grp_dur, row)
 
@@ -1824,7 +1857,7 @@ RefreshDetailPanel = function()
             col1X + 140, row, 108, function(v)
                 EnsureLayerWritable().countFontSize = v
                 DeferredFlush()
-        end)
+            end)
         row = row - 36
 
         DetailLabel(detailPanel, "Position", col1X, row)
@@ -1832,17 +1865,16 @@ RefreshDetailPanel = function()
             DetailAnchorGrid(detailPanel, cfg.countAnchor or "BOTTOMRIGHT", col1X, row - 16, function(key)
                 EnsureLayerWritable().countAnchor = key
                 RefreshDetailPanel()
-        end), "Stack Position", "Where the stack count sits on each icon.")
+            end), "Stack Position", "Where the stack count sits on each icon.")
         row = row - 82
         CloseGroup(grp_stk, row)
-
     elseif (cfg.type or "icons") == "border" then
         -- Border Width
         DetailSlider(detailPanel, "Border Width", cfg.borderWidth or 2, 1, 8, 1,
             col1X, row, 130, function(v)
                 EnsureLayerWritable().borderWidth = v
                 DeferredFlush()
-        end)
+            end)
         row = row - 40
 
         -- Animation
@@ -1852,10 +1884,11 @@ RefreshDetailPanel = function()
             { key = "chase", label = "Chase" },
         }
         DetailLabel(detailPanel, "Animation", col1X, row)
-        local animDD = DetailDropdown(detailPanel, animItems, cfg.borderAnim or "solid", col1X, row - 14, 120, function(k)
-            EnsureLayerWritable().borderAnim = k
-            RefreshDetailPanel()
-        end)
+        local animDD = DetailDropdown(detailPanel, animItems, cfg.borderAnim or "solid", col1X, row - 14, 120,
+            function(k)
+                EnsureLayerWritable().borderAnim = k
+                RefreshDetailPanel()
+            end)
         AddTooltip(animDD, "Animation",
             "Solid: static color.\nPulse: fades in and out.\nChase: tiny dots orbit the border.")
 
@@ -1865,7 +1898,7 @@ RefreshDetailPanel = function()
                 col1X + 140, row, 108, function(v)
                     EnsureLayerWritable().borderAnimSpeed = v
                     DeferredFlush()
-            end)
+                end)
         end
         row = row - 40
 
@@ -1891,24 +1924,23 @@ RefreshDetailPanel = function()
                 col2X, chY - 18, 136, function(v)
                     EnsureLayerWritable().chaseCount = v
                     DeferredFlush()
-            end)
+                end)
             DetailSlider(detailPanel, "Dot Length", cfg.chasePixelW or 6, 1, 24, 1,
                 col2X, chY - 52, 136, function(v)
                     EnsureLayerWritable().chasePixelW = v
                     DeferredFlush()
-            end)
+                end)
             DetailSlider(detailPanel, "Dot Thickness", cfg.chasePixelH or 2, 1, 12, 1,
                 col2X, chY - 86, 136, function(v)
                     EnsureLayerWritable().chasePixelH = v
                     DeferredFlush()
-            end)
+                end)
             DetailLabel(detailPanel, "Dot Color", col2X, chY - 120)
             DetailColorRow(col2X, chY - 134, cfg.chaseColor, function(r, g, b, a)
                 EnsureLayerWritable().chaseColor = { r, g, b, a or 1 }
                 DeferredFlush()
             end)
         end
-
     elseif (cfg.type or "icons") == "overlay" then
         -- Overlay Color
         DetailLabel(detailPanel, "Overlay Color", col1X, row)
@@ -1924,7 +1956,7 @@ RefreshDetailPanel = function()
             col1X, row, 200, function(v)
                 EnsureLayerWritable().overlayAlpha = v
                 DeferredFlush()
-        end)
+            end)
         row = row - 40
     end
 
@@ -1980,12 +2012,14 @@ RefreshDetailPanel = function()
             rTex:SetText("×")
             local capSid = sid
             rBtn:SetScript("OnEnter", function() rTex:SetTextColor(C.danger[1], C.danger[2], C.danger[3]) end)
-            rBtn:SetScript("OnLeave", function() rTex:SetTextColor(C.muted[1],  C.muted[2],  C.muted[3])  end)
+            rBtn:SetScript("OnLeave", function() rTex:SetTextColor(C.muted[1], C.muted[2], C.muted[3]) end)
             rBtn:SetScript("OnClick", function()
                 local i2 = EnsureIndicatorsWritable(activeFrameKey)
                 local ids = i2[selectedSlot].spellIds or {}
                 for j = #ids, 1, -1 do
-                    if ids[j] == capSid then table.remove(ids, j); break end
+                    if ids[j] == capSid then
+                        table.remove(ids, j); break
+                    end
                 end
                 if i2[selectedSlot].spellId == capSid then
                     i2[selectedSlot].spellId = nil
@@ -2073,21 +2107,21 @@ local function BuildDesigner()
     root:EnableMouse(true)
     root:RegisterForDrag("LeftButton")
     root:SetScript("OnDragStart", function(self) self:StartMoving() end)
-    root:SetScript("OnDragStop",  function(self) self:StopMovingOrSizing() end)
+    root:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
     root:SetClampedToScreen(true)
     Backdrop(root, C.bg, C.border, 1, 1)
 
     -- Accent stripe along top
     local stripe = root:CreateTexture(nil, "ARTWORK")
     stripe:SetHeight(2)
-    stripe:SetPoint("TOPLEFT",  root, "TOPLEFT",  1, -1)
+    stripe:SetPoint("TOPLEFT", root, "TOPLEFT", 1, -1)
     stripe:SetPoint("TOPRIGHT", root, "TOPRIGHT", -1, -1)
     stripe:SetColorTexture(C.teal[1], C.teal[2], C.teal[3], 1)
 
     -- ── Header ─────────────────────────────────────────────
     local header = CreateFrame("Frame", nil, root, "BackdropTemplate")
     header:SetHeight(HEADER_H)
-    header:SetPoint("TOPLEFT",  root, "TOPLEFT",  0, 0)
+    header:SetPoint("TOPLEFT", root, "TOPLEFT", 0, 0)
     header:SetPoint("TOPRIGHT", root, "TOPRIGHT", 0, 0)
     Backdrop(header, C.panel, C.border, 1, 1)
 
@@ -2106,7 +2140,7 @@ local function BuildDesigner()
     headerFrameLabel = frameDDBtn:CreateFontString(nil, "OVERLAY")
     headerFrameLabel:SetFont(Font(LABEL_FONT_SIZE))
     headerFrameLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
-    headerFrameLabel:SetPoint("LEFT",  frameDDBtn, "LEFT",  6, 0)
+    headerFrameLabel:SetPoint("LEFT", frameDDBtn, "LEFT", 6, 0)
     headerFrameLabel:SetPoint("RIGHT", frameDDBtn, "RIGHT", -14, 0)
 
     local ddArrow = frameDDBtn:CreateFontString(nil, "OVERLAY")
@@ -2136,7 +2170,7 @@ local function BuildDesigner()
         for idx2, item in ipairs(items) do
             local row = CreateFrame("Button", nil, menu, "BackdropTemplate")
             row:SetSize(144, itemH)
-            row:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(idx2-1)*itemH - 2)
+            row:SetPoint("TOPLEFT", menu, "TOPLEFT", 2, -(idx2 - 1) * itemH - 2)
             Backdrop(row, { 0, 0, 0 }, { 0, 0, 0 }, 0, 0)
             local isActive = (item.key == activeFrameKey)
             local rLbl = row:CreateFontString(nil, "OVERLAY")
@@ -2225,11 +2259,11 @@ local function BuildDesigner()
     root:EnableKeyboard(true)
 
     -- ── Catalogue panel (left) ──────────────────────────────
-    local CATALOG_W  = 230
-    local CONTENT_Y  = -(HEADER_H + PAD)
-    local CONTENT_H  = H_TOTAL - HEADER_H - PAD * 2
+    local CATALOG_W = 230
+    local CONTENT_Y = -(HEADER_H + PAD)
+    local CONTENT_H = H_TOTAL - HEADER_H - PAD * 2
 
-    local catPanel = CreateFrame("Frame", nil, root, "BackdropTemplate")
+    local catPanel  = CreateFrame("Frame", nil, root, "BackdropTemplate")
     catPanel:SetSize(CATALOG_W, CONTENT_H)
     catPanel:SetPoint("TOPLEFT", root, "TOPLEFT", PAD, CONTENT_Y)
     Backdrop(catPanel, C.panel, C.border, 1, 1)
@@ -2241,10 +2275,10 @@ local function BuildDesigner()
     catTitle:SetPoint("TOPLEFT", catPanel, "TOPLEFT", PAD, -8)
 
     catalogScroll = CreateFrame("ScrollFrame", nil, catPanel)
-    catalogScroll:SetPoint("TOPLEFT",    catPanel, "TOPLEFT",    2, -22)
-    catalogScroll:SetPoint("BOTTOMRIGHT",catPanel, "BOTTOMRIGHT",-4,  4)
+    catalogScroll:SetPoint("TOPLEFT", catPanel, "TOPLEFT", 2, -22)
+    catalogScroll:SetPoint("BOTTOMRIGHT", catPanel, "BOTTOMRIGHT", -4, 4)
 
-    catalogChild  = CreateFrame("Frame", nil, catalogScroll)
+    catalogChild = CreateFrame("Frame", nil, catalogScroll)
     catalogChild:SetSize(CATALOG_W - 6, 1)
     catalogScroll:SetScrollChild(catalogChild)
 
@@ -2300,8 +2334,8 @@ local function BuildDesigner()
 
     -- Scrollable inner child for settings widgets
     local detailScroll = CreateFrame("ScrollFrame", nil, detailOuter)
-    detailScroll:SetPoint("TOPLEFT",     detailOuter, "TOPLEFT",     2, -22)
-    detailScroll:SetPoint("BOTTOMRIGHT", detailOuter, "BOTTOMRIGHT", -4,  4)
+    detailScroll:SetPoint("TOPLEFT", detailOuter, "TOPLEFT", 2, -22)
+    detailScroll:SetPoint("BOTTOMRIGHT", detailOuter, "BOTTOMRIGHT", -4, 4)
     detailScroll:SetScript("OnMouseWheel", function(self, delta)
         local cur = self:GetVerticalScroll()
         local max = self:GetVerticalScrollRange()
@@ -2316,7 +2350,7 @@ local function BuildDesigner()
         local SIDE_W = 200
         previewSidePanel = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
         previewSidePanel:SetWidth(SIDE_W)
-        previewSidePanel:SetPoint("TOPLEFT",    root, "TOPRIGHT",    PAD, 0)
+        previewSidePanel:SetPoint("TOPLEFT", root, "TOPRIGHT", PAD, 0)
         previewSidePanel:SetPoint("BOTTOMLEFT", root, "BOTTOMRIGHT", PAD, 0)
         previewSidePanel:SetFrameStrata("FULLSCREEN")
         previewSidePanel:SetFrameLevel(root:GetFrameLevel() + 2)
@@ -2325,8 +2359,8 @@ local function BuildDesigner()
         -- Accent line along the left edge
         local sideAccent = previewSidePanel:CreateTexture(nil, "BORDER")
         sideAccent:SetWidth(2)
-        sideAccent:SetPoint("TOPLEFT",    previewSidePanel, "TOPLEFT",    1, -1)
-        sideAccent:SetPoint("BOTTOMLEFT", previewSidePanel, "BOTTOMLEFT", 1,  1)
+        sideAccent:SetPoint("TOPLEFT", previewSidePanel, "TOPLEFT", 1, -1)
+        sideAccent:SetPoint("BOTTOMLEFT", previewSidePanel, "BOTTOMLEFT", 1, 1)
         sideAccent:SetColorTexture(C.teal[1], C.teal[2], C.teal[3], 0.7)
 
         -- Section header
@@ -2361,7 +2395,7 @@ local function BuildDesigner()
         local phHBg = previewHost:CreateTexture(nil, "BACKGROUND")
         phHBg:SetColorTexture(0.08, 0.09, 0.12, 1)
         phHBg:SetHeight(10)
-        phHBg:SetPoint("BOTTOMLEFT",  previewHost, "BOTTOMLEFT",  3, 3)
+        phHBg:SetPoint("BOTTOMLEFT", previewHost, "BOTTOMLEFT", 3, 3)
         phHBg:SetPoint("BOTTOMRIGHT", previewHost, "BOTTOMRIGHT", -3, 3)
 
         local phHFg = previewHost:CreateTexture(nil, "ARTWORK")
@@ -2374,7 +2408,7 @@ local function BuildDesigner()
         local phNameBg = previewHost:CreateTexture(nil, "BACKGROUND")
         phNameBg:SetColorTexture(0.06, 0.07, 0.10, 1)
         phNameBg:SetHeight(16)
-        phNameBg:SetPoint("TOPLEFT",  previewHost, "TOPLEFT",  3, -16)
+        phNameBg:SetPoint("TOPLEFT", previewHost, "TOPLEFT", 3, -16)
         phNameBg:SetPoint("TOPRIGHT", previewHost, "TOPRIGHT", -3, -16)
 
         local phName = previewHost:CreateFontString(nil, "OVERLAY")

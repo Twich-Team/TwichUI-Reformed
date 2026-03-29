@@ -629,7 +629,7 @@ function MPT:GetMythicPlusTimerAppearance()
     local customBarColor = self.trackerAppearanceCache.timerBarColor
 
     appearance.timerFontPath = GetTrackerFontPath(options and options:GetMythicPlusTimerFont() or
-    (db.mythicPlusTimerFont or db.trackerFont))
+        (db.mythicPlusTimerFont or db.trackerFont))
     appearance.timerFontSize = ClampNumber(db.mythicPlusTimerFontSize, 8, 28, appearance.fontSize)
     appearance.timerOutline = GetOutlineFlag(db.mythicPlusTimerFontOutline or db.trackerFontOutline)
     appearance.timerRowGap = ClampNumber(db.mythicPlusTimerRowGap, 0, 30, appearance.rowGap)
@@ -1906,11 +1906,11 @@ function MPT:EnsureKeystoneHelperPanel()
     local BTN_W                                       = math.floor((W - 2 * PAD - 6) / 2)
 
     -- Y offsets from TOPLEFT (negative = downward)
-    local titleY                                      = -PAD -- -12
-    local divY                                        = titleY - 16 - 6 -- -34
-    local infoY                                       = divY - 1 - 8 -- -43
-    local btnY                                        = infoY - INFO_H - 8 -- -119
-    local togY                                        = btnY - BTN_H - 8 -- -153
+    local titleY                                      = -PAD                  -- -12
+    local divY                                        = titleY - 16 - 6       -- -34
+    local infoY                                       = divY - 1 - 8          -- -43
+    local btnY                                        = infoY - INFO_H - 8    -- -119
+    local togY                                        = btnY - BTN_H - 8      -- -153
     local TOTAL_H                                     = -(togY - ROW_H - PAD) --  185
 
     local bgR, bgG, bgB, _, borderR, borderG, borderB = GetBackdropColors()
@@ -2943,7 +2943,7 @@ function MPT:PlayMythicPlusTimerUpgradeAnimation(segmentKey)
     self:EnsureMythicPlusTimerAnimationSurfaces(frame)
 
     local segment = frame.MilestoneRow and frame.MilestoneRow.Segments and
-    frame.MilestoneRow.Segments[segmentKey or "plusOne"]
+        frame.MilestoneRow.Segments[segmentKey or "plusOne"]
     if segment and segment.Flash then
         local color = segment.barColor or TIMER_PLUS_ONE_COLOR
         segment.Flash:SetColorTexture(color[1] or 1, color[2] or 1, color[3] or 1, 1)
@@ -3186,7 +3186,7 @@ function MPT:BuildActiveMythicPlusTimerState()
             nextLimit = plusTwoLimit,
             value = elapsed > plusTwoLimit and FormatSignedClock(plusOneLimit - elapsed) or "",
             progress = plusOneLimit > plusTwoLimit and
-            ClampNumber((elapsed - plusTwoLimit) / (plusOneLimit - plusTwoLimit), 0, 1, 0) or 0,
+                ClampNumber((elapsed - plusTwoLimit) / (plusOneLimit - plusTwoLimit), 0, 1, 0) or 0,
             color = TIMER_PLUS_ONE_COLOR,
         },
         {
@@ -3197,7 +3197,7 @@ function MPT:BuildActiveMythicPlusTimerState()
             nextLimit = plusThreeLimit,
             value = elapsed > plusThreeLimit and elapsed <= plusTwoLimit and FormatClock(plusTwoLimit - elapsed) or "",
             progress = plusTwoLimit > plusThreeLimit and
-            ClampNumber((elapsed - plusThreeLimit) / (plusTwoLimit - plusThreeLimit), 0, 1, 0) or 0,
+                ClampNumber((elapsed - plusThreeLimit) / (plusTwoLimit - plusThreeLimit), 0, 1, 0) or 0,
             color = TIMER_PLUS_TWO_COLOR,
         },
         {
@@ -3221,10 +3221,10 @@ function MPT:BuildActiveMythicPlusTimerState()
     -- Tazavesh multi-wing).  Hard-capping at 10 ensures we always find the
     -- isWeightedProgress forces criterion even if numCriteria is wrong.
     local stepCount = C_Scenario and type(C_Scenario.GetStepInfo) == "function" and select(3, C_Scenario.GetStepInfo()) or
-    0
+        0
     for index = 1, max(10, tonumber(stepCount) or 0) do
         local info = C_ScenarioInfo and type(C_ScenarioInfo.GetCriteriaInfo) == "function" and
-        C_ScenarioInfo.GetCriteriaInfo(index)
+            C_ScenarioInfo.GetCriteriaInfo(index)
         if type(info) == "table" then
             if info.isWeightedProgress and type(info.totalQuantity) == "number" and info.totalQuantity > 0 then
                 totalCount = info.totalQuantity
@@ -3254,7 +3254,7 @@ function MPT:BuildActiveMythicPlusTimerState()
                 checkpoints[#checkpoints + 1] = {
                     name = tostring(info.description or ("Boss " .. index)),
                     time = info.completed and
-                    ("[" .. FormatClock(self.mythicPlusTimerState.bossCheckpoints[key] or 0) .. "]") or "Pending",
+                        ("[" .. FormatClock(self.mythicPlusTimerState.bossCheckpoints[key] or 0) .. "]") or "Pending",
                     completed = info.completed == true,
                 }
             end
@@ -3264,7 +3264,7 @@ function MPT:BuildActiveMythicPlusTimerState()
     local forcesBar = {
         label = "Forces",
         detail = totalCount > 0 and format("%d / %d enemy forces", currentCount, totalCount) or
-        "Enemy forces unavailable",
+            "Enemy forces unavailable",
         value = totalCount > 0 and format("%.1f%%", min(100, (currentCount / totalCount) * 100)) or "--",
         progress = totalCount > 0 and ClampNumber(currentCount / totalCount, 0, 1, 0) or 0,
         color = TIMER_FORCES_COLOR,
@@ -3463,7 +3463,7 @@ function MPT:LayoutMythicPlusTimerFrame(frame, checkpointCount)
         local segment = frame.MilestoneRow.Segments[key]
         local fraction = segment.widthFraction or 0
         local segmentWidth = key == "plusThree" and max(24, availableWidth - xOffset) or
-        max(24, floor(availableWidth * fraction))
+            max(24, floor(availableWidth * fraction))
         segment:ClearAllPoints()
         segment:SetPoint("TOPLEFT", frame.MilestoneRow, "TOPLEFT", xOffset, 0)
         segment:SetWidth(segmentWidth)
@@ -3535,9 +3535,9 @@ function MPT:LayoutMythicPlusTimerFrame(frame, checkpointCount)
 
     for _, row in ipairs(frame.CheckpointRows) do
         local nameColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or
-        { appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1 }
+            { appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1 }
         local timeColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or
-        { appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1 }
+            { appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1 }
         ApplyFontString(row.Name, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, nameColor[1],
             nameColor[2], nameColor[3], nameColor[4])
         ApplyFontString(row.Time, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, timeColor[1],
@@ -3549,7 +3549,7 @@ function MPT:RefreshMythicPlusTimerFrame()
     local frame = self:EnsureMythicPlusTimerFrame()
     local appearance = self:GetMythicPlusTimerAppearance()
     local state = self.preview.mythicPlusTimer and self:BuildMythicPlusTimerPreviewState() or
-    self:BuildActiveMythicPlusTimerState()
+        self:BuildActiveMythicPlusTimerState()
     local shouldShow = self.preview.mythicPlusTimer or
         (IsModuleConfiguredEnabled() and self:IsFeatureEnabled("mythicPlusTimer") and state and self:ShouldShowTrackerFrames())
 
@@ -3618,7 +3618,7 @@ function MPT:RefreshMythicPlusTimerFrame()
             segment.Value:SetText(segmentState.value or "")
             segment.bar:SetValue(1 - ClampNumber(segmentState.progress, 0, 1, 0))
             segment.barColor = appearance.timerBarColorMode == "custom" and appearance.timerBarColor or
-            (segmentState.color or ACTIVE_COLOR)
+                (segmentState.color or ACTIVE_COLOR)
             SetStatusBarColor(segment.bar, segment.barColor)
             local progress = ClampNumber(segmentState.progress, 0, 1, 0)
             local detailLine = ""

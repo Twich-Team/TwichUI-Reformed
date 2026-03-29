@@ -579,29 +579,29 @@ local function SmartPositionNextToConfig(toolPanel)
     local rightAnchor = (frame.PreviewHost and frame.PreviewHost:IsShown())
         and frame.PreviewHost or frame
 
-    local screenW = UIParent:GetWidth()
-    local screenH = UIParent:GetHeight()
-    local GAP        = 10
-    local STACK_GAP  = 8
+    local screenW     = UIParent:GetWidth()
+    local screenH     = UIParent:GetHeight()
+    local GAP         = 10
+    local STACK_GAP   = 8
 
-    local rx       = rightAnchor:GetRight() or (screenW * 0.5 + 100)
-    local lx       = frame:GetLeft()        or (screenW * 0.5 - 100)
-    local configTop = frame:GetTop()        or screenH
+    local rx          = rightAnchor:GetRight() or (screenW * 0.5 + 100)
+    local lx          = frame:GetLeft() or (screenW * 0.5 - 100)
+    local configTop   = frame:GetTop() or screenH
 
-    local spaceRight = screenW - rx - GAP
-    local spaceLeft  = lx - GAP
+    local spaceRight  = screenW - rx - GAP
+    local spaceLeft   = lx - GAP
 
     -- Preferred side: whichever has more free horizontal space.
-    local useRight = spaceRight >= spaceLeft
+    local useRight    = spaceRight >= spaceLeft
 
     -- Top of the first panel on this side aligns with the config frame top.
-    local topY = math.min(configTop, screenH - 6)
+    local topY        = math.min(configTop, screenH - 6)
 
     -- Collect sibling tool panels (DebugConsole / ErrorLogViewer) that are
     -- already visible so we can stack below them rather than overlap.
     local otherPanels = {}
-    local dc  = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
-    local elv = T.Tools and T.Tools.UI and T.Tools.UI.ErrorLogViewer
+    local dc          = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+    local elv         = T.Tools and T.Tools.UI and T.Tools.UI.ErrorLogViewer
     for _, sibling in ipairs({ dc and dc.frame, elv and elv.frame }) do
         if sibling and sibling ~= toolPanel and sibling:IsShown() then
             otherPanels[#otherPanels + 1] = sibling
@@ -627,7 +627,7 @@ local function SmartPositionNextToConfig(toolPanel)
 
     toolPanel:ClearAllPoints()
     if useRight then
-        toolPanel:SetPoint("TOPLEFT",  UIParent, "BOTTOMLEFT", rx + GAP, placeTopY)
+        toolPanel:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", rx + GAP, placeTopY)
     else
         toolPanel:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", lx - GAP, placeTopY)
     end
@@ -1373,7 +1373,8 @@ function UI:EnsureFrame()
             end
         end
     end)
-    AttachTooltip(frame.DebuggerButton, "Debugger", "Open the TwichUI Debug Console to inspect live module state and logs.")
+    AttachTooltip(frame.DebuggerButton, "Debugger",
+        "Open the TwichUI Debug Console to inspect live module state and logs.")
 
     frame.Subtitle:SetPoint("RIGHT", frame.DebuggerButton, "LEFT", -12, 0)
 
@@ -1910,7 +1911,7 @@ function UI:RenderUnitFrameTagReference(parent, width)
     intro:SetJustifyV("TOP")
     intro:SetTextColor(0.78, 0.8, 0.86)
     intro:SetText(
-    "Custom text fields accept raw oUF tag strings. Combine tags freely and use affixes like [perhp<$%] when you want punctuation to disappear with empty values.")
+        "Custom text fields accept raw oUF tag strings. Combine tags freely and use affixes like [perhp<$%] when you want punctuation to disappear with empty values.")
     intro:SetWidth(width)
     y = y + intro:GetStringHeight() + 14
 
@@ -1969,11 +1970,11 @@ function UI:RenderUnitFramePanel(parent, width)
     ctrlHeader:SetJustifyH("LEFT")
     ctrlHeader:SetTextColor(accent[1], accent[2], accent[3])
     ctrlHeader:SetText("Controls")
-    y = y + 22
+    y               = y + 22
 
-    local BTN_H   = 28
-    local BTN_GAP = 6
-    local BTN_W   = math.floor((width - BTN_GAP) / 2)
+    local BTN_H     = 28
+    local BTN_GAP   = 6
+    local BTN_W     = math.floor((width - BTN_GAP) / 2)
 
     -- Row 1: Enable/Disable | Test Mode
     local enableBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
@@ -2009,14 +2010,14 @@ function UI:RenderUnitFramePanel(parent, width)
 
     -- Dynamic button label refresh (called after all buttons are created)
     local function RefreshButtonStates()
-        local m          = GetUFModule()
-        local db         = m and m.GetDB and m:GetDB()
-        local enabled    = db == nil or db.enabled ~= false
-        local testMode   = db and db.testMode == true
-        local locked     = db == nil or db.lockFrames ~= false
-        SetButtonText(enableBtn,  enabled  and "Disable UF"    or "Enable UF")
-        SetButtonText(testBtn,    testMode and "Exit Test"      or "Test Mode")
-        SetButtonText(moversBtn,  locked   and "Unlock Movers"  or "Lock Movers")
+        local m        = GetUFModule()
+        local db       = m and m.GetDB and m:GetDB()
+        local enabled  = db == nil or db.enabled ~= false
+        local testMode = db and db.testMode == true
+        local locked   = db == nil or db.lockFrames ~= false
+        SetButtonText(enableBtn, enabled and "Disable UF" or "Enable UF")
+        SetButtonText(testBtn, testMode and "Exit Test" or "Test Mode")
+        SetButtonText(moversBtn, locked and "Unlock Movers" or "Lock Movers")
     end
     RefreshButtonStates()
 
@@ -2054,7 +2055,7 @@ function UI:RenderUnitFramePanel(parent, width)
 
     -- ── Divider ───────────────────────────────────────────────────────────────
     local divider = parent:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, -y)
+    divider:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
     divider:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -y)
     divider:SetHeight(1)
     divider:SetColorTexture(accent[1], accent[2], accent[3], 0.25)
@@ -2069,8 +2070,8 @@ function UI:RenderUnitFramePanel(parent, width)
     y = y + 22
 
     local scrollFrame = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT",     parent, "TOPLEFT",     0,   -y)
-    scrollFrame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -20,  0)
+    scrollFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
+    scrollFrame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -20, 0)
     SkinScrollBar(scrollFrame, accent)
 
     local tagContentWidth = math.max(160, width - 28)

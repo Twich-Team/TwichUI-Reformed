@@ -171,6 +171,18 @@ local function CopyColor(color, fallback)
     }
 end
 
+local ROLE_ATLAS = {
+    TANK    = "roleicon-tank",
+    HEALER  = "roleicon-healer",
+    DAMAGER = "roleicon-dps",
+}
+
+local INFO_BAR_TEXT_DEFAULTS = {
+    { tag = "[name]",     justify = "LEFT",   fontSize = 9, useClassColor = false },
+    { tag = "[perhp<$%]", justify = "CENTER", fontSize = 9, useClassColor = false },
+    { tag = "",           justify = "RIGHT",  fontSize = 9, useClassColor = false },
+}
+
 local function GetLSMTexture(name)
     local LSM = T.Libs and T.Libs.LSM
     if not LSM or type(LSM.Fetch) ~= "function" then
@@ -335,10 +347,19 @@ end
 local function AuraMatchesDisplayMode(mode, data)
     if not data then return false end
     if mode == "DISPELLABLE" or mode == "DISPELLABLE_OR_BOSS" then
-        if data.isHarmfulAura ~= true then return false end
-        local canDispel = GetPlayerDispelTypes()[NormalizeDispelName(data.dispelName or "")] == true
+        -- isHarmful / isHarmfulAura can be secret booleans — wrap comparisons in pcall.
+        local _okh, _harm   = pcall(function() return data.isHarmful == true end)
+        local _okha, _harma = pcall(function() return data.isHarmfulAura == true end)
+        if not ((_okh and _harm) or (_okha and _harma)) then return false end
+        -- dispelName can also be a secret string — guard the table key lookup.
+        local _okd, _canDispel = pcall(function()
+            return GetPlayerDispelTypes()[NormalizeDispelName(data.dispelName or "")] == true
+        end)
+        local canDispel = _okd and _canDispel
         if mode == "DISPELLABLE" then return canDispel end
-        return canDispel or data.isBossAura == true
+        -- isBossAura can be a secret boolean too.
+        local _okb, _isBoss = pcall(function() return data.isBossAura == true end)
+        return canDispel or (_okb and _isBoss)
     end
     return true
 end
@@ -411,24 +432,25 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
 
     local palette = {
         health          = CopyColor(scopeColors.health or db.colors.health or
-        GetThemeColor("successColor", { 0.34, 0.84, 0.54, 1 })),
+            GetThemeColor("successColor", { 0.34, 0.84, 0.54, 1 })),
         power           = CopyColor(scopeColors.power or db.colors.power or
-        GetThemeColor("primaryColor", { 0.10, 0.72, 0.74, 1 })),
+            GetThemeColor("primaryColor", { 0.10, 0.72, 0.74, 1 })),
         powerBackground = CopyColor(scopeColors.powerBackground or db.colors.powerBackground or
-        GetThemeColor("backgroundColor", { 0.05, 0.06, 0.08, 0.85 })),
+            GetThemeColor("backgroundColor", { 0.05, 0.06, 0.08, 0.85 })),
         powerBorder     = CopyColor(scopeColors.powerBorder or db.colors.powerBorder or
-        GetThemeColor("borderColor", { 0.24, 0.26, 0.32, 0.9 })),
+            GetThemeColor("borderColor", { 0.24, 0.26, 0.32, 0.9 })),
         cast            = CopyColor(scopeColors.cast or db.colors.cast or
-        GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })),
+            GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })),
         background      = CopyColor(scopeColors.background or db.colors.background or
-        GetThemeColor("backgroundColor", { 0.05, 0.06, 0.08, 1 })),
+            GetThemeColor("backgroundColor", { 0.05, 0.06, 0.08, 1 })),
         border          = CopyColor(scopeColors.border or db.colors.border or
-        GetThemeColor("borderColor", { 0.24, 0.26, 0.32, 1 })),
+            GetThemeColor("borderColor", { 0.24, 0.26, 0.32, 1 })),
     }
 
     if unitColors then
         if type(unitColors.power) == "table" then palette.power = CopyColor(unitColors.power) end
-        if type(unitColors.powerBackground) == "table" then palette.powerBackground = CopyColor(unitColors.powerBackground) end
+        if type(unitColors.powerBackground) == "table" then palette.powerBackground = CopyColor(unitColors
+            .powerBackground) end
         if type(unitColors.powerBorder) == "table" then palette.powerBorder = CopyColor(unitColors.powerBorder) end
         if type(unitColors.cast) == "table" then palette.cast = CopyColor(unitColors.cast) end
         if type(unitColors.background) == "table" then palette.background = CopyColor(unitColors.background) end
@@ -493,8 +515,8 @@ end
 --   "powertype" — look up WoW's PowerBarColor for the unit's active resource
 -- Falls back to palette.power when mode = "powertype" but no mapping exists.
 function UnitFrames:ResolvePowerColor(unitKey, unit)
-    local db      = self:GetDB()
-    local palette = self:GetPalette(unitKey, unit)
+    local db            = self:GetDB()
+    local palette       = self:GetPalette(unitKey, unit)
 
     local resolvedScope = ResolveScopeByUnitKey(unitKey or "")
     local unitColors    = nil
@@ -503,11 +525,11 @@ function UnitFrames:ResolvePowerColor(unitKey, unit)
         db.units[unitKey] = db.units[unitKey] or {}
         unitColors = db.units[unitKey].colors or nil
     end
-    db.colors        = db.colors        or {}
-    db.colors.scopes = db.colors.scopes or {}
+    db.colors         = db.colors or {}
+    db.colors.scopes  = db.colors.scopes or {}
     local scopeColors = db.colors.scopes[resolvedScope] or {}
 
-    local mode = (unitColors and unitColors.powerColorMode and unitColors.powerColorMode ~= "inherit" and unitColors.powerColorMode)
+    local mode        = (unitColors and unitColors.powerColorMode and unitColors.powerColorMode ~= "inherit" and unitColors.powerColorMode)
         or (scopeColors.powerColorMode and scopeColors.powerColorMode ~= "" and scopeColors.powerColorMode)
         or db.powerColorMode
         or "custom"
@@ -537,6 +559,400 @@ function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
     end
 end
 
+-- Returns whether the power bar should be shown for the given unitKey.
+-- Group member types always show power (per group config); single units read showPower.
+function UnitFrames:GetEffectiveShowPower(unitKey)
+    if unitKey == "partyMember" or unitKey == "raidMember" or unitKey == "tankMember" then
+        return true
+    end
+    local key = (unitKey and unitKey:match("^boss")) and "boss" or (unitKey or "")
+    return self:GetUnitSettings(key).showPower ~= false
+end
+
+-- ---------------------------------------------------------------------------
+-- Role Icon (Task 2)
+-- ---------------------------------------------------------------------------
+
+--- Returns the merged role icon config for a given unit key.
+function UnitFrames:GetRoleIconConfig(unitKey)
+    local db = self:GetDB()
+    local scope = ResolveScopeByUnitKey(unitKey)
+
+    local groupCfg = {}
+    if scope ~= "singles" then
+        local grp = db.groups and db.groups[scope] or {}
+        groupCfg = type(grp.roleIcon) == "table" and grp.roleIcon or {}
+    end
+
+    local unitCfg = {}
+    if scope == "singles" and unitKey and unitKey ~= "partyMember" and unitKey ~= "raidMember" and unitKey ~= "tankMember" then
+        local u = db.units and db.units[unitKey] or {}
+        unitCfg = type(u.roleIcon) == "table" and u.roleIcon or {}
+    end
+
+    local function get(k, default)
+        if unitCfg[k] ~= nil then return unitCfg[k] end
+        if groupCfg[k] ~= nil then return groupCfg[k] end
+        return default
+    end
+
+    return {
+        enabled = get("enabled", false),
+        corner  = get("corner", "TOPRIGHT"),
+        size    = get("size", 18),
+        insetX  = get("insetX", 2),
+        insetY  = get("insetY", 2),
+        filter  = get("filter", "all"),
+    }
+end
+
+--- Applies role icon layout settings to a frame (lazy texture creation + positioning).
+--- Also installs an OnShow hook so the icon refreshes whenever the frame gains a unit.
+function UnitFrames:ApplyRoleIconSettings(frame, unitKey)
+    if not frame then return end
+
+    if not frame.TwichRoleIcon then
+        frame.TwichRoleIcon = frame:CreateTexture(nil, "OVERLAY", nil, 1)
+    end
+
+    local icon = frame.TwichRoleIcon
+    local cfg = self:GetRoleIconConfig(unitKey)
+
+    if not cfg.enabled then
+        icon:Hide()
+        return
+    end
+
+    local sz = Clamp(cfg.size, 8, 40)
+    icon:SetSize(sz, sz)
+    icon:ClearAllPoints()
+
+    local corner = cfg.corner or "TOPRIGHT"
+    local inX = tonumber(cfg.insetX) or 2
+    local inY = tonumber(cfg.insetY) or 2
+
+    if corner == "TOPLEFT" then
+        icon:SetPoint("TOPLEFT", frame, "TOPLEFT", inX, -inY)
+    elseif corner == "TOPRIGHT" then
+        icon:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -inX, -inY)
+    elseif corner == "BOTTOMLEFT" then
+        icon:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", inX, inY)
+    else
+        icon:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inX, inY)
+    end
+
+    -- Ensure the icon refreshes every time the frame shows with a new unit
+    if not frame._twichRoleIconOnShowHooked then
+        frame._twichRoleIconOnShowHooked = true
+        frame:HookScript("OnShow", function(f)
+            UnitFrames:UpdateRoleIcon(f, f._unitKey or unitKey)
+        end)
+    end
+
+    self:UpdateRoleIcon(frame, unitKey)
+end
+
+--- Updates role icon visibility/atlas based on the unit's assigned role.
+--- Filter "all"     = always show for any visible group member (DAMAGER icon for unassigned).
+--- Filter "assigned"= show only when role is explicitly TANK/HEALER/DAMAGER (not NONE).
+--- Filter "nonDps"  = TANK or HEALER only.
+--- Filter "healers" = HEALER only.
+--- Filter "tanks"   = TANK only.
+function UnitFrames:UpdateRoleIcon(frame, unitKey)
+    local icon = frame and frame.TwichRoleIcon
+    if not icon then return end
+
+    local cfg = self:GetRoleIconConfig(unitKey)
+    if not cfg.enabled then
+        icon:Hide(); return
+    end
+
+    local unit = frame.unit
+    if not unit or not UnitExists(unit) then
+        icon:Hide(); return
+    end
+
+    local role = (UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)) or ""
+
+    local filter = cfg.filter or "all"
+    local displayRole = role -- role to use for the atlas lookup
+
+    local show
+    if filter == "all" then
+        -- Always show; fall back to DAMAGER icon for unassigned units
+        show = true
+        if role == "" or role == "NONE" then displayRole = "DAMAGER" end
+    elseif filter == "assigned" then
+        show = role ~= "" and role ~= "NONE"
+    elseif filter == "nonDps" then
+        show = role == "TANK" or role == "HEALER"
+    elseif filter == "healers" then
+        show = role == "HEALER"
+    elseif filter == "tanks" then
+        show = role == "TANK"
+    else
+        show = role ~= "" and role ~= "NONE"
+    end
+
+    if show then
+        -- GetRoleIconAtlas is available since WoW 5.0; ROLE_ATLAS is a fallback.
+        local atlas = (_G.GetRoleIconAtlas and _G.GetRoleIconAtlas(displayRole))
+            or ROLE_ATLAS[displayRole]
+        if atlas then
+            -- SetAtlas with false so our explicit SetSize is NOT overridden.
+            icon:SetAtlas(atlas, false)
+            icon:SetSize(Clamp(cfg.size, 8, 40), Clamp(cfg.size, 8, 40))
+            icon:Show()
+        else
+            icon:Hide()
+        end
+    else
+        icon:Hide()
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Extra Info Bar (Task 3)
+-- ---------------------------------------------------------------------------
+
+--- Returns the merged info bar config for a given unit key.
+function UnitFrames:GetInfoBarConfig(unitKey)
+    local db = self:GetDB()
+    local scope = ResolveScopeByUnitKey(unitKey)
+
+    local override = {}
+    if scope == "singles" and unitKey and unitKey ~= "partyMember" and unitKey ~= "raidMember" and unitKey ~= "tankMember" then
+        local u = db.units and db.units[unitKey] or {}
+        override = type(u.infoBar) == "table" and u.infoBar or {}
+    elseif scope ~= "singles" then
+        local grp = db.groups and db.groups[scope] or {}
+        override = type(grp.infoBar) == "table" and grp.infoBar or {}
+    end
+
+    local function get(k, default)
+        if override[k] ~= nil then return override[k] end
+        return default
+    end
+
+    local cfg = {
+        enabled       = get("enabled", false),
+        height        = get("height", 18),
+        texture       = get("texture", nil),
+        bgColor       = get("bgColor", nil),
+        borderColor   = get("borderColor", nil),
+        borderSize    = get("borderSize", 1),
+        numTexts      = get("numTexts", 3),
+        -- Font / style for the whole bar (nil = inherit from unit text config)
+        fontName      = get("fontName", nil),
+        outlineMode   = get("outlineMode", nil),
+        shadowEnabled = get("shadowEnabled", nil),
+        shadowColor   = get("shadowColor", nil),
+        shadowOffsetX = get("shadowOffsetX", nil),
+        shadowOffsetY = get("shadowOffsetY", nil),
+        texts         = {},
+    }
+
+    for i = 1, 3 do
+        local key = "text" .. i
+        local def = INFO_BAR_TEXT_DEFAULTS[i]
+        local src = type(override[key]) == "table" and override[key] or {}
+        cfg.texts[i] = {
+            tag           = src.tag ~= nil and src.tag or def.tag,
+            justify       = src.justify or def.justify,
+            fontSize      = src.fontSize or def.fontSize,
+            useClassColor = src.useClassColor ~= nil and src.useClassColor or def.useClassColor,
+            color         = src.color or nil,
+        }
+    end
+
+    return cfg
+end
+
+--- Lazily creates the info bar frame below the given unit frame.
+--- Width is matched to the TwichBackdrop visual edge (1px outset on each side).
+function UnitFrames:EnsureInfoBar(frame)
+    if frame.TwichInfoBar then return frame.TwichInfoBar end
+
+    local bar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    -- outset by 1px on each side to align with the TwichBackdrop visual border
+    bar:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", -1, -2)
+    bar:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 1, -2)
+    bar:SetHeight(18)
+    bar:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    bar:SetBackdropColor(0.05, 0.06, 0.08, 0.92)
+    bar:SetBackdropBorderColor(0.24, 0.26, 0.32, 0.9)
+
+    local texts = {}
+    for i = 1, 3 do
+        local fs = bar:CreateFontString(nil, "OVERLAY")
+        texts[i] = fs
+    end
+    bar.infoTexts = texts
+    bar:Hide()
+    frame.TwichInfoBar = bar
+    return bar
+end
+
+--- Applies info bar settings; lazily creates the bar frame if needed.
+function UnitFrames:ApplyInfoBarSettings(frame, unitKey)
+    if not frame then return end
+
+    local cfg = self:GetInfoBarConfig(unitKey)
+
+    if not cfg.enabled then
+        if frame.TwichInfoBar then frame.TwichInfoBar:Hide() end
+        return
+    end
+
+    local bar = self:EnsureInfoBar(frame)
+    local h = Clamp(cfg.height, 8, 40)
+    bar:SetHeight(h)
+
+    -- Background color
+    local bg = cfg.bgColor
+    if bg then
+        bar:SetBackdropColor(bg[1] or 0, bg[2] or 0, bg[3] or 0, bg[4] or 0.92)
+    else
+        bar:SetBackdropColor(0.05, 0.06, 0.08, 0.92)
+    end
+
+    -- Border size + color
+    local bSize = Clamp(cfg.borderSize or 1, 0, 3)
+    bar:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = bSize > 0 and "Interface\\Buttons\\WHITE8x8" or nil,
+        edgeSize = bSize,
+    })
+    local bc = cfg.borderColor
+    if bc then
+        bar:SetBackdropBorderColor(bc[1] or 0.24, bc[2] or 0.26, bc[3] or 0.32, bc[4] or 0.9)
+    else
+        bar:SetBackdropBorderColor(0.24, 0.26, 0.32, 0.9)
+    end
+    -- Reapply bg color after SetBackdrop reset it
+    if bg then
+        bar:SetBackdropColor(bg[1] or 0, bg[2] or 0, bg[3] or 0, bg[4] or 0.92)
+    else
+        bar:SetBackdropColor(0.05, 0.06, 0.08, 0.92)
+    end
+
+    -- Optional texture overlay
+    if cfg.texture and cfg.texture ~= "" then
+        if not bar._bgTex then
+            bar._bgTex = bar:CreateTexture(nil, "BACKGROUND", nil, 1)
+            bar._bgTex:SetAllPoints(bar)
+        end
+        local texPath = GetLSMTexture(cfg.texture)
+        if texPath then
+            bar._bgTex:SetTexture(texPath); bar._bgTex:Show()
+        else
+            bar._bgTex:Hide()
+        end
+    elseif bar._bgTex then
+        bar._bgTex:Hide()
+    end
+
+    -- Build effective text style: info bar settings override frame text config
+    local baseStyle = self:GetTextConfigFor(unitKey)
+    local barStyle = {
+        fontName      = cfg.fontName or baseStyle.fontName,
+        outlineMode   = cfg.outlineMode or baseStyle.outlineMode,
+        shadowEnabled = cfg.shadowEnabled ~= nil and cfg.shadowEnabled or baseStyle.shadowEnabled,
+        shadowColor   = cfg.shadowColor or baseStyle.shadowColor,
+        shadowOffsetX = cfg.shadowOffsetX ~= nil and cfg.shadowOffsetX or baseStyle.shadowOffsetX,
+        shadowOffsetY = cfg.shadowOffsetY ~= nil and cfg.shadowOffsetY or baseStyle.shadowOffsetY,
+    }
+
+    -- Text slots
+    local numTexts = math_max(1, math_min(cfg.numTexts or 3, 3))
+    local texts = bar.infoTexts
+    local tagApplied = false
+
+    for i = 1, 3 do
+        local fs = texts[i]
+        if not fs then break end
+        local tc = cfg.texts[i]
+
+        if i <= numTexts then
+            self:ApplyFontObject(fs, Clamp(tc.fontSize or 9, 6, 20), barStyle.fontName, barStyle)
+
+            -- Color
+            if tc.useClassColor and frame.unit then
+                local _, classToken = UnitClass(frame.unit)
+                if classToken and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken] then
+                    local c = _G.RAID_CLASS_COLORS[classToken]
+                    fs:SetTextColor(c.r, c.g, c.b, 1)
+                else
+                    fs:SetTextColor(1, 1, 1, 1)
+                end
+            elseif tc.color then
+                fs:SetTextColor(tc.color[1] or 1, tc.color[2] or 1, tc.color[3] or 1, tc.color[4] or 1)
+            else
+                fs:SetTextColor(1, 1, 1, 1)
+            end
+
+            fs:SetJustifyH(tc.justify or "CENTER")
+            fs:SetHeight(h)
+            fs:ClearAllPoints()
+
+            if numTexts == 1 then
+                fs:SetPoint("LEFT", bar, "LEFT", 4, 0)
+                fs:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
+            elseif numTexts == 2 then
+                if i == 1 then
+                    fs:SetPoint("LEFT", bar, "LEFT", 4, 0)
+                    fs:SetPoint("RIGHT", bar, "CENTER", -2, 0)
+                else
+                    fs:SetPoint("LEFT", bar, "CENTER", 2, 0)
+                    fs:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
+                end
+            else
+                -- 3 equal columns anchored to thirds
+                if i == 1 then
+                    fs:SetPoint("TOPLEFT", bar, "TOPLEFT", 4, 0)
+                    fs:SetPoint("TOPRIGHT", bar, "TOP", -2, 0)
+                elseif i == 2 then
+                    fs:SetPoint("LEFT", bar, "LEFT", 4, 0)
+                    fs:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
+                    fs:SetJustifyH("CENTER")
+                else
+                    fs:SetPoint("TOPLEFT", bar, "TOP", 2, 0)
+                    fs:SetPoint("TOPRIGHT", bar, "TOPRIGHT", -4, 0)
+                end
+            end
+
+            -- oUF tag
+            if type(frame.Untag) == "function" then frame:Untag(fs) end
+            if tc.tag and tc.tag ~= "" and type(frame.Tag) == "function" then
+                frame:Tag(fs, tc.tag)
+                tagApplied = true
+            else
+                fs:SetText("")
+            end
+            fs:Show()
+        else
+            if type(frame.Untag) == "function" then frame:Untag(fs) end
+            fs:Hide()
+        end
+    end
+
+    bar:Show()
+
+    -- oUF tags are event-driven; force an immediate refresh so text
+    -- appears right away when the user applies settings mid-session.
+    if tagApplied and frame.unit and type(frame.UpdateAllElements) == "function" then
+        C_Timer.After(0, function()
+            if frame.unit and type(frame.UpdateAllElements) == "function" then
+                frame:UpdateAllElements("TwichInfoBar")
+            end
+        end)
+    end
+end
+
 function UnitFrames:ApplyStatusBarTexture(frame)
     local db = self:GetDB()
 
@@ -553,7 +969,8 @@ function UnitFrames:ApplyStatusBarTexture(frame)
     local bgTexture = (bgTextureName and bgTextureName ~= "") and GetLSMTexture(bgTextureName) or texture
 
     local powerBgTextureName = db.powerBgTexture
-    local powerBgTexture = (powerBgTextureName and powerBgTextureName ~= "") and GetLSMTexture(powerBgTextureName) or bgTexture
+    local powerBgTexture = (powerBgTextureName and powerBgTextureName ~= "") and GetLSMTexture(powerBgTextureName) or
+    bgTexture
 
     if frame.Health and frame.Health.SetStatusBarTexture then
         frame.Health:SetStatusBarTexture(texture)
@@ -768,21 +1185,21 @@ function UnitFrames:GetAuraConfigFor(unitKey)
     local scoped = db.auras.scopes[scope]
 
     local merged = {
-        enabled     = scoped.enabled,
-        maxIcons    = scoped.maxIcons,
-        iconSize    = scoped.iconSize,
-        spacing     = scoped.spacing,
-        yOffset     = scoped.yOffset,
-        filter      = scoped.filter,
-        onlyMine    = scoped.onlyMine,
-        barMode     = scoped.barMode,
-        barHeight   = scoped.barHeight,
-        barTexture  = scoped.barTexture,
-        barFontSize = scoped.barFontSize,
-        barFontName = scoped.barFontName,
-        showTime    = scoped.showTime,
-        showStacks  = scoped.showStacks,
-        barColor    = scoped.barColor,
+        enabled       = scoped.enabled,
+        maxIcons      = scoped.maxIcons,
+        iconSize      = scoped.iconSize,
+        spacing       = scoped.spacing,
+        yOffset       = scoped.yOffset,
+        filter        = scoped.filter,
+        onlyMine      = scoped.onlyMine,
+        barMode       = scoped.barMode,
+        barHeight     = scoped.barHeight,
+        barTexture    = scoped.barTexture,
+        barFontSize   = scoped.barFontSize,
+        barFontName   = scoped.barFontName,
+        showTime      = scoped.showTime,
+        showStacks    = scoped.showStacks,
+        barColor      = scoped.barColor,
         barBackground = scoped.barBackground,
     }
     if merged.enabled == nil then merged.enabled = true end
@@ -794,12 +1211,12 @@ function UnitFrames:GetAuraConfigFor(unitKey)
     if merged.onlyMine == nil then merged.onlyMine = false end
     if merged.barMode == nil then merged.barMode = false end
     if merged.barHeight == nil then merged.barHeight = 14 end
-    if merged.barTexture == nil then merged.barTexture = nil end  -- nil = theme default
+    if merged.barTexture == nil then merged.barTexture = nil end   -- nil = theme default
     if merged.barFontSize == nil then merged.barFontSize = nil end -- nil = auto (barH - 4)
     if merged.barFontName == nil then merged.barFontName = nil end -- nil = text fontName
     if merged.showTime == nil then merged.showTime = true end
     if merged.showStacks == nil then merged.showStacks = true end
-    if merged.barColor == nil then merged.barColor = nil end      -- nil = palette.cast
+    if merged.barColor == nil then merged.barColor = nil end           -- nil = palette.cast
     if merged.barBackground == nil then merged.barBackground = nil end -- nil = default backdrop
 
     -- Per-unit overrides (scope == "singles" only for named units)
@@ -870,8 +1287,16 @@ local function CollectAuraData(list, unit, auraFilter, maxCount, onlyMine, filte
         if data then
             local d = {}
             for k, v in pairs(data) do d[k] = v end
-            d.isPlayerAura  = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
-            d.isHarmfulAura = auraFilter:find("HARMFUL") ~= nil
+            -- Blizzard can return 'secret' typed numbers for duration/expirationTime/applications.
+            -- These blow up on comparison even after tonumber().  Strip via arithmetic pcall.
+            local _okd, _sd  = pcall(function() return (d.duration or 0) + 0 end)
+            d.duration       = _okd and type(_sd) == "number" and _sd or 0
+            local _oke, _se  = pcall(function() return (d.expirationTime or 0) + 0 end)
+            d.expirationTime = _oke and type(_se) == "number" and _se or 0
+            local _oka, _sa  = pcall(function() return (d.applications or 0) + 0 end)
+            d.applications   = _oka and type(_sa) == "number" and _sa or 0
+            d.isPlayerAura   = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
+            d.isHarmfulAura  = auraFilter:find("HARMFUL") ~= nil
             if (not onlyMine or d.isPlayerAura) and AuraMatchesDisplayMode(filterMode, d) then
                 list[#list + 1] = d
                 if #list >= maxCount then return end
@@ -898,10 +1323,11 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     local texture    = (barTexName and barTexName ~= "") and GetLSMTexture(barTexName) or GetThemeTexture()
     local palette    = self:GetPalette(unitKey, unit)
     -- Resolve bar-specific colors; fall back to palette entries
-    local barColor   = aura.barColor   -- may be a table {r,g,b,a} or nil
-    local bgColor    = aura.barBackground  -- may be a table {r,g,b,a} or nil
-    local barFontSz  = (aura.barFontSize and aura.barFontSize > 0) and Clamp(aura.barFontSize, 6, 20) or math_max(7, barH - 4)
-    local barFontNm  = aura.barFontName  or text.fontName
+    local barColor   = aura.barColor      -- may be a table {r,g,b,a} or nil
+    local bgColor    = aura.barBackground -- may be a table {r,g,b,a} or nil
+    local barFontSz  = (aura.barFontSize and aura.barFontSize > 0) and Clamp(aura.barFontSize, 6, 20) or
+    math_max(7, barH - 4)
+    local barFontNm  = aura.barFontName or text.fontName
     local showTime   = aura.showTime ~= false
     local showStacks = aura.showStacks ~= false
 
@@ -971,7 +1397,7 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             if bar.label then
                 self:ApplyFontObject(bar.label, barFontSz, barFontNm, text)
                 bar.label:ClearAllPoints()
-                bar.label:SetPoint("LEFT",  bar, "LEFT",  iconOffset, 0)
+                bar.label:SetPoint("LEFT", bar, "LEFT", iconOffset, 0)
                 bar.label:SetPoint("RIGHT", bar, "RIGHT", -(rightReserve + 4), 0)
                 bar.label:SetText(data.name or "")
             end
@@ -1224,9 +1650,9 @@ end
 
 function UnitFrames:ApplyClassBarSettings(frame, unitKey)
     if unitKey ~= "player" or not frame.ClassPower or not frame.ClassPower.container then return end
-    local db        = self:GetDB()
-    local cfg       = db.classBar or {}
-    local enabled   = cfg.enabled ~= false
+    local db      = self:GetDB()
+    local cfg     = db.classBar or {}
+    local enabled = cfg.enabled ~= false
 
     UFDebug(string.format("ApplyClassBarSettings: unitKey=%s enabled=%s matchFrameWidth=%s cfgWidth=%s",
         tostring(unitKey), tostring(enabled), tostring(cfg.matchFrameWidth), tostring(cfg.width)))
@@ -1371,10 +1797,10 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
             frame.Castbar.Text:ClearAllPoints()
             if showIcon and iconPos == "inside" then
                 if iconSide == "right" then
-                    frame.Castbar.Text:SetPoint("LEFT",  frame.Castbar, "LEFT",  4, 0)
+                    frame.Castbar.Text:SetPoint("LEFT", frame.Castbar, "LEFT", 4, 0)
                     frame.Castbar.Text:SetPoint("RIGHT", frame.Castbar, "RIGHT", -(iconSize + 8), 0)
                 else
-                    frame.Castbar.Text:SetPoint("LEFT",  frame.Castbar, "LEFT",  iconSize + 8, 0)
+                    frame.Castbar.Text:SetPoint("LEFT", frame.Castbar, "LEFT", iconSize + 8, 0)
                     frame.Castbar.Text:SetPoint("RIGHT", frame.Castbar, "RIGHT", -4, 0)
                 end
             else
@@ -1392,18 +1818,18 @@ end
 
 function UnitFrames:UpdateUnitHighlights(frame)
     if not frame then return end
-    local db = self:GetDB()
-    local highlights = db.highlights or {}
-    local unit = frame.unit
-    local unitKey = frame._unitKey or unit
+    local db               = self:GetDB()
+    local highlights       = db.highlights or {}
+    local unit             = frame.unit
+    local unitKey          = frame._unitKey or unit
     -- Per-unit overrides stored at db.units[unitKey].highlights
-    local unitHL = (db.units and db.units[unitKey] and db.units[unitKey].highlights) or {}
-    local targetEnabled   = highlights.showTarget   ~= false and unitHL.showTarget   ~= false
+    local unitHL           = (db.units and db.units[unitKey] and db.units[unitKey].highlights) or {}
+    local targetEnabled    = highlights.showTarget ~= false and unitHL.showTarget ~= false
     local mouseoverEnabled = highlights.showMouseover ~= false and unitHL.showMouseover ~= false
 
     -- Reset both target elements before deciding which to show
     if frame.TwichTargetHighlight then frame.TwichTargetHighlight:Hide() end
-    if frame.TwichTargetGlow       then frame.TwichTargetGlow:Hide()       end
+    if frame.TwichTargetGlow then frame.TwichTargetGlow:Hide() end
 
     if targetEnabled then
         local showTarget = false
@@ -1419,13 +1845,13 @@ function UnitFrames:UpdateUnitHighlights(frame)
                 local a = c[4] or 0.9
                 local gf = frame.TwichTargetGlow
                 -- VERTICAL: bottom→top. TOP edge: color at bottom (frame edge), fade to transparent at top.
-                SetGradientCompat(gf._top,    "VERTICAL",   r, g, b, a, r, g, b, 0)
+                SetGradientCompat(gf._top, "VERTICAL", r, g, b, a, r, g, b, 0)
                 -- BOT edge: transparent at bottom, color at top (frame edge).
-                SetGradientCompat(gf._bottom, "VERTICAL",   r, g, b, 0, r, g, b, a)
+                SetGradientCompat(gf._bottom, "VERTICAL", r, g, b, 0, r, g, b, a)
                 -- HORIZONTAL: left→right. LEFT edge: transparent at left, color at right (frame edge).
-                SetGradientCompat(gf._left,   "HORIZONTAL", r, g, b, 0, r, g, b, a)
+                SetGradientCompat(gf._left, "HORIZONTAL", r, g, b, 0, r, g, b, a)
                 -- RIGHT edge: color at left (frame edge), transparent at right.
-                SetGradientCompat(gf._right,  "HORIZONTAL", r, g, b, a, r, g, b, 0)
+                SetGradientCompat(gf._right, "HORIZONTAL", r, g, b, a, r, g, b, 0)
                 gf:Show()
             elseif frame.TwichTargetHighlight then
                 frame.TwichTargetHighlight:SetBackdropBorderColor(c[1] or 1, c[2] or 0.82, c[3] or 0, c[4] or 0.9)
@@ -1500,7 +1926,7 @@ function UnitFrames:ApplySmoothBarValue(bar, value, maxValue)
     local hasInterpolation = StatusBarInterpolation and StatusBarInterpolation.ExponentialEaseOut
     local smoothEnabled = self:GetDB().smoothBars ~= false and hasInterpolation
     local smoothingMethod = smoothEnabled and StatusBarInterpolation.ExponentialEaseOut or
-    (StatusBarInterpolation and StatusBarInterpolation.Immediate or nil)
+        (StatusBarInterpolation and StatusBarInterpolation.Immediate or nil)
 
     bar.smoothing = smoothingMethod
 
@@ -1539,6 +1965,10 @@ function UnitFrames:ApplyUnitFrameSize(frame, settings, unitKey)
         frame.Power:ClearAllPoints()
 
         if powerHeight > 0 then
+            -- Power is on — clear the force-hide guard and re-enable if oUF disabled it.
+            frame.Power._forceHide = nil
+            frame.Power:SetAlpha(1)
+            if frame.Power.border then frame.Power.border:SetAlpha(1) end
             frame.Power:Show()
             if detached then
                 frame.Power:SetWidth(Clamp(settings.powerWidth or width, 40, 600))
@@ -1568,7 +1998,14 @@ function UnitFrames:ApplyUnitFrameSize(frame, settings, unitKey)
                 frame.Health:SetPoint("BOTTOM", frame.Power, "TOP", 0, 1)
             end
         else
+            -- Power is off — set the force-hide flag so the OnShow hook keeps it hidden
+            -- even when oUF's Enable() or any oUF event calls power:Show().
+            frame.Power._forceHide = true
+            frame.Power:SetAlpha(0)
+            if frame.Power.border then frame.Power.border:SetAlpha(0) end
             frame.Power:Hide()
+            frame.Power:SetHeight(0)
+            if frame.Power.border then frame.Power.border:Hide() end
             frame.Power:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
             frame.Power:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
             frame.Health:SetAllPoints(frame)
@@ -1652,6 +2089,8 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     self:ApplyClassBarSettings(frame, unitKey)
     self:ApplyHighlightSettings(frame)
     self:ApplyUnitCastbarSettings(frame, unitKey)
+    self:ApplyRoleIconSettings(frame, unitKey)
+    self:ApplyInfoBarSettings(frame, unitKey)
 end
 
 function UnitFrames:ApplyHeaderSettings(header, groupKey)
@@ -1723,8 +2162,8 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
 
     -- Determine the unitKey used for member frames of this group.
     local memberUnitKey = (groupKey == "party" and "partyMember")
-        or (groupKey == "raid"  and "raidMember")
-        or (groupKey == "tank"  and "tankMember")
+        or (groupKey == "raid" and "raidMember")
+        or (groupKey == "tank" and "tankMember")
 
     -- Propagate appearance and text changes to all already-spawned member frames.
     for i = 1, select('#', header:GetChildren()) do
@@ -1739,6 +2178,8 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
                 self:ApplyFrameFonts(child, memberUnitKey)
                 self:ApplyTextTags(child, memberUnitKey)
                 self:ApplyTextPositions(child, memberUnitKey)
+                self:ApplyRoleIconSettings(child, memberUnitKey)
+                self:ApplyInfoBarSettings(child, memberUnitKey)
             end
         end
     end
@@ -1812,7 +2253,7 @@ function UnitFrames:GetMoverInspector()
 
     -- Resolve the addon theme font path at panel creation time.
     local function ResolveAddonFont(size)
-        local path = _G.STANDARD_TEXT_FONT
+        local path  = _G.STANDARD_TEXT_FONT
         local LSM   = T.Libs and T.Libs.LSM
         local theme = T:GetModule("Theme", true)
         if LSM and theme then
@@ -1853,10 +2294,10 @@ function UnitFrames:GetMoverInspector()
         panel._hideTimer = C_Timer.NewTimer(0.15, function()
             panel._hideTimer = nil
             if (panel.xBox and panel.xBox:HasFocus()) or
-               (panel.yBox and panel.yBox:HasFocus()) or
-               (panel.wBox and panel.wBox:HasFocus()) or
-               (panel.hBox and panel.hBox:HasFocus()) then
-                return  -- keep open while the user is typing
+                (panel.yBox and panel.yBox:HasFocus()) or
+                (panel.wBox and panel.wBox:HasFocus()) or
+                (panel.hBox and panel.hBox:HasFocus()) then
+                return -- keep open while the user is typing
             end
             panel:Hide()
         end)
@@ -1874,7 +2315,7 @@ function UnitFrames:GetMoverInspector()
 
     -- ── Title ────────────────────────────────────────────────────────────
     local title = panel:CreateFontString(nil, "OVERLAY")
-    title:SetPoint("TOPLEFT",  panel, "TOPLEFT",  8, -8)
+    title:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -8)
     title:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -8)
     title:SetJustifyH("LEFT")
     FLabel(title, 11)
@@ -1891,7 +2332,7 @@ function UnitFrames:GetMoverInspector()
     -- Divider 1
     local div1 = panel:CreateTexture(nil, "ARTWORK")
     div1:SetHeight(1)
-    div1:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, -22)
+    div1:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -22)
     div1:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -22)
     div1:SetColorTexture(0.10, 0.72, 0.74, 0.35)
 
@@ -1924,16 +2365,16 @@ function UnitFrames:GetMoverInspector()
         eb:SetTextColor(1, 1, 1)
         eb:SetJustifyH("RIGHT")
         eb:EnableMouse(true)
-        eb:SetScript("OnEnter",           CancelHide)
-        eb:SetScript("OnLeave",           ScheduleHide)
+        eb:SetScript("OnEnter", CancelHide)
+        eb:SetScript("OnLeave", ScheduleHide)
         eb:SetScript("OnEditFocusGained", CancelHide)
         return eb
     end
 
     -- ── X / Y inputs (row 1) ─────────────────────────────────────────────
-    MakeLabel("X",   8, -35)
+    MakeLabel("X", 8, -35)
     MakeLabel("Y", 116, -35)
-    local xBox = MakeEditBox( 19, -30, 86)
+    local xBox = MakeEditBox(19, -30, 86)
     local yBox = MakeEditBox(127, -30, 82)
     panel.xBox = xBox
     panel.yBox = yBox
@@ -1941,14 +2382,14 @@ function UnitFrames:GetMoverInspector()
     -- Divider between position and size
     local div2 = panel:CreateTexture(nil, "ARTWORK")
     div2:SetHeight(1)
-    div2:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, -55)
+    div2:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -55)
     div2:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -55)
     div2:SetColorTexture(0.14, 0.16, 0.22, 1)
 
     -- ── W / H inputs (row 2) ─────────────────────────────────────────────
-    MakeLabel("W",   8, -63)
+    MakeLabel("W", 8, -63)
     MakeLabel("H", 116, -63)
-    local wBox = MakeEditBox( 19, -58, 86)
+    local wBox = MakeEditBox(19, -58, 86)
     local hBox = MakeEditBox(127, -58, 82)
     panel.wBox = wBox
     panel.hBox = hBox
@@ -1956,7 +2397,7 @@ function UnitFrames:GetMoverInspector()
     -- Divider between size and nudge
     local div3 = panel:CreateTexture(nil, "ARTWORK")
     div3:SetHeight(1)
-    div3:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, -83)
+    div3:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -83)
     div3:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -83)
     div3:SetColorTexture(0.14, 0.16, 0.22, 1)
 
@@ -1991,25 +2432,25 @@ function UnitFrames:GetMoverInspector()
     local function ApplySize(w, h)
         local active = panel._active
         if not active or InCombatLockdown() then return end
-        local key = active.mover._layoutKey
-        local db  = UnitFrames:GetDB()
-        local newW = math_max(40, math.floor((tonumber(w) or 40) + 0.5))
-        local newH = math_max(8,  math.floor((tonumber(h) or 8)  + 0.5))
+        local key       = active.mover._layoutKey
+        local db        = UnitFrames:GetDB()
+        local newW      = math_max(40, math.floor((tonumber(w) or 40) + 0.5))
+        local newH      = math_max(8, math.floor((tonumber(h) or 8) + 0.5))
         local powerBase = key and key:match("^(.-)_power$")
         if powerBase then
-            local s = UnitFrames:GetUnitSettings(powerBase)
+            local s       = UnitFrames:GetUnitSettings(powerBase)
             s.powerWidth  = newW
             s.powerHeight = newH
         elseif key == "castbar" then
-            db.castbar = db.castbar or {}
+            db.castbar        = db.castbar or {}
             db.castbar.width  = newW
             db.castbar.height = newH
         elseif key == "party" or key == "raid" or key == "tank" then
-            local gs = UnitFrames:GetGroupSettings(key)
+            local gs  = UnitFrames:GetGroupSettings(key)
             gs.width  = newW
             gs.height = newH
         elseif key == "boss" then
-            local bs = UnitFrames:GetUnitSettings("boss")
+            local bs  = UnitFrames:GetUnitSettings("boss")
             bs.width  = newW
             bs.height = newH
         else
@@ -2063,7 +2504,7 @@ function UnitFrames:GetMoverInspector()
         if not active then return end
         local m = active.mover
         -- Position
-        local x = m:GetLeft()   or 0
+        local x = m:GetLeft() or 0
         local y = m:GetBottom() or 0
         panel.xBox:SetText(tostring(math.floor(x + 0.5)))
         panel.yBox:SetText(tostring(math.floor(y + 0.5)))
@@ -2138,8 +2579,8 @@ function UnitFrames:GetMoverInspector()
     end)
 
     -- ── Nudge buttons ────────────────────────────────────────────────────
-    local S, G = 20, 3   -- button size, gap
-    local CX   = 110     -- horizontal centre of the 220-wide panel
+    local S, G = 20, 3 -- button size, gap
+    local CX   = 110   -- horizontal centre of the 220-wide panel
 
     local function MakeNudgeBtn(label, dx, dy)
         local btn = CreateFrame("Button", nil, panel, "BackdropTemplate")
@@ -2178,24 +2619,24 @@ function UnitFrames:GetMoverInspector()
     end
 
     -- Arrow layout: cross pattern centred on panel (shifted down for W/H row)
-    local row1Y = -91
-    local row2Y = row1Y - S - G   -- -114
-    local row3Y = row2Y - S - G   -- -137
+    local row1Y    = -91
+    local row2Y    = row1Y - S - G                        -- -114
+    local row3Y    = row2Y - S - G                        -- -137
 
-    local btnUp    = MakeNudgeBtn("\226\134\145",  0,  1)  -- ↑
-    local btnLeft  = MakeNudgeBtn("\226\134\144", -1,  0)  -- ←
-    local btnRight = MakeNudgeBtn("\226\134\146",  1,  0)  -- →
-    local btnDown  = MakeNudgeBtn("\226\134\147",  0, -1)  -- ↓
+    local btnUp    = MakeNudgeBtn("\226\134\145", 0, 1)   -- ↑
+    local btnLeft  = MakeNudgeBtn("\226\134\144", -1, 0)  -- ←
+    local btnRight = MakeNudgeBtn("\226\134\146", 1, 0)   -- →
+    local btnDown  = MakeNudgeBtn("\226\134\147", 0, -1)  -- ↓
 
-    btnUp:SetPoint(   "TOPLEFT", panel, "TOPLEFT", CX - S/2,         row1Y)
-    btnLeft:SetPoint( "TOPLEFT", panel, "TOPLEFT", CX - S/2 - S - G, row2Y)
-    btnRight:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S/2 + S + G, row2Y)
-    btnDown:SetPoint( "TOPLEFT", panel, "TOPLEFT", CX - S/2,         row3Y)
+    btnUp:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2, row1Y)
+    btnLeft:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2 - S - G, row2Y)
+    btnRight:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2 + S + G, row2Y)
+    btnDown:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2, row3Y)
 
     -- Centre indicator (non-interactive cosmetic box)
     local ctr = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     ctr:SetSize(S, S)
-    ctr:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S/2, row2Y)
+    ctr:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2, row2Y)
     ctr:EnableMouse(false)
     ctr:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
@@ -2280,7 +2721,7 @@ function UnitFrames:AttachMover(frame, layoutKey)
     mover:SetMovable(true)
     mover:RegisterForDrag("LeftButton")
     mover:SetScript("OnDragStart", mover:GetScript("OnMouseDown"))
-    mover:SetScript("OnDragStop",  mover:GetScript("OnMouseUp"))
+    mover:SetScript("OnDragStop", mover:GetScript("OnMouseUp"))
 
     -- Show/hide the inspector on hover.
     mover:SetScript("OnEnter", function(selfMover)
@@ -2351,9 +2792,9 @@ function UnitFrames:UpdateMovers()
         local powerMoverUnits = {
             { key = "player",       defaultW = 260, defaultH = 10 },
             { key = "target",       defaultW = 240, defaultH = 10 },
-            { key = "targettarget", defaultW = 180, defaultH = 8  },
-            { key = "focus",        defaultW = 220, defaultH = 8  },
-            { key = "pet",          defaultW = 180, defaultH = 8  },
+            { key = "targettarget", defaultW = 180, defaultH = 8 },
+            { key = "focus",        defaultW = 220, defaultH = 8 },
+            { key = "pet",          defaultW = 180, defaultH = 8 },
         }
         for _, entry in ipairs(powerMoverUnits) do
             local key      = entry.key
@@ -2731,7 +3172,8 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
             local key = "bossPreview" .. index
             local bossMockClass = bossClasses[index] or "DEATHKNIGHT"
             if not preview[key] then
-                preview[key] = self:CreatePreviewFrame(preview.bossAnchor, width, height, "Boss " .. index, "boss", bossMockClass)
+                preview[key] = self:CreatePreviewFrame(preview.bossAnchor, width, height, "Boss " .. index, "boss",
+                    bossMockClass)
             else
                 self:UpdatePreviewFrame(preview[key], width, height, "Boss " .. index, "boss", bossMockClass)
             end
@@ -2785,9 +3227,11 @@ function UnitFrames:BuildPreviewGroups()
         for index = 1, 5 do
             local partyMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
             if not party.rows[index] then
-                party.rows[index] = self:CreatePreviewFrame(party, width, height, "Party " .. index, "partyMember", partyMockClass)
+                party.rows[index] = self:CreatePreviewFrame(party, width, height, "Party " .. index, "partyMember",
+                    partyMockClass)
             else
-                self:UpdatePreviewFrame(party.rows[index], width, height, "Party " .. index, "partyMember", partyMockClass)
+                self:UpdatePreviewFrame(party.rows[index], width, height, "Party " .. index, "partyMember",
+                    partyMockClass)
             end
             local row = party.rows[index]
             local column = math.floor((index - 1) / unitsPerColumn)
@@ -2814,7 +3258,8 @@ function UnitFrames:BuildPreviewGroups()
         for index = 1, 20 do
             local raidMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
             if not raid.rows[index] then
-                raid.rows[index] = self:CreatePreviewFrame(raid, width, height, "Raid " .. index, "raidMember", raidMockClass)
+                raid.rows[index] = self:CreatePreviewFrame(raid, width, height, "Raid " .. index, "raidMember",
+                    raidMockClass)
             else
                 self:UpdatePreviewFrame(raid.rows[index], width, height, "Raid " .. index, "raidMember", raidMockClass)
             end
@@ -2841,7 +3286,8 @@ function UnitFrames:BuildPreviewGroups()
         for index = 1, 2 do
             local tankMockClass = tankClasses[index] or "WARRIOR"
             if not tank.rows[index] then
-                tank.rows[index] = self:CreatePreviewFrame(tank, width, height, "Tank " .. index, "tankMember", tankMockClass)
+                tank.rows[index] = self:CreatePreviewFrame(tank, width, height, "Tank " .. index, "tankMember",
+                    tankMockClass)
             else
                 self:UpdatePreviewFrame(tank.rows[index], width, height, "Tank " .. index, "tankMember", tankMockClass)
             end
@@ -2910,6 +3356,7 @@ function UnitFrames:RefreshAllFrames()
     self:RefreshPreviewVisibility()
     self:ApplyTestModeToSingles()
     self:UpdateMovers()
+    self:ApplyMasqueSettings()
 end
 
 function UnitFrames:OnThemeChanged()
@@ -2981,10 +3428,25 @@ function UnitFrames:StyleFrame(frame)
     power.colorClass = false; power.colorDisconnected = false
     power.colorReaction = false; power.colorTapping = false; power.colorPower = false
     power.frequentUpdates = true
+    -- oUF's Power:Enable() unconditionally calls element:Show(), which happens after
+    -- StyleFrame returns.  This hook fires synchronously when that Show() is called and
+    -- immediately re-hides the bar if we configured it to be off (_forceHide flag).
+    power:HookScript("OnShow", function(self)
+        if self._forceHide then
+            self:Hide()
+            if self.border then self.border:Hide() end
+        end
+    end)
     -- oUF's Power:PostUpdate signature is (unit, cur, min, max) — the 4th arg is the
     -- minimum, not the maximum. Capturing it as 'max' caused SetMinMaxValues(0, min=0)
     -- which left the bar permanently empty. We name the 4th param _min and take max 5th.
     power.PostUpdate = function(powerBar, unit2, cur, _min, max)
+        -- If power bar is configured off, prevent oUF re-showing it during update events.
+        if not UnitFrames:GetEffectiveShowPower(capturedUnitKey) then
+            powerBar:Hide()
+            if powerBar.border then powerBar.border:Hide() end
+            return
+        end
         UnitFrames:ApplySmoothBarValue(powerBar, cur, max)
         local col = UnitFrames:ResolvePowerColor(capturedUnitKey, unit2)
         powerBar:SetStatusBarColor(col[1], col[2], col[3], 1)
@@ -2994,6 +3456,11 @@ function UnitFrames:StyleFrame(frame)
     -- zone transitions). When all colorXxx flags are false oUF skips SetStatusBarColor
     -- entirely, so we must force our resolved color here to avoid a black bar.
     power.PostUpdateColor = function(powerBar, unit2, _color, _r, _g, _b)
+        if not UnitFrames:GetEffectiveShowPower(capturedUnitKey) then
+            powerBar:Hide()
+            if powerBar.border then powerBar.border:Hide() end
+            return
+        end
         local col = UnitFrames:ResolvePowerColor(capturedUnitKey, unit2)
         powerBar:SetStatusBarColor(col[1], col[2], col[3], 1)
         UnitFrames:UpdatePowerBarForRole(powerBar, capturedUnitKey, unit2)
@@ -3136,7 +3603,7 @@ function UnitFrames:StyleFrame(frame)
     frame.TwichTargetGlow = glowContainer
 
     -- Mouseover highlight
-    local hoverHL = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    local hoverHL         = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     hoverHL:SetAllPoints(frame)
     hoverHL:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 2))
     hoverHL:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
@@ -3428,7 +3895,8 @@ function UnitFrames:SpawnHeaders(oUF)
         "yOffset", -8,
         "point", "TOP"
     )
-    UFDebug(string.format("SpawnHeaders: party header = %s", tostring(self.headers.party and self.headers.party:GetName() or "nil")))
+    UFDebug(string.format("SpawnHeaders: party header = %s",
+        tostring(self.headers.party and self.headers.party:GetName() or "nil")))
 
     self.headers.raid = oUF:SpawnHeader(
         "TwichUIUF_RaidHeader",
@@ -3573,12 +4041,12 @@ function UnitFrames:BuildDebugReport()
     for _, k in ipairs(headerKeys) do
         local h = self.headers[k]
         if h then
-            local shown     = h.IsShown and h:IsShown() or false
-            local w         = h.GetWidth  and math.floor(h:GetWidth()  + 0.5) or 0
-            local hgt       = h.GetHeight and math.floor(h:GetHeight() + 0.5) or 0
-            local showAttr  = h.GetAttribute and h:GetAttribute("showParty") or h:GetAttribute("showRaid")
+            local shown      = h.IsShown and h:IsShown() or false
+            local w          = h.GetWidth and math.floor(h:GetWidth() + 0.5) or 0
+            local hgt        = h.GetHeight and math.floor(h:GetHeight() + 0.5) or 0
+            local showAttr   = h.GetAttribute and h:GetAttribute("showParty") or h:GetAttribute("showRaid")
             local childCount = 0
-            for _ in pairs({h:GetChildren()}) do childCount = childCount + 1 end
+            for _ in pairs({ h:GetChildren() }) do childCount = childCount + 1 end
             -- Count how many children are shown (i.e. have a live unit)
             local shownChildren = 0
             for i = 1, select("#", h:GetChildren()) do
@@ -3599,7 +4067,7 @@ function UnitFrames:BuildDebugReport()
                 if c and c.Health then
                     local cu = c.unit and tostring(c.unit) or "(none)"
                     local cs = c.IsShown and c:IsShown() or false
-                    local cw = c.GetWidth  and math.floor(c:GetWidth()  + 0.5) or 0
+                    local cw = c.GetWidth and math.floor(c:GetWidth() + 0.5) or 0
                     local ch = c.GetHeight and math.floor(c:GetHeight() + 0.5) or 0
                     tinsert(lines, string.format("    child%d: unit=%-8s %dx%d shown=%s",
                         i, cu, cw, ch, tostring(cs)))
@@ -3621,7 +4089,7 @@ function UnitFrames:BuildDebugReport()
         local mv = self.movers[k]
         if mv then
             local mvShown = mv.IsShown and mv:IsShown() or false
-            local mvW = mv.GetWidth  and math.floor(mv:GetWidth()  + 0.5) or 0
+            local mvW = mv.GetWidth and math.floor(mv:GetWidth() + 0.5) or 0
             local mvH = mv.GetHeight and math.floor(mv:GetHeight() + 0.5) or 0
             local mvPos = "(no pos)"
             if mv.GetNumPoints and mv:GetNumPoints() > 0 then
@@ -3728,33 +4196,60 @@ function UnitFrames:OnEnable()
 
     self:RefreshAllFrames()
 
-    -- Optional Masque skinning for the standalone castbar icon.
-    -- Masque is a third-party library; we only proceed if it is loaded.
-    local Masque = LibStub and LibStub("Masque", true)
-    if Masque then
-        local castbar = self.frames.castbar
-        if castbar and castbar.iconButton then
-            local masqueGroup = Masque:Group("TwichUI Reformed", "Castbar Icon")
-            masqueGroup:AddButton(castbar.iconButton, {
-                Icon        = castbar.icon,
-                Highlight   = nil,
-                Normal      = false,
-                Pushed      = false,
-                Disabled    = false,
-                Checked     = false,
-                Border      = false,
-                Cooldown    = nil,
-                AutoCast    = nil,
-                AutoCastable = nil,
-                HotKey      = nil,
-                Count       = false,
-                Name        = nil,
-                Duration    = false,
-                FloatingBG  = nil,
-                Flash       = nil,
-            })
-            masqueGroup:ReSkin()
-            self._masqueGroup = masqueGroup
+    -- Apply Masque skinning if enabled (gated by db.castbar.masqueEnabled).
+    -- ApplyMasqueSettings is also called from RefreshAllFrames so toggling the
+    -- option takes effect without a UI reload.
+    self:ApplyMasqueSettings()
+end
+
+--- Applies or tears down Masque skinning for the standalone castbar icon.
+--- Safe to call multiple times; initialises Masque only when masqueEnabled is true
+--- and tears it down (deletes the group) when it is disabled.
+function UnitFrames:ApplyMasqueSettings()
+    local db = self:GetDB()
+    local castbarCfg = type(db.castbar) == "table" and db.castbar or {}
+    local wantMasque = castbarCfg.masqueEnabled == true
+
+    if wantMasque then
+        -- Initialise only once; ReSkin on subsequent calls
+        if not self._masqueGroup then
+            local Masque = LibStub and LibStub("Masque", true)
+            if Masque then
+                local castbar = self.frames.castbar
+                if castbar and castbar.iconButton then
+                    local masqueGroup = Masque:Group("TwichUI Reformed", "Castbar Icon")
+                    masqueGroup:AddButton(castbar.iconButton, {
+                        Icon         = castbar.icon,
+                        Highlight    = nil,
+                        Normal       = false,
+                        Pushed       = false,
+                        Disabled     = false,
+                        Checked      = false,
+                        Border       = false,
+                        Cooldown     = nil,
+                        AutoCast     = nil,
+                        AutoCastable = nil,
+                        HotKey       = nil,
+                        Count        = false,
+                        Name         = nil,
+                        Duration     = false,
+                        FloatingBG   = nil,
+                        Flash        = nil,
+                    })
+                    masqueGroup:ReSkin()
+                    self._masqueGroup = masqueGroup
+                end
+            end
+        elseif self._masqueGroup.ReSkin then
+            self._masqueGroup:ReSkin()
+        end
+    else
+        -- Masque was disabled; remove the group to restore default icon appearance
+        if self._masqueGroup then
+            if type(self._masqueGroup.Delete) == "function" then
+                self._masqueGroup:Delete()
+            end
+            self._masqueGroup = nil
         end
     end
 end
