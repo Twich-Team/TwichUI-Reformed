@@ -808,6 +808,9 @@ local function GetPreviewType(path)
     if key:find("raidFrames.dispellableDebuffsTab", 1, true) == 1 then
         return "raid"
     end
+    if key:find("Unit Frames", 1, true) == 1 then
+        return "unitframes"
+    end
 
     return nil
 end
@@ -1772,6 +1775,102 @@ function UI:ConfigureOptionsLayout(path)
     self.lastOptionsScrollWidth = scrollWidth
 end
 
+local UNIT_FRAME_TAG_REFERENCE = {
+    {
+        title = "Core",
+        items = {
+            { tag = "[name]",    description = "Full unit name." },
+            { tag = "[name(8)]", description = "Shortened name. The number is the max length." },
+            { tag = "[class]",   description = "Localized class name for player units." },
+            { tag = "[level]",   description = "Unit level." },
+            { tag = "[status]",  description = "Status text such as Dead, Ghost, AFK, or Offline." },
+        },
+    },
+    {
+        title = "Health",
+        items = {
+            { tag = "[curhp]",         description = "Current health value." },
+            { tag = "[perhp<$%]",      description = "Health percent with a suffix only when the tag has a value." },
+            { tag = "[missinghp]",     description = "Missing health amount." },
+            { tag = "[curhp]/[maxhp]", description = "Common combined current and max health display." },
+        },
+    },
+    {
+        title = "Power",
+        items = {
+            { tag = "[curpp]",     description = "Current power value." },
+            { tag = "[perpp<$%]",  description = "Power percent with a conditional suffix." },
+            { tag = "[missingpp]", description = "Missing power amount." },
+            { tag = "[power]",     description = "Localized power type name such as Mana, Rage, or Energy." },
+        },
+    },
+    {
+        title = "Color And Syntax",
+        items = {
+            { tag = "[raidcolor][name<$|r]", description = "Wrap the unit name in raid/class color and close the color code only when the name exists." },
+            { tag = "[difficulty][level]",   description = "Color the level text by target difficulty." },
+            { tag = "[group]",               description = "Raid group number for raid members." },
+            { tag = "[classification]",      description = "Rare, Elite, Boss, or Affix classification text when relevant." },
+        },
+    },
+}
+
+function UI:RenderUnitFrameTagReference(parent, width)
+    local accent = self.currentAccent or { 0.98, 0.76, 0.22 }
+    local y = 0
+
+    local intro = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    intro:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
+    intro:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
+    intro:SetJustifyH("LEFT")
+    intro:SetJustifyV("TOP")
+    intro:SetTextColor(0.78, 0.8, 0.86)
+    intro:SetText(
+    "Custom text fields accept raw oUF tag strings. Combine tags freely and use affixes like [perhp<$%] when you want punctuation to disappear with empty values.")
+    intro:SetWidth(width)
+    y = y + intro:GetStringHeight() + 14
+
+    for _, section in ipairs(UNIT_FRAME_TAG_REFERENCE) do
+        local heading = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        heading:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
+        heading:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -y)
+        heading:SetJustifyH("LEFT")
+        heading:SetTextColor(accent[1], accent[2], accent[3])
+        heading:SetText(section.title)
+        y = y + 20
+
+        for _, item in ipairs(section.items) do
+            local row = CreatePanel(parent, 0.08, 0.08, 0.11, 0.94, 0.08)
+            row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
+            row:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -y)
+
+            local tagLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            tagLabel:SetPoint("TOPLEFT", row, "TOPLEFT", 10, -8)
+            tagLabel:SetPoint("TOPRIGHT", row, "TOPRIGHT", -10, -8)
+            tagLabel:SetJustifyH("LEFT")
+            tagLabel:SetTextColor(1, 0.95, 0.82)
+            tagLabel:SetText(item.tag)
+
+            local descLabel = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            descLabel:SetPoint("TOPLEFT", tagLabel, "BOTTOMLEFT", 0, -5)
+            descLabel:SetPoint("TOPRIGHT", row, "TOPRIGHT", -10, 0)
+            descLabel:SetJustifyH("LEFT")
+            descLabel:SetJustifyV("TOP")
+            descLabel:SetTextColor(0.74, 0.76, 0.82)
+            descLabel:SetText(item.description)
+            descLabel:SetWidth(width - 20)
+
+            local rowHeight = math.max(44, descLabel:GetStringHeight() + 28)
+            row:SetHeight(rowHeight)
+            y = y + rowHeight + 8
+        end
+
+        y = y + 6
+    end
+
+    return y
+end
+
 function UI:RenderStickyPreview(path)
     local frame = self:EnsureFrame()
     local previewType = GetPreviewType(path or {})
@@ -1803,6 +1902,10 @@ function UI:RenderStickyPreview(path)
             title = "Raid Preview",
             subtitle = "Glow and spark changes stay visible while you scroll through the frame settings.",
         },
+        unitframes = {
+            title = "oUF Tag Reference",
+            subtitle = "Common bundled oUF tags stay visible while you configure Unit Frames text and custom tag fields.",
+        },
     }
     local previewInfo = titles[previewType]
     frame.PreviewTitle:SetText(previewInfo and previewInfo.title or "Preview")
@@ -1813,7 +1916,14 @@ function UI:RenderStickyPreview(path)
     root:SetPoint("TOPLEFT", frame.PreviewBody, "TOPLEFT", 0, 0)
     root:SetSize(width, 1)
     self.previewRoot = root
-    local height = self:RenderPreviewStrip(root, 0, path, width)
+
+    local height = nil
+    if previewType == "unitframes" then
+        height = self:RenderUnitFrameTagReference(root, width)
+    else
+        height = self:RenderPreviewStrip(root, 0, path, width)
+    end
+
     root:SetHeight(height)
 end
 
