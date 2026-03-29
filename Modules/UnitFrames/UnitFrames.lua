@@ -46,6 +46,20 @@ local PREVIEW_SINGLE_UNITS = {
     { key = "pet",          label = "Pet" },
 }
 
+-- Realistic class distribution used in test mode preview frames.
+local PREVIEW_CLASS_TOKENS = {
+    "WARRIOR", "MAGE", "PRIEST", "DEATHKNIGHT", "DRUID",
+    "PALADIN", "ROGUE", "HUNTER", "WARLOCK", "SHAMAN",
+    "MONK", "DEMONHUNTER", "EVOKER",
+}
+-- Per-slot mock class for single unit previews (player/pet omitted; palette
+-- handles player via UnitClass("player") directly; pet has no player class).
+local PREVIEW_MOCK_CLASSES = {
+    target       = "WARRIOR",
+    targettarget = "MAGE",
+    focus        = "DEATHKNIGHT",
+}
+
 local function GetOUF()
     -- Embedded oUF in this addon lives on the addon namespace table (Engine),
     -- while some external layouts expose a global oUF. Support both.
@@ -321,7 +335,7 @@ function UnitFrames:GetLayoutSettings(key)
     return db.layout[key]
 end
 
-function UnitFrames:GetPalette(scopeOrUnitKey, unit)
+function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
     local db = self:GetDB()
     db.colors = db.colors or {}
     db.colors.scopes = db.colors.scopes or {}
@@ -385,6 +399,8 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit)
         elseif unitKey == "player" then
             _, classToken = UnitClass("player")
         end
+        -- Fall back to the caller-supplied mock class (used by test mode previews).
+        if not classToken then classToken = mockClass end
         local classColor = (_G.CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[classToken or ""]
         if classColor then
             palette.health = { classColor.r, classColor.g, classColor.b, 1 }
@@ -1656,11 +1672,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     end)
 end
 
-function UnitFrames:CreatePreviewFrame(parent, width, height, label, scopeOrUnitKey)
+function UnitFrames:CreatePreviewFrame(parent, width, height, label, scopeOrUnitKey, mockClass)
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     frame:SetSize(width, height)
     frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-    local palette = self:GetPalette(scopeOrUnitKey or "singles")
+    local palette = self:GetPalette(scopeOrUnitKey or "singles", nil, mockClass)
     frame:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
     frame:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
 
@@ -1699,12 +1715,14 @@ function UnitFrames:CreatePreviewFrame(parent, width, height, label, scopeOrUnit
     frame.Label      = nameFS
     frame.HealthText = healthFS
     frame._scopeKey  = scopeOrUnitKey
+    frame._mockClass = mockClass
     return frame
 end
 
-function UnitFrames:UpdatePreviewFrame(frame, width, height, label, scopeOrUnitKey)
+function UnitFrames:UpdatePreviewFrame(frame, width, height, label, scopeOrUnitKey, mockClass)
     if not frame then return end
-    local palette = self:GetPalette(scopeOrUnitKey or frame._scopeKey or "singles")
+    local mockC = (mockClass ~= nil) and mockClass or frame._mockClass
+    local palette = self:GetPalette(scopeOrUnitKey or frame._scopeKey or "singles", nil, mockC)
     local text = self:GetTextConfigFor(scopeOrUnitKey or frame._scopeKey or "player")
     frame:SetSize(width, height)
     frame:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
@@ -1736,11 +1754,12 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         local layout = self:GetLayoutSettings(entry.key)
         local width = Clamp(settings.width or 220, 80, 600)
         local height = Clamp(settings.height or 42, 16, 180)
+        local mockClass = PREVIEW_MOCK_CLASSES[entry.key]
 
         if not preview[entry.key] then
-            preview[entry.key] = self:CreatePreviewFrame(UIParent, width, height, entry.label, entry.key)
+            preview[entry.key] = self:CreatePreviewFrame(UIParent, width, height, entry.label, entry.key, mockClass)
         else
-            self:UpdatePreviewFrame(preview[entry.key], width, height, entry.label, entry.key)
+            self:UpdatePreviewFrame(preview[entry.key], width, height, entry.label, entry.key, mockClass)
         end
 
         local frame = preview[entry.key]
@@ -1769,9 +1788,9 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
 
         preview.castbar.icon = preview.castbar:CreateTexture(nil, "ARTWORK")
         preview.castbar.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        preview.castbar.icon:SetPoint("RIGHT", preview.castbar, "LEFT", -6, 0)
         preview.castbar.icon:SetSize(20, 20)
         preview.castbar.icon:SetTexture(136243)
+        -- Point is set dynamically in the refresh section below.
 
         preview.castbar.spellText = preview.castbar:CreateFontString(nil, "OVERLAY")
         preview.castbar.spellText:SetPoint("LEFT", preview.castbar, "LEFT", 6, 0)
@@ -1811,10 +1830,43 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         castPreview.timeText:SetShown(castSettings.showTimeText ~= false)
         self:ApplyFontObject(castPreview.spellText, Clamp(castSettings.spellFontSize or 11, 6, 24))
         self:ApplyFontObject(castPreview.timeText, Clamp(castSettings.timeFontSize or 10, 6, 24))
-        if castPreview.icon then
+        do
             local iconSize = Clamp(castSettings.iconSize or castSettings.height or 20, 12, 50)
-            castPreview.icon:SetSize(iconSize, iconSize)
-            castPreview.icon:SetShown(castSettings.showIcon ~= false)
+            local showIcon = castSettings.showIcon ~= false
+            local iconPos  = castSettings.iconPosition or "outside"
+            local iconSide = castSettings.iconSide or "left"
+            if castPreview.icon then
+                castPreview.icon:SetSize(iconSize, iconSize)
+                castPreview.icon:SetShown(showIcon)
+                -- Mirror RefreshCastbarLayout icon positioning.
+                castPreview.icon:ClearAllPoints()
+                if iconPos == "inside" then
+                    if iconSide == "right" then
+                        castPreview.icon:SetPoint("RIGHT", castPreview, "RIGHT", -4, 0)
+                    else
+                        castPreview.icon:SetPoint("LEFT", castPreview, "LEFT", 4, 0)
+                    end
+                else
+                    if iconSide == "right" then
+                        castPreview.icon:SetPoint("LEFT", castPreview, "RIGHT", 6, 0)
+                    else
+                        castPreview.icon:SetPoint("RIGHT", castPreview, "LEFT", -6, 0)
+                    end
+                end
+            end
+            -- Reposition spell text to match icon layout (mirrors RefreshCastbarLayout).
+            castPreview.spellText:ClearAllPoints()
+            if showIcon and iconPos == "inside" then
+                if iconSide == "right" then
+                    castPreview.spellText:SetPoint("LEFT", castPreview, "LEFT", 6, 0)
+                    castPreview.spellText:SetPoint("RIGHT", castPreview, "RIGHT", -(iconSize + 8), 0)
+                else
+                    castPreview.spellText:SetPoint("LEFT", castPreview, "LEFT", iconSize + 8, 0)
+                    castPreview.spellText:SetPoint("RIGHT", castPreview, "RIGHT", -6, 0)
+                end
+            else
+                castPreview.spellText:SetPoint("LEFT", castPreview, "LEFT", 6, 0)
+            end
         end
         castPreview:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
         castPreview:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
@@ -1842,12 +1894,14 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         )
         preview.bossAnchor:SetSize(width, (height + math.abs(yOffset)) * 5)
 
+        local bossClasses = { "DEATHKNIGHT", "WARLOCK", "MAGE", "WARRIOR", "PRIEST" }
         for index = 1, 5 do
             local key = "bossPreview" .. index
+            local bossMockClass = bossClasses[index] or "DEATHKNIGHT"
             if not preview[key] then
-                preview[key] = self:CreatePreviewFrame(preview.bossAnchor, width, height, "Boss " .. index)
+                preview[key] = self:CreatePreviewFrame(preview.bossAnchor, width, height, "Boss " .. index, "boss", bossMockClass)
             else
-                self:UpdatePreviewFrame(preview[key], width, height, "Boss " .. index)
+                self:UpdatePreviewFrame(preview[key], width, height, "Boss " .. index, "boss", bossMockClass)
             end
 
             preview[key]:ClearAllPoints()
@@ -1894,10 +1948,11 @@ function UnitFrames:BuildPreviewGroups()
         PositionContainer(party, layout)
         party:SetSize(width, (height + math_abs(yOffset)) * 5)
         for index = 1, 5 do
+            local partyMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
             if not party.rows[index] then
-                party.rows[index] = self:CreatePreviewFrame(party, width, height, "Party " .. index)
+                party.rows[index] = self:CreatePreviewFrame(party, width, height, "Party " .. index, "partyMember", partyMockClass)
             else
-                self:UpdatePreviewFrame(party.rows[index], width, height, "Party " .. index)
+                self:UpdatePreviewFrame(party.rows[index], width, height, "Party " .. index, "partyMember", partyMockClass)
             end
             local row = party.rows[index]
             row:ClearAllPoints()
@@ -1923,10 +1978,11 @@ function UnitFrames:BuildPreviewGroups()
         PositionContainer(raid, layout)
         raid:SetSize((width + colSpacing) * maxColumns, (height + math_abs(yOffset)) * unitsPerColumn)
         for index = 1, 20 do
+            local raidMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
             if not raid.rows[index] then
-                raid.rows[index] = self:CreatePreviewFrame(raid, width, height, "Raid " .. index)
+                raid.rows[index] = self:CreatePreviewFrame(raid, width, height, "Raid " .. index, "raidMember", raidMockClass)
             else
-                self:UpdatePreviewFrame(raid.rows[index], width, height, "Raid " .. index)
+                self:UpdatePreviewFrame(raid.rows[index], width, height, "Raid " .. index, "raidMember", raidMockClass)
             end
             local row = raid.rows[index]
             local column = math.floor((index - 1) / unitsPerColumn)
@@ -1947,11 +2003,13 @@ function UnitFrames:BuildPreviewGroups()
         local yOffset = tonumber(settings.yOffset) or -6
         PositionContainer(tank, layout)
         tank:SetSize(width, (height + math_abs(yOffset)) * 2)
+        local tankClasses = { "WARRIOR", "PALADIN" }
         for index = 1, 2 do
+            local tankMockClass = tankClasses[index] or "WARRIOR"
             if not tank.rows[index] then
-                tank.rows[index] = self:CreatePreviewFrame(tank, width, height, "Tank " .. index)
+                tank.rows[index] = self:CreatePreviewFrame(tank, width, height, "Tank " .. index, "tankMember", tankMockClass)
             else
-                self:UpdatePreviewFrame(tank.rows[index], width, height, "Tank " .. index)
+                self:UpdatePreviewFrame(tank.rows[index], width, height, "Tank " .. index, "tankMember", tankMockClass)
             end
             local row = tank.rows[index]
             row:ClearAllPoints()
