@@ -297,15 +297,26 @@ local GROW_STEP = {
 }
 
 local function UpdateIconIndicator(frame, idx, cfg, auras)
-    local container = EnsureIconContainer(frame, idx)
-    local size      = Clamp(cfg.iconSize or 18, 8, 40)
-    local spacing   = Clamp(cfg.spacing  or 2,  0, 12)
-    local maxCount  = Clamp(cfg.maxCount or 5,  1, MAX_ICONS)
-    local shown     = math_min(#auras, maxCount)
-    local step      = size + spacing
-    local growFn    = GROW_STEP[cfg.growDirection or "RIGHT"] or GROW_STEP.RIGHT
-    local showDur   = cfg.showDuration ~= false
-    local durFont   = Clamp(cfg.durationFontSize or 7, 5, 14)
+    local container  = EnsureIconContainer(frame, idx)
+    local size       = Clamp(cfg.iconSize or 18, 8, 40)
+    local spacing    = Clamp(cfg.spacing  or 2,  0, 12)
+    local maxCount   = Clamp(cfg.maxCount or 5,  1, MAX_ICONS)
+    local shown      = math_min(#auras, maxCount)
+    local step       = size + spacing
+    local growFn     = GROW_STEP[cfg.growDirection or "RIGHT"] or GROW_STEP.RIGHT
+    local showDur    = cfg.showDuration ~= false
+    local durFont    = Clamp(cfg.durationFontSize or 7, 5, 14)
+    local showCount  = cfg.showCount ~= false
+    local countFont  = Clamp(cfg.countFontSize or 9, 5, 16)
+    local durAnchor  = cfg.durAnchor   or "TOPLEFT"
+    local cntAnchor  = cfg.countAnchor or "BOTTOMRIGHT"
+
+    -- Small inset offsets so text sits just inside the icon border
+    local ANCHOR_OFS = {
+        TOPLEFT    = { 1, -1}, TOP     = { 0, -1}, TOPRIGHT    = {-1, -1},
+        LEFT       = { 1,  0}, CENTER  = { 0,  0}, RIGHT       = {-1,  0},
+        BOTTOMLEFT = { 1,  1}, BOTTOM  = { 0,  1}, BOTTOMRIGHT = {-1,  1},
+    }
 
     container:ClearAllPoints()
     container:SetPoint(
@@ -328,13 +339,22 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
         slot.icon:SetTexture(data.icon)
 
         local n = data.applications or 0
-        slot.count:SetText(n > 1 and tostring(n) or "")
-
-        slot._expiry   = data.expirationTime
-        slot._duration = data.duration
+        local daOfs = ANCHOR_OFS[durAnchor] or {0, 0}
+        slot.dur:ClearAllPoints()
+        slot.dur:SetPoint(durAnchor, slot, durAnchor, daOfs[1], daOfs[2])
         slot.dur:SetFont(_G.STANDARD_TEXT_FONT, durFont, "OUTLINE")
         UpdateDurationText(slot.dur, data.expirationTime, data.duration)
         slot.dur:SetShown(showDur)
+
+        local caOfs = ANCHOR_OFS[cntAnchor] or {0, 0}
+        slot.count:ClearAllPoints()
+        slot.count:SetPoint(cntAnchor, slot, cntAnchor, caOfs[1], caOfs[2])
+        slot.count:SetFont(_G.STANDARD_TEXT_FONT, countFont, "OUTLINE")
+        slot.count:SetText(n > 1 and tostring(n) or "")
+        slot.count:SetShown(showCount and n > 1)
+
+        slot._expiry   = data.expirationTime
+        slot._duration = data.duration
 
         slot:Show()
     end
@@ -694,7 +714,7 @@ function UnitFrames:AWPreviewRender(frame, slotIdx, cfg)
             icon           = tex or 134400,
             duration       = 60,
             expirationTime = GetTime() + 45 + i * 7,
-            applications   = 0,
+            applications   = (cfg.showCount ~= false) and 3 or 0,
         }
     end
     if itype == "icons" then
