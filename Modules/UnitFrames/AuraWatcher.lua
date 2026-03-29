@@ -99,13 +99,21 @@ local function ScanBySpellIds(unit, lookup, onlyMine)
         local slots = { C_UnitAuras.GetAuraSlots(unit, filter) }
         for i = 2, #slots do
             local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
-            -- spellId can be a 'secret' type in combat — pcall the table lookup.
+            -- spellId can be a 'secret' type in combat — pcall the boolean test AND the table lookup.
             local _ok_cfg, _cfg = false, nil
-            if data and data.spellId then
-                _ok_cfg, _cfg = pcall(function() return lookup[data.spellId] end)
+            if data then
+                _ok_cfg, _cfg = pcall(function()
+                    if data.spellId then return lookup[data.spellId] end
+                end)
             end
             if _ok_cfg and _cfg then
-                if not onlyMine or data.isPlayerAura then
+                -- isPlayerAura is a raw Blizzard bool — may be secret. Use IsAuraFilteredOutByInstanceID.
+                local passPlayer = not onlyMine
+                if not passPlayer and C_UnitAuras.IsAuraFilteredOutByInstanceID then
+                    passPlayer = not C_UnitAuras.IsAuraFilteredOutByInstanceID(
+                        unit, data.auraInstanceID, filter .. "|PLAYER")
+                end
+                if passPlayer then
                     -- duration / expirationTime / applications may also be secret type — strip via pcall.
                     local _okd, _dur = pcall(function() return (data.duration or 0) + 0 end)
                     local _oke, _exp = pcall(function() return (data.expirationTime or 0) + 0 end)
@@ -127,31 +135,55 @@ end
 local function ScanByFilter(unit, source, onlyMine)
     if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then return {} end
     local result = {}
-    local filters
+
+    -- Use Blizzard's own composite filter flags so GetAuraSlots pre-classifies for us.
+    -- This avoids reading ANY tainted boolean/string fields from raw AuraData.
+    local filterStrings
     if source == "HELPFUL" then
-        filters = { "HELPFUL" }
-    elseif source == "HARMFUL" or source == "DISPELLABLE" or source == "DISPELLABLE_OR_BOSS" then
-        filters = { "HARMFUL" }
-    else
-        filters = { "HELPFUL", "HARMFUL" }
+        filterStrings = { "HELPFUL" }
+    elseif source == "HARMFUL" then
+        filterStrings = { "HARMFUL" }
+    elseif source == "DISPELLABLE" then
+        filterStrings = { "HARMFUL|RAID_PLAYER_DISPELLABLE" }
+    elseif source == "DISPELLABLE_OR_BOSS" then
+        -- RAID_PLAYER_DISPELLABLE = dispellable by the active player.
+        -- IMPORTANT = boss/priority debuffs (proxy for isBossAura).
+        filterStrings = { "HARMFUL|RAID_PLAYER_DISPELLABLE", "HARMFUL|IMPORTANT" }
+    else  -- ALL
+        filterStrings = { "HELPFUL", "HARMFUL" }
     end
-    for _, f in ipairs(filters) do
-        local playerFilter = f .. "|PLAYER"
-        local slots = { C_UnitAuras.GetAuraSlots(unit, f) }
-        for i = 2, #slots do
-            local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
-            if data then
-                local passPlayer = not onlyMine or data.isPlayerAura
-                if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
-                    local _okd, _dur = pcall(function() return (data.duration or 0) + 0 end)
-                    local _oke, _exp = pcall(function() return (data.expirationTime or 0) + 0 end)
-                    local _oka, _app = pcall(function() return (data.applications or 0) + 0 end)
-                    result[#result + 1] = {
-                        icon           = data.icon,
-                        duration       = _okd and type(_dur) == "number" and _dur or 0,
-                        expirationTime = _oke and type(_exp) == "number" and _exp or 0,
-                        applications   = _oka and type(_app) == "number" and _app or 0,
-                    }
+
+    local seen = {}  -- deduplicate auraInstanceIDs across multi-filter scans
+    for _, f in ipairs(filterStrings) do
+        -- pcall-wrap GetAuraSlots (best practice per ElvUI/DandersFrames).
+        local ok, slotData = pcall(function() return { C_UnitAuras.GetAuraSlots(unit, f) } end)
+        if ok and slotData then
+            for i = 2, #slotData do
+                local data = C_UnitAuras.GetAuraDataBySlot(unit, slotData[i])
+                if data then
+                    local aid = data.auraInstanceID   -- integer, never a secret type
+                    if aid and not seen[aid] then
+                        seen[aid] = true
+                        -- Use IsAuraFilteredOutByInstanceID for the player-cast check.
+                        -- Its return value is a plain Lua bool (C function result), never secret.
+                        local passPlayer = not onlyMine
+                        if not passPlayer and C_UnitAuras.IsAuraFilteredOutByInstanceID then
+                            local base = f:match("^([^|]+)") or "HARMFUL"
+                            passPlayer = not C_UnitAuras.IsAuraFilteredOutByInstanceID(
+                                unit, aid, base .. "|PLAYER")
+                        end
+                        if passPlayer then
+                            local _okd, _dur = pcall(function() return (data.duration or 0) + 0 end)
+                            local _oke, _exp = pcall(function() return (data.expirationTime or 0) + 0 end)
+                            local _oka, _app = pcall(function() return (data.applications or 0) + 0 end)
+                            result[#result + 1] = {
+                                icon           = data.icon,
+                                duration       = _okd and type(_dur) == "number" and _dur or 0,
+                                expirationTime = _oke and type(_exp) == "number" and _exp or 0,
+                                applications   = _oka and type(_app) == "number" and _app or 0,
+                            }
+                        end
+                    end
                 end
             end
         end

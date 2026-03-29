@@ -344,29 +344,27 @@ local function NormalizeDispelName(name)
     return (name == "") and "Enrage" or name
 end
 
-local function AuraMatchesDisplayMode(mode, data)
+-- knownHarmful: optional bool — caller can assert harmfulness without reading any Blizzard fields.
+local function AuraMatchesDisplayMode(mode, data, knownHarmful)
     if not data then return false end
     if mode == "DISPELLABLE" or mode == "DISPELLABLE_OR_BOSS" then
-        -- isHarmful / isHarmfulAura can be secret booleans — wrap comparisons in pcall.
-        local _okh, _harm   = pcall(function() return data.isHarmful == true end)
-        local _okha, _harma = pcall(function() return data.isHarmfulAura == true end)
-        if not ((_okh and _harm) or (_okha and _harma)) then return false end
-        -- dispelName can also be a secret string — guard the table key lookup.
-        local _okd, _canDispel = pcall(function()
-            return GetPlayerDispelTypes()[NormalizeDispelName(data.dispelName or "")] == true
-        end)
-        local canDispel = _okd and _canDispel
-        if mode == "DISPELLABLE" then return canDispel end
-        -- isBossAura can be a secret boolean too.
-        local _okb, _isBoss = pcall(function() return data.isBossAura == true end)
-        return canDispel or (_okb and _isBoss)
+        -- Only ever access our OWN synthetic fields here (computed via IsAuraFilteredOutByInstanceID).
+        -- Any direct read of Blizzard's boolean/string AuraData fields (canActivePlayerDispel,
+        -- isHarmful, dispelName, isBossAura) throws on ==, ~=, not, if-then, or — ALL operations.
+        local isHarmful = (knownHarmful == true) or (data.isHarmfulAura == true)
+        if not isHarmful then return false end
+        -- isDispellableByPlayer / isBossImportant are plain Lua bools we set via IsAuraFilteredOutByInstanceID.
+        if data.isDispellableByPlayer == true then return true end
+        if mode == "DISPELLABLE_OR_BOSS" and data.isBossImportant == true then return true end
+        return false
     end
     return true
 end
 
 -- Method wrapper so AuraWatcher.lua (loaded after this file) can call it.
-function UnitFrames:CheckAuraMatchesFilter(mode, data)
-    return AuraMatchesDisplayMode(mode, data)
+-- knownHarmful: optional; pass true when the caller already knows the aura is a debuff.
+function UnitFrames:CheckAuraMatchesFilter(mode, data, knownHarmful)
+    return AuraMatchesDisplayMode(mode, data, knownHarmful)
 end
 
 function UnitFrames:GetOptions()
@@ -1297,6 +1295,13 @@ local function CollectAuraData(list, unit, auraFilter, maxCount, onlyMine, filte
             d.applications   = _oka and type(_sa) == "number" and _sa or 0
             d.isPlayerAura   = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
             d.isHarmfulAura  = auraFilter:find("HARMFUL") ~= nil
+            -- Classify dispellability/boss status via C API — returns a plain Lua bool, NEVER a secret value.
+            if C_UnitAuras.IsAuraFilteredOutByInstanceID then
+                d.isDispellableByPlayer = not C_UnitAuras.IsAuraFilteredOutByInstanceID(
+                    unit, data.auraInstanceID, "HARMFUL|RAID_PLAYER_DISPELLABLE")
+                d.isBossImportant = not C_UnitAuras.IsAuraFilteredOutByInstanceID(
+                    unit, data.auraInstanceID, "HARMFUL|IMPORTANT")
+            end
             if (not onlyMine or d.isPlayerAura) and AuraMatchesDisplayMode(filterMode, d) then
                 list[#list + 1] = d
                 if #list >= maxCount then return end
