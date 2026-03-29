@@ -5,6 +5,7 @@
 ## Onboarding & Wizard
 
 - My brother is testing the addon for me. When he installed it, it did not show him the wizard automatically, i had to have him use /tui wizard reset. It should show the first time a person logs into any character (so if he has two characters, it will show once for character 1 and once for character 2). It should also show when I determine players need to re-run the wizard via some override when I update the addon.
+- The placement of elements via the layout worked great, except the chat sizing was a little strange. it was too large for him. can we more aggressively scale the chat sizing on different resolutions than my own which created the layout?
 - I would like a nice panel to display when players update the addon if i have news or new features to inform them of. This panel should only show once and only when the addon has been updated and only if i provide it information to display to the player. Make it simple for me to add sections to display that information (such as bugs, new features, breaking changes, etc.). This panel should be dismissable by the player, permenantly disableable somewhere in the configuration. Additionally, if its the players first time installing and setting up the addon, this panel will not display until after they complete the wizard process and the final reload finishes.
 - The wizard now needs to disable the ElvUI unit frames module, and we probably need to do this towards the begining of the wizard process
 
@@ -42,6 +43,12 @@
 ### General
 
 - In the configuraiton for unit frames, we say "standalone ouf..." can we make this simpler to understand for new players? SOmething that explains that this is where you configure your health bars and party and raid frames
+- When I activate test mode to test say party frames (and others), they dont exactly represent what they look like. For example, they seem to mostly all be colored green, even though they are set to class color, and class color works outside of test mode. We should mimic a real environment as closely as possible (ElvUI can do this). With various random classes, etc.
+
+### Texts
+
+- When i change the text options on the frames, they dont update. for example, in player, if i set name to custom tag, and enter a custom tag, it doesnt update when hit enter or when i click refresh. In fact, it doesnt seem to work at all, even after a reload.
+- I would like to be able to set colors for texts. For example the name text.
 
 ### Auras
 

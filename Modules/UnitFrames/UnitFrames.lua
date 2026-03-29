@@ -186,6 +186,12 @@ local function BuildFrameName(unit)
         return "Pet Target"
     end
 
+    -- Power bar sub-movers use a "unitkey_power" naming convention.
+    local powerBase = unit and unit:match("^(.-)_power$")
+    if powerBase then
+        return BuildFrameName(powerBase) .. " Power"
+    end
+
     return unit and (unit:gsub("^%l", string.upper)) or "Unit"
 end
 
@@ -393,11 +399,14 @@ function UnitFrames:ApplyStatusBarTexture(frame)
     local textureName = db.texture
     local texture = (textureName and textureName ~= "") and GetLSMTexture(textureName) or GetThemeTexture()
 
+    local powerTextureName = db.powerTexture
+    local powerTexture = (powerTextureName and powerTextureName ~= "") and GetLSMTexture(powerTextureName) or texture
+
     if frame.Health and frame.Health.SetStatusBarTexture then
         frame.Health:SetStatusBarTexture(texture)
     end
     if frame.Power and frame.Power.SetStatusBarTexture then
-        frame.Power:SetStatusBarTexture(texture)
+        frame.Power:SetStatusBarTexture(powerTexture)
     end
     if frame.Castbar and frame.Castbar.SetStatusBarTexture then
         frame.Castbar:SetStatusBarTexture(texture)
@@ -1142,7 +1151,7 @@ function UnitFrames:StopSmoothBar(bar)
     bar.smoothing = nil
 end
 
-function UnitFrames:ApplyUnitFrameSize(frame, settings)
+function UnitFrames:ApplyUnitFrameSize(frame, settings, unitKey)
     local width  = Clamp(settings.width or 220, 80, 600)
     local height = Clamp(settings.height or 42, 16, 180)
     frame:SetSize(width, height)
@@ -1158,11 +1167,21 @@ function UnitFrames:ApplyUnitFrameSize(frame, settings)
             if detached then
                 frame.Power:SetWidth(Clamp(settings.powerWidth or width, 40, 600))
                 frame.Power:SetHeight(powerHeight)
-                frame.Power:SetPoint(
-                    settings.powerPoint or "TOPLEFT", frame,
-                    settings.powerRelativePoint or "BOTTOMLEFT",
-                    tonumber(settings.powerOffsetX) or 0,
-                    tonumber(settings.powerOffsetY) or -1)
+                -- If the power bar has been freely placed by its mover, an absolute
+                -- position is stored in layout[unitKey.."_power"]. Use UIParent anchoring
+                -- in that case so the bar stays put when the unit frame moves.
+                local powerLayout = unitKey and self:GetLayoutSettings(unitKey .. "_power") or nil
+                if powerLayout and powerLayout.point == "BOTTOMLEFT" and powerLayout.x ~= nil then
+                    frame.Power:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT",
+                        tonumber(powerLayout.x) or 0,
+                        tonumber(powerLayout.y) or 0)
+                else
+                    frame.Power:SetPoint(
+                        settings.powerPoint or "TOPLEFT", frame,
+                        settings.powerRelativePoint or "BOTTOMLEFT",
+                        tonumber(settings.powerOffsetX) or 0,
+                        tonumber(settings.powerOffsetY) or -1)
+                end
                 frame.Health:SetAllPoints(frame)
             else
                 frame.Power:SetHeight(powerHeight)
@@ -1218,7 +1237,7 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
 
     local layout = self:GetLayoutSettings(unitKey)
 
-    self:ApplyUnitFrameSize(frame, settings)
+    self:ApplyUnitFrameSize(frame, settings, unitKey)
 
     if not frame.isHeaderChild then
         frame:ClearAllPoints()
@@ -1449,6 +1468,56 @@ function UnitFrames:UpdateMovers()
                 Clamp(s.width or entry.defaultW, 80, 600),
                 Clamp(s.height or entry.defaultH, 16, 180),
                 s.enabled ~= false)
+        end
+    end
+
+    -- Detached power bar movers (one per single unit that has powerDetached == true).
+    -- Each power bar gets its own freely-draggable mover stored under "unitkey_power".
+    do
+        local powerMoverUnits = {
+            { key = "player",       defaultW = 260, defaultH = 10 },
+            { key = "target",       defaultW = 240, defaultH = 10 },
+            { key = "targettarget", defaultW = 180, defaultH = 8  },
+            { key = "focus",        defaultW = 220, defaultH = 8  },
+            { key = "pet",          defaultW = 180, defaultH = 8  },
+        }
+        for _, entry in ipairs(powerMoverUnits) do
+            local key      = entry.key
+            local ufFrame  = self.frames[key]
+            local s        = self:GetUnitSettings(key)
+            local powerKey = key .. "_power"
+            if ufFrame and ufFrame.Power and s.powerDetached == true then
+                if not self.movers[powerKey] then
+                    self:AttachMover(ufFrame.Power, powerKey)
+                end
+                local mover = self.movers[powerKey]
+                if mover then
+                    local powerLayout = self:GetLayoutSettings(powerKey)
+                    local pw = Clamp(s.powerWidth or s.width or entry.defaultW, 40, 600)
+                    -- Use a minimum mover height of 16 so thin bars remain easy to grab.
+                    local ph = math_max(16, Clamp(s.powerHeight or entry.defaultH, 4, 32))
+                    if powerLayout.point == "BOTTOMLEFT" and powerLayout.x ~= nil then
+                        PlaceMover(mover, "BOTTOMLEFT", "BOTTOMLEFT",
+                            tonumber(powerLayout.x) or 0,
+                            tonumber(powerLayout.y) or 0,
+                            pw, ph, s.enabled ~= false)
+                    else
+                        -- Bar hasn't been freely placed yet; position the mover over
+                        -- wherever the power bar currently sits on screen.
+                        local bl = ufFrame.Power:IsVisible() and ufFrame.Power:GetLeft()
+                        local bb = ufFrame.Power:IsVisible() and ufFrame.Power:GetBottom()
+                        if bl and bb then
+                            PlaceMover(mover, "BOTTOMLEFT", "BOTTOMLEFT", bl, bb, pw, ph, s.enabled ~= false)
+                        else
+                            mover:Hide()
+                        end
+                    end
+                end
+            else
+                -- Detach is off for this unit — hide any lingering power mover.
+                local mover = self.movers[powerKey]
+                if mover then mover:Hide() end
+            end
         end
     end
 
