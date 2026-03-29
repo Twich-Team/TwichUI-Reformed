@@ -1423,7 +1423,7 @@ function UnitFrames:PersistLayoutFromFrame(layoutKey, frame, absX, absY)
 end
 
 -- Singleton inspector panel shown when hovering a mover handle.
--- Displays the frame name, editable X/Y coordinates, and nudge buttons.
+-- Displays the frame name, editable X/Y/W/H fields, and nudge buttons.
 function UnitFrames:GetMoverInspector()
     if self._moverInspector then return self._moverInspector end
 
@@ -1447,7 +1447,7 @@ function UnitFrames:GetMoverInspector()
     local panel = CreateFrame("Frame", "TwichUIMoverInspector", UIParent, "BackdropTemplate")
     panel:SetFrameStrata("TOOLTIP")
     panel:SetFrameLevel(9998)
-    panel:SetSize(220, 140)
+    panel:SetSize(220, 170)
     panel:SetBackdrop({
         bgFile   = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -1470,7 +1470,9 @@ function UnitFrames:GetMoverInspector()
         panel._hideTimer = C_Timer.NewTimer(0.15, function()
             panel._hideTimer = nil
             if (panel.xBox and panel.xBox:HasFocus()) or
-               (panel.yBox and panel.yBox:HasFocus()) then
+               (panel.yBox and panel.yBox:HasFocus()) or
+               (panel.wBox and panel.wBox:HasFocus()) or
+               (panel.hBox and panel.hBox:HasFocus()) then
                 return  -- keep open while the user is typing
             end
             panel:Hide()
@@ -1510,7 +1512,7 @@ function UnitFrames:GetMoverInspector()
     div1:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -22)
     div1:SetColorTexture(0.10, 0.72, 0.74, 0.35)
 
-    -- ── X / Y inputs ────────────────────────────────────────────────────
+    -- ── Shared widget helpers ────────────────────────────────────────────
     local function MakeLabel(text, xOff, yOff)
         local fs = panel:CreateFontString(nil, "OVERLAY")
         fs:SetPoint("TOPLEFT", panel, "TOPLEFT", xOff, yOff)
@@ -1545,12 +1547,101 @@ function UnitFrames:GetMoverInspector()
         return eb
     end
 
+    -- ── X / Y inputs (row 1) ─────────────────────────────────────────────
     MakeLabel("X",   8, -35)
     MakeLabel("Y", 116, -35)
     local xBox = MakeEditBox( 19, -30, 86)
     local yBox = MakeEditBox(127, -30, 82)
     panel.xBox = xBox
     panel.yBox = yBox
+
+    -- Divider between position and size
+    local div2 = panel:CreateTexture(nil, "ARTWORK")
+    div2:SetHeight(1)
+    div2:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, -55)
+    div2:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -55)
+    div2:SetColorTexture(0.14, 0.16, 0.22, 1)
+
+    -- ── W / H inputs (row 2) ─────────────────────────────────────────────
+    MakeLabel("W",   8, -63)
+    MakeLabel("H", 116, -63)
+    local wBox = MakeEditBox( 19, -58, 86)
+    local hBox = MakeEditBox(127, -58, 82)
+    panel.wBox = wBox
+    panel.hBox = hBox
+
+    -- Divider between size and nudge
+    local div3 = panel:CreateTexture(nil, "ARTWORK")
+    div3:SetHeight(1)
+    div3:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, -83)
+    div3:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -83)
+    div3:SetColorTexture(0.14, 0.16, 0.22, 1)
+
+    -- ── Size data helpers ────────────────────────────────────────────────
+    -- Returns w, h, canEditW, canEditH for the given layout key.
+    local function GetSizeForKey(key)
+        local db = UnitFrames:GetDB()
+        local powerBase = key and key:match("^(.-)_power$")
+        if powerBase then
+            local s = UnitFrames:GetUnitSettings(powerBase)
+            return s.powerWidth or 220, s.powerHeight or 8, true, true
+        end
+        if key == "castbar" then
+            local cs = db.castbar or {}
+            return cs.width or 260, cs.height or 20, true, true
+        end
+        if key == "party" or key == "raid" or key == "tank" then
+            local gs = UnitFrames:GetGroupSettings(key)
+            return gs.width, gs.height, true, true
+        end
+        if key == "boss" then
+            local bs = UnitFrames:GetUnitSettings("boss")
+            return bs.width, bs.height, true, true
+        end
+        local s = UnitFrames:GetUnitSettings(key)
+        if s and s.width ~= nil then
+            return s.width, s.height, true, true
+        end
+        return nil, nil, false, false
+    end
+
+    local function ApplySize(w, h)
+        local active = panel._active
+        if not active or InCombatLockdown() then return end
+        local key = active.mover._layoutKey
+        local db  = UnitFrames:GetDB()
+        local newW = math_max(40, math.floor((tonumber(w) or 40) + 0.5))
+        local newH = math_max(8,  math.floor((tonumber(h) or 8)  + 0.5))
+        local powerBase = key and key:match("^(.-)_power$")
+        if powerBase then
+            local s = UnitFrames:GetUnitSettings(powerBase)
+            s.powerWidth  = newW
+            s.powerHeight = newH
+        elseif key == "castbar" then
+            db.castbar = db.castbar or {}
+            db.castbar.width  = newW
+            db.castbar.height = newH
+        elseif key == "party" or key == "raid" or key == "tank" then
+            local gs = UnitFrames:GetGroupSettings(key)
+            gs.width  = newW
+            gs.height = newH
+        elseif key == "boss" then
+            local bs = UnitFrames:GetUnitSettings("boss")
+            bs.width  = newW
+            bs.height = newH
+        else
+            local s = UnitFrames:GetUnitSettings(key)
+            if s then
+                s.width  = newW
+                s.height = newH
+            end
+        end
+        panel.wBox:SetText(tostring(newW))
+        panel.hBox:SetText(tostring(newH))
+        panel.wBox:SetCursorPosition(0)
+        panel.hBox:SetCursorPosition(0)
+        UnitFrames:RefreshAllFrames()
+    end
 
     -- ── Position helpers ─────────────────────────────────────────────────
     local function RepositionPanel(mover)
@@ -1588,15 +1679,42 @@ function UnitFrames:GetMoverInspector()
         local active = panel._active
         if not active then return end
         local m = active.mover
+        -- Position
         local x = m:GetLeft()   or 0
         local y = m:GetBottom() or 0
         panel.xBox:SetText(tostring(math.floor(x + 0.5)))
         panel.yBox:SetText(tostring(math.floor(y + 0.5)))
         panel.xBox:SetCursorPosition(0)
         panel.yBox:SetCursorPosition(0)
+        -- Size
+        local w, h, canW, canH = GetSizeForKey(m._layoutKey)
+        local disabledColor = { 0.35, 0.35, 0.42, 1 }
+        if canW then
+            panel.wBox:SetText(tostring(math.floor((w or 100) + 0.5)))
+            panel.wBox:SetBackdropColor(0.04, 0.05, 0.08, 1)
+            panel.wBox:SetBackdropBorderColor(0.20, 0.22, 0.30, 1)
+        else
+            panel.wBox:SetText("—")
+            panel.wBox:SetBackdropColor(0.03, 0.03, 0.05, 1)
+            panel.wBox:SetBackdropBorderColor(0.12, 0.13, 0.18, 1)
+        end
+        if canH then
+            panel.hBox:SetText(tostring(math.floor((h or 20) + 0.5)))
+            panel.hBox:SetBackdropColor(0.04, 0.05, 0.08, 1)
+            panel.hBox:SetBackdropBorderColor(0.20, 0.22, 0.30, 1)
+        else
+            panel.hBox:SetText("—")
+            panel.hBox:SetBackdropColor(0.03, 0.03, 0.05, 1)
+            panel.hBox:SetBackdropBorderColor(0.12, 0.13, 0.18, 1)
+        end
+        panel.wBox:SetCursorPosition(0)
+        panel.hBox:SetCursorPosition(0)
+        panel.wBox:SetEnabled(canW == true)
+        panel.hBox:SetEnabled(canH == true)
     end
     panel.RefreshBoxes = RefreshBoxes
 
+    -- X/Y scripts
     xBox:SetScript("OnEnterPressed", function(eb)
         local y = tonumber(panel.yBox:GetText()) or 0
         ApplyPosition(eb:GetText(), y)
@@ -1606,7 +1724,6 @@ function UnitFrames:GetMoverInspector()
         RefreshBoxes()
         eb:ClearFocus()
     end)
-
     yBox:SetScript("OnEnterPressed", function(eb)
         local x = tonumber(panel.xBox:GetText()) or 0
         ApplyPosition(x, eb:GetText())
@@ -1617,12 +1734,25 @@ function UnitFrames:GetMoverInspector()
         eb:ClearFocus()
     end)
 
-    -- Divider 2
-    local div2 = panel:CreateTexture(nil, "ARTWORK")
-    div2:SetHeight(1)
-    div2:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, -55)
-    div2:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -55)
-    div2:SetColorTexture(0.14, 0.16, 0.22, 1)
+    -- W/H scripts
+    wBox:SetScript("OnEnterPressed", function(eb)
+        local h = tonumber(panel.hBox:GetText()) or 0
+        ApplySize(eb:GetText(), h)
+        eb:ClearFocus()
+    end)
+    wBox:SetScript("OnEscapePressed", function(eb)
+        RefreshBoxes()
+        eb:ClearFocus()
+    end)
+    hBox:SetScript("OnEnterPressed", function(eb)
+        local w = tonumber(panel.wBox:GetText()) or 0
+        ApplySize(w, eb:GetText())
+        eb:ClearFocus()
+    end)
+    hBox:SetScript("OnEscapePressed", function(eb)
+        RefreshBoxes()
+        eb:ClearFocus()
+    end)
 
     -- ── Nudge buttons ────────────────────────────────────────────────────
     local S, G = 20, 3   -- button size, gap
@@ -1664,10 +1794,10 @@ function UnitFrames:GetMoverInspector()
         return btn
     end
 
-    -- Arrow layout: cross pattern centred on panel
-    local row1Y = -63
-    local row2Y = row1Y - S - G   -- -86
-    local row3Y = row2Y - S - G   -- -109
+    -- Arrow layout: cross pattern centred on panel (shifted down for W/H row)
+    local row1Y = -91
+    local row2Y = row1Y - S - G   -- -114
+    local row3Y = row2Y - S - G   -- -137
 
     local btnUp    = MakeNudgeBtn("\226\134\145",  0,  1)  -- ↑
     local btnLeft  = MakeNudgeBtn("\226\134\144", -1,  0)  -- ←
