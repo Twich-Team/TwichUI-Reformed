@@ -817,6 +817,179 @@ end
 local BuildColorScopeTab
 local BuildUnitColorTab
 
+-- ---------------------------------------------------------------------------
+-- Copy-From helpers
+-- These tables hold the currently-selected source key in the AceGUI dropdowns.
+-- They are module-local (not persisted) because they are purely transient UI state.
+-- ---------------------------------------------------------------------------
+local _copyFromSingleSource = {}  -- [dstKey] = srcKey
+local _copyFromGroupSource  = {}  -- [dstKey] = srcKey
+
+local SINGLE_COPY_KEYS = { "player", "target", "targettarget", "focus", "pet" }
+local GROUP_COPY_KEYS  = { "party", "raid", "tank" }
+
+-- Keys inside db.units[unitKey] that should NOT be copied (position / enabled toggle).
+local UNIT_SKIP_KEYS   = { enabled = true }
+-- Keys inside db.groups[groupKey] that should NOT be copied (enabled toggle; layout
+-- is stored separately in db.layout so it is already excluded).
+local GROUP_SKIP_KEYS  = { enabled = true }
+
+-- Deep-merge src into dst, skipping nil values.  Creates sub-tables as needed.
+local function DeepMerge(dst, src)
+    if type(src) ~= "table" then return end
+    for k, v in pairs(src) do
+        if type(v) == "table" then
+            if type(dst[k]) ~= "table" then dst[k] = {} end
+            DeepMerge(dst[k], v)
+        else
+            dst[k] = v
+        end
+    end
+end
+
+-- Copy all unit appearance settings from srcKey to dstKey (singles).
+-- Skips: db.layout (position), db.units[x].enabled.
+-- Copies: db.units sub-keys, db.colors.scopes, db.healthColorByScope,
+--         db.text (singles share one scope), db.auras (singles share one scope).
+local function CopyUnitSettings(srcKey, dstKey)
+    local db = Options:GetDB()
+
+    -- Frame settings (size, power, fonts, auras, etc.)
+    local srcUnit = (db.units or {})[srcKey] or {}
+    db.units = db.units or {}
+    db.units[dstKey] = db.units[dstKey] or {}
+    for k, v in pairs(srcUnit) do
+        if not UNIT_SKIP_KEYS[k] then
+            db.units[dstKey][k] = CopyTable(v)
+        end
+    end
+
+    -- Color scope: singles all share the "singles" scope — no per-unit scope copy needed.
+    -- Per-unit health color override lives under db.units[x].healthColor, already copied above.
+
+    CommitChange(true)
+end
+
+-- Copy all group appearance settings from srcKey to dstKey (party/raid/tank).
+-- Skips: db.layout (position), db.groups[x].enabled.
+-- Copies: db.groups sub-keys, db.colors.scopes, db.healthColorByScope,
+--         db.text.scopes, db.auras.scopes.
+local function CopyGroupSettings(srcKey, dstKey)
+    local db = Options:GetDB()
+
+    -- Group frame settings (size, spacing, etc.)
+    local srcGroup = (db.groups or {})[srcKey] or {}
+    db.groups = db.groups or {}
+    db.groups[dstKey] = db.groups[dstKey] or {}
+    for k, v in pairs(srcGroup) do
+        if not GROUP_SKIP_KEYS[k] then
+            db.groups[dstKey][k] = CopyTable(v)
+        end
+    end
+
+    -- Color scope (health/power/background/border tints)
+    db.colors = db.colors or {}
+    db.colors.scopes = db.colors.scopes or {}
+    if db.colors.scopes[srcKey] then
+        db.colors.scopes[dstKey] = CopyTable(db.colors.scopes[srcKey])
+    end
+
+    -- Health color mode + custom color
+    db.healthColorByScope = db.healthColorByScope or {}
+    if db.healthColorByScope[srcKey] then
+        db.healthColorByScope[dstKey] = CopyTable(db.healthColorByScope[srcKey])
+    end
+
+    -- Text scope
+    db.text = db.text or {}
+    db.text.scopes = db.text.scopes or {}
+    if db.text.scopes[srcKey] then
+        db.text.scopes[dstKey] = CopyTable(db.text.scopes[srcKey])
+    end
+
+    -- Aura scope
+    db.auras = db.auras or {}
+    db.auras.scopes = db.auras.scopes or {}
+    if db.auras.scopes[srcKey] then
+        db.auras.scopes[dstKey] = CopyTable(db.auras.scopes[srcKey])
+    end
+
+    CommitChange(true)
+end
+
+-- Build the "Copy From" inline group for a single-unit tab.
+local function BuildCopyFromSingle(dstKey)
+    local sourceValues = {}
+    for _, k in ipairs(SINGLE_COPY_KEYS) do
+        if k ~= dstKey then
+            local labels = { player = "Player", target = "Target",
+                             targettarget = "Target of Target", focus = "Focus", pet = "Pet" }
+            sourceValues[k] = labels[k] or k
+        end
+    end
+
+    return Widgets.IGroup(99, "Copy From", {
+        source = {
+            type    = "select",
+            name    = "Source Frame",
+            desc    = "Choose which unit frame to copy settings from.",
+            order   = 1,
+            values  = sourceValues,
+            get     = function() return _copyFromSingleSource[dstKey] end,
+            set     = function(_, v) _copyFromSingleSource[dstKey] = v end,
+            disabled = ModuleDisabled(),
+        },
+        apply = BuildExecute(2, "Copy Settings",
+            "Copy all appearance settings from the selected source frame. Position is never overwritten.",
+            function()
+                local src = _copyFromSingleSource[dstKey]
+                if not src then return end
+                CopyUnitSettings(src, dstKey)
+                _copyFromSingleSource[dstKey] = nil
+            end, {
+                disabled = ModuleDisabled(function()
+                    return _copyFromSingleSource[dstKey] == nil
+                end),
+            }),
+    })
+end
+
+-- Build the "Copy From" inline group for a group (party/raid/tank) tab.
+local function BuildCopyFromGroup(dstKey)
+    local sourceValues = {}
+    local labels = { party = "Party", raid = "Raid", tank = "Tank" }
+    for _, k in ipairs(GROUP_COPY_KEYS) do
+        if k ~= dstKey then
+            sourceValues[k] = labels[k] or k
+        end
+    end
+
+    return Widgets.IGroup(99, "Copy From", {
+        source = {
+            type    = "select",
+            name    = "Source Group",
+            desc    = "Choose which group frame to copy settings from.",
+            order   = 1,
+            values  = sourceValues,
+            get     = function() return _copyFromGroupSource[dstKey] end,
+            set     = function(_, v) _copyFromGroupSource[dstKey] = v end,
+            disabled = ModuleDisabled(),
+        },
+        apply = BuildExecute(2, "Copy Settings",
+            "Copy all appearance settings from the selected source group. Position is never overwritten.",
+            function()
+                local src = _copyFromGroupSource[dstKey]
+                if not src then return end
+                CopyGroupSettings(src, dstKey)
+                _copyFromGroupSource[dstKey] = nil
+            end, {
+                disabled = ModuleDisabled(function()
+                    return _copyFromGroupSource[dstKey] == nil
+                end),
+            }),
+    })
+end
+
 local function BuildSingleUnitTab(unitKey, label)
     local defaults = SINGLE_UNIT_DEFAULTS[unitKey]
     local layoutDefaults = SINGLE_LAYOUT_DEFAULTS[unitKey]
@@ -914,6 +1087,7 @@ local function BuildSingleUnitTab(unitKey, label)
                             "Show the mouseover highlight on this frame. Disable to hide it even when globally on.",
                             ExtendPath(basePath, "highlights", "showMouseover"), true, { disabled = disabled }),
                     }),
+                    copyFrom = BuildCopyFromSingle(unitKey),
                 },
             },
             layout = BuildLayoutGroup(2, "Layout", unitKey, layoutDefaults, {
@@ -1118,6 +1292,7 @@ local function BuildGroupTab(groupKey, label)
             "Show the mouseover highlight on group member frames. Disable to hide it even when globally on.",
             { "units", memberKey, "highlights", "showMouseover" }, true, { disabled = disabled }),
     })
+    frameTab.args.copyFrom = BuildCopyFromGroup(groupKey)
 
     local colorsTab = BuildColorScopeTab(groupKey, "Colors")
     colorsTab.order = 5
