@@ -460,17 +460,33 @@ end
 
 function UnitFrames:ApplyStatusBarTexture(frame)
     local db = self:GetDB()
+
+    -- Fill textures
     local textureName = db.texture
     local texture = (textureName and textureName ~= "") and GetLSMTexture(textureName) or GetThemeTexture()
 
     local powerTextureName = db.powerTexture
     local powerTexture = (powerTextureName and powerTextureName ~= "") and GetLSMTexture(powerTextureName) or texture
 
+    -- Background / "lost" textures.  Each falls back to the corresponding fill texture
+    -- so the appearance is unchanged for anyone who hasn't set them explicitly.
+    local bgTextureName = db.bgTexture
+    local bgTexture = (bgTextureName and bgTextureName ~= "") and GetLSMTexture(bgTextureName) or texture
+
+    local powerBgTextureName = db.powerBgTexture
+    local powerBgTexture = (powerBgTextureName and powerBgTextureName ~= "") and GetLSMTexture(powerBgTextureName) or bgTexture
+
     if frame.Health and frame.Health.SetStatusBarTexture then
         frame.Health:SetStatusBarTexture(texture)
     end
+    if frame.Health and frame.Health.bg then
+        frame.Health.bg:SetTexture(bgTexture)
+    end
     if frame.Power and frame.Power.SetStatusBarTexture then
         frame.Power:SetStatusBarTexture(powerTexture)
+    end
+    if frame.Power and frame.Power.bg then
+        frame.Power.bg:SetTexture(powerBgTexture)
     end
     if frame.Castbar and frame.Castbar.SetStatusBarTexture then
         frame.Castbar:SetStatusBarTexture(texture)
@@ -495,6 +511,13 @@ function UnitFrames:ApplyFrameColors(frame, unitKey)
 
     if frame.Health and frame.Health.SetStatusBarColor then
         frame.Health:SetStatusBarColor(palette.health[1], palette.health[2], palette.health[3], 1)
+    end
+    -- Tint the health background texture with the frame's background palette color.
+    -- This keeps the "lost health" area visually consistent with the frame backdrop
+    -- while still allowing a different texture shape/pattern via db.bgTexture.
+    if frame.Health and frame.Health.bg then
+        local bg = palette.background
+        frame.Health.bg:SetVertexColor(bg[1], bg[2], bg[3], bg[4] or 0.9)
     end
     if frame.Power and frame.Power.SetStatusBarColor then
         frame.Power:SetStatusBarColor(palette.power[1], palette.power[2], palette.power[3], 1)
@@ -2572,8 +2595,11 @@ function UnitFrames:BuildPreviewGroups()
         local width = Clamp(settings.width or 180, 80, 500)
         local height = Clamp(settings.height or 36, 14, 120)
         local yOffset = tonumber(settings.yOffset) or -6
+        local colSpacing = tonumber(settings.columnSpacing) or 6
+        local unitsPerColumn = math_max(1, tonumber(settings.unitsPerColumn) or 5)
+        local maxColumns = math_max(1, tonumber(settings.maxColumns) or 1)
         PositionContainer(party, layout)
-        party:SetSize(width, (height + math_abs(yOffset)) * 5)
+        party:SetSize((width + colSpacing) * maxColumns - colSpacing, (height + math_abs(yOffset)) * unitsPerColumn)
         for index = 1, 5 do
             local partyMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
             if not party.rows[index] then
@@ -2582,13 +2608,12 @@ function UnitFrames:BuildPreviewGroups()
                 self:UpdatePreviewFrame(party.rows[index], width, height, "Party " .. index, "partyMember", partyMockClass)
             end
             local row = party.rows[index]
+            local column = math.floor((index - 1) / unitsPerColumn)
+            local rowIndex = (index - 1) % unitsPerColumn
             row:ClearAllPoints()
-            if index == 1 then
-                row:SetPoint("TOP", party, "TOP", 0, 0)
-            else
-                row:SetPoint("TOP", party.rows[index - 1], "BOTTOM", 0, yOffset)
-            end
-            row:SetShown(true)
+            row:SetPoint("TOPLEFT", party, "TOPLEFT", column * (width + colSpacing),
+                -(rowIndex * (height + math_abs(yOffset))))
+            row:SetShown(column < maxColumns)
         end
     end
 
@@ -2742,6 +2767,13 @@ function UnitFrames:StyleFrame(frame)
     health.colorClass = false; health.colorDisconnected = false
     health.colorReaction = false; health.colorTapping = false
     health.frequentUpdates = true
+    -- Background texture layer: fills the entire health bar area and shows in the
+    -- "lost health" (empty) region behind the StatusBar fill.  Texture is controlled
+    -- via db.bgTexture; color is driven by palette.background in ApplyFrameColors.
+    local healthBg = health:CreateTexture(nil, "BACKGROUND")
+    healthBg:SetAllPoints(health)
+    healthBg:SetTexture("Interface\\Buttons\\WHITE8x8")
+    health.bg = healthBg
     health.PostUpdate = function(healthBar, unit2, cur, max)
         UnitFrames:ApplySmoothBarValue(healthBar, cur, max)
         local palette = UnitFrames:GetPalette(capturedUnitKey, unit2)
