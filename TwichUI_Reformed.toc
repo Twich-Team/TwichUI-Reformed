@@ -4,6 +4,7 @@
 ## Version: 0.01-ALPHA
 ## SavedVariables: TwichDB
 ## RequiredDeps: ElvUI
+## OptionalDeps: Masque
 ## Interface: 120001
 ## Group: Twich
 ## IconTexture: Interface\AddOns\TwichUI_Reformed\Media\Textures\logo.tga

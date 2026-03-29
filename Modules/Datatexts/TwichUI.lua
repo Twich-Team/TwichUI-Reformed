@@ -8,6 +8,9 @@ local DataTextModule = T:GetModule("Datatexts")
 
 ---@type ConfigurationModule
 local ConfigurationModule = T:GetModule("Configuration")
+
+local ReloadUI = _G.ReloadUI
+
 ---@class BrandDataText : AceModule
 local BrandDT = DataTextModule:NewModule("BrandDataText")
 
@@ -26,13 +29,30 @@ function BrandDT:OnEnter(panel)
     end
 
     panel.text:SetTextColor(1.0, 0.78, 0.28)
+
+    local tooltip = DataTextModule:GetElvUITooltip()
+    if not tooltip then return end
+
+    tooltip:ClearLines()
+    tooltip:AddLine("TwichUI Reformed")
+    tooltip:AddLine(" ")
+    tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Left-click  — Open configuration"))
+    tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Right-click — Reload UI"))
+    DataTextModule:ShowDatatextTooltip(tooltip)
 end
 
 function BrandDT:OnLeave(panel)
     SetBrandText(panel)
+    DataTextModule:HideDatatextTooltip(DataTextModule:GetActiveDatatextTooltip())
 end
 
-function BrandDT:OnClick()
+function BrandDT:OnClick(panel, button)
+    if button == "RightButton" then
+        ReloadUI()
+        return
+    end
+
+    -- Left-click (default): open config
     if ConfigurationModule and ConfigurationModule.OpenOptionsUI then
         ConfigurationModule:OpenOptionsUI()
     end

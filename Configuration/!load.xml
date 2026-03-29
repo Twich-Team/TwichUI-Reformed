@@ -16,4 +16,5 @@
     <Include file='BestInSlot.lua' />
     <Include file='NotificationPanel.lua' />
     <Include file='ErrorLog.lua' />
+    <Include file='Debugger.lua' />
 </Ui>
