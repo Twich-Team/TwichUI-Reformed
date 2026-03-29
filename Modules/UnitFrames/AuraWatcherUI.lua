@@ -46,7 +46,7 @@ local wipe          = wipe
 -- Visual constants  (match TwichUI wizard palette)
 -- ============================================================
 local W_TOTAL  = 860
-local H_TOTAL  = 526
+local H_TOTAL  = 700
 local HEADER_H = 40
 local PAD      = 12
 
@@ -67,9 +67,9 @@ local C = {
     danger  = { 0.90, 0.30, 0.32 },
 }
 
-local SECTION_FONT_SIZE = 10
-local LABEL_FONT_SIZE   = 11
-local BODY_FONT_SIZE    = 12
+local SECTION_FONT_SIZE = 11
+local LABEL_FONT_SIZE   = 12
+local BODY_FONT_SIZE    = 13
 
 -- Anchor point labels (for 3×3 grid)
 local ANCHOR_KEYS  = { "TOPLEFT","TOP","TOPRIGHT","LEFT","CENTER","RIGHT","BOTTOMLEFT","BOTTOM","BOTTOMRIGHT" }
@@ -116,20 +116,56 @@ local heldEntry     = nil             -- catalog/generic entry currently "picked
 local selectedSlot  = 0               -- 1-6, currently selected indicator slot
 local tilePool      = {}              -- reused catalog tile frames
 local sectionLabels = {}              -- FontString section labels (tracked for cleanup)
-local previewHost   = nil             -- mock frame for live preview
+local previewHost       = nil         -- mock frame for live preview
+local previewSidePanel  = nil         -- right-side panel hosting the preview
+local activeDragCatcher = nil         -- global drag-release catcher frame
+local selectedLayer     = 1           -- 1=primary, 2+=extraLayers[n-1]
 
 -- ============================================================
 -- Live-update flush — pushes config changes to all active frames
 -- ============================================================
 local flushPending = false
+local RefreshPreview  -- forward-declare
+
 local function DeferredFlush()
     if not flushPending then
         flushPending = true
         C_Timer.After(0.1, function()
             flushPending = false
             UnitFrames:AWForceUpdate()
+            if RefreshPreview then RefreshPreview() end
         end)
     end
+end
+
+-- ============================================================
+-- Shared UI helpers
+-- ============================================================
+
+--- Format a numeric value for display: integers show as integers,
+--- floats with the appropriate decimal places based on step size.
+local function FormatSliderVal(v, step)
+    if step and step < 1 then
+        local places = math.ceil(math.abs(math.log(step) / math.log(10)))
+        return string.format("%%.%df", places):format(v)
+    end
+    return tostring(math.floor(v + 0.5))
+end
+
+--- Attach a GameTooltip to a frame.  Fires on enter/leave.
+--- Does NOT stomp an existing OnLeave script.
+local function AddTooltip(frame, title, body)
+    frame:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(title, 1, 1, 1)
+        if body then GameTooltip:AddLine(body, 0.8, 0.8, 0.8, true) end
+        GameTooltip:Show()
+    end)
+    local prevLeave = frame:GetScript("OnLeave")
+    frame:SetScript("OnLeave", function(self)
+        GameTooltip:Hide()
+        if prevLeave then prevLeave(self) end
+    end)
 end
 
 -- ============================================================
@@ -211,6 +247,50 @@ local function EnsureIndicatorsWritable(frameKey)
 end
 
 -- ============================================================
+-- Layer helpers — support multiple visual layers per slot
+-- ============================================================
+
+--- Returns the config table for the currently-edited layer.
+--- selectedLayer==1 → primary (the slot cfg itself)
+--- selectedLayer>1  → extraLayers[n-1]
+local function GetLayerCfg()
+    local inds     = GetIndicators(activeFrameKey)
+    local slotCfg  = inds[selectedSlot]
+    if not slotCfg then return nil end
+    if selectedLayer == 1 then return slotCfg end
+    local extra = slotCfg.extraLayers
+    return extra and extra[selectedLayer - 1] or nil
+end
+
+--- Returns the writable layer cfg, initialising extraLayers as needed.
+local function EnsureLayerWritable()
+    local i2 = EnsureIndicatorsWritable(activeFrameKey)
+    if selectedLayer == 1 then return i2[selectedSlot] end
+    i2[selectedSlot].extraLayers = i2[selectedSlot].extraLayers or {}
+    if not i2[selectedSlot].extraLayers[selectedLayer - 1] then
+        i2[selectedSlot].extraLayers[selectedLayer - 1] = { type = "border" }
+    end
+    return i2[selectedSlot].extraLayers[selectedLayer - 1]
+end
+
+--- Refresh the preview side panel to show all layers of the current slot.
+RefreshPreview = function()
+    if not previewHost then return end
+    UnitFrames:AWPreviewClear(previewHost)
+    local inds    = GetIndicators(activeFrameKey)
+    local slotCfg = inds[selectedSlot]
+    if not slotCfg then return end
+    -- Primary layer at index 1
+    UnitFrames:AWPreviewRender(previewHost, 1, slotCfg)
+    -- Extra layers at their engine indices
+    if slotCfg.extraLayers then
+        for lj, extraCfg in ipairs(slotCfg.extraLayers) do
+            UnitFrames:AWPreviewRender(previewHost, 6 * lj + 1, extraCfg)
+        end
+    end
+end
+
+-- ============================================================
 -- Slot assignment helpers
 -- ============================================================
 
@@ -285,6 +365,36 @@ local function IndicatorLabel(cfg)
         }
         return labels[s] or s
     end
+end
+
+--- Multi-line summary for the slot card — shows each spell name on its own line
+--- with "X more" if there are too many to fit. Non-spell sources use IndicatorLabel.
+local MAX_CARD_SPELL_LINES = 3
+local function BuildSlotSummary(cfg)
+    if not cfg then return "" end
+    if cfg.source ~= "spell" then return IndicatorLabel(cfg) end
+    local spellIds = cfg.spellIds or {}
+    -- backward compat
+    if #spellIds == 0 and cfg.spellId and cfg.spellId > 0 then
+        spellIds = { cfg.spellId }
+    end
+    if #spellIds == 0 then return "Spell (unset)" end
+    local lines = {}
+    for i = 1, math.min(#spellIds, MAX_CARD_SPELL_LINES) do
+        local sid  = spellIds[i]
+        local name
+        if _G.C_Spell and _G.C_Spell.GetSpellName then
+            name = _G.C_Spell.GetSpellName(sid)
+        elseif _G.GetSpellInfo then
+            name = (_G.GetSpellInfo(sid))
+        end
+        lines[#lines + 1] = name or ("ID: " .. tostring(sid))
+    end
+    local overflow = #spellIds - MAX_CARD_SPELL_LINES
+    if overflow > 0 then
+        lines[#lines + 1] = "+" .. overflow .. " more"
+    end
+    return table.concat(lines, "\n")
 end
 
 --- Icon texture for an indicator config.
@@ -389,13 +499,13 @@ local function ReleaseTilePool()
     wipe(sectionLabels)
 end
 
-local TILE_SIZE  = 42
-local TILE_PAD   = 4
-local TILE_COLS  = 4
+local TILE_SIZE  = 52
+local TILE_PAD   = 6
+local TILE_COLS  = 3
 
 local function MakeTile(parent, entry, isFilter)
     local tile = CreateFrame("Button", nil, parent, "BackdropTemplate")
-    tile:SetSize(TILE_SIZE, TILE_SIZE + 16)
+    tile:SetSize(TILE_SIZE, TILE_SIZE + 22)
     Backdrop(tile, C.card, C.border, 1, 1)
     tile:EnableMouse(true)
 
@@ -406,15 +516,16 @@ local function MakeTile(parent, entry, isFilter)
     tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     tile.iconTex = tex
 
-    -- Label below icon
+    -- Label below icon (two-line, wrap allowed)
     local lbl = tile:CreateFontString(nil, "OVERLAY")
-    lbl:SetFont(Font(8))
+    lbl:SetFont(Font(10))
     lbl:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
     lbl:SetPoint("TOPLEFT",  tile, "TOPLEFT",  2, -(TILE_SIZE - 2))
     lbl:SetPoint("TOPRIGHT", tile, "TOPRIGHT", -2, -(TILE_SIZE - 2))
     lbl:SetJustifyH("CENTER")
-    lbl:SetWordWrap(false)
+    lbl:SetWordWrap(true)
     lbl:SetNonSpaceWrap(false)
+    lbl:SetHeight(20)
     tile.lbl = lbl
 
     -- Colour accent bar along the left edge
@@ -436,7 +547,7 @@ local function MakeTile(parent, entry, isFilter)
     end
     tex:SetTexture(iconTex)
 
-    -- Label text (short, 1 line)
+    -- Label text
     lbl:SetText(entry.display)
 
     -- Accent colour
@@ -452,6 +563,8 @@ local function MakeTile(parent, entry, isFilter)
         elseif entry.source then
             GameTooltip:AddLine("Generic filter: " .. entry.source, 0.7, 0.7, 0.7)
         end
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine("Click or drag to a slot to assign.", 0.6, 0.6, 0.6, true)
         GameTooltip:Show()
         self:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 1)
     end)
@@ -463,12 +576,81 @@ local function MakeTile(parent, entry, isFilter)
             isHeld and C.gold[2]   or C.border[2],
             isHeld and C.gold[3]   or C.border[3], 1)
     end)
-    tile:SetScript("OnClick", function(self)
+
+    -- True click-drag: OnMouseDown picks up the entry + installs a global
+    -- OnMouseUp catcher. Releasing directly over a slot card assigns immediately.
+    -- Releasing elsewhere keeps the entry "held" (click-a-slot-to-assign workflow).
+    tile:SetScript("OnMouseDown", function(self, button)
+        if button ~= "LeftButton" then return end
         if heldEntry == self.entry then
+            -- Toggle off on second press
             SetHeld(nil)
-        else
-            SetHeld(self.entry)
+            if activeDragCatcher then
+                activeDragCatcher:Hide()
+                activeDragCatcher:SetParent(nil)
+                activeDragCatcher = nil
+            end
+            return
         end
+        SetHeld(self.entry)
+        -- Clean up any stale catcher
+        if activeDragCatcher then
+            activeDragCatcher:Hide()
+            activeDragCatcher:SetParent(nil)
+        end
+        activeDragCatcher = CreateFrame("Frame", nil, UIParent)
+        activeDragCatcher:SetAllPoints(UIParent)
+        activeDragCatcher:SetFrameStrata("TOOLTIP")
+        activeDragCatcher:SetFrameLevel(840)
+        activeDragCatcher:EnableMouse(true)
+        activeDragCatcher:SetScript("OnMouseUp", function(_, btn)
+            if btn ~= "LeftButton" then return end
+            local catcher = activeDragCatcher
+            activeDragCatcher = nil
+            if catcher then catcher:Hide(); catcher:SetParent(nil) end
+            -- Check which slot card the cursor is over
+            local held  = heldEntry
+            if not held then return end
+            for si = 1, 6 do
+                local card = slotCards[si]
+                if card and card:IsVisible() and card:IsMouseOver() then
+                    local inds    = EnsureIndicatorsWritable(activeFrameKey)
+                    local existing = inds[si]
+                    if existing and existing.source == "spell"
+                        and held.spellIds and not held.source then
+                        existing.spellIds = existing.spellIds or {}
+                        if existing.spellId and existing.spellId > 0 then
+                            local ok = false
+                            for _, v in ipairs(existing.spellIds) do
+                                if v == existing.spellId then ok = true; break end
+                            end
+                            if not ok then
+                                table.insert(existing.spellIds, existing.spellId)
+                            end
+                            existing.spellId = nil
+                        end
+                        for _, sid in ipairs(held.spellIds) do
+                            local ok = false
+                            for _, v in ipairs(existing.spellIds) do
+                                if v == sid then ok = true; break end
+                            end
+                            if not ok then
+                                table.insert(existing.spellIds, sid)
+                            end
+                        end
+                        SetHeld(nil)
+                        SelectSlot(si)
+                    else
+                        inds[si] = EntryToIndicatorCfg(held)
+                        SetHeld(nil)
+                        SelectSlot(si)
+                    end
+                    return
+                end
+            end
+            -- Not over a slot → keep held for click-to-assign
+        end)
+        activeDragCatcher:Show()
     end)
 
     tile:Hide()
@@ -561,15 +743,15 @@ RefreshCatalog = function()
             x = x + TILE_SIZE + TILE_PAD
             if x + TILE_SIZE > maxW + TILE_PAD then
                 x = 0
-                y = y - (TILE_SIZE + 16 + TILE_PAD)
-                totalH = totalH + TILE_SIZE + 16 + TILE_PAD
+                y = y - (TILE_SIZE + 22 + TILE_PAD)
+                totalH = totalH + TILE_SIZE + 22 + TILE_PAD
             end
         end
     end
     -- final row
     if x > 0 then
-        y = y - (TILE_SIZE + 16 + TILE_PAD)
-        totalH = totalH + TILE_SIZE + 16 + TILE_PAD
+        y = y - (TILE_SIZE + 22 + TILE_PAD)
+        totalH = totalH + TILE_SIZE + 22 + TILE_PAD
     end
 
     catalogChild:SetHeight(math.max(1, -y + PAD))
@@ -680,14 +862,21 @@ local function BuildSlotCard(parent, slotIdx)
     card.anchorBadge = anchorBadge
 
     card:SetScript("OnEnter", function(self)
-        if not heldEntry then
-            self:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.8)
-        else
-            -- "drop target" highlight
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if heldEntry then
+            GameTooltip:SetText("Slot " .. slotIdx, C.gold[1], C.gold[2], C.gold[3])
+            GameTooltip:AddLine("Release here to assign the held indicator.", 0.8, 0.8, 0.8, true)
             self:SetBackdropBorderColor(C.gold[1], C.gold[2], C.gold[3], 1)
+        else
+            GameTooltip:SetText("Slot " .. slotIdx, 1, 1, 1)
+            GameTooltip:AddLine("Click to select and configure this indicator slot.", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine("Drag an entry from the catalogue to assign it.", 0.7, 0.7, 0.7, true)
+            self:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.8)
         end
+        GameTooltip:Show()
     end)
     card:SetScript("OnLeave", function(self)
+        GameTooltip:Hide()
         local isSel = (selectedSlot == slotIdx)
         self:SetBackdropBorderColor(
             isSel and C.teal[1] or C.border[1],
@@ -800,7 +989,7 @@ RefreshSlots = function()
                 end
             end
 
-            card.lblMain:SetText(IndicatorLabel(cfg))
+            card.lblMain:SetText(BuildSlotSummary(cfg))
             local typeLabels = {
                 icons   = "Icon Cluster",
                 border  = "Border Highlight",
@@ -825,6 +1014,7 @@ SelectSlot = function(idx)
     else
         selectedSlot = idx
     end
+    selectedLayer = 1
     RefreshSlots()
     RefreshDetailPanel()
 end
@@ -973,33 +1163,75 @@ local function DetailCheckbox(parent, label, current, x, y, onChange)
 end
 
 local function DetailSlider(parent, label, value, minV, maxV, step, x, y, w, onChange)
-    local lfs = DetailLabel(parent, label, x, y)
-    _ = lfs  -- suppress unused warning
+    local W = w or 120
+    local STEP = step or 1
 
+    if label and label ~= "" then
+        local lfs = PushDetail(parent:CreateFontString(nil, "OVERLAY"))
+        lfs:SetFont(Font(SECTION_FONT_SIZE, "OUTLINE"))
+        lfs:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+        lfs:SetText(label)
+        lfs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
+    end
+
+    -- Slider bar (leaves 34px on the right for the EditBox)
     local s = PushDetail(CreateFrame("Slider", nil, parent, "BackdropTemplate"))
-    s:SetSize(w or 120, 16)
-    s:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 14)
+    s:SetSize(W - 34, 14)
+    s:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 16)
     s:SetMinMaxValues(minV, maxV)
-    s:SetValueStep(step or 1)
+    s:SetValueStep(STEP)
     s:SetValue(value)
     s:SetObeyStepOnDrag(true)
     Backdrop(s, C.panel, C.border, 1, 1)
 
-    -- Thumb texture  (minimal, just a line)
     local thumb = s:CreateTexture(nil, "ARTWORK")
-    thumb:SetSize(8, 14)
+    thumb:SetSize(6, 12)
     thumb:SetColorTexture(C.teal[1], C.teal[2], C.teal[3], 1)
     s:SetThumbTexture(thumb)
 
-    local val = PushDetail(parent:CreateFontString(nil, "OVERLAY"))
-    val:SetFont(Font(9))
-    val:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
-    val:SetPoint("TOP", s, "BOTTOM", 0, -1)
-    val:SetText(tostring(math_floor(value)))
+    -- Numeric EditBox (right of slider, always editable)
+    local eb = PushDetail(CreateFrame("EditBox", nil, parent, "BackdropTemplate"))
+    eb:SetSize(30, 14)
+    eb:SetPoint("TOPLEFT", parent, "TOPLEFT", x + W - 30, y - 16)
+    Backdrop(eb, C.panel, C.border, 1, 1)
+    eb:SetFont(Font(10))
+    eb:SetAutoFocus(false)
+    eb:SetNumeric(false)          -- allow floats via GetText
+    eb:SetMaxLetters(8)
+    eb:SetJustifyH("CENTER")
+    eb:SetTextInsets(2, 2, 0, 0)
+    eb:SetText(FormatSliderVal(value, STEP))
+
+    local function CommitEdit()
+        local v = tonumber(eb:GetText())
+        if v then
+            v = math.max(minV, math.min(maxV, v))
+            -- Snap to step
+            if STEP >= 0.001 then
+                v = math.floor(v / STEP + 0.5) * STEP
+            end
+            s:SetValue(v)
+        end
+        eb:SetText(FormatSliderVal(s:GetValue(), STEP))
+        eb:ClearFocus()
+    end
+    eb:SetScript("OnEnterPressed", function() CommitEdit() end)
+    eb:SetScript("OnEscapePressed", function(self2)
+        self2:SetText(FormatSliderVal(s:GetValue(), STEP))
+        self2:ClearFocus()
+    end)
+    eb:SetScript("OnEditFocusGained", function(self2)
+        self2:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 1)
+        self2:HighlightText()
+    end)
+    eb:SetScript("OnEditFocusLost", function(self2)
+        self2:SetBackdropBorderColor(C.border[1], C.border[2], C.border[3], 1)
+    end)
+    AddTooltip(eb, "Manual Entry", "Click to type a value, then press Enter to apply.")
 
     s:SetScript("OnValueChanged", function(self2, v)
-        val:SetText(tostring(math_floor(v)))
-        if onChange then onChange(math_floor(v)) end
+        eb:SetText(FormatSliderVal(v, STEP))
+        if onChange then onChange(v) end
         DeferredFlush()
     end)
 
@@ -1066,10 +1298,11 @@ RefreshDetailPanel = function()
     if not detailPanel then return end
     ClearDetail()
 
-    local inds = GetIndicators(activeFrameKey)
-    local cfg  = inds[selectedSlot]
+    local inds     = GetIndicators(activeFrameKey)
+    local slotCfg  = inds[selectedSlot]  -- full slot cfg (owns source/spells/extraLayers)
+    local cfg      = GetLayerCfg()       -- current layer's visual settings
 
-    if selectedSlot == 0 or not cfg then
+    if selectedSlot == 0 or not slotCfg then
         detailPanel:SetHeight(80)
         local hint = PushDetail(detailPanel:CreateFontString(nil, "OVERLAY"))
         hint:SetFont(Font(LABEL_FONT_SIZE))
@@ -1081,261 +1314,506 @@ RefreshDetailPanel = function()
         return
     end
 
+    -- Clamp selectedLayer in case layers were removed externally
+    local extraCount  = slotCfg.extraLayers and #slotCfg.extraLayers or 0
+    if selectedLayer > 1 + extraCount then selectedLayer = 1 end
+    cfg = GetLayerCfg()   -- re-fetch after clamp
+
     -- Title
+    local layerSuffix = selectedLayer > 1 and ("  ·  Layer " .. selectedLayer) or ""
     local titleFS = PushDetail(detailPanel:CreateFontString(nil, "OVERLAY"))
     titleFS:SetFont(Font(LABEL_FONT_SIZE, "OUTLINE"))
     titleFS:SetTextColor(C.teal[1], C.teal[2], C.teal[3])
-    titleFS:SetText("Slot " .. selectedSlot .. " — " .. IndicatorLabel(cfg))
+    titleFS:SetText("Slot " .. selectedSlot .. layerSuffix .. " — " .. IndicatorLabel(slotCfg))
     titleFS:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", PAD, -PAD)
     titleFS:SetWidth(detailPanel:GetWidth() - PAD * 4)
 
-    -- We lay settings out in two columns with relatively tight spacing
-    local col1X, col2X = PAD, PAD + 200
-    local row         = -PAD - 20 -- starting Y under title
+    -- ── Layer tabs ──────────────────────────────────────────────────────────
+    local LAYER_TAB_H  = 22
+    local LAYER_TAB_W  = 110
+    local tabRowY      = -PAD - 20 - 6   -- just below title
+    local tabX         = PAD
+    local typeLabels   = { icons = "Icon Cluster", border = "Border", overlay = "Overlay" }
 
-    -- Indicator type
+    local function LayerTabLabel(layerIdx)
+        local lcfg
+        if layerIdx == 1 then lcfg = slotCfg
+        elseif slotCfg.extraLayers then lcfg = slotCfg.extraLayers[layerIdx - 1] end
+        local t = lcfg and (typeLabels[lcfg.type or "icons"] or "Layer") or "Layer"
+        return "L" .. layerIdx .. "  " .. t
+    end
+
+    local totalLayers = 1 + extraCount
+    for li = 1, totalLayers do
+        local isActive = (li == selectedLayer)
+        local tab = PushDetail(CreateFrame("Button", nil, detailPanel, "BackdropTemplate"))
+        tab:SetSize(LAYER_TAB_W, LAYER_TAB_H)
+        tab:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", tabX + (li - 1) * (LAYER_TAB_W + 4), tabRowY)
+        Backdrop(tab,
+            isActive and { C.teal[1]*0.2, C.teal[2]*0.2, C.teal[3]*0.2 } or C.card,
+            isActive and C.teal or C.border, 1, 1)
+        local tabLbl = tab:CreateFontString(nil, "OVERLAY")
+        tabLbl:SetFont(Font(9))
+        tabLbl:SetAllPoints(tab)
+        tabLbl:SetJustifyH("CENTER")
+        tabLbl:SetJustifyV("MIDDLE")
+        tabLbl:SetTextColor(
+            isActive and C.teal[1] or C.muted[1],
+            isActive and C.teal[2] or C.muted[2],
+            isActive and C.teal[3] or C.muted[3])
+        tabLbl:SetText(LayerTabLabel(li))
+        local capLi = li
+        tab:SetScript("OnClick", function()
+            selectedLayer = capLi
+            RefreshDetailPanel()
+        end)
+        tab:SetScript("OnEnter", function(self2)
+            if not isActive then
+                self2:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.7)
+            end
+        end)
+        tab:SetScript("OnLeave", function(self2)
+            if not isActive then
+                self2:SetBackdropBorderColor(C.border[1], C.border[2], C.border[3], 1)
+            end
+        end)
+    end
+
+    -- "+ Add Layer" button
+    local addLayerX = tabX + totalLayers * (LAYER_TAB_W + 4)
+    local addLayerBtn = PushDetail(CreateFrame("Button", nil, detailPanel, "BackdropTemplate"))
+    addLayerBtn:SetSize(80, LAYER_TAB_H)
+    addLayerBtn:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", addLayerX, tabRowY)
+    Backdrop(addLayerBtn, C.panel, C.border, 1, 1)
+    local addLayerLbl = addLayerBtn:CreateFontString(nil, "OVERLAY")
+    addLayerLbl:SetFont(Font(9))
+    addLayerLbl:SetTextColor(C.teal[1], C.teal[2], C.teal[3])
+    addLayerLbl:SetAllPoints(addLayerBtn)
+    addLayerLbl:SetJustifyH("CENTER")
+    addLayerLbl:SetJustifyV("MIDDLE")
+    addLayerLbl:SetText("+ Layer")
+    AddTooltip(addLayerBtn, "Add Layer", "Add an additional indicator layer to this slot.\nEach layer tracks the same aura but shows a different visual type.")
+    addLayerBtn:SetScript("OnEnter", function(self2)
+        self2:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 1)
+    end)
+    addLayerBtn:SetScript("OnLeave", function(self2)
+        self2:SetBackdropBorderColor(C.border[1], C.border[2], C.border[3], 1)
+    end)
+    addLayerBtn:SetScript("OnClick", function()
+        local i2 = EnsureIndicatorsWritable(activeFrameKey)
+        i2[selectedSlot].extraLayers = i2[selectedSlot].extraLayers or {}
+        table.insert(i2[selectedSlot].extraLayers, {
+            type   = "border",
+            anchor = slotCfg.anchor or "TOPLEFT",
+            borderAnim = "solid",
+        })
+        selectedLayer = 1 + #i2[selectedSlot].extraLayers
+        RefreshDetailPanel()
+    end)
+
+    -- "Remove Layer" button (only for non-primary layers)
+    if selectedLayer > 1 then
+        local remX = addLayerX + 84
+        local remBtn = PushDetail(CreateFrame("Button", nil, detailPanel, "BackdropTemplate"))
+        remBtn:SetSize(80, LAYER_TAB_H)
+        remBtn:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", remX, tabRowY)
+        Backdrop(remBtn, C.panel, C.border, 1, 1)
+        local remLbl = remBtn:CreateFontString(nil, "OVERLAY")
+        remLbl:SetFont(Font(9))
+        remLbl:SetTextColor(C.danger[1], C.danger[2], C.danger[3])
+        remLbl:SetAllPoints(remBtn)
+        remLbl:SetJustifyH("CENTER")
+        remLbl:SetJustifyV("MIDDLE")
+        remLbl:SetText("Remove")
+        remBtn:SetScript("OnEnter", function(self2)
+            self2:SetBackdropBorderColor(C.danger[1], C.danger[2], C.danger[3], 1)
+        end)
+        remBtn:SetScript("OnLeave", function(self2)
+            self2:SetBackdropBorderColor(C.border[1], C.border[2], C.border[3], 1)
+        end)
+        remBtn:SetScript("OnClick", function()
+            local i2 = EnsureIndicatorsWritable(activeFrameKey)
+            table.remove(i2[selectedSlot].extraLayers, selectedLayer - 1)
+            selectedLayer = selectedLayer - 1
+            if selectedLayer < 1 then selectedLayer = 1 end
+            RefreshDetailPanel()
+        end)
+    end
+
+    -- ── Two-column settings layout ────────────────────────────────────────────
+    -- col1 (left):  type + type-specific settings
+    -- col2 (right): positioning (anchor / offsets) + chase dot options
+    local col1X  = PAD
+    local col2X  = PAD + 302
+    local row    = -PAD - 20 - LAYER_TAB_H - 10   -- below layer tabs row
+    local c2y    = row                              -- col2 top (same baseline as col1)
+
+    -- ── Helpers ─────────────────────────────────────────────
+    -- Shared preset swatch table (used for border colour, overlay colour, chase colour)
+    local SWATCH_PRESETS = {
+        { 1.00, 0.50, 0.00 },  -- orange
+        { 0.10, 0.72, 0.74 },  -- teal
+        { 0.96, 0.76, 0.24 },  -- gold
+        { 0.42, 0.89, 0.63 },  -- green
+        { 0.90, 0.30, 0.32 },  -- red
+        { 1.00, 1.00, 1.00 },  -- white
+        { 0.50, 0.25, 1.00 },  -- purple
+        { 0.25, 0.50, 1.00 },  -- blue
+    }
+
+    --- Render a row of colour swatches + a "..." custom-colour button.
+    --- onChange(r,g,b,a) is called when a colour is committed.
+    local function DetailColorRow(px, py, currentColor, onChange)
+        local swX = px
+        for _, sw in ipairs(SWATCH_PRESETS) do
+            local swBtn = PushDetail(CreateFrame("Button", nil, detailPanel, "BackdropTemplate"))
+            swBtn:SetSize(18, 18)
+            swBtn:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", swX, py)
+            Backdrop(swBtn, { sw[1]*0.25, sw[2]*0.25, sw[3]*0.25 }, { sw[1], sw[2], sw[3] }, 1, 1)
+            local cc = currentColor
+            local isSel = cc
+                and math.abs((cc[1] or 0) - sw[1]) < 0.02
+                and math.abs((cc[2] or 0) - sw[2]) < 0.02
+                and math.abs((cc[3] or 0) - sw[3]) < 0.02
+            if isSel then swBtn:SetBackdropBorderColor(1, 1, 1, 1) end
+            local capSw = sw
+            swBtn:SetScript("OnEnter", function(s2) s2:SetBackdropBorderColor(1,1,1,1) end)
+            swBtn:SetScript("OnLeave", function(s2)
+                local cur = currentColor
+                local sel = cur
+                    and math.abs((cur[1] or 0) - capSw[1]) < 0.02
+                    and math.abs((cur[2] or 0) - capSw[2]) < 0.02
+                    and math.abs((cur[3] or 0) - capSw[3]) < 0.02
+                s2:SetBackdropBorderColor(
+                    sel and 1 or capSw[1], sel and 1 or capSw[2], sel and 1 or capSw[3], 1)
+            end)
+            swBtn:SetScript("OnClick", function()
+                if onChange then onChange(capSw[1], capSw[2], capSw[3], 1) end
+            end)
+            swX = swX + 22
+        end
+
+        -- "..." custom colour button
+        local custBtn = PushDetail(CreateFrame("Button", nil, detailPanel, "BackdropTemplate"))
+        custBtn:SetSize(24, 18)
+        custBtn:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", swX, py)
+        Backdrop(custBtn, C.panel, C.border, 1, 1)
+        local custLbl = custBtn:CreateFontString(nil, "OVERLAY")
+        custLbl:SetFont(Font(9))
+        custLbl:SetTextColor(C.teal[1], C.teal[2], C.teal[3])
+        custLbl:SetAllPoints(custBtn)
+        custLbl:SetJustifyH("CENTER")
+        custLbl:SetText("...")
+        custBtn:SetScript("OnEnter", function(s2)
+            GameTooltip:SetOwner(s2, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Custom Color", 1, 1, 1)
+            GameTooltip:AddLine("Click to enter a custom R / G / B value.", 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+            s2:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 1)
+        end)
+        custBtn:SetScript("OnLeave", function(s2)
+            GameTooltip:Hide()
+            s2:SetBackdropBorderColor(C.border[1], C.border[2], C.border[3], 1)
+        end)
+        custBtn:SetScript("OnClick", function(s2)
+            local cur = currentColor or { 1, 1, 1, 1 }
+            local popup = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+            popup:SetSize(168, 120)
+            popup:SetFrameStrata("TOOLTIP")
+            popup:SetFrameLevel(950)
+            Backdrop(popup, C.panel, C.border, 1, 1)
+            popup:SetPoint("BOTTOMLEFT", s2, "TOPLEFT", 0, 4)
+
+            local ch = { math.floor((cur[1] or 1)*255+0.5),
+                         math.floor((cur[2] or 1)*255+0.5),
+                         math.floor((cur[3] or 1)*255+0.5) }
+            local comps = {"R", "G", "B"}
+            local boxes = {}
+            for ci = 1, 3 do
+                local lbl2 = popup:CreateFontString(nil, "OVERLAY")
+                lbl2:SetFont(Font(LABEL_FONT_SIZE))
+                lbl2:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+                lbl2:SetText(comps[ci])
+                lbl2:SetPoint("TOPLEFT", popup, "TOPLEFT", 8, -(8 + (ci-1)*30))
+
+                local box = CreateFrame("EditBox", nil, popup, "BackdropTemplate")
+                box:SetSize(120, 20)
+                box:SetPoint("TOPLEFT", popup, "TOPLEFT", 24, -(8 + (ci-1)*30))
+                Backdrop(box, C.card, C.border, 1, 1)
+                box:SetFont(Font(LABEL_FONT_SIZE))
+                box:SetAutoFocus(false)
+                box:SetNumeric(true)
+                box:SetMaxLetters(3)
+                box:SetTextInsets(4, 4, 0, 0)
+                box:SetText(tostring(ch[ci]))
+                box:SetScript("OnEditFocusGained", function(self2)
+                    self2:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 1)
+                    self2:HighlightText()
+                end)
+                box:SetScript("OnEditFocusLost", function(self2)
+                    self2:SetBackdropBorderColor(C.border[1], C.border[2], C.border[3], 1)
+                end)
+                boxes[ci] = box
+            end
+
+            local applyBtn = CreateFrame("Button", nil, popup, "BackdropTemplate")
+            applyBtn:SetSize(70, 20)
+            applyBtn:SetPoint("BOTTOMLEFT", popup, "BOTTOMLEFT", 8, 8)
+            Backdrop(applyBtn, C.card, C.border, 1, 1)
+            local applyLbl = applyBtn:CreateFontString(nil, "OVERLAY")
+            applyLbl:SetFont(Font(LABEL_FONT_SIZE))
+            applyLbl:SetTextColor(C.teal[1], C.teal[2], C.teal[3])
+            applyLbl:SetAllPoints(applyBtn)
+            applyLbl:SetJustifyH("CENTER")
+            applyLbl:SetText("Apply")
+
+            local cancelBtn = CreateFrame("Button", nil, popup, "BackdropTemplate")
+            cancelBtn:SetSize(56, 20)
+            cancelBtn:SetPoint("BOTTOMRIGHT", popup, "BOTTOMRIGHT", -8, 8)
+            Backdrop(cancelBtn, C.card, C.border, 1, 1)
+            local cancelLbl = cancelBtn:CreateFontString(nil, "OVERLAY")
+            cancelLbl:SetFont(Font(LABEL_FONT_SIZE))
+            cancelLbl:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+            cancelLbl:SetAllPoints(cancelBtn)
+            cancelLbl:SetJustifyH("CENTER")
+            cancelLbl:SetText("Cancel")
+
+            applyBtn:SetScript("OnClick", function()
+                local r = math.max(0, math.min(255, tonumber(boxes[1]:GetText()) or 255)) / 255
+                local g = math.max(0, math.min(255, tonumber(boxes[2]:GetText()) or 255)) / 255
+                local b = math.max(0, math.min(255, tonumber(boxes[3]:GetText()) or 255)) / 255
+                if onChange then onChange(r, g, b, 1) end
+                popup:Hide(); popup:SetParent(nil)
+            end)
+            cancelBtn:SetScript("OnClick", function()
+                popup:Hide(); popup:SetParent(nil)
+            end)
+
+            local catcher2 = CreateFrame("Button", nil, UIParent)
+            catcher2:SetAllPoints(UIParent)
+            catcher2:SetFrameStrata("TOOLTIP")
+            catcher2:SetFrameLevel(949)
+            catcher2:SetScript("OnClick", function()
+                popup:Hide(); popup:SetParent(nil)
+                catcher2:Hide(); catcher2:SetParent(nil)
+            end)
+            popup:SetScript("OnHide", function()
+                catcher2:Hide(); catcher2:SetParent(nil)
+            end)
+            catcher2:Show()
+            popup:Show()
+        end)
+    end
+
+    -- ── COL 2: Positioning (always visible, fixed position) ──────────────────
+    local c2Sec = PushDetail(detailPanel:CreateFontString(nil, "OVERLAY"))
+    c2Sec:SetFont(Font(SECTION_FONT_SIZE, "OUTLINE"))
+    c2Sec:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+    c2Sec:SetText("POSITIONING")
+    c2Sec:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", col2X, c2y)
+    AddTooltip(c2Sec, "Positioning", "Set where this indicator appears on the unit frame.")
+
+    DetailLabel(detailPanel, "Anchor Point", col2X, c2y - 18)
+    AddTooltip(
+        DetailAnchorGrid(detailPanel, cfg.anchor or "TOPLEFT", col2X, c2y - 34, function(key)
+            local layer = EnsureLayerWritable()
+            layer.anchor         = key
+            layer.relativeAnchor = key
+            RefreshSlots()
+            RefreshDetailPanel()
+        end),
+        "Anchor Point", "Click a cell to set where on the frame this indicator is anchored.")
+
+    DetailSlider(detailPanel, "Offset X", cfg.offsetX or 0, -80, 80, 1,
+        col2X, c2y - 96, 136, function(v)
+            EnsureLayerWritable().offsetX = v
+            DeferredFlush()
+    end)
+    DetailSlider(detailPanel, "Offset Y", cfg.offsetY or 0, -80, 80, 1,
+        col2X, c2y - 130, 136, function(v)
+            EnsureLayerWritable().offsetY = v
+            DeferredFlush()
+    end)
+
+    -- ── COL 1: Type + Only Mine ───────────────────────────────────────────────
     local typeItems = {
         { key = "icons",   label = "Icon Cluster"    },
         { key = "border",  label = "Border Highlight" },
         { key = "overlay", label = "Color Overlay"    },
     }
-    DetailLabel(detailPanel, "Type", col1X, row)
-    DetailDropdown(detailPanel, typeItems, cfg.type or "icons", col1X, row - 14, 140, function(k)
-        local i2 = EnsureIndicatorsWritable(activeFrameKey)
-        i2[selectedSlot].type = k
+    DetailLabel(detailPanel, "Indicator Type", col1X, row)
+    local typeDD = DetailDropdown(detailPanel, typeItems, cfg.type or "icons", col1X, row - 14, 148, function(k)
+        EnsureLayerWritable().type = k
         RefreshDetailPanel()
     end)
+    AddTooltip(typeDD, "Indicator Type",
+        "Icon Cluster: shows aura icons.\nBorder Highlight: glows the frame border.\nColor Overlay: tints the entire frame.")
 
-    -- Only Mine checkbox
-    DetailCheckbox(detailPanel, "Only Mine", cfg.onlyMine, col2X, row - 14, function(v)
-        local i2 = EnsureIndicatorsWritable(activeFrameKey)
-        i2[selectedSlot].onlyMine = v
-        DeferredFlush()
-    end)
+    -- Only Mine only makes sense on the primary layer (shares aura condition with slot)
+    if selectedLayer == 1 then
+        local cbOnlyMine = DetailCheckbox(detailPanel, "Only Mine", slotCfg.onlyMine, col1X + 168, row - 14, function(v)
+            local i2 = EnsureIndicatorsWritable(activeFrameKey)
+            i2[selectedSlot].onlyMine = v
+            DeferredFlush()
+        end)
+        AddTooltip(cbOnlyMine, "Only Mine", "When enabled, only show auras that YOU applied to this unit.")
+    end
 
     row = row - 46
 
-    -- Anchor grid
-    DetailLabel(detailPanel, "Anchor Point", col1X, row)
-    row = row - 16
-    DetailAnchorGrid(detailPanel, cfg.anchor or "TOPLEFT", col1X, row, function(key)
-        local i2 = EnsureIndicatorsWritable(activeFrameKey)
-        i2[selectedSlot].anchor         = key
-        i2[selectedSlot].relativeAnchor = key
-        RefreshSlots()
-        RefreshDetailPanel()
-    end)
-
-    -- Offset sliders beside anchor grid
-    local offX2 = col1X + 100
-    DetailLabel(detailPanel, "Offset X", offX2, row)
-    DetailSlider(detailPanel, "", cfg.offsetX or 0, -80, 80, 1, offX2, row - 6, 100, function(v)
-        local i2 = EnsureIndicatorsWritable(activeFrameKey)
-        i2[selectedSlot].offsetX = v
-    end)
-    DetailLabel(detailPanel, "Offset Y", offX2, row - 38)
-    DetailSlider(detailPanel, "", cfg.offsetY or 0, -80, 80, 1, offX2, row - 44, 100, function(v)
-        local i2 = EnsureIndicatorsWritable(activeFrameKey)
-        i2[selectedSlot].offsetY = v
-    end)
-
-    row = row - 80
-
-    -- Type-specific settings
+    -- ── COL 1: Type-specific settings ────────────────────────────────────────
     if (cfg.type or "icons") == "icons" then
-        -- Size
-        DetailLabel(detailPanel, "Icon Size", col1X, row)
-        DetailSlider(detailPanel, "", cfg.iconSize or 18, 8, 40, 1, col1X, row - 6, 100, function(v)
-            local i2 = EnsureIndicatorsWritable(activeFrameKey)
-            i2[selectedSlot].iconSize = v
+        -- Icon Size
+        DetailSlider(detailPanel, "Icon Size", cfg.iconSize or 18, 8, 40, 1,
+            col1X, row, 130, function(v)
+                EnsureLayerWritable().iconSize = v
+                DeferredFlush()
         end)
 
-        -- Max count
-        DetailLabel(detailPanel, "Max Count", col1X + 120, row)
-        DetailSlider(detailPanel, "", cfg.maxCount or 5, 1, 12, 1, col1X + 120, row - 6, 90, function(v)
-            local i2 = EnsureIndicatorsWritable(activeFrameKey)
-            i2[selectedSlot].maxCount = v
+        -- Max Count (right of icon size)
+        DetailSlider(detailPanel, "Max Count", cfg.maxCount or 5, 1, 12, 1,
+            col1X + 148, row, 120, function(v)
+                EnsureLayerWritable().maxCount = v
+                DeferredFlush()
         end)
+        row = row - 40
 
-        row = row - 46
-
-        -- Grow direction
+        -- Grow Direction
         local growItems = {
             { key="RIGHT", label="→ Right" }, { key="LEFT",  label="← Left"  },
             { key="UP",    label="↑ Up"    }, { key="DOWN",  label="↓ Down"  },
         }
         DetailLabel(detailPanel, "Grow Direction", col1X, row)
-        DetailDropdown(detailPanel, growItems, cfg.growDirection or "RIGHT", col1X, row - 14, 120, function(k)
-            local i2 = EnsureIndicatorsWritable(activeFrameKey)
-            i2[selectedSlot].growDirection = k
+        local dirDD = DetailDropdown(detailPanel, growItems, cfg.growDirection or "RIGHT", col1X, row - 14, 128, function(k)
+            EnsureLayerWritable().growDirection = k
+            DeferredFlush()
         end)
+        AddTooltip(dirDD, "Grow Direction", "Direction icons expand when multiple auras are active.")
 
-        -- Spacing
-        DetailLabel(detailPanel, "Spacing", col1X + 140, row)
-        DetailSlider(detailPanel, "", cfg.spacing or 2, 0, 12, 1, col1X + 140, row - 6, 80, function(v)
-            local i2 = EnsureIndicatorsWritable(activeFrameKey)
-            i2[selectedSlot].spacing = v
+        -- Spacing (right of grow)
+        DetailSlider(detailPanel, "Gap", cfg.spacing or 2, 0, 12, 1,
+            col1X + 148, row, 100, function(v)
+                EnsureLayerWritable().spacing = v
+                DeferredFlush()
         end)
+        row = row - 40
 
-        row = row - 46
+        -- Show Duration text + font size
+        local cbDur = DetailCheckbox(detailPanel, "Show Duration", cfg.showDuration ~= false, col1X, row - 6, function(v)
+            EnsureLayerWritable().showDuration = v
+            DeferredFlush()
+        end)
+        AddTooltip(cbDur, "Show Duration", "Display the time remaining on each aura icon.")
+
+        DetailSlider(detailPanel, "Duration Font", cfg.durationFontSize or 7, 5, 14, 1,
+            col1X + 148, row, 100, function(v)
+                EnsureLayerWritable().durationFontSize = v
+                DeferredFlush()
+        end)
+        row = row - 36
 
     elseif (cfg.type or "icons") == "border" then
-        -- ── Border settings ─────────────────────────────────
-        -- Width
-        DetailLabel(detailPanel, "Border Width", col1X, row)
-        DetailSlider(detailPanel, "", cfg.borderWidth or 2, 1, 8, 1, col1X, row - 6, 100, function(v)
-            local i2 = EnsureIndicatorsWritable(activeFrameKey)
-            i2[selectedSlot].borderWidth = v
+        -- Border Width
+        DetailSlider(detailPanel, "Border Width", cfg.borderWidth or 2, 1, 8, 1,
+            col1X, row, 130, function(v)
+                EnsureLayerWritable().borderWidth = v
+                DeferredFlush()
         end)
+        row = row - 40
 
-        row = row - 46
-
-        -- Animation type
+        -- Animation
         local animItems = {
             { key = "solid", label = "Solid" },
             { key = "pulse", label = "Pulse" },
             { key = "chase", label = "Chase" },
         }
         DetailLabel(detailPanel, "Animation", col1X, row)
-        DetailDropdown(detailPanel, animItems, cfg.borderAnim or "solid", col1X, row - 14, 110, function(k)
-            local i2 = EnsureIndicatorsWritable(activeFrameKey)
-            i2[selectedSlot].borderAnim = k
+        local animDD = DetailDropdown(detailPanel, animItems, cfg.borderAnim or "solid", col1X, row - 14, 120, function(k)
+            EnsureLayerWritable().borderAnim = k
             RefreshDetailPanel()
         end)
+        AddTooltip(animDD, "Animation",
+            "Solid: static color.\nPulse: fades in and out.\nChase: tiny dots orbit the border.")
 
-        row = row - 46
-
-        -- Pulse speed (only relevant for pulse animation)
+        -- Pulse speed (only when pulse selected)
         if (cfg.borderAnim or "solid") == "pulse" then
-            DetailLabel(detailPanel, "Pulse Speed", col1X, row)
-            DetailSlider(detailPanel, "", cfg.borderAnimSpeed or 1.0, 0.25, 4.0, 0.25,
-                col1X, row - 6, 120, function(v)
-                    local i2 = EnsureIndicatorsWritable(activeFrameKey)
-                    i2[selectedSlot].borderAnimSpeed = v
+            DetailSlider(detailPanel, "Speed", cfg.borderAnimSpeed or 1.0, 0.25, 4.0, 0.25,
+                col1X + 140, row, 108, function(v)
+                    EnsureLayerWritable().borderAnimSpeed = v
+                    DeferredFlush()
             end)
-            row = row - 46
         end
+        row = row - 40
 
-        -- Border color swatches
-        local swatchDefs = {
-            { 1.00, 0.50, 0.00 },  -- orange (default)
-            { 0.10, 0.72, 0.74 },  -- teal
-            { 0.96, 0.76, 0.24 },  -- gold
-            { 0.42, 0.89, 0.63 },  -- green
-            { 0.90, 0.30, 0.32 },  -- red
-            { 1.00, 1.00, 1.00 },  -- white
-        }
+        -- Border Color
         DetailLabel(detailPanel, "Border Color", col1X, row)
-        local swX = col1X
-        for _, sw in ipairs(swatchDefs) do
-            local swBtn = PushDetail(CreateFrame("Button", nil, detailPanel, "BackdropTemplate"))
-            swBtn:SetSize(20, 20)
-            swBtn:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", swX, row - 14)
-            Backdrop(swBtn, { sw[1] * 0.25, sw[2] * 0.25, sw[3] * 0.25 }, { sw[1], sw[2], sw[3] }, 1, 1)
-            local bc     = cfg.borderColor
-            local isSel  = bc
-                and math.abs((bc[1] or 0) - sw[1]) < 0.02
-                and math.abs((bc[2] or 0) - sw[2]) < 0.02
-                and math.abs((bc[3] or 0) - sw[3]) < 0.02
-            if isSel then
-                swBtn:SetBackdropBorderColor(1, 1, 1, 1)
-            end
-            local capSw = sw
-            swBtn:SetScript("OnEnter", function(self2)
-                self2:SetBackdropBorderColor(1, 1, 1, 1)
-            end)
-            swBtn:SetScript("OnLeave", function(self2)
-                local cur = cfg.borderColor
-                local sel = cur
-                    and math.abs((cur[1] or 0) - capSw[1]) < 0.02
-                    and math.abs((cur[2] or 0) - capSw[2]) < 0.02
-                    and math.abs((cur[3] or 0) - capSw[3]) < 0.02
-                self2:SetBackdropBorderColor(
-                    sel and 1 or capSw[1],
-                    sel and 1 or capSw[2],
-                    sel and 1 or capSw[3], 1)
-            end)
-            swBtn:SetScript("OnClick", function()
-                local i2 = EnsureIndicatorsWritable(activeFrameKey)
-                i2[selectedSlot].borderColor = { capSw[1], capSw[2], capSw[3], 1 }
-                RefreshDetailPanel()
-            end)
-            swX = swX + 24
-        end
-
-        row = row - 46
-    elseif (cfg.type or "icons") == "overlay" then
-        -- ── Color overlay settings ──────────────────────────
-        -- Overlay color swatches
-        local oSwatchDefs = {
-            { 1.00, 0.50, 0.00 },  -- orange
-            { 0.10, 0.72, 0.74 },  -- teal
-            { 0.96, 0.76, 0.24 },  -- gold
-            { 0.42, 0.89, 0.63 },  -- green
-            { 0.90, 0.30, 0.32 },  -- red
-            { 1.00, 1.00, 1.00 },  -- white
-        }
-        DetailLabel(detailPanel, "Overlay Color", col1X, row)
-        local oSwX = col1X
-        for _, sw in ipairs(oSwatchDefs) do
-            local swBtn = PushDetail(CreateFrame("Button", nil, detailPanel, "BackdropTemplate"))
-            swBtn:SetSize(20, 20)
-            swBtn:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", oSwX, row - 14)
-            Backdrop(swBtn, { sw[1] * 0.25, sw[2] * 0.25, sw[3] * 0.25 }, { sw[1], sw[2], sw[3] }, 1, 1)
-            local oc    = cfg.overlayColor
-            local isSel = oc
-                and math.abs((oc[1] or 0) - sw[1]) < 0.02
-                and math.abs((oc[2] or 0) - sw[2]) < 0.02
-                and math.abs((oc[3] or 0) - sw[3]) < 0.02
-            if isSel then
-                swBtn:SetBackdropBorderColor(1, 1, 1, 1)
-            end
-            local capSw = sw
-            swBtn:SetScript("OnEnter", function(self2)
-                self2:SetBackdropBorderColor(1, 1, 1, 1)
-            end)
-            swBtn:SetScript("OnLeave", function(self2)
-                local cur = cfg.overlayColor
-                local sel = cur
-                    and math.abs((cur[1] or 0) - capSw[1]) < 0.02
-                    and math.abs((cur[2] or 0) - capSw[2]) < 0.02
-                    and math.abs((cur[3] or 0) - capSw[3]) < 0.02
-                self2:SetBackdropBorderColor(
-                    sel and 1 or capSw[1],
-                    sel and 1 or capSw[2],
-                    sel and 1 or capSw[3], 1)
-            end)
-            swBtn:SetScript("OnClick", function()
-                local i2 = EnsureIndicatorsWritable(activeFrameKey)
-                i2[selectedSlot].overlayColor = { capSw[1], capSw[2], capSw[3], 1 }
-                RefreshDetailPanel()
-            end)
-            oSwX = oSwX + 24
-        end
-
-        row = row - 46
-
-        -- Overlay alpha slider
-        DetailLabel(detailPanel, "Overlay Opacity", col1X, row)
-        DetailSlider(detailPanel, "", cfg.overlayAlpha or 0.35, 0.0, 0.8, 0.05,
-            col1X, row - 6, 160, function(v)
-                local i2 = EnsureIndicatorsWritable(activeFrameKey)
-                i2[selectedSlot].overlayAlpha = v
+        DetailColorRow(col1X, row - 16, cfg.borderColor, function(r, g, b, a)
+            EnsureLayerWritable().borderColor = { r, g, b, a or 1 }
+            DeferredFlush()
+            RefreshDetailPanel()
         end)
+        row = row - 44
 
-        row = row - 46
+        -- Chase dot settings in col2 (below offset sliders)
+        if (cfg.borderAnim or "solid") == "chase" then
+            local chY = c2y - 170
+            local c2Sec2 = PushDetail(detailPanel:CreateFontString(nil, "OVERLAY"))
+            c2Sec2:SetFont(Font(SECTION_FONT_SIZE, "OUTLINE"))
+            c2Sec2:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+            c2Sec2:SetText("CHASE DOTS")
+            c2Sec2:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", col2X, chY)
+
+            DetailSlider(detailPanel, "Dot Count", cfg.chaseCount or 4, 1, 12, 1,
+                col2X, chY - 18, 136, function(v)
+                    EnsureLayerWritable().chaseCount = v
+                    DeferredFlush()
+            end)
+            DetailSlider(detailPanel, "Dot Length", cfg.chasePixelW or 6, 1, 24, 1,
+                col2X, chY - 52, 136, function(v)
+                    EnsureLayerWritable().chasePixelW = v
+                    DeferredFlush()
+            end)
+            DetailSlider(detailPanel, "Dot Thickness", cfg.chasePixelH or 2, 1, 12, 1,
+                col2X, chY - 86, 136, function(v)
+                    EnsureLayerWritable().chasePixelH = v
+                    DeferredFlush()
+            end)
+            DetailLabel(detailPanel, "Dot Color", col2X, chY - 120)
+            DetailColorRow(col2X, chY - 134, cfg.chaseColor, function(r, g, b, a)
+                EnsureLayerWritable().chaseColor = { r, g, b, a or 1 }
+                DeferredFlush()
+            end)
+        end
+
+    elseif (cfg.type or "icons") == "overlay" then
+        -- Overlay Color
+        DetailLabel(detailPanel, "Overlay Color", col1X, row)
+        DetailColorRow(col1X, row - 16, cfg.overlayColor, function(r, g, b, a)
+            EnsureLayerWritable().overlayColor = { r, g, b, a or 1 }
+            DeferredFlush()
+            RefreshDetailPanel()
+        end)
+        row = row - 44
+
+        -- Overlay Opacity
+        DetailSlider(detailPanel, "Overlay Opacity", cfg.overlayAlpha or 0.35, 0.0, 0.8, 0.05,
+            col1X, row, 200, function(v)
+                EnsureLayerWritable().overlayAlpha = v
+                DeferredFlush()
+        end)
+        row = row - 40
     end
 
-    -- ── Tracked Spells editor (spell-source indicators only) ──
-    if cfg.source == "spell" then
+    -- Spell list — only shown on the primary layer (layer 1) since spells are slot-wide
+    if selectedLayer == 1 and slotCfg.source == "spell" then
         row = row - 4
         DetailLabel(detailPanel, "TRACKED SPELLS", col1X, row)
         row = row - 18
 
-        local spellIds = cfg.spellIds or {}
+        local spellIds = slotCfg.spellIds or {}
         -- backward compat: surface legacy spellId scalar
-        if #spellIds == 0 and cfg.spellId and cfg.spellId > 0 then
-            spellIds = { cfg.spellId }
+        if #spellIds == 0 and slotCfg.spellId and slotCfg.spellId > 0 then
+            spellIds = { slotCfg.spellId }
         end
 
         for _, sid in ipairs(spellIds) do
@@ -1385,7 +1863,6 @@ RefreshDetailPanel = function()
                 for j = #ids, 1, -1 do
                     if ids[j] == capSid then table.remove(ids, j); break end
                 end
-                -- migrate legacy scalar if it matches
                 if i2[selectedSlot].spellId == capSid then
                     i2[selectedSlot].spellId = nil
                 end
@@ -1449,13 +1926,8 @@ RefreshDetailPanel = function()
     -- Resize scroll child to fit all content
     detailPanel:SetHeight(math.max(1, -row + PAD))
 
-    -- Live preview
-    if previewHost then
-        UnitFrames:AWPreviewClear(previewHost)
-        if cfg then
-            UnitFrames:AWPreviewRender(previewHost, 1, cfg)
-        end
-    end
+    -- Refresh preview to show current slot's layers
+    RefreshPreview()
 
     DeferredFlush()
 end
@@ -1714,46 +2186,83 @@ local function BuildDesigner()
     detailPanel:SetSize(RIGHT_W - 6, 80)
     detailScroll:SetScrollChild(detailPanel)
 
-    -- ── Live preview mock frame ───────────────────────────────
-    previewHost = CreateFrame("Frame", nil, detailOuter, "BackdropTemplate")
-    previewHost:SetSize(160, 90)
-    previewHost:SetPoint("BOTTOMRIGHT", detailOuter, "BOTTOMRIGHT", -PAD, PAD)
-    Backdrop(previewHost, { 0.05, 0.07, 0.10 }, C.border, 1, 1)
+    -- ── Preview side panel (anchored to right exterior of root) ──────────────
+    if not previewSidePanel then
+        local SIDE_W = 200
+        previewSidePanel = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        previewSidePanel:SetWidth(SIDE_W)
+        previewSidePanel:SetPoint("TOPLEFT",    root, "TOPRIGHT",    PAD, 0)
+        previewSidePanel:SetPoint("BOTTOMLEFT", root, "BOTTOMRIGHT", PAD, 0)
+        previewSidePanel:SetFrameStrata("FULLSCREEN")
+        previewSidePanel:SetFrameLevel(root:GetFrameLevel() + 2)
+        Backdrop(previewSidePanel, C.panel, C.border, 1, 1)
 
-    local previewLabel = previewHost:CreateFontString(nil, "OVERLAY")
-    previewLabel:SetFont(Font(7, "OUTLINE"))
-    previewLabel:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
-    previewLabel:SetText("PREVIEW")
-    previewLabel:SetPoint("TOPLEFT", previewHost, "TOPLEFT", 4, -4)
+        -- Accent line along the left edge
+        local sideAccent = previewSidePanel:CreateTexture(nil, "BORDER")
+        sideAccent:SetWidth(2)
+        sideAccent:SetPoint("TOPLEFT",    previewSidePanel, "TOPLEFT",    1, -1)
+        sideAccent:SetPoint("BOTTOMLEFT", previewSidePanel, "BOTTOMLEFT", 1,  1)
+        sideAccent:SetColorTexture(C.teal[1], C.teal[2], C.teal[3], 0.7)
 
-    -- Mock health bar
-    local phHBg = previewHost:CreateTexture(nil, "BACKGROUND")
-    phHBg:SetColorTexture(0.08, 0.09, 0.12, 1)
-    phHBg:SetHeight(10)
-    phHBg:SetPoint("BOTTOMLEFT",  previewHost, "BOTTOMLEFT",  3, 3)
-    phHBg:SetPoint("BOTTOMRIGHT", previewHost, "BOTTOMRIGHT", -3, 3)
+        -- Section header
+        local sideTitle = previewSidePanel:CreateFontString(nil, "OVERLAY")
+        sideTitle:SetFont(Font(14, "OUTLINE"))
+        sideTitle:SetTextColor(C.teal[1], C.teal[2], C.teal[3])
+        sideTitle:SetText("LIVE PREVIEW")
+        sideTitle:SetPoint("TOPLEFT", previewSidePanel, "TOPLEFT", PAD + 4, -PAD)
 
-    local phHFg = previewHost:CreateTexture(nil, "ARTWORK")
-    phHFg:SetColorTexture(0.10, 0.68, 0.25, 1)
-    phHFg:SetHeight(10)
-    phHFg:SetPoint("BOTTOMLEFT", previewHost, "BOTTOMLEFT", 3, 3)
-    phHFg:SetWidth(100)
+        -- Subtitle
+        local sideSub = previewSidePanel:CreateFontString(nil, "OVERLAY")
+        sideSub:SetFont(Font(10))
+        sideSub:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+        sideSub:SetText("Aura overlays update as\nyou adjust settings.")
+        sideSub:SetJustifyH("LEFT")
+        sideSub:SetWidth(SIDE_W - PAD * 2 - 4)
+        sideSub:SetPoint("TOPLEFT", sideTitle, "BOTTOMLEFT", 0, -4)
 
-    -- Mock name bar
-    local phNameBg = previewHost:CreateTexture(nil, "BACKGROUND")
-    phNameBg:SetColorTexture(0.06, 0.07, 0.10, 1)
-    phNameBg:SetHeight(16)
-    phNameBg:SetPoint("TOPLEFT",  previewHost, "TOPLEFT",  3, -16)
-    phNameBg:SetPoint("TOPRIGHT", previewHost, "TOPRIGHT", -3, -16)
+        -- Mock unit frame (preview host)
+        previewHost = CreateFrame("Frame", nil, previewSidePanel, "BackdropTemplate")
+        previewHost:SetSize(SIDE_W - PAD * 2, 90)
+        previewHost:SetPoint("TOPLEFT", sideSub, "BOTTOMLEFT", 0, -PAD)
+        Backdrop(previewHost, { 0.05, 0.07, 0.10 }, C.border, 1, 1)
 
-    local phName = previewHost:CreateFontString(nil, "OVERLAY")
-    phName:SetFont(Font(8))
-    phName:SetTextColor(C.text[1], C.text[2], C.text[3])
-    phName:SetText("Player Name")
-    phName:SetPoint("LEFT", phNameBg, "LEFT", 4, 0)
+        local previewLabel = previewHost:CreateFontString(nil, "OVERLAY")
+        previewLabel:SetFont(Font(7, "OUTLINE"))
+        previewLabel:SetTextColor(C.muted[1], C.muted[2], C.muted[3])
+        previewLabel:SetText("UNIT FRAME")
+        previewLabel:SetPoint("TOPLEFT", previewHost, "TOPLEFT", 4, -4)
 
-    UnitFrames:AWAttach(previewHost)
-    previewHost.unit = nil
+        -- Mock health bar
+        local phHBg = previewHost:CreateTexture(nil, "BACKGROUND")
+        phHBg:SetColorTexture(0.08, 0.09, 0.12, 1)
+        phHBg:SetHeight(10)
+        phHBg:SetPoint("BOTTOMLEFT",  previewHost, "BOTTOMLEFT",  3, 3)
+        phHBg:SetPoint("BOTTOMRIGHT", previewHost, "BOTTOMRIGHT", -3, 3)
+
+        local phHFg = previewHost:CreateTexture(nil, "ARTWORK")
+        phHFg:SetColorTexture(0.10, 0.68, 0.25, 1)
+        phHFg:SetHeight(10)
+        phHFg:SetPoint("BOTTOMLEFT", previewHost, "BOTTOMLEFT", 3, 3)
+        phHFg:SetWidth(100)
+
+        -- Mock name bar
+        local phNameBg = previewHost:CreateTexture(nil, "BACKGROUND")
+        phNameBg:SetColorTexture(0.06, 0.07, 0.10, 1)
+        phNameBg:SetHeight(16)
+        phNameBg:SetPoint("TOPLEFT",  previewHost, "TOPLEFT",  3, -16)
+        phNameBg:SetPoint("TOPRIGHT", previewHost, "TOPRIGHT", -3, -16)
+
+        local phName = previewHost:CreateFontString(nil, "OVERLAY")
+        phName:SetFont(Font(8))
+        phName:SetTextColor(C.text[1], C.text[2], C.text[3])
+        phName:SetText("Player Name")
+        phName:SetPoint("LEFT", phNameBg, "LEFT", 4, 0)
+
+        UnitFrames:AWAttach(previewHost)
+        previewHost.unit = nil
+
+        previewSidePanel:Hide()
+    end
 
     root:Hide()
 end
@@ -1770,12 +2279,17 @@ function UnitFrames:AWOpenDesigner(frameKey)
     activeFrameKey = frameKey or "partyMember"
     heldEntry      = nil
     selectedSlot   = 0
+    selectedLayer  = 1
     HideCursor()
     if headerFrameLabel then
         headerFrameLabel:SetText(FRAME_LABELS[activeFrameKey] or activeFrameKey)
     end
     root:Show()
     root:Raise()
+    if previewSidePanel then
+        previewSidePanel:Show()
+        previewSidePanel:SetFrameLevel(root:GetFrameLevel() + 2)
+    end
     RefreshCatalog()
     RefreshSlots()
     RefreshDetailPanel()
@@ -1784,6 +2298,7 @@ end
 --- Close the designer.
 function UnitFrames:AWCloseDesigner()
     if root then root:Hide() end
+    if previewSidePanel then previewSidePanel:Hide() end
     HideCursor()
     SetHeld(nil)
 end

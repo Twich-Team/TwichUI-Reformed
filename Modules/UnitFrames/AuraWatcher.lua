@@ -304,6 +304,8 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
     local shown     = math_min(#auras, maxCount)
     local step      = size + spacing
     local growFn    = GROW_STEP[cfg.growDirection or "RIGHT"] or GROW_STEP.RIGHT
+    local showDur   = cfg.showDuration ~= false
+    local durFont   = Clamp(cfg.durationFontSize or 7, 5, 14)
 
     container:ClearAllPoints()
     container:SetPoint(
@@ -330,7 +332,9 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
 
         slot._expiry   = data.expirationTime
         slot._duration = data.duration
+        slot.dur:SetFont(_G.STANDARD_TEXT_FONT, durFont, "OUTLINE")
         UpdateDurationText(slot.dur, data.expirationTime, data.duration)
+        slot.dur:SetShown(showDur)
 
         slot:Show()
     end
@@ -357,6 +361,12 @@ end
 -- Border overlay rendering
 -- ============================================================
 
+local function HideChaseDots(border)
+    if border._chaseDots then
+        for _, dt in ipairs(border._chaseDots) do dt:Hide() end
+    end
+end
+
 local function UpdateBorderIndicator(frame, idx, cfg, isActive)
     local border = EnsureBorderOverlay(frame, idx)
     local bw     = Clamp(cfg.borderWidth or 2, 1, 8)
@@ -368,129 +378,118 @@ local function UpdateBorderIndicator(frame, idx, cfg, isActive)
     border:SetPoint("TOPLEFT",     frame, "TOPLEFT",      -bw,  bw)
     border:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",   bw, -bw)
 
-    if isActive then
-        border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = bw })
-        border._animSpeed   = speed
-        border._borderColor = c
-        border._bw          = bw
-
-        if anim == "pulse" then
-            border._animType  = "pulse"
-            border._pulseTime = border._pulseTime or 0
-            if not border._onUpdateSet then
-                border._onUpdateSet = true
-                border:SetScript("OnUpdate", function(self2, elapsed)
-                    local at = self2._animType
-                    local sp = self2._animSpeed or 1.0
-                    local bc = self2._borderColor or { 1, 0.5, 0, 1 }
-                    if at == "pulse" then
-                        self2._pulseTime = (self2._pulseTime or 0) + elapsed
-                        local alpha = 0.35 + 0.65 * math.abs(math.sin(
-                            self2._pulseTime * math.pi * sp))
-                        self2:SetBackdropBorderColor(bc[1], bc[2], bc[3], alpha)
-                    elseif at == "chase" then
-                        self2._chaseTime = (self2._chaseTime or 0) + elapsed * sp
-                        local t    = self2._chaseTime % 4
-                        local side = math_floor(t)
-                        local frac = t - side
-                        local dot  = self2._chaseDot
-                        if not dot then return end
-                        local ds = math_max(6, (self2._bw or 2) * 3)
-                        dot:SetSize(ds, ds)
-                        dot:SetColorTexture(
-                            math_min(1, bc[1] + 0.5),
-                            math_min(1, bc[2] + 0.5),
-                            math_min(1, bc[3] + 0.5), 1)
-                        dot:ClearAllPoints()
-                        local fw = self2:GetWidth()
-                        local fh = self2:GetHeight()
-                        if side == 0 then
-                            dot:SetPoint("TOPLEFT", self2, "TOPLEFT",
-                                frac * (fw - ds), 0)
-                        elseif side == 1 then
-                            dot:SetPoint("TOPRIGHT", self2, "TOPRIGHT",
-                                0, -(frac * (fh - ds)))
-                        elseif side == 2 then
-                            dot:SetPoint("BOTTOMRIGHT", self2, "BOTTOMRIGHT",
-                                -(frac * (fw - ds)), 0)
-                        else
-                            dot:SetPoint("BOTTOMLEFT", self2, "BOTTOMLEFT",
-                                0, frac * (fh - ds))
-                        end
-                    end
-                end)
-            end
-            border:SetBackdropBorderColor(c[1], c[2], c[3], 1)
-            if border._chaseDot then border._chaseDot:Hide() end
-
-        elseif anim == "chase" then
-            border._animType  = "chase"
-            border._chaseTime = border._chaseTime or 0
-            -- Ensure chase dot texture
-            if not border._chaseDot then
-                border._chaseDot = border:CreateTexture(nil, "OVERLAY")
-                border._chaseDot:SetColorTexture(1, 1, 1, 1)
-            end
-            if not border._onUpdateSet then
-                border._onUpdateSet = true
-                border:SetScript("OnUpdate", function(self2, elapsed)
-                    local at = self2._animType
-                    local sp = self2._animSpeed or 1.0
-                    local bc = self2._borderColor or { 1, 0.5, 0, 1 }
-                    if at == "pulse" then
-                        self2._pulseTime = (self2._pulseTime or 0) + elapsed
-                        local alpha = 0.35 + 0.65 * math.abs(math.sin(
-                            self2._pulseTime * math.pi * sp))
-                        self2:SetBackdropBorderColor(bc[1], bc[2], bc[3], alpha)
-                    elseif at == "chase" then
-                        self2._chaseTime = (self2._chaseTime or 0) + elapsed * sp
-                        local t    = self2._chaseTime % 4
-                        local side = math_floor(t)
-                        local frac = t - side
-                        local dot  = self2._chaseDot
-                        if not dot then return end
-                        local ds = math_max(6, (self2._bw or 2) * 3)
-                        dot:SetSize(ds, ds)
-                        dot:SetColorTexture(
-                            math_min(1, bc[1] + 0.5),
-                            math_min(1, bc[2] + 0.5),
-                            math_min(1, bc[3] + 0.5), 1)
-                        dot:ClearAllPoints()
-                        local fw = self2:GetWidth()
-                        local fh = self2:GetHeight()
-                        if side == 0 then
-                            dot:SetPoint("TOPLEFT", self2, "TOPLEFT",
-                                frac * (fw - ds), 0)
-                        elseif side == 1 then
-                            dot:SetPoint("TOPRIGHT", self2, "TOPRIGHT",
-                                0, -(frac * (fh - ds)))
-                        elseif side == 2 then
-                            dot:SetPoint("BOTTOMRIGHT", self2, "BOTTOMRIGHT",
-                                -(frac * (fw - ds)), 0)
-                        else
-                            dot:SetPoint("BOTTOMLEFT", self2, "BOTTOMLEFT",
-                                0, frac * (fh - ds))
-                        end
-                    end
-                end)
-            end
-            border:SetBackdropBorderColor(c[1], c[2], c[3], 0.9)
-            border._chaseDot:Show()
-
-        else  -- solid
-            border._animType = "solid"
-            if border._onUpdateSet then
-                border:SetScript("OnUpdate", nil)
-                border._onUpdateSet = false
-            end
-            if border._chaseDot then border._chaseDot:Hide() end
-            border:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
-        end
-        border:Show()
-    else
+    if not isActive then
         border:Hide()
-        if border._chaseDot then border._chaseDot:Hide() end
+        HideChaseDots(border)
+        return
     end
+
+    -- Active ─────────────────────────────────────────────────────
+    border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = bw })
+    border._animSpeed   = speed
+    border._borderColor = c
+    border._bw          = bw
+
+    -- Solid: no OnUpdate needed
+    if anim == "solid" then
+        border._animType = "solid"
+        if border._onUpdateSet then
+            border:SetScript("OnUpdate", nil)
+            border._onUpdateSet = nil
+        end
+        HideChaseDots(border)
+        border:SetBackdropBorderColor(c[1], c[2], c[3], c[4] or 1)
+        border:Show()
+        return
+    end
+
+    -- Pulse or Chase: install shared OnUpdate handler once
+    if not border._onUpdateSet then
+        border._onUpdateSet = true
+        border:SetScript("OnUpdate", function(self2, elapsed)
+            local at = self2._animType
+            local sp = self2._animSpeed or 1.0
+            local bc = self2._borderColor or { 1, 0.5, 0, 1 }
+            if at == "pulse" then
+                self2._pulseTime = (self2._pulseTime or 0) + elapsed
+                local alpha = 0.35 + 0.65 * math.abs(math.sin(
+                    self2._pulseTime * math.pi * sp))
+                self2:SetBackdropBorderColor(bc[1], bc[2], bc[3], alpha)
+            elseif at == "chase" then
+                self2._chaseTime = (self2._chaseTime or 0) + elapsed * sp
+                local t    = self2._chaseTime
+                local dots = self2._chaseDots
+                if not dots then return end
+                local N      = self2._activeChaseCount or #dots
+                local dLen   = self2._chasePixelW or 6   -- length along travel direction
+                local dThick = self2._chasePixelH or 2   -- thickness perpendicular to travel
+                local cc     = self2._chaseColor
+                if not cc then
+                    cc = {
+                        math_min(1, bc[1] + 0.5),
+                        math_min(1, bc[2] + 0.5),
+                        math_min(1, bc[3] + 0.5), 1,
+                    }
+                end
+                local fw = self2:GetWidth()
+                local fh = self2:GetHeight()
+                for di = 1, N do
+                    local dot      = dots[di]
+                    local phase    = (t + (di - 1) / N * 4) % 4
+                    local side     = math_floor(phase)
+                    local frac     = phase - side
+                    local isHoriz  = (side == 0 or side == 2)
+                    local dotW     = isHoriz and dLen or dThick
+                    local dotH     = isHoriz and dThick or dLen
+                    dot:SetSize(dotW, dotH)
+                    dot:SetColorTexture(cc[1], cc[2], cc[3], cc[4] or 1)
+                    dot:ClearAllPoints()
+                    if side == 0 then
+                        dot:SetPoint("TOPLEFT", self2, "TOPLEFT",
+                            frac * (fw - dotW), 0)
+                    elseif side == 1 then
+                        dot:SetPoint("TOPRIGHT", self2, "TOPRIGHT",
+                            0, -(frac * (fh - dotH)))
+                    elseif side == 2 then
+                        dot:SetPoint("BOTTOMRIGHT", self2, "BOTTOMRIGHT",
+                            -(frac * (fw - dotW)), 0)
+                    else
+                        dot:SetPoint("BOTTOMLEFT", self2, "BOTTOMLEFT",
+                            0, frac * (fh - dotH))
+                    end
+                end
+            end
+        end)
+    end
+
+    if anim == "pulse" then
+        border._animType  = "pulse"
+        border._pulseTime = border._pulseTime or 0
+        HideChaseDots(border)
+        border:SetBackdropBorderColor(c[1], c[2], c[3], 1)
+    else  -- chase
+        border._animType    = "chase"
+        border._chaseTime   = border._chaseTime or 0
+        border._chasePixelW = Clamp(cfg.chasePixelW or 6, 1, 24)  -- length along edge
+        border._chasePixelH = Clamp(cfg.chasePixelH or 2, 1, 12)  -- thickness
+        border._chaseColor  = type(cfg.chaseColor) == "table" and cfg.chaseColor or nil
+        local count = Clamp(cfg.chaseCount or 3, 1, 8)
+        border._chaseDots = border._chaseDots or {}
+        for di = #border._chaseDots + 1, count do
+            local dt = border:CreateTexture(nil, "OVERLAY")
+            dt:SetColorTexture(1, 1, 1, 1)
+            border._chaseDots[di] = dt
+        end
+        for di = count + 1, #border._chaseDots do
+            border._chaseDots[di]:Hide()
+        end
+        for di = 1, count do
+            border._chaseDots[di]:Show()
+        end
+        border._activeChaseCount = count
+        border:SetBackdropBorderColor(c[1], c[2], c[3], 0.9)
+    end
+    border:Show()
 end
 
 -- ============================================================
@@ -573,39 +572,86 @@ function UnitFrames:AWUpdate(frame)
 
     local indicators = self:AWGetIndicators(unitKey)
 
+    local MAX_EXTRA_LAYERS = 3
     for idx = 1, MAX_INDICATORS do
         local cfg = indicators[idx]
         if cfg and cfg.enabled ~= false then
-            local auras = ResolveAuras(frame, cfg)
-            local itype = cfg.type or "icons"
+            local auras  = ResolveAuras(frame, cfg)
+            local itype  = cfg.type or "icons"
+            local active = #auras > 0
             if itype == "icons" then
                 UpdateIconIndicator(frame, idx, cfg, auras)
-                -- hide other indicator types for this slot
                 local bd = frame._awState.borders  and frame._awState.borders [idx]
                 local ov = frame._awState.overlays and frame._awState.overlays[idx]
                 if bd then bd:Hide() end
                 if ov then ov:Hide() end
             elseif itype == "border" then
-                UpdateBorderIndicator(frame, idx, cfg, #auras > 0)
+                UpdateBorderIndicator(frame, idx, cfg, active)
                 local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
                 local ov = frame._awState.overlays and frame._awState.overlays[idx]
                 if ic then ic:Hide() end
                 if ov then ov:Hide() end
             elseif itype == "overlay" then
-                UpdateColorOverlayIndicator(frame, idx, cfg, #auras > 0)
+                UpdateColorOverlayIndicator(frame, idx, cfg, active)
                 local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
                 local bd = frame._awState.borders  and frame._awState.borders [idx]
                 if ic then ic:Hide() end
                 if bd then bd:Hide() end
             end
+            -- Process extra indicator layers (same aura condition, different visual)
+            if cfg.extraLayers then
+                for lj, extraCfg in ipairs(cfg.extraLayers) do
+                    local ei    = MAX_INDICATORS * lj + idx
+                    local etype = extraCfg.type or "icons"
+                    if etype == "icons" then
+                        UpdateIconIndicator(frame, ei, extraCfg, auras)
+                        local bd2 = frame._awState.borders  and frame._awState.borders [ei]
+                        local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
+                        if bd2 then bd2:Hide() end
+                        if ov2 then ov2:Hide() end
+                    elseif etype == "border" then
+                        UpdateBorderIndicator(frame, ei, extraCfg, active)
+                        local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
+                        local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
+                        if ic2 then ic2:Hide() end
+                        if ov2 then ov2:Hide() end
+                    elseif etype == "overlay" then
+                        UpdateColorOverlayIndicator(frame, ei, extraCfg, active)
+                        local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
+                        local bd2 = frame._awState.borders  and frame._awState.borders [ei]
+                        if ic2 then ic2:Hide() end
+                        if bd2 then bd2:Hide() end
+                    end
+                end
+            end
+            -- Hide any extra layer slots no longer in use
+            local extraCount = cfg.extraLayers and #cfg.extraLayers or 0
+            for lj = extraCount + 1, MAX_EXTRA_LAYERS do
+                local ei = MAX_INDICATORS * lj + idx
+                local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
+                if ic2 then ic2:Hide() end
+                local bd2 = frame._awState.borders and frame._awState.borders[ei]
+                if bd2 then bd2:Hide() end
+                local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
+                if ov2 then ov2:Hide() end
+            end
         else
-            -- Hide this slot's visuals
+            -- Hide primary visuals and all potential extra layer slots
             local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
             if ic then ic:Hide() end
             local bd = frame._awState.borders  and frame._awState.borders [idx]
             if bd then bd:Hide() end
             local ov = frame._awState.overlays and frame._awState.overlays[idx]
             if ov then ov:Hide() end
+            for lj = 1, MAX_EXTRA_LAYERS do
+                local ei = MAX_INDICATORS * lj + idx
+                local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
+                if ic2 then ic2:Hide() end
+                local bd2 = frame._awState.borders and frame._awState.borders[ei]
+                if bd2 then bd2:Hide() end
+                local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
+                if ov2 then ov2:Hide() end
+            end
         end
     end
 end
@@ -652,11 +698,11 @@ function UnitFrames:AWPreviewRender(frame, slotIdx, cfg)
         }
     end
     if itype == "icons" then
-        UpdateIconIndicator(frame, 1, cfg, mockAuras)
+        UpdateIconIndicator(frame, slotIdx, cfg, mockAuras)
     elseif itype == "border" then
-        UpdateBorderIndicator(frame, 1, cfg, true)
+        UpdateBorderIndicator(frame, slotIdx, cfg, true)
     elseif itype == "overlay" then
-        UpdateColorOverlayIndicator(frame, 1, cfg, true)
+        UpdateColorOverlayIndicator(frame, slotIdx, cfg, true)
     end
 end
 
