@@ -1971,7 +1971,10 @@ function UnitFrames:StyleFrame(frame)
     power.colorClass = false; power.colorDisconnected = false
     power.colorReaction = false; power.colorTapping = false; power.colorPower = false
     power.frequentUpdates = true
-    power.PostUpdate = function(powerBar, unit2, cur, max)
+    -- oUF's Power:PostUpdate signature is (unit, cur, min, max) — the 4th arg is the
+    -- minimum, not the maximum. Capturing it as 'max' caused SetMinMaxValues(0, min=0)
+    -- which left the bar permanently empty. We name the 4th param _min and take max 5th.
+    power.PostUpdate = function(powerBar, unit2, cur, _min, max)
         UnitFrames:ApplySmoothBarValue(powerBar, cur, max)
         local palette = UnitFrames:GetPalette(capturedUnitKey, unit2)
         powerBar:SetStatusBarColor(palette.power[1], palette.power[2], palette.power[3], 1)

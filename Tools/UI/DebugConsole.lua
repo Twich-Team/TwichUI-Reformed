@@ -534,16 +534,16 @@ function DebugConsole:RefreshSourceButtons()
                 edgeSize = 1,
                 insets = { left = 1, right = 1, top = 1, bottom = 1 },
             })
-            button:SetBackdropColor(0.42 * 0.16, 0.82 * 0.16, 0.98 * 0.16, 0.98)
-            button:SetBackdropBorderColor(0.42, 0.82, 0.98, 0.35)
+            button:SetBackdropColor(0.08, 0.09, 0.13, 0.92)
+            button:SetBackdropBorderColor(0.30, 0.32, 0.40, 0.42)
             local lbl = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             lbl:SetAllPoints(button)
             lbl:SetJustifyH("CENTER")
             lbl:SetJustifyV("MIDDLE")
-            lbl:SetTextColor(0.82, 0.92, 1)
+            lbl:SetTextColor(0.68, 0.70, 0.78)
             button.__twichuiLabel = lbl
-            button:SetScript("OnMouseDown", function(b) b:SetBackdropColor(0.42 * 0.26, 0.82 * 0.26, 0.98 * 0.26, 1) end)
-            button:SetScript("OnMouseUp", function(b) b:SetBackdropColor(0.42 * 0.16, 0.82 * 0.16, 0.98 * 0.16, 0.98) end)
+            button:SetScript("OnMouseDown", function(b) b:SetBackdropColor(0.14, 0.15, 0.20, 1.0) end)
+            button:SetScript("OnMouseUp", function(b) b:SetBackdropColor(0.08, 0.09, 0.13, 0.92) end)
             frame.sourceButtons[index] = button
         end
 
@@ -557,16 +557,19 @@ function DebugConsole:RefreshSourceButtons()
         end)
 
         if self.activeSourceKey == key then
-            button:SetBackdropBorderColor(0.98, 0.76, 0.22, 0.9)
-            button:SetBackdropColor(0.98 * 0.2, 0.76 * 0.2, 0.22 * 0.2, 0.98)
-            button.__twichuiLabel:SetTextColor(1, 0.95, 0.82)
+            -- Active tab: bright gold background + full-strength border
+            button:SetBackdropColor(0.22, 0.17, 0.04, 1.0)
+            button:SetBackdropBorderColor(0.98, 0.76, 0.22, 1.0)
+            button.__twichuiLabel:SetTextColor(1.0, 0.95, 0.78)
             button:EnableMouse(false)
+            button:SetAlpha(1.0)
         else
-            button:SetBackdropColor(0.42 * 0.16, 0.82 * 0.16, 0.98 * 0.16, 0.98)
-            button:SetBackdropBorderColor(0.42, 0.82, 0.98, 0.35)
-            button.__twichuiLabel:SetTextColor(0.82, 0.92, 1)
+            -- Inactive: fully uniform style across all tabs regardless of capture state.
+            button:SetBackdropColor(0.08, 0.09, 0.13, 0.92)
+            button:SetBackdropBorderColor(0.30, 0.32, 0.40, 0.42)
+            button.__twichuiLabel:SetTextColor(0.68, 0.70, 0.78)
+            button:SetAlpha(1.0)
             button:EnableMouse(true)
-            button:SetAlpha(self:IsSourceEnabled(key) and 1.0 or 0.55)
         end
 
         button:Show()

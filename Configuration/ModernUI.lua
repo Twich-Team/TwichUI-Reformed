@@ -570,6 +570,69 @@ local function AttachTooltip(button, title, text)
     end)
 end
 
+-- Place a tool panel (DebugConsole, ErrorLogViewer) neatly beside the config frame.
+-- Picks the side with the most available screen space, accounting for the preview host.
+local function SmartPositionNextToConfig(toolPanel)
+    local frame = UI:EnsureFrame()
+    if not frame or not toolPanel then return end
+
+    local rightAnchor = (frame.PreviewHost and frame.PreviewHost:IsShown())
+        and frame.PreviewHost or frame
+
+    local screenW = UIParent:GetWidth()
+    local screenH = UIParent:GetHeight()
+    local GAP        = 10
+    local STACK_GAP  = 8
+
+    local rx       = rightAnchor:GetRight() or (screenW * 0.5 + 100)
+    local lx       = frame:GetLeft()        or (screenW * 0.5 - 100)
+    local configTop = frame:GetTop()        or screenH
+
+    local spaceRight = screenW - rx - GAP
+    local spaceLeft  = lx - GAP
+
+    -- Preferred side: whichever has more free horizontal space.
+    local useRight = spaceRight >= spaceLeft
+
+    -- Top of the first panel on this side aligns with the config frame top.
+    local topY = math.min(configTop, screenH - 6)
+
+    -- Collect sibling tool panels (DebugConsole / ErrorLogViewer) that are
+    -- already visible so we can stack below them rather than overlap.
+    local otherPanels = {}
+    local dc  = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+    local elv = T.Tools and T.Tools.UI and T.Tools.UI.ErrorLogViewer
+    for _, sibling in ipairs({ dc and dc.frame, elv and elv.frame }) do
+        if sibling and sibling ~= toolPanel and sibling:IsShown() then
+            otherPanels[#otherPanels + 1] = sibling
+        end
+    end
+
+    -- Detect whether any sibling is already on the preferred side, and if so
+    -- stack below the lowest of them.
+    local lowestBottom = nil
+    for _, other in ipairs(otherPanels) do
+        local otherLeft = other:GetLeft() or 0
+        local onRight   = otherLeft >= rx - 20
+        local onLeft    = (other:GetRight() or screenW) <= lx + 20
+        if (useRight and onRight) or (not useRight and onLeft) then
+            local b = other:GetBottom() or topY
+            if lowestBottom == nil or b < lowestBottom then
+                lowestBottom = b
+            end
+        end
+    end
+
+    local placeTopY = lowestBottom and (lowestBottom - STACK_GAP) or topY
+
+    toolPanel:ClearAllPoints()
+    if useRight then
+        toolPanel:SetPoint("TOPLEFT",  UIParent, "BOTTOMLEFT", rx + GAP, placeTopY)
+    else
+        toolPanel:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", lx - GAP, placeTopY)
+    end
+end
+
 local function GetOrderedEntries(section)
     local ordered = {}
     for key, option in pairs(section and section.args or {}) do
@@ -1274,7 +1337,12 @@ function UI:EnsureFrame()
     SetButtonText(frame.ErrorLogButton, "Error Log")
     frame.ErrorLogButton:SetScript("OnClick", function()
         local viewer = T.Tools and T.Tools.UI and T.Tools.UI.ErrorLogViewer
-        if viewer then viewer:Toggle() end
+        if viewer then
+            viewer:Toggle()
+            if viewer.frame and viewer.frame:IsShown() then
+                SmartPositionNextToConfig(viewer.frame)
+            end
+        end
     end)
     AttachTooltip(frame.ErrorLogButton, "Error Log", "View errors captured from TwichUI_Reformed.")
 
@@ -1300,6 +1368,9 @@ function UI:EnsureFrame()
         local console = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
         if console and console.Show then
             console:Show()
+            if console.frame then
+                SmartPositionNextToConfig(console.frame)
+            end
         end
     end)
     AttachTooltip(frame.DebuggerButton, "Debugger", "Open the TwichUI Debug Console to inspect live module state and logs.")
