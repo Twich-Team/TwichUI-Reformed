@@ -3434,6 +3434,48 @@ function UnitFrames:OnInitialize()
     end
 end
 
+-- Refresh target highlights on every frame when the player's target changes.
+-- Without this, frames that were previously targeted keep their highlight until
+-- the next time the mouse enters/leaves them.
+function UnitFrames:OnTargetChanged()
+    for _, frame in pairs(self.frames) do
+        if frame and frame.TwichTargetHighlight then
+            self:UpdateUnitHighlights(frame)
+        end
+    end
+    for _, header in pairs(self.headers) do
+        if header then
+            for i = 1, select('#', header:GetChildren()) do
+                local child = select(i, header:GetChildren())
+                if child and child.TwichTargetHighlight then
+                    self:UpdateUnitHighlights(child)
+                end
+            end
+        end
+    end
+end
+
+-- Refresh mouseover highlights on every frame when the WoW mouseover unit changes.
+-- This ensures that frames whose unit matches the new mouseover unit light up even
+-- if the cursor moved to them between frames without triggering OnEnter/OnLeave.
+function UnitFrames:OnMouseoverChanged()
+    for _, frame in pairs(self.frames) do
+        if frame and frame.TwichMouseoverHighlight then
+            self:UpdateUnitHighlights(frame)
+        end
+    end
+    for _, header in pairs(self.headers) do
+        if header then
+            for i = 1, select('#', header:GetChildren()) do
+                local child = select(i, header:GetChildren())
+                if child and child.TwichMouseoverHighlight then
+                    self:UpdateUnitHighlights(child)
+                end
+            end
+        end
+    end
+end
+
 function UnitFrames:OnEnable()
     if not self:SpawnFrames() then
         T:Print("UnitFrames: oUF is unavailable. Ensure Libraries/oUF/oUF.xml is loaded.")
