@@ -45,11 +45,6 @@
 
 - In the configuraiton for unit frames, we say "standalone ouf..." can we make this simpler to understand for new players? SOmething that explains that this is where you configure your health bars and party and raid frames
 
-- Can we add more options to customize the highlights? Especially target highlight. Its very thick and odd, maybe a highlight width, or the option to make it a nice glow instead of a border.
-- For highlights, i need to be able to enable or disable them for each frame type (player, target, etc.)
-
-- Make a toggle in the class bar configuration to make the width of the classbar the same width as the player frame
-
 - I am in a group, and the party frames are not displaying.
 
 - Can we add a way to copy settings from one frame type to another? for example if i design my player frame, and i want to mimic its design for the target as a starting point. Should work across all single unit frames. Similarly with Group UNits. if i design a party frame, and want to mimic it in raid to start with.,

@@ -29,6 +29,25 @@ local math_min = math.min
 local math_max = math.max
 local math_abs = math.abs
 
+-- Gradient compat: SetGradient (9.0+) or SetGradientAlpha (legacy).
+-- For VERTICAL: arg1/2 = bottom color, arg3/4 = top color.
+-- For HORIZONTAL: arg1/2 = left color, arg3/4 = right color.
+local function SetGradientCompat(tex, orient, r1, g1, b1, a1, r2, g2, b2, a2)
+    if tex.SetGradient and _G.CreateColor then
+        tex:SetGradient(orient, _G.CreateColor(r1, g1, b1, a1), _G.CreateColor(r2, g2, b2, a2))
+    elseif tex.SetGradientAlpha then
+        tex:SetGradientAlpha(orient, r1, g1, b1, a1, r2, g2, b2, a2)
+    else
+        tex:SetVertexColor(r1, g1, b1, math.max(a1, a2))
+    end
+end
+
+-- Lightweight debug helper — only writes when the UF source is enabled in the console.
+local function UFDebug(msg)
+    local dc = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+    if dc and dc.Log then dc:Log("unitframes", msg, false) end
+end
+
 local STYLE_NAME = "TwichUI_Reformed_UnitFrames"
 
 UnitFrames.styleRegistered = false
@@ -1013,7 +1032,34 @@ function UnitFrames:ApplyClassBarSettings(frame, unitKey)
     local db        = self:GetDB()
     local cfg       = db.classBar or {}
     local enabled   = cfg.enabled ~= false
-    local width     = Clamp(cfg.width or math_max(frame:GetWidth(), 260), 40, 600)
+
+    UFDebug(string.format("ApplyClassBarSettings: unitKey=%s enabled=%s matchFrameWidth=%s cfgWidth=%s",
+        tostring(unitKey), tostring(enabled), tostring(cfg.matchFrameWidth), tostring(cfg.width)))
+
+    -- ForceUpdate first so oUF shows/hides the correct individual bars based on
+    -- the player's current class resource count. We then read back how many are
+    -- actually shown and use that as the segment count for layout calculations.
+    -- Guard flag prevents ForceUpdate from re-entering this function via PostUpdate.
+    frame.ClassPower._applyingSettings = true
+    if frame.ClassPower.ForceUpdate then frame.ClassPower:ForceUpdate() end
+    frame.ClassPower._applyingSettings = nil
+    local maxBars = #frame.ClassPower
+    local segmentCount = 0
+    for i = 1, maxBars do
+        if frame.ClassPower[i] and frame.ClassPower[i]:IsShown() then
+            segmentCount = segmentCount + 1
+        end
+    end
+    if segmentCount == 0 then segmentCount = maxBars end
+    UFDebug(string.format("ApplyClassBarSettings: maxBars=%d segmentCount=%d frameWidth=%.1f",
+        maxBars, segmentCount, frame:GetWidth()))
+
+    local width
+    if cfg.matchFrameWidth == true then
+        width = Clamp(frame:GetWidth(), 40, 600)
+    else
+        width = Clamp(cfg.width or math_max(frame:GetWidth(), 260), 40, 600)
+    end
     local height    = Clamp(cfg.height or 10, 4, 40)
     local spacing   = Clamp(cfg.spacing or 2, 0, 40)
     local texName   = (db.texture and db.texture ~= "") and db.texture or nil
@@ -1023,11 +1069,11 @@ function UnitFrames:ApplyClassBarSettings(frame, unitKey)
     container:SetPoint(
         cfg.point or "TOPLEFT", frame,
         cfg.relativePoint or "BOTTOMLEFT",
-        tonumber(cfg.xOffset) or 0, tonumber(cfg.yOffset) or -2)
+        tonumber(cfg.xOffset) or 0,
+        tonumber(cfg.yOffset) or -2)
     container:SetSize(width, height)
-    local visibleBars = #frame.ClassPower
-    local barWidth = math_max(4, (width - spacing * math_max(0, visibleBars - 1)) / math_max(1, visibleBars))
-    for i = 1, visibleBars do
+    local barWidth = math_max(4, (width - spacing * math_max(0, segmentCount - 1)) / math_max(1, segmentCount))
+    for i = 1, maxBars do
         local bar = frame.ClassPower[i]
         bar:ClearAllPoints(); bar:SetSize(barWidth, height)
         if i == 1 then
@@ -1040,7 +1086,7 @@ function UnitFrames:ApplyClassBarSettings(frame, unitKey)
     end
     container:SetShown(enabled)
     self:ApplyClassBarColors(frame)
-    if frame.ClassPower.ForceUpdate then frame.ClassPower:ForceUpdate() end
+    -- No second ForceUpdate needed — already done above.
 end
 
 function UnitFrames:GetCastbarSmoothingMethod()
@@ -1121,22 +1167,47 @@ function UnitFrames:UpdateUnitHighlights(frame)
     local db = self:GetDB()
     local highlights = db.highlights or {}
     local unit = frame.unit
-    if frame.TwichTargetHighlight then
+    local unitKey = frame._unitKey or unit
+    -- Per-unit overrides stored at db.units[unitKey].highlights
+    local unitHL = (db.units and db.units[unitKey] and db.units[unitKey].highlights) or {}
+    local targetEnabled   = highlights.showTarget   ~= false and unitHL.showTarget   ~= false
+    local mouseoverEnabled = highlights.showMouseover ~= false and unitHL.showMouseover ~= false
+
+    -- Reset both target elements before deciding which to show
+    if frame.TwichTargetHighlight then frame.TwichTargetHighlight:Hide() end
+    if frame.TwichTargetGlow       then frame.TwichTargetGlow:Hide()       end
+
+    if targetEnabled then
         local showTarget = false
         if unit and unit ~= "" then
             local ok, isUnit = pcall(_G.UnitIsUnit, unit, "target")
             showTarget = ok and isUnit == true
         end
-        if highlights.showTarget ~= false and showTarget then
-            local c = highlights.targetColor or { 1.0, 0.82, 0.0, 0.9 }
-            frame.TwichTargetHighlight:SetBackdropBorderColor(c[1] or 1, c[2] or 0.82, c[3] or 0, c[4] or 0.9)
-            frame.TwichTargetHighlight:Show()
-        else
-            frame.TwichTargetHighlight:Hide()
+        if showTarget then
+            local c    = highlights.targetColor or { 1.0, 0.82, 0.0, 0.9 }
+            local mode = highlights.targetMode or "border"
+            if mode == "glow" and frame.TwichTargetGlow then
+                local r, g, b = c[1] or 1, c[2] or 0.82, c[3] or 0
+                local a = c[4] or 0.9
+                local gf = frame.TwichTargetGlow
+                -- VERTICAL: bottom→top. TOP edge: color at bottom (frame edge), fade to transparent at top.
+                SetGradientCompat(gf._top,    "VERTICAL",   r, g, b, a, r, g, b, 0)
+                -- BOT edge: transparent at bottom, color at top (frame edge).
+                SetGradientCompat(gf._bottom, "VERTICAL",   r, g, b, 0, r, g, b, a)
+                -- HORIZONTAL: left→right. LEFT edge: transparent at left, color at right (frame edge).
+                SetGradientCompat(gf._left,   "HORIZONTAL", r, g, b, 0, r, g, b, a)
+                -- RIGHT edge: color at left (frame edge), transparent at right.
+                SetGradientCompat(gf._right,  "HORIZONTAL", r, g, b, a, r, g, b, 0)
+                gf:Show()
+            elseif frame.TwichTargetHighlight then
+                frame.TwichTargetHighlight:SetBackdropBorderColor(c[1] or 1, c[2] or 0.82, c[3] or 0, c[4] or 0.9)
+                frame.TwichTargetHighlight:Show()
+            end
         end
     end
+
     if frame.TwichMouseoverHighlight then
-        if highlights.showMouseover ~= false and frame.isHovering then
+        if mouseoverEnabled and frame.isHovering then
             local c = highlights.mouseoverColor or { 1.0, 1.0, 1.0, 0.08 }
             frame.TwichMouseoverHighlight:SetBackdropColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 0.08)
             frame.TwichMouseoverHighlight:Show()
@@ -1146,20 +1217,37 @@ function UnitFrames:UpdateUnitHighlights(frame)
     end
 end
 
-function UnitFrames:OnTargetChanged()
-    for _, frame in pairs(self.frames) do
-        if frame and frame.TwichTargetHighlight then
-            self:UpdateUnitHighlights(frame)
-        end
+function UnitFrames:ApplyHighlightSettings(frame)
+    if not frame then return end
+    local highlights = self:GetDB().highlights or {}
+    local width = Clamp(highlights.targetWidth or 2, 1, 12)
+    if frame.TwichTargetHighlight then
+        frame.TwichTargetHighlight:ClearAllPoints()
+        frame.TwichTargetHighlight:SetPoint("TOPLEFT", frame, "TOPLEFT", -width, width)
+        frame.TwichTargetHighlight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", width, -width)
+        frame.TwichTargetHighlight:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = width })
     end
-end
-
-function UnitFrames:OnMouseoverChanged()
-    for _, frame in pairs(self.frames) do
-        if frame and frame.TwichMouseoverHighlight then
-            self:UpdateUnitHighlights(frame)
-        end
+    if frame.TwichTargetGlow then
+        local gf = frame.TwichTargetGlow
+        local spread = math_max(4, width * 3)
+        -- Top edge: above the frame, gradient fades upward
+        gf._top:ClearAllPoints()
+        gf._top:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, 0)
+        gf._top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, spread)
+        -- Bottom edge: below the frame
+        gf._bottom:ClearAllPoints()
+        gf._bottom:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, 0)
+        gf._bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -spread)
+        -- Left edge
+        gf._left:ClearAllPoints()
+        gf._left:SetPoint("TOPRIGHT", frame, "TOPLEFT", 0, 0)
+        gf._left:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -spread, 0)
+        -- Right edge
+        gf._right:ClearAllPoints()
+        gf._right:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, 0)
+        gf._right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", spread, 0)
     end
+    self:UpdateUnitHighlights(frame)
 end
 
 function UnitFrames:ApplyTagVisibility(frame)
@@ -1330,6 +1418,7 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     self:ApplyAuraSettings(frame, unitKey)
     self:ApplyTagVisibility(frame)
     self:ApplyClassBarSettings(frame, unitKey)
+    self:ApplyHighlightSettings(frame)
     self:ApplyUnitCastbarSettings(frame, unitKey)
 end
 
@@ -1373,6 +1462,13 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
 
     header:SetScale(Clamp(self:GetDB().scale or 1, 0.6, 1.6))
     header:SetAlpha(Clamp(self:GetDB().frameAlpha or 1, 0.15, 1))
+    -- Propagate highlight visual settings to all spawned member frames
+    for i = 1, select('#', header:GetChildren()) do
+        local child = select(i, header:GetChildren())
+        if child and child.TwichTargetHighlight then
+            self:ApplyHighlightSettings(child)
+        end
+    end
 end
 
 function UnitFrames:ApplyBossLayout()
@@ -2562,6 +2658,7 @@ function UnitFrames:StyleFrame(frame)
     end
 
     local capturedUnitKey = unitKey
+    frame._unitKey = capturedUnitKey
 
     frame:SetAttribute("useparent-unit", true)
     frame:RegisterForClicks("AnyUp")
@@ -2624,7 +2721,25 @@ function UnitFrames:StyleFrame(frame)
         classPower.container = classContainer
         classPower.PostVisibility = function(element, isVisible)
             local cfg = UnitFrames:GetDB().classBar or {}
-            element.container:SetShown(cfg.enabled ~= false and isVisible)
+            local shouldShow = cfg.enabled ~= false and isVisible
+            UFDebug(string.format("ClassPower.PostVisibility: isVisible=%s enabled=%s → container shown=%s",
+                tostring(isVisible), tostring(cfg.enabled ~= false), tostring(shouldShow)))
+            element.container:SetShown(shouldShow)
+        end
+        classPower.PostUpdate = function(element, unit2, min2, max2, hasMaxChanged)
+            -- Guard: ApplyClassBarSettings calls ForceUpdate which re-fires PostUpdate.
+            -- Without this guard the two functions recurse infinitely and freeze the client.
+            if element._applyingSettings then
+                UFDebug("ClassPower.PostUpdate: skipped (inside ApplyClassBarSettings)")
+                return
+            end
+            UFDebug(string.format("ClassPower.PostUpdate: unit=%s hasMaxChanged=%s",
+                tostring(unit2), tostring(hasMaxChanged)))
+            -- Re-run the full layout when the class resource maximum changes
+            -- (e.g. spec swap from 5 to 6 segments or vice-versa).
+            if hasMaxChanged then
+                UnitFrames:ApplyClassBarSettings(frame, capturedUnitKey)
+            end
         end
         classPower.PostUpdateColor = function(element, color)
             UnitFrames:ApplyClassBarColors(frame, color)
@@ -2707,6 +2822,26 @@ function UnitFrames:StyleFrame(frame)
     targetHL:SetBackdropBorderColor(1, 0.82, 0, 0)
     targetHL:Hide()
     frame.TwichTargetHighlight = targetHL
+
+    -- Target glow: 8 gradient textures forming a soft outer halo.
+    -- Rendered one level below the unit frame so the interior is covered by
+    -- the frame's own content. SetClipsChildren(false) lets them spill outward.
+    local glowContainer = CreateFrame("Frame", nil, frame)
+    glowContainer:SetAllPoints(frame)
+    glowContainer:SetFrameLevel(math_max(0, frame:GetFrameLevel() - 1))
+    glowContainer:SetClipsChildren(false)
+    glowContainer:Hide()
+    local function MkGTex()
+        local t = glowContainer:CreateTexture(nil, "BACKGROUND")
+        t:SetTexture("Interface\\Buttons\\WHITE8x8")
+        t:SetBlendMode("ADD")
+        return t
+    end
+    glowContainer._top    = MkGTex()
+    glowContainer._bottom = MkGTex()
+    glowContainer._left   = MkGTex()
+    glowContainer._right  = MkGTex()
+    frame.TwichTargetGlow = glowContainer
 
     -- Mouseover highlight
     local hoverHL = CreateFrame("Frame", nil, frame, "BackdropTemplate")

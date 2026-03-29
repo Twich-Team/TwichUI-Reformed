@@ -906,6 +906,14 @@ local function BuildSingleUnitTab(unitKey, label)
                                 end),
                             }),
                     }),
+                    highlights = Widgets.IGroup(3, "Highlights", {
+                        showTarget = BuildToggle(1, "Target Highlight",
+                            "Show the target highlight on this frame. Disable to hide it even when globally on.",
+                            ExtendPath(basePath, "highlights", "showTarget"), true, { disabled = disabled }),
+                        showMouseover = BuildToggle(2, "Mouseover Highlight",
+                            "Show the mouseover highlight on this frame. Disable to hide it even when globally on.",
+                            ExtendPath(basePath, "highlights", "showMouseover"), true, { disabled = disabled }),
+                    }),
                 },
             },
             layout = BuildLayoutGroup(2, "Layout", unitKey, layoutDefaults, {
@@ -932,6 +940,10 @@ local function BuildSingleUnitTab(unitKey, label)
         local isPowerOn = ModuleDisabled(function()
             return GetPathValue({ "classBar", "enabled" }, true) ~= true
         end)
+        local isWidthDisabled = ModuleDisabled(function()
+            return GetPathValue({ "classBar", "enabled" }, true) ~= true
+                or GetPathValue({ "classBar", "matchFrameWidth" }, false) == true
+        end)
         tab.args.classBar = {
             type = "group",
             name = "Class Bar",
@@ -939,36 +951,39 @@ local function BuildSingleUnitTab(unitKey, label)
             args = Widgets.IGroup(1, "Class Bar", {
                 enabled = BuildToggle(1, "Enable", "Show the player class resource bar.",
                     { "classBar", "enabled" }, true, { disabled = isBarDisabled, refreshConfig = true }),
-                width = BuildRange(2, "Width", "Class bar width.",
-                    { "classBar", "width" }, 260, 40, 600, 1, { disabled = isPowerOn }),
-                height = BuildRange(3, "Height", "Class bar height.",
+                matchFrameWidth = BuildToggle(2, "Match Frame Width",
+                    "Automatically match the class bar width to the player frame width.",
+                    { "classBar", "matchFrameWidth" }, false, { disabled = isPowerOn, refreshConfig = true }),
+                width = BuildRange(3, "Width", "Class bar width.",
+                    { "classBar", "width" }, 260, 40, 600, 1, { disabled = isWidthDisabled }),
+                height = BuildRange(4, "Height", "Class bar height.",
                     { "classBar", "height" }, 10, 4, 40, 1, { disabled = isPowerOn }),
-                spacing = BuildRange(4, "Segment Gap",
+                spacing = BuildRange(5, "Segment Gap",
                     "Pixel gap between each class resource segment (e.g. Holy Power ticks).",
                     { "classBar", "spacing" }, 2, 0, 40, 1, { disabled = isPowerOn }),
-                point = BuildSelect(5, "Anchor", "Class bar anchor point.",
+                point = BuildSelect(6, "Anchor", "Class bar anchor point.",
                     { "classBar", "point" }, "TOPLEFT", POINT_VALUES, { disabled = isPowerOn }),
-                relativePoint = BuildSelect(6, "Relative Point", "Class bar relative anchor point.",
+                relativePoint = BuildSelect(7, "Relative Point", "Class bar relative anchor point.",
                     { "classBar", "relativePoint" }, "BOTTOMLEFT", POINT_VALUES, { disabled = isPowerOn }),
-                xOffset = BuildRange(7, "X Offset", "Class bar horizontal offset.",
+                xOffset = BuildRange(8, "X Offset", "Class bar horizontal offset.",
                     { "classBar", "xOffset" }, 0, -240, 240, 1, { disabled = isPowerOn }),
-                yOffset = BuildRange(8, "Y Offset", "Class bar vertical offset.",
+                yOffset = BuildRange(9, "Y Offset", "Class bar vertical offset.",
                     { "classBar", "yOffset" }, -2, -240, 240, 1, { disabled = isPowerOn }),
-                useCustomColor = BuildToggle(9, "Custom Bar Color",
+                useCustomColor = BuildToggle(10, "Custom Bar Color",
                     "Use a specific color instead of the class resource color.",
                     { "classBar", "useCustomColor" }, false, { disabled = isPowerOn, refreshConfig = true }),
-                color = BuildColor(10, "Bar Color", "Custom class bar color.",
+                color = BuildColor(11, "Bar Color", "Custom class bar color.",
                     { "classBar", "color" }, COLOR_DEFAULTS.classBar, true, { disabled = isColorDisabled }),
-                useCustomBackground = BuildToggle(11, "Custom Background",
+                useCustomBackground = BuildToggle(12, "Custom Background",
                     "Use a custom background color for the class bar segments.",
                     { "classBar", "useCustomBackground" }, false, { disabled = isPowerOn, refreshConfig = true }),
-                backgroundColor = BuildColor(12, "Background Color", "Class bar segment background color.",
+                backgroundColor = BuildColor(13, "Background Color", "Class bar segment background color.",
                     { "classBar", "backgroundColor" }, COLOR_DEFAULTS.classBarBackground, true,
                     { disabled = isBGDisabled }),
-                useCustomBorder = BuildToggle(13, "Custom Border",
+                useCustomBorder = BuildToggle(14, "Custom Border",
                     "Use a custom border color for the class bar segments.",
                     { "classBar", "useCustomBorder" }, false, { disabled = isPowerOn, refreshConfig = true }),
-                borderColor = BuildColor(14, "Border Color", "Class bar segment border color.",
+                borderColor = BuildColor(15, "Border Color", "Class bar segment border color.",
                     { "classBar", "borderColor" }, COLOR_DEFAULTS.classBarBorder, true,
                     { disabled = isBorderDisabled }),
             }).args,
@@ -1094,6 +1109,16 @@ local function BuildGroupTab(groupKey, label)
         })
     end
 
+    local memberKey = groupKey .. "Member"
+    frameTab.args.highlights = Widgets.IGroup(2, "Highlights", {
+        showTarget = BuildToggle(1, "Target Highlight",
+            "Show the target highlight on group member frames. Disable to hide it even when globally on.",
+            { "units", memberKey, "highlights", "showTarget" }, true, { disabled = disabled }),
+        showMouseover = BuildToggle(2, "Mouseover Highlight",
+            "Show the mouseover highlight on group member frames. Disable to hide it even when globally on.",
+            { "units", memberKey, "highlights", "showMouseover" }, true, { disabled = disabled }),
+    })
+
     local colorsTab = BuildColorScopeTab(groupKey, "Colors")
     colorsTab.order = 5
 
@@ -1150,6 +1175,14 @@ local function BuildBossTab()
                             { "groups", "boss", "yOffset" }, groupDefaults.yOffset, -120, 120, 1, {
                                 disabled = disabled,
                             }),
+                    }),
+                    highlights = Widgets.IGroup(2, "Highlights", {
+                        showTarget = BuildToggle(1, "Target Highlight",
+                            "Show the target highlight on boss frames. Disable to hide it even when globally on.",
+                            { "units", "boss", "highlights", "showTarget" }, true, { disabled = disabled }),
+                        showMouseover = BuildToggle(2, "Mouseover Highlight",
+                            "Show the mouseover highlight on boss frames. Disable to hide it even when globally on.",
+                            { "units", "boss", "highlights", "showMouseover" }, true, { disabled = disabled }),
                     }),
                 },
             },
@@ -1452,16 +1485,29 @@ local function BuildGeneralTab()
             sharedText = BuildTextGroup(2, "Shared Text Defaults", { "text" }, "__root"),
             highlights = Widgets.IGroup(3, "Highlights", {
                 showTarget = BuildToggle(1, "Target Highlight", "Highlight the current target frame.",
-                    { "highlights", "showTarget" }, true),
-                targetColor = BuildColor(2, "Target Color", "Border color for the current target highlight.",
+                    { "highlights", "showTarget" }, true, { refreshConfig = true }),
+                targetMode = BuildSelect(2, "Style", "Sharp border or additive glow around the target.",
+                    { "highlights", "targetMode" }, "border", { border = "Border", glow = "Glow" }, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue({ "highlights", "showTarget" }, true) ~= true
+                        end),
+                        refreshConfig = true,
+                    }),
+                targetWidth = BuildRange(3, "Width", "Border thickness or glow spread in pixels.",
+                    { "highlights", "targetWidth" }, 2, 1, 12, 1, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue({ "highlights", "showTarget" }, true) ~= true
+                        end),
+                    }),
+                targetColor = BuildColor(4, "Target Color", "Color for the target highlight.",
                     { "highlights", "targetColor" }, COLOR_DEFAULTS.targetHighlight, true, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue({ "highlights", "showTarget" }, true) ~= true
                         end),
                     }),
-                showMouseover = BuildToggle(3, "Mouseover Highlight", "Highlight frames when hovered.",
+                showMouseover = BuildToggle(5, "Mouseover Highlight", "Subtly highlight frames on hover.",
                     { "highlights", "showMouseover" }, true),
-                mouseoverColor = BuildColor(4, "Mouseover Color", "Fill color for mouseover highlight.",
+                mouseoverColor = BuildColor(6, "Mouseover Color", "Fill tint for the mouseover highlight.",
                     { "highlights", "mouseoverColor" }, COLOR_DEFAULTS.mouseoverHighlight, true, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue({ "highlights", "showMouseover" }, true) ~= true
