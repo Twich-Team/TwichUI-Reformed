@@ -808,7 +808,7 @@ local function GetPreviewType(path)
     if key:find("raidFrames.dispellableDebuffsTab", 1, true) == 1 then
         return "raid"
     end
-    if key:find("Unit Frames", 1, true) == 1 then
+    if key:find("unitFrames", 1, true) == 1 then
         return "unitframes"
     end
 
@@ -1291,7 +1291,20 @@ function UI:EnsureFrame()
         end
     end)
 
-    frame.Subtitle:SetPoint("RIGHT", frame.ErrorLogButton, "LEFT", -12, 0)
+    frame.DebuggerButton = CreateFrame("Button", nil, frame.TitleBar, "BackdropTemplate")
+    frame.DebuggerButton:SetSize(96, 24)
+    frame.DebuggerButton:SetPoint("RIGHT", frame.ErrorLogButton, "LEFT", -6, 0)
+    SkinActionButton(frame.DebuggerButton, { 0.55, 0.82, 0.55 })
+    SetButtonText(frame.DebuggerButton, "Debugger")
+    frame.DebuggerButton:SetScript("OnClick", function()
+        local console = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+        if console and console.Show then
+            console:Show()
+        end
+    end)
+    AttachTooltip(frame.DebuggerButton, "Debugger", "Open the TwichUI Debug Console to inspect live module state and logs.")
+
+    frame.Subtitle:SetPoint("RIGHT", frame.DebuggerButton, "LEFT", -12, 0)
 
     frame.Sidebar = CreatePanel(frame, 0.055, 0.055, 0.08, 0.985, 0.18)
     frame.Sidebar:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -68)
@@ -1871,6 +1884,134 @@ function UI:RenderUnitFrameTagReference(parent, width)
     return y
 end
 
+function UI:RenderUnitFramePanel(parent, width)
+    local accent = self.currentAccent or { 0.91, 0.45, 0.45 }
+    local y = 0
+
+    local function GetUFModule()
+        return T:GetModule("UnitFrames", true)
+    end
+
+    -- ── Controls ─────────────────────────────────────────────────────────────
+    local ctrlHeader = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    ctrlHeader:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
+    ctrlHeader:SetJustifyH("LEFT")
+    ctrlHeader:SetTextColor(accent[1], accent[2], accent[3])
+    ctrlHeader:SetText("Controls")
+    y = y + 22
+
+    local BTN_H   = 28
+    local BTN_GAP = 6
+    local BTN_W   = math.floor((width - BTN_GAP) / 2)
+
+    -- Row 1: Enable/Disable | Test Mode
+    local enableBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    enableBtn:SetSize(BTN_W, BTN_H)
+    enableBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
+    SkinActionButton(enableBtn, { 0.55, 0.82, 0.55 })
+
+    local testBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    testBtn:SetSize(BTN_W, BTN_H)
+    testBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", BTN_W + BTN_GAP, -y)
+    SkinActionButton(testBtn, { 0.98, 0.76, 0.22 })
+
+    y = y + BTN_H + BTN_GAP
+
+    -- Row 2: Unlock/Lock Movers | Refresh Frames
+    local moversBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    moversBtn:SetSize(BTN_W, BTN_H)
+    moversBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
+    SkinActionButton(moversBtn, { 0.78, 0.60, 0.96 })
+
+    local refreshBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    refreshBtn:SetSize(BTN_W, BTN_H)
+    refreshBtn:SetPoint("TOPLEFT", parent, "TOPLEFT", BTN_W + BTN_GAP, -y)
+    SkinActionButton(refreshBtn, { 0.42, 0.82, 0.98 })
+    SetButtonText(refreshBtn, "Refresh")
+    refreshBtn:SetScript("OnClick", function()
+        local m = GetUFModule()
+        if m and m.RefreshAllFrames then m:RefreshAllFrames() end
+    end)
+    AttachTooltip(refreshBtn, "Refresh Frames", "Force a full re-apply of all unit frame settings and colors.")
+
+    y = y + BTN_H + 16
+
+    -- Dynamic button label refresh (called after all buttons are created)
+    local function RefreshButtonStates()
+        local m          = GetUFModule()
+        local db         = m and m.GetDB and m:GetDB()
+        local enabled    = db == nil or db.enabled ~= false
+        local testMode   = db and db.testMode == true
+        local locked     = db == nil or db.lockFrames ~= false
+        SetButtonText(enableBtn,  enabled  and "Disable UF"    or "Enable UF")
+        SetButtonText(testBtn,    testMode and "Exit Test"      or "Test Mode")
+        SetButtonText(moversBtn,  locked   and "Unlock Movers"  or "Lock Movers")
+    end
+    RefreshButtonStates()
+
+    enableBtn:SetScript("OnClick", function()
+        local m = GetUFModule()
+        if not m then return end
+        local db = m:GetDB()
+        db.enabled = not (db.enabled ~= false)
+        if db.enabled and not m:IsEnabled() then
+            m:Enable()
+        elseif not db.enabled and m:IsEnabled() then
+            m:Disable()
+        end
+        RefreshButtonStates()
+    end)
+    AttachTooltip(enableBtn, "Toggle Unit Frames", "Enable or disable the TwichUI standalone unit frames module.")
+
+    testBtn:SetScript("OnClick", function()
+        local m = GetUFModule()
+        if not m then return end
+        m:SetTestMode(not (m:GetDB().testMode == true))
+        RefreshButtonStates()
+    end)
+    AttachTooltip(testBtn, "Test Mode", "Show unit frame placeholders with sample health, power, and cast data.")
+
+    moversBtn:SetScript("OnClick", function()
+        local m = GetUFModule()
+        if not m then return end
+        local db = m:GetDB()
+        -- lockFrames ~= false means currently locked; toggle by passing the opposite
+        m:SetFrameLock(not (db.lockFrames ~= false))
+        RefreshButtonStates()
+    end)
+    AttachTooltip(moversBtn, "Movers", "Show or hide the drag handles for repositioning unit frames.")
+
+    -- ── Divider ───────────────────────────────────────────────────────────────
+    local divider = parent:CreateTexture(nil, "ARTWORK")
+    divider:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, -y)
+    divider:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -y)
+    divider:SetHeight(1)
+    divider:SetColorTexture(accent[1], accent[2], accent[3], 0.25)
+    y = y + 1 + 12
+
+    -- ── oUF Tag Reference (scrollable) ────────────────────────────────────────
+    local tagHeader = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    tagHeader:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
+    tagHeader:SetJustifyH("LEFT")
+    tagHeader:SetTextColor(accent[1], accent[2], accent[3])
+    tagHeader:SetText("oUF Tag Reference")
+    y = y + 22
+
+    local scrollFrame = CreateFrame("ScrollFrame", nil, parent, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT",     parent, "TOPLEFT",     0,   -y)
+    scrollFrame:SetPoint("BOTTOMRIGHT", parent, "BOTTOMRIGHT", -20,  0)
+    SkinScrollBar(scrollFrame, accent)
+
+    local tagContentWidth = math.max(160, width - 28)
+    local tagScrollChild = CreateFrame("Frame", nil, scrollFrame)
+    tagScrollChild:SetWidth(tagContentWidth)
+    tagScrollChild:SetHeight(1)
+    scrollFrame:SetScrollChild(tagScrollChild)
+
+    local tagHeight = self:RenderUnitFrameTagReference(tagScrollChild, tagContentWidth)
+    tagScrollChild:SetHeight(tagHeight)
+end
+
 function UI:RenderStickyPreview(path)
     local frame = self:EnsureFrame()
     local previewType = GetPreviewType(path or {})
@@ -1903,8 +2044,8 @@ function UI:RenderStickyPreview(path)
             subtitle = "Glow and spark changes stay visible while you scroll through the frame settings.",
         },
         unitframes = {
-            title = "oUF Tag Reference",
-            subtitle = "Common bundled oUF tags stay visible while you configure Unit Frames text and custom tag fields.",
+            title = "Unit Frames",
+            subtitle = "Quick controls and oUF tag reference — stays pinned while you configure unit frame settings.",
         },
     }
     local previewInfo = titles[previewType]
@@ -1917,14 +2058,14 @@ function UI:RenderStickyPreview(path)
     root:SetSize(width, 1)
     self.previewRoot = root
 
-    local height = nil
     if previewType == "unitframes" then
-        height = self:RenderUnitFrameTagReference(root, width)
+        -- Root stretches to fill PreviewBody so the inner scroll frame can anchor to its bottom.
+        root:SetPoint("BOTTOMRIGHT", frame.PreviewBody, "BOTTOMRIGHT", 0, 0)
+        self:RenderUnitFramePanel(root, width)
     else
-        height = self:RenderPreviewStrip(root, 0, path, width)
+        local height = self:RenderPreviewStrip(root, 0, path, width)
+        root:SetHeight(height)
     end
-
-    root:SetHeight(height)
 end
 
 local function GetMythicPreviewRows()

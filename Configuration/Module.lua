@@ -5,11 +5,7 @@ local TwichRx = _G.TwichRx
 ---@type TwichUI
 local T = unpack(TwichRx)
 
-local E = unpack(ElvUI)
 local AceConfig = LibStub("AceConfig-3.0", true)
-
--- local AceConfig = LibStub("AceConfig-3.0")
--- local AceConfigDialog = LibStub("AceConfigDialog-3.0")
 local AceDBOptions = LibStub("AceDBOptions-3.0")
 local StaticPopup_Show = StaticPopup_Show
 local StaticPopupDialogs = StaticPopupDialogs
@@ -57,17 +53,9 @@ ConfigurationModule.registeredConfigurationFunctions = {}
 ConfigurationModule.Options = Options
 ConfigurationModule.standaloneOptionsAppName = "TwichUIReduxStandalone"
 
---- Convenience function to find the proper AceConfigRegistry, preferring ElvUI-patched versions.
 local function GetAceConfigRegistry()
-    return _G.LibStub("AceConfigRegistry-3.0-ElvUI", true)
-        or (E and E.Libs and E.Libs.AceConfigRegistry)
-        or (T.Libs and T.Libs.AceConfigRegistry)
+    return (T.Libs and T.Libs.AceConfigRegistry)
         or _G.LibStub("AceConfigRegistry-3.0", true)
-end
-
---- Convenience function to get the ElvUI engine instance.
-local function GetElvUIEngine()
-    return _G.ElvUI and _G.ElvUI[1]
 end
 
 --- Called when the module is initialized. Creates the configuration.
@@ -176,20 +164,6 @@ function ConfigurationModule:Refresh()
     local ACR = GetAceConfigRegistry()
     if ACR and ACR.NotifyChange then
         pcall(ACR.NotifyChange, ACR, self:GetStandaloneOptionsAppName())
-        pcall(ACR.NotifyChange, ACR, "TwichUIRx")
-    end
-
-    local E = GetElvUIEngine()
-    local shouldRefreshElvUI = false
-    do
-        local ACD = _G.LibStub("AceConfigDialog-3.0-ElvUI", true)
-        if ACD and ACD.OpenFrames and ACD.OpenFrames.ElvUI then
-            shouldRefreshElvUI = true
-        end
-    end
-
-    if shouldRefreshElvUI and E and type(E.RefreshOptions) == "function" then
-        pcall(E.RefreshOptions, E)
     end
 
     if self.StandaloneUI and type(self.StandaloneUI.GetFrame) == "function" then
@@ -212,75 +186,18 @@ function ConfigurationModule:OpenChoresTrackerOptions()
     self:ToggleOptionsUI("Quality of Life", "choresTab", "trackerFrame")
 end
 
---- Open the configuration interface inside of the ElvUI configuration.
-function ConfigurationModule:OpenLegacyOptionsUI(...)
-    local groupPath = { ... }
-    local opened
-    if E and type(E.ToggleOptionsUI) == "function" then
-        E:ToggleOptionsUI()
-        opened = true
-    elseif E and type(E.ToggleOptions) == "function" then
-        E:ToggleOptions()
-        opened = true
-    end
-
-    if not opened then
-        T:Print("Unable to open configuration UI.")
-        return
-    end
-
-    -- Prefer ElvUI-patched AceConfig variants if available
-    local ACD = _G.LibStub("AceConfigDialog-3.0-ElvUI", true)
-        or (E and E.Libs and E.Libs.AceConfigDialog)
-        or (T.Libs and T.Libs.AceConfigDialog)
-        or _G.LibStub("AceConfigDialog-3.0", true)
-    local ACR = GetAceConfigRegistry()
-
-    if ACR and ACR.NotifyChange then
-        pcall(ACR.NotifyChange, ACR, "ElvUI")
-    end
-
-    if ACD and ACD.SelectGroup then
-        local tries, maxTries, delay = 0, 20, 0.1 -- up to ~2s total
-        local function trySelect()
-            tries = tries + 1
-            local ok = pcall(ACD.SelectGroup, ACD, "ElvUI", "TwichUIRx", unpack(groupPath))
-            if not ok then
-                ok = pcall(ACD.SelectGroup, ACD, "ElvUI", "plugins", "TwichUIRx", unpack(groupPath))
-            end
-            if not ok and _G.C_Timer and _G.C_Timer.After and tries < maxTries then
-                _G.C_Timer.After(delay, trySelect)
-            elseif not ok and tries >= maxTries then
-                T:Print("Could not focus TwichUI in ElvUI options.")
-            end
-        end
-
-        if _G.C_Timer and _G.C_Timer.After then
-            _G.C_Timer.After(delay, trySelect)
-        else
-            trySelect()
-        end
-    end
-end
-
 function ConfigurationModule:ToggleOptionsUI(...)
     if self.StandaloneUI and type(self.StandaloneUI.IsAvailable) == "function" and self.StandaloneUI:IsAvailable()
         and type(self.StandaloneUI.Toggle) == "function" then
         self.StandaloneUI:Toggle(...)
-        return
     end
-
-    self:OpenLegacyOptionsUI(...)
 end
 
 function ConfigurationModule:OpenOptionsUI(...)
     if self.StandaloneUI and type(self.StandaloneUI.IsAvailable) == "function" and self.StandaloneUI:IsAvailable()
         and type(self.StandaloneUI.Show) == "function" then
         self.StandaloneUI:Show(...)
-        return
     end
-
-    self:OpenLegacyOptionsUI(...)
 end
 
 function ConfigurationModule:EnsureChoresTrackerConfigButton()

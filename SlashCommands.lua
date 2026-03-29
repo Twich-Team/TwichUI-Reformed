@@ -103,13 +103,6 @@ local function OpenConfigurationPanel(input)
         return
     end
 
-    if primaryCommand == "legacy" then
-        ---@type ConfigurationModule
-        local ConfigurationModule = T:GetModule("Configuration")
-        ConfigurationModule:OpenLegacyOptionsUI()
-        return
-    end
-
     ---@type ConfigurationModule
     local ConfigurationModule = T:GetModule("Configuration")
     ConfigurationModule:ToggleOptionsUI()
