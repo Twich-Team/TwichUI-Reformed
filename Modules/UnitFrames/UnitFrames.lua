@@ -1422,6 +1422,287 @@ function UnitFrames:PersistLayoutFromFrame(layoutKey, frame, absX, absY)
     end
 end
 
+-- Singleton inspector panel shown when hovering a mover handle.
+-- Displays the frame name, editable X/Y coordinates, and nudge buttons.
+function UnitFrames:GetMoverInspector()
+    if self._moverInspector then return self._moverInspector end
+
+    -- Resolve the addon theme font path at panel creation time.
+    local function ResolveAddonFont(size)
+        local path = _G.STANDARD_TEXT_FONT
+        local LSM   = T.Libs and T.Libs.LSM
+        local theme = T:GetModule("Theme", true)
+        if LSM and theme then
+            local name = theme.Get and theme:Get("globalFont")
+            if name and name ~= "" and name ~= "__default" then
+                local ok, fetched = pcall(LSM.Fetch, LSM, "font", name)
+                if ok and type(fetched) == "string" and fetched ~= "" then
+                    path = fetched
+                end
+            end
+        end
+        return path, size or 11
+    end
+
+    local panel = CreateFrame("Frame", "TwichUIMoverInspector", UIParent, "BackdropTemplate")
+    panel:SetFrameStrata("TOOLTIP")
+    panel:SetFrameLevel(9998)
+    panel:SetSize(220, 140)
+    panel:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    panel:SetBackdropColor(0.06, 0.07, 0.10, 0.97)
+    panel:SetBackdropBorderColor(0.10, 0.72, 0.74, 1.0)
+    panel:EnableMouse(true)
+    panel:Hide()
+
+    -- Hover-delay hide ---------------------------------------------------
+    local function CancelHide()
+        if panel._hideTimer then
+            panel._hideTimer:Cancel()
+            panel._hideTimer = nil
+        end
+    end
+    local function ScheduleHide()
+        CancelHide()
+        panel._hideTimer = C_Timer.NewTimer(0.15, function()
+            panel._hideTimer = nil
+            if (panel.xBox and panel.xBox:HasFocus()) or
+               (panel.yBox and panel.yBox:HasFocus()) then
+                return  -- keep open while the user is typing
+            end
+            panel:Hide()
+        end)
+    end
+    panel.CancelHide   = CancelHide
+    panel.ScheduleHide = ScheduleHide
+    panel:SetScript("OnEnter", CancelHide)
+    panel:SetScript("OnLeave", ScheduleHide)
+
+    -- Shared font helper -------------------------------------------------
+    local function FLabel(fs, size)
+        local p, s = ResolveAddonFont(size)
+        fs:SetFont(p, s, "")
+    end
+
+    -- ── Title ────────────────────────────────────────────────────────────
+    local title = panel:CreateFontString(nil, "OVERLAY")
+    title:SetPoint("TOPLEFT",  panel, "TOPLEFT",  8, -8)
+    title:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -8)
+    title:SetJustifyH("LEFT")
+    FLabel(title, 11)
+    title:SetTextColor(0.10, 0.72, 0.74, 1)
+    panel.title = title
+
+    local shiftHint = panel:CreateFontString(nil, "OVERLAY")
+    shiftHint:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -8)
+    shiftHint:SetJustifyH("RIGHT")
+    FLabel(shiftHint, 8)
+    shiftHint:SetText("Shift = 10 px")
+    shiftHint:SetTextColor(0.40, 0.40, 0.52)
+
+    -- Divider 1
+    local div1 = panel:CreateTexture(nil, "ARTWORK")
+    div1:SetHeight(1)
+    div1:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, -22)
+    div1:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -22)
+    div1:SetColorTexture(0.10, 0.72, 0.74, 0.35)
+
+    -- ── X / Y inputs ────────────────────────────────────────────────────
+    local function MakeLabel(text, xOff, yOff)
+        local fs = panel:CreateFontString(nil, "OVERLAY")
+        fs:SetPoint("TOPLEFT", panel, "TOPLEFT", xOff, yOff)
+        FLabel(fs, 10)
+        fs:SetText(text)
+        fs:SetTextColor(0.55, 0.58, 0.68)
+        return fs
+    end
+
+    local function MakeEditBox(xOff, yOff, w)
+        local eb = CreateFrame("EditBox", nil, panel, "BackdropTemplate")
+        eb:SetSize(w, 20)
+        eb:SetPoint("TOPLEFT", panel, "TOPLEFT", xOff, yOff)
+        eb:SetBackdrop({
+            bgFile   = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+        })
+        eb:SetBackdropColor(0.04, 0.05, 0.08, 1)
+        eb:SetBackdropBorderColor(0.20, 0.22, 0.30, 1)
+        eb:SetTextInsets(5, 5, 2, 2)
+        eb:SetMaxLetters(7)
+        eb:SetAutoFocus(false)
+        local fp, fs = ResolveAddonFont(10)
+        eb:SetFont(fp, fs, "")
+        eb:SetTextColor(1, 1, 1)
+        eb:SetJustifyH("RIGHT")
+        eb:EnableMouse(true)
+        eb:SetScript("OnEnter",           CancelHide)
+        eb:SetScript("OnLeave",           ScheduleHide)
+        eb:SetScript("OnEditFocusGained", CancelHide)
+        return eb
+    end
+
+    MakeLabel("X",   8, -35)
+    MakeLabel("Y", 116, -35)
+    local xBox = MakeEditBox( 19, -30, 86)
+    local yBox = MakeEditBox(127, -30, 82)
+    panel.xBox = xBox
+    panel.yBox = yBox
+
+    -- ── Position helpers ─────────────────────────────────────────────────
+    local function RepositionPanel(mover)
+        panel:ClearAllPoints()
+        local moverTop = mover:GetTop() or 0
+        local screenH  = UIParent:GetHeight() or 768
+        if moverTop > screenH * 0.55 then
+            panel:SetPoint("TOP", mover, "BOTTOM", 0, -6)
+        else
+            panel:SetPoint("BOTTOM", mover, "TOP", 0, 6)
+        end
+    end
+
+    local function ApplyPosition(x, y)
+        local active = panel._active
+        if not active or InCombatLockdown() then return end
+        local mover = active.mover
+        local frame = mover._frame
+        local key   = mover._layoutKey
+        local newX  = math.floor((tonumber(x) or 0) + 0.5)
+        local newY  = math.floor((tonumber(y) or 0) + 0.5)
+        frame:ClearAllPoints()
+        frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", newX, newY)
+        UnitFrames:PersistLayoutFromFrame(key, frame, newX, newY)
+        mover:ClearAllPoints()
+        mover:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", newX, newY)
+        panel.xBox:SetText(tostring(newX))
+        panel.yBox:SetText(tostring(newY))
+        panel.xBox:SetCursorPosition(0)
+        panel.yBox:SetCursorPosition(0)
+        RepositionPanel(mover)
+    end
+
+    local function RefreshBoxes()
+        local active = panel._active
+        if not active then return end
+        local m = active.mover
+        local x = m:GetLeft()   or 0
+        local y = m:GetBottom() or 0
+        panel.xBox:SetText(tostring(math.floor(x + 0.5)))
+        panel.yBox:SetText(tostring(math.floor(y + 0.5)))
+        panel.xBox:SetCursorPosition(0)
+        panel.yBox:SetCursorPosition(0)
+    end
+    panel.RefreshBoxes = RefreshBoxes
+
+    xBox:SetScript("OnEnterPressed", function(eb)
+        local y = tonumber(panel.yBox:GetText()) or 0
+        ApplyPosition(eb:GetText(), y)
+        eb:ClearFocus()
+    end)
+    xBox:SetScript("OnEscapePressed", function(eb)
+        RefreshBoxes()
+        eb:ClearFocus()
+    end)
+
+    yBox:SetScript("OnEnterPressed", function(eb)
+        local x = tonumber(panel.xBox:GetText()) or 0
+        ApplyPosition(x, eb:GetText())
+        eb:ClearFocus()
+    end)
+    yBox:SetScript("OnEscapePressed", function(eb)
+        RefreshBoxes()
+        eb:ClearFocus()
+    end)
+
+    -- Divider 2
+    local div2 = panel:CreateTexture(nil, "ARTWORK")
+    div2:SetHeight(1)
+    div2:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, -55)
+    div2:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -55)
+    div2:SetColorTexture(0.14, 0.16, 0.22, 1)
+
+    -- ── Nudge buttons ────────────────────────────────────────────────────
+    local S, G = 20, 3   -- button size, gap
+    local CX   = 110     -- horizontal centre of the 220-wide panel
+
+    local function MakeNudgeBtn(label, dx, dy)
+        local btn = CreateFrame("Button", nil, panel, "BackdropTemplate")
+        btn:SetSize(S, S)
+        btn:SetBackdrop({
+            bgFile   = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+        })
+        btn:SetBackdropColor(0.09, 0.11, 0.15, 1)
+        btn:SetBackdropBorderColor(0.20, 0.22, 0.30, 1)
+        local fs = btn:CreateFontString(nil, "OVERLAY")
+        fs:SetAllPoints(btn)
+        fs:SetJustifyH("CENTER")
+        fs:SetJustifyV("MIDDLE")
+        FLabel(fs, 11)
+        fs:SetText(label)
+        btn:SetScript("OnEnter", function()
+            btn:SetBackdropColor(0.10, 0.72, 0.74, 0.22)
+            btn:SetBackdropBorderColor(0.10, 0.72, 0.74, 1)
+            CancelHide()
+        end)
+        btn:SetScript("OnLeave", function()
+            btn:SetBackdropColor(0.09, 0.11, 0.15, 1)
+            btn:SetBackdropBorderColor(0.20, 0.22, 0.30, 1)
+            ScheduleHide()
+        end)
+        btn:SetScript("OnClick", function()
+            if not panel._active or InCombatLockdown() then return end
+            local step = IsShiftKeyDown() and 10 or 1
+            local curX = tonumber(panel.xBox:GetText()) or 0
+            local curY = tonumber(panel.yBox:GetText()) or 0
+            ApplyPosition(curX + dx * step, curY + dy * step)
+        end)
+        return btn
+    end
+
+    -- Arrow layout: cross pattern centred on panel
+    local row1Y = -63
+    local row2Y = row1Y - S - G   -- -86
+    local row3Y = row2Y - S - G   -- -109
+
+    local btnUp    = MakeNudgeBtn("\226\134\145",  0,  1)  -- ↑
+    local btnLeft  = MakeNudgeBtn("\226\134\144", -1,  0)  -- ←
+    local btnRight = MakeNudgeBtn("\226\134\146",  1,  0)  -- →
+    local btnDown  = MakeNudgeBtn("\226\134\147",  0, -1)  -- ↓
+
+    btnUp:SetPoint(   "TOPLEFT", panel, "TOPLEFT", CX - S/2,         row1Y)
+    btnLeft:SetPoint( "TOPLEFT", panel, "TOPLEFT", CX - S/2 - S - G, row2Y)
+    btnRight:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S/2 + S + G, row2Y)
+    btnDown:SetPoint( "TOPLEFT", panel, "TOPLEFT", CX - S/2,         row3Y)
+
+    -- Centre indicator (non-interactive cosmetic box)
+    local ctr = CreateFrame("Frame", nil, panel, "BackdropTemplate")
+    ctr:SetSize(S, S)
+    ctr:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S/2, row2Y)
+    ctr:EnableMouse(false)
+    ctr:SetBackdrop({
+        bgFile   = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    ctr:SetBackdropColor(0.05, 0.06, 0.09, 0.7)
+    ctr:SetBackdropBorderColor(0.15, 0.17, 0.22, 0.6)
+    local ctrFont = ctr:CreateFontString(nil, "OVERLAY")
+    ctrFont:SetAllPoints(ctr)
+    ctrFont:SetJustifyH("CENTER")
+    ctrFont:SetJustifyV("MIDDLE")
+    FLabel(ctrFont, 8)
+    ctrFont:SetText("XY")
+    ctrFont:SetTextColor(0.38, 0.40, 0.50)
+
+    self._moverInspector = panel
+    return panel
+end
+
 function UnitFrames:AttachMover(frame, layoutKey)
     if not frame or self.movers[layoutKey] then
         return
@@ -1442,6 +1723,10 @@ function UnitFrames:AttachMover(frame, layoutKey)
     mover.label:SetPoint("CENTER", mover, "CENTER", 0, 0)
     self:ApplyFontObject(mover.label, 11)
     mover.label:SetText(BuildFrameName(layoutKey))
+
+    -- Store references so the inspector panel can reach the target frame.
+    mover._frame     = frame
+    mover._layoutKey = layoutKey
 
     mover:SetScript("OnMouseDown", function(selfFrame)
         if InCombatLockdown() then
@@ -1467,13 +1752,43 @@ function UnitFrames:AttachMover(frame, layoutKey)
         frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
 
         UnitFrames:PersistLayoutFromFrame(layoutKey, frame, x, y)
+
+        -- Refresh inspector X/Y fields if it's currently tracking this mover.
+        local inspector = UnitFrames._moverInspector
+        if inspector and inspector:IsShown()
+            and inspector._active
+            and inspector._active.mover == selfFrame
+        then
+            inspector.RefreshBoxes()
+        end
     end)
 
     mover:EnableMouse(true)
     mover:SetMovable(true)
     mover:RegisterForDrag("LeftButton")
     mover:SetScript("OnDragStart", mover:GetScript("OnMouseDown"))
-    mover:SetScript("OnDragStop", mover:GetScript("OnMouseUp"))
+    mover:SetScript("OnDragStop",  mover:GetScript("OnMouseUp"))
+
+    -- Show/hide the inspector on hover.
+    mover:SetScript("OnEnter", function(selfMover)
+        local inspector = UnitFrames:GetMoverInspector()
+        inspector.CancelHide()
+        inspector._active = { mover = selfMover }
+        inspector.title:SetText(BuildFrameName(selfMover._layoutKey))
+        inspector.RefreshBoxes()
+        inspector:ClearAllPoints()
+        local moverTop = selfMover:GetTop() or 0
+        local screenH  = UIParent:GetHeight() or 768
+        if moverTop > screenH * 0.55 then
+            inspector:SetPoint("TOP", selfMover, "BOTTOM", 0, -6)
+        else
+            inspector:SetPoint("BOTTOM", selfMover, "TOP", 0, 6)
+        end
+        inspector:Show()
+    end)
+    mover:SetScript("OnLeave", function()
+        UnitFrames:GetMoverInspector().ScheduleHide()
+    end)
 
     self.movers[layoutKey] = mover
 end
@@ -2799,6 +3114,9 @@ end
 function UnitFrames:SetFrameLock(locked)
     local db = self:GetDB()
     db.lockFrames = locked == true
+    if locked and self._moverInspector then
+        self._moverInspector:Hide()
+    end
     self:UpdateMovers()
 end
 
