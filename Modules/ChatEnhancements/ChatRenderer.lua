@@ -1182,12 +1182,12 @@ function ChatRendererModule:EnsureRow(renderer, index)
     return row
 end
 
-function ChatRendererModule:MeasureEntry(renderer, entry, bodyWidth)
+function ChatRendererModule:MeasureEntry(renderer, entry, bodyWidth, measureLabel)
     if not renderer or not entry then
         return
     end
 
-    local measure = renderer.MeasureLabel
+    local measure = measureLabel or renderer.MeasureLabel
     local baseFontSize = self.settings.chatFontSize or 13
     if not IsUsablePlainString(entry.text) then
         entry.bodyHeight = baseFontSize
@@ -1334,13 +1334,15 @@ function ChatRendererModule:RelayoutRenderer(renderer)
     local groupedRowGap = mathMax(1, math.floor(rowGap * 0.4))
 
     for index, entry in ipairs(renderer.entries) do
+        local row = self:EnsureRow(renderer, index)
         -- Mirror the icon-offset logic from RefreshRow so the measurement width
         -- matches the actual label width used when rendering.  If a class icon
         -- will be shown, the label is CLASS_ICON_LABEL_OFFSET narrower than
         -- bodyWidth, causing multi-line wrapping that wasn't captured by a
         -- measurement taken at the full bodyWidth.  This was the root cause of
-        -- rows not expanding vertically when messages wrapped (most noticeable
-        -- in dungeons where every instance-chat sender has a cached class icon).
+        -- rows not expanding vertically when messages wrapped.  Use the real row
+        -- label for the measurement pass so NPC and boss messages follow the exact
+        -- same font-string wrapping rules as the rendered output.
         local iconOffset = 0
         if self.settings.showClassIcons and entry.speakerKey then
             local classToken = self:GetSpeakerClassToken(entry.speakerKey)
@@ -1353,7 +1355,7 @@ function ChatRendererModule:RelayoutRenderer(renderer)
         end
         local effectiveBodyWidth = mathMax(50, bodyWidth - iconOffset)
         if entry.measuredWidth ~= effectiveBodyWidth then
-            self:MeasureEntry(renderer, entry, effectiveBodyWidth)
+            self:MeasureEntry(renderer, entry, effectiveBodyWidth, row.Label)
             entry.measuredWidth = effectiveBodyWidth
         end
 
@@ -1363,7 +1365,6 @@ function ChatRendererModule:RelayoutRenderer(renderer)
         offsetY = offsetY + entry.rowHeight
         previousEntry = entry
 
-        local row = self:EnsureRow(renderer, index)
         self:RefreshRow(renderer, row, entry, bodyWidth)
     end
 
