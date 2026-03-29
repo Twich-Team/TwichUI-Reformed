@@ -1920,7 +1920,7 @@ RefreshDetailPanel = function()
             c2Sec2:SetText("CHASE DOTS")
             c2Sec2:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", col2X, chY)
 
-            DetailSlider(detailPanel, "Dot Count", cfg.chaseCount or 4, 1, 12, 1,
+            DetailSlider(detailPanel, "Dot Count", cfg.chaseCount or 4, 1, 20, 1,
                 col2X, chY - 18, 136, function(v)
                     EnsureLayerWritable().chaseCount = v
                     DeferredFlush()

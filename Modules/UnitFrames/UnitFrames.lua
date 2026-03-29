@@ -1596,15 +1596,26 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
         return AuraMatchesDisplayMode(element.twichFilterMode, data)
     end
 
+    -- oUF's Auras Enable() calls auras:Show() unconditionally every time a unit is assigned.
+    -- Guard against that with the same _forceHide / OnShow pattern used for Power.
+    local aurasEnabled = aura.enabled ~= false
+    frame.Auras._forceHide = not aurasEnabled or nil
+    if not frame.Auras._twichAurasOnShowHooked then
+        frame.Auras._twichAurasOnShowHooked = true
+        frame.Auras:HookScript("OnShow", function(self2)
+            if self2._forceHide then self2:Hide() end
+        end)
+    end
+
     if aura.barMode == true then
         -- Bar mode: hide icon grid, show bar container
         frame.Auras.num = 0; frame.Auras.numTotal = 0
         frame.Auras.numBuffs = 0; frame.Auras.numDebuffs = 0
-        frame.Auras:SetShown(false)
+        frame.Auras:Hide()
         local bars = self:EnsureAuraBarsContainer(frame)
         bars:ClearAllPoints()
         bars:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, yOff)
-        bars:SetShown(aura.enabled ~= false)
+        bars:SetShown(aurasEnabled)
         self:RefreshAuraBarsForFrame(frame, unitKey)
     else
         -- Icon mode
@@ -1626,7 +1637,7 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
         frame.Auras.size = iconSize
         frame.Auras.spacing = spacing
         frame.Auras.needFullUpdate = true
-        frame.Auras:SetShown(aura.enabled ~= false)
+        frame.Auras:SetShown(aurasEnabled)
         frame.Auras:ClearAllPoints()
         frame.Auras:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, yOff)
         frame.Auras:SetHeight(iconSize)

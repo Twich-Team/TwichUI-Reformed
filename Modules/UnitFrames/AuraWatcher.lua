@@ -543,7 +543,7 @@ local function UpdateBorderIndicator(frame, idx, cfg, isActive)
         border._chasePixelW = Clamp(cfg.chasePixelW or 6, 1, 24) -- length along edge
         border._chasePixelH = Clamp(cfg.chasePixelH or 2, 1, 12) -- thickness
         border._chaseColor  = type(cfg.chaseColor) == "table" and cfg.chaseColor or nil
-        local count         = Clamp(cfg.chaseCount or 3, 1, 8)
+        local count         = Clamp(cfg.chaseCount or 4, 1, 20)
         border._chaseDots   = border._chaseDots or {}
         for di = #border._chaseDots + 1, count do
             local dt = border:CreateTexture(nil, "OVERLAY")
