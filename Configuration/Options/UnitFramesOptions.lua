@@ -245,10 +245,10 @@ local PLAYER_CASTBAR_DEFAULTS = {
 }
 
 local EMBEDDED_CASTBAR_DEFAULTS = {
-    target = { enabled = true, detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2 },
-    party = { enabled = true, detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2 },
-    raid = { enabled = true, detached = false, width = 120, height = 12, iconSize = 14, showIcon = true, showText = true, showTimeText = true, fontSize = 8, timeFontSize = 8, yOffset = -2 },
-    boss = { enabled = true, detached = false, width = 220, height = 12, iconSize = 18, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2 },
+    target = { enabled = true, detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left" },
+    party  = { enabled = true, detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left" },
+    raid   = { enabled = true, detached = false, width = 120, height = 12, iconSize = 14, showIcon = true, showText = true, showTimeText = true, fontSize = 8, timeFontSize = 8, yOffset = -2, iconPosition = "outside", iconSide = "left" },
+    boss   = { enabled = true, detached = false, width = 220, height = 12, iconSize = 18, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left" },
 }
 
 local function GetModule()
@@ -843,6 +843,43 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             }),
         barHeight = BuildRange(9, "Bar Height", "Aura bar height in bar mode.", ExtendPath(basePath, "barHeight"),
             auraDefault("barHeight", 14), 8, 30, 1, {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
+                end),
+            }),
+        barTexture = BuildTextureSelect(10, "Bar Texture",
+            "Status bar texture used for aura bars. Uses the theme texture when set to default.",
+            ExtendPath(basePath, "barTexture"), "Use Theme Texture", {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
+                end),
+            }),
+        barFontSize = BuildRange(11, "Bar Font Size", "Font size for bar labels and time text. Leave at 0 for auto-size.",
+            ExtendPath(basePath, "barFontSize"), auraDefault("barFontSize", 0), 0, 20, 1, {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
+                end),
+            }),
+        showTime = BuildToggle(12, "Show Time", "Show remaining time on aura bars.",
+            ExtendPath(basePath, "showTime"), auraDefault("showTime", true), {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
+                end),
+            }),
+        showStacks = BuildToggle(13, "Show Stacks", "Show stack count on aura bars (when > 1).",
+            ExtendPath(basePath, "showStacks"), auraDefault("showStacks", true), {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
+                end),
+            }),
+        barColor = BuildColor(14, "Bar Color", "Custom aura bar fill color (timed auras). Overrides the palette cast color.",
+            ExtendPath(basePath, "barColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
+                end),
+            }),
+        barBackground = BuildColor(15, "Background", "Aura bar background color override.",
+            ExtendPath(basePath, "barBackground"), { 0.04, 0.05, 0.07, 0.95 }, true, {
                 disabled = ModuleDisabled(function()
                     return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
                 end),
@@ -1548,7 +1585,7 @@ local function BuildGroupTab(groupKey, label)
     end
 
     local memberKey = groupKey .. "Member"
-    frameTab.args.highlights = Widgets.IGroup(2, "Highlights", {
+    frameTab.args.highlights = Widgets.IGroup(3, "Highlights", {
         showTarget = BuildToggle(1, "Target Highlight",
             "Show the target highlight on group member frames. Disable to hide it even when globally on.",
             { "units", memberKey, "highlights", "showTarget" }, true, { disabled = disabled }),
@@ -1556,6 +1593,16 @@ local function BuildGroupTab(groupKey, label)
             "Show the mouseover highlight on group member frames. Disable to hide it even when globally on.",
             { "units", memberKey, "highlights", "showMouseover" }, true, { disabled = disabled }),
     })
+    -- Healer-only power bar is meaningful for party and raid — not for tank
+    if groupKey == "party" or groupKey == "raid" then
+        frameTab.args.power = Widgets.IGroup(4, "Power Bar", {
+            healerOnlyPower = BuildToggle(1, "Healer Only",
+                "When enabled, only show the power bar for frames whose unit has the Healer role assigned. All other roles will have the power bar hidden.",
+                ExtendPath(basePath, "healerOnlyPower"), false, {
+                    disabled = disabled,
+                }),
+        })
+    end
     frameTab.args.copyFrom = BuildCopyFromGroup(groupKey)
 
     local colorsTab = BuildColorScopeTab(groupKey, "Colors")
@@ -1708,6 +1755,22 @@ local function BuildEmbeddedCastbarTab(scopeKey, label)
                     COLOR_DEFAULTS.cast, true, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue(ExtendPath(path, "useCustomColor"), false) ~= true
+                        end),
+                    }),
+                iconPosition = BuildSelect(13, "Icon Position",
+                    "Place the icon outside the bar frame or embedded inside it.",
+                    ExtendPath(path, "iconPosition"), defaults.iconPosition or "outside",
+                    { outside = "Outside Bar", inside = "Inside Bar" }, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(path, "showIcon"), defaults.showIcon) ~= true
+                        end),
+                    }),
+                iconSide = BuildSelect(14, "Icon Side",
+                    "Which side of the castbar the icon appears on.",
+                    ExtendPath(path, "iconSide"), defaults.iconSide or "left",
+                    { left = "Left", right = "Right" }, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(path, "showIcon"), defaults.showIcon) ~= true
                         end),
                     }),
             }),
@@ -2179,6 +2242,24 @@ local function BuildColorsTab()
                 border = BuildColor(5, "Border", "Fallback frame border tint.", { "colors", "border" },
                     COLOR_DEFAULTS.border, true),
             }),
+            powerTypeOverrides = Widgets.IGroup(2, "Power Type Colors", {
+                desc = Widgets.Description(0,
+                    "Override the default WoW color for each power type. These take effect when Power Color Mode is set to \"Power Type\"."),
+                mana          = BuildColor(1,  "Mana",           "Override color for Mana.",          { "powerTypeColors", "MANA" },          { 0.0,  0.44, 1.0,  1 }, false, { refreshConfig = true }),
+                rage          = BuildColor(2,  "Rage",           "Override color for Rage.",          { "powerTypeColors", "RAGE" },          { 1.0,  0.0,  0.0,  1 }, false, { refreshConfig = true }),
+                focus         = BuildColor(3,  "Focus",          "Override color for Focus.",         { "powerTypeColors", "FOCUS" },         { 1.0,  0.55, 0.0,  1 }, false, { refreshConfig = true }),
+                energy        = BuildColor(4,  "Energy",         "Override color for Energy.",        { "powerTypeColors", "ENERGY" },        { 1.0,  1.0,  0.0,  1 }, false, { refreshConfig = true }),
+                runicPower    = BuildColor(5,  "Runic Power",    "Override color for Runic Power.",   { "powerTypeColors", "RUNIC_POWER" },   { 0.0,  0.82, 1.0,  1 }, false, { refreshConfig = true }),
+                lunarPower    = BuildColor(6,  "Lunar Power",    "Override color for Lunar Power.",   { "powerTypeColors", "LUNAR_POWER" },   { 0.3,  0.52, 0.9,  1 }, false, { refreshConfig = true }),
+                holyPower     = BuildColor(7,  "Holy Power",     "Override color for Holy Power.",    { "powerTypeColors", "HOLY_POWER" },    { 0.95, 0.9,  0.6,  1 }, false, { refreshConfig = true }),
+                fury          = BuildColor(8,  "Fury",           "Override color for Fury.",          { "powerTypeColors", "FURY" },          { 0.79, 0.26, 0.99, 1 }, false, { refreshConfig = true }),
+                pain          = BuildColor(9,  "Pain",           "Override color for Pain.",          { "powerTypeColors", "PAIN" },          { 1.0,  0.61, 0.2,  1 }, false, { refreshConfig = true }),
+                maelstrom     = BuildColor(10, "Maelstrom",      "Override color for Maelstrom.",     { "powerTypeColors", "MAELSTROM" },     { 0.0,  0.5,  1.0,  1 }, false, { refreshConfig = true }),
+                chi           = BuildColor(11, "Chi",            "Override color for Chi.",           { "powerTypeColors", "CHI" },           { 0.71, 1.0,  0.92, 1 }, false, { refreshConfig = true }),
+                insanity      = BuildColor(12, "Insanity",       "Override color for Insanity.",      { "powerTypeColors", "INSANITY" },      { 0.4,  0.0,  0.8,  1 }, false, { refreshConfig = true }),
+                arcaneCharges = BuildColor(13, "Arcane Charges", "Override color for Arcane Charges.",{ "powerTypeColors", "ARCANE_CHARGES" },{ 0.19, 0.51, 1.0,  1 }, false, { refreshConfig = true }),
+                comboPoints   = BuildColor(14, "Combo Points",   "Override color for Combo Points.",  { "powerTypeColors", "COMBO_POINTS" },  { 1.0,  0.82, 0.0,  1 }, false, { refreshConfig = true }),
+            }),
         },
     }
 
@@ -2241,6 +2322,7 @@ function Options:GetDB()
     if type(db.castbars) ~= "table" then db.castbars = {} end
     if type(db.classBar) ~= "table" then db.classBar = {} end
     if type(db.highlights) ~= "table" then db.highlights = {} end
+    if type(db.powerTypeColors) ~= "table" then db.powerTypeColors = {} end
 
     return db
 end

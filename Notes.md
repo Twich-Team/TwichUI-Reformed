@@ -48,11 +48,10 @@
 
 - In the configuraiton for unit frames, we say "standalone ouf..." can we make this simpler to understand for new players? SOmething that explains that this is where you configure your health bars and party and raid frames
 
-- Add the ability to configure the frames to only show mana bars for healers. ElvUI does this. SHould be on party and raid frames.
-- When i change the texts in the party frames, tehy do not update on the frames themselves until after i reload.
-- We need the ability to set the castbar icon position, side, and ask masque skinning to the target and boss cast bars, just like the player cast bars.
-- I need to be able to configure the aura bar texture, font and font size, bar color, background color, whether it shows time left or stacks. Also, the icon representing the aura on the bar looks to have a low alpha or be behind the bar
-- Add in the top level colors config within unit frames, color pickers for each of the game's power types so they can be overridden (mana, rage, energy,... )
+- When I target myself to test target of target, there is a black bar at the bottom, im not sure what it is. I attached an image of it. I have power bar disabled for this frame.
+- I need to be able to place the dungeon role icon on the frames (like tank, dps, healer). I'd also like to only show it based on role (like only show healers and tanks).
+- Can we add an optional area like ElvUI's extra info bar, which basically extends the unitframe out vertically to include a new row at the bottom that we can put custom texts with custom textures and what not. defaults off. allow custom texts using ouf tags, allow choice of font, font size, font color (including class color).
+- Add the ability to enable/disable masque support for the castbar icons, default it is disabled.
 
 ### Texts
 

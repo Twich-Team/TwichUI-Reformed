@@ -21,6 +21,7 @@ local UnitExists = _G.UnitExists
 local UnitClass = _G.UnitClass
 local UnitIsPlayer = _G.UnitIsPlayer
 local UnitPowerType = _G.UnitPowerType
+local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
 local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
 local StatusBarInterpolation = (_G.Enum and _G.Enum.StatusBarInterpolation) or _G.StatusBarInterpolation
@@ -49,12 +50,19 @@ local function UFDebug(msg)
     if dc and dc.Log then dc:Log("unitframes", msg, false) end
 end
 
--- Returns the WoW-native PowerBarColor entry for a unit's current power type,
--- or nil if the type is not found in the global table.
--- PowerBarColor is keyed by token string ("MANA", "RAGE", etc.) or numeric type.
-local function GetPowerTypeColor(unit)
+-- Returns the power bar fill colour for a unit's current power type.
+-- Checks db.powerTypeColors overrides first, then falls back to PowerBarColor.
+local function GetPowerTypeColor(unit, db)
     if not unit then return nil end
     local powerType, powerToken = UnitPowerType(unit)
+    -- Check user overrides stored by token (e.g. db.powerTypeColors.MANA = {r,g,b,1})
+    if db and type(db.powerTypeColors) == "table" then
+        local ov = (powerToken and db.powerTypeColors[powerToken])
+            or (powerType ~= nil and db.powerTypeColors[tostring(powerType)])
+        if ov and type(ov[1]) == "number" then
+            return { ov[1], ov[2], ov[3], ov[4] or 1 }
+        end
+    end
     local pbc = _G.PowerBarColor
     if not pbc then return nil end
     local c = (powerToken and pbc[powerToken]) or (powerType ~= nil and pbc[powerType])
@@ -505,11 +513,28 @@ function UnitFrames:ResolvePowerColor(unitKey, unit)
         or "custom"
 
     if mode == "powertype" then
-        local ptColor = GetPowerTypeColor(unit)
+        local ptColor = GetPowerTypeColor(unit, db)
         if ptColor then return ptColor end
     end
 
     return palette.power
+end
+
+-- Applies healer-only power bar visibility for party/raid frames.
+-- Uses alpha rather than SetShown to avoid triggering a health bar re-anchor.
+function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
+    local healerOnly = false
+    if unitKey == "partyMember" then
+        healerOnly = self:GetGroupSettings("party").healerOnlyPower == true
+    elseif unitKey == "raidMember" then
+        healerOnly = self:GetGroupSettings("raid").healerOnlyPower == true
+    end
+    if healerOnly and unit and UnitGroupRolesAssigned then
+        local role = UnitGroupRolesAssigned(unit) or ""
+        powerBar:SetAlpha(role == "HEALER" and 1 or 0)
+    else
+        powerBar:SetAlpha(1)
+    end
 end
 
 function UnitFrames:ApplyStatusBarTexture(frame)
@@ -743,15 +768,22 @@ function UnitFrames:GetAuraConfigFor(unitKey)
     local scoped = db.auras.scopes[scope]
 
     local merged = {
-        enabled   = scoped.enabled,
-        maxIcons  = scoped.maxIcons,
-        iconSize  = scoped.iconSize,
-        spacing   = scoped.spacing,
-        yOffset   = scoped.yOffset,
-        filter    = scoped.filter,
-        onlyMine  = scoped.onlyMine,
-        barMode   = scoped.barMode,
-        barHeight = scoped.barHeight,
+        enabled     = scoped.enabled,
+        maxIcons    = scoped.maxIcons,
+        iconSize    = scoped.iconSize,
+        spacing     = scoped.spacing,
+        yOffset     = scoped.yOffset,
+        filter      = scoped.filter,
+        onlyMine    = scoped.onlyMine,
+        barMode     = scoped.barMode,
+        barHeight   = scoped.barHeight,
+        barTexture  = scoped.barTexture,
+        barFontSize = scoped.barFontSize,
+        barFontName = scoped.barFontName,
+        showTime    = scoped.showTime,
+        showStacks  = scoped.showStacks,
+        barColor    = scoped.barColor,
+        barBackground = scoped.barBackground,
     }
     if merged.enabled == nil then merged.enabled = true end
     if merged.maxIcons == nil then merged.maxIcons = 8 end
@@ -762,6 +794,13 @@ function UnitFrames:GetAuraConfigFor(unitKey)
     if merged.onlyMine == nil then merged.onlyMine = false end
     if merged.barMode == nil then merged.barMode = false end
     if merged.barHeight == nil then merged.barHeight = 14 end
+    if merged.barTexture == nil then merged.barTexture = nil end  -- nil = theme default
+    if merged.barFontSize == nil then merged.barFontSize = nil end -- nil = auto (barH - 4)
+    if merged.barFontName == nil then merged.barFontName = nil end -- nil = text fontName
+    if merged.showTime == nil then merged.showTime = true end
+    if merged.showStacks == nil then merged.showStacks = true end
+    if merged.barColor == nil then merged.barColor = nil end      -- nil = palette.cast
+    if merged.barBackground == nil then merged.barBackground = nil end -- nil = default backdrop
 
     -- Per-unit overrides (scope == "singles" only for named units)
     if scope == "singles" and unitKey ~= "partyMember" and unitKey ~= "raidMember" and unitKey ~= "tankMember" then
@@ -789,12 +828,14 @@ function UnitFrames:EnsureAuraBarsContainer(frame)
         bar:SetBackdropColor(0.04, 0.05, 0.07, 0.95)
         bar:SetBackdropBorderColor(0.16, 0.18, 0.24, 0.85)
         bar:SetMinMaxValues(0, 1); bar:SetValue(1)
-        local icon = bar:CreateTexture(nil, "ARTWORK")
+        local icon = bar:CreateTexture(nil, "OVERLAY")
         icon:SetTexCoord(0.08, 0.92, 0.08, 0.92); bar.icon = icon
         local label = bar:CreateFontString(nil, "OVERLAY")
         label:SetJustifyH("LEFT"); label:SetWordWrap(false); bar.label = label
         local timeText = bar:CreateFontString(nil, "OVERLAY")
         timeText:SetJustifyH("RIGHT"); bar.timeText = timeText
+        local stackText = bar:CreateFontString(nil, "OVERLAY")
+        stackText:SetJustifyH("CENTER"); bar.stackText = stackText
         bar:SetScript("OnUpdate", function(self2, _)
             if not self2._duration or self2._duration <= 0 then
                 self2:SetValue(1)
@@ -851,9 +892,18 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     local onlyMine   = aura.onlyMine == true
     local container  = frame.AuraBars
     local frameWidth = math_max(40, frame:GetWidth())
-    local texture    = GetThemeTexture()
-    local palette    = self:GetPalette(unitKey, unit)
     local text       = self:GetTextConfigFor(unitKey)
+    -- Texture: custom aura barTexture > theme default
+    local barTexName = aura.barTexture
+    local texture    = (barTexName and barTexName ~= "") and GetLSMTexture(barTexName) or GetThemeTexture()
+    local palette    = self:GetPalette(unitKey, unit)
+    -- Resolve bar-specific colors; fall back to palette entries
+    local barColor   = aura.barColor   -- may be a table {r,g,b,a} or nil
+    local bgColor    = aura.barBackground  -- may be a table {r,g,b,a} or nil
+    local barFontSz  = (aura.barFontSize and aura.barFontSize > 0) and Clamp(aura.barFontSize, 6, 20) or math_max(7, barH - 4)
+    local barFontNm  = aura.barFontName  or text.fontName
+    local showTime   = aura.showTime ~= false
+    local showStacks = aura.showStacks ~= false
 
     local auraList   = {}
     if filter == "HELPFUL" then
@@ -881,31 +931,71 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
                 bar:SetPoint("TOP", container.bars[i - 1], "BOTTOM", 0, -spacing)
             end
             bar:SetStatusBarTexture(texture)
+            -- Apply backdrop background override if set
+            if bgColor then
+                bar:SetBackdropColor(bgColor[1] or 0, bgColor[2] or 0, bgColor[3] or 0, bgColor[4] or 0.95)
+            else
+                bar:SetBackdropColor(0.04, 0.05, 0.07, 0.95)
+            end
             local dur = tonumber(data.duration) or 0
             local exp = tonumber(data.expirationTime) or 0
             if dur > 0 then
                 bar:SetMinMaxValues(0, dur); bar:SetValue(math_max(0, exp - GetTime()))
                 bar._duration = dur; bar._expiry = exp
-                bar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 0.85)
+                if barColor then
+                    bar:SetStatusBarColor(barColor[1] or 0, barColor[2] or 0, barColor[3] or 0, barColor[4] or 0.85)
+                else
+                    bar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 0.85)
+                end
             else
                 bar:SetMinMaxValues(0, 1); bar:SetValue(1)
                 bar._duration = 0; bar._expiry = 0
-                bar:SetStatusBarColor(palette.health[1], palette.health[2], palette.health[3], 0.7)
+                if barColor then
+                    bar:SetStatusBarColor(barColor[1] or 0, barColor[2] or 0, barColor[3] or 0, barColor[4] or 0.7)
+                else
+                    bar:SetStatusBarColor(palette.health[1], palette.health[2], palette.health[3], 0.7)
+                end
             end
             if bar.icon then
                 bar.icon:SetTexture(data.icon); bar.icon:SetSize(barH - 2, barH - 2)
                 bar.icon:ClearAllPoints(); bar.icon:SetPoint("LEFT", bar, "LEFT", 1, 0)
             end
+            -- Stacks text (shown left of time, right-aligned block)
+            -- Reserve space for stacks and time on the right side
+            local stackStr = (showStacks and data.applications and data.applications > 1)
+                and tostring(data.applications) or nil
+            local iconOffset = barH + 2
+            local rightReserve = 0
+            if showTime then rightReserve = rightReserve + 30 end
+            if showStacks then rightReserve = rightReserve + 20 end
             if bar.label then
-                self:ApplyFontObject(bar.label, math_max(7, barH - 4), text.fontName, text)
+                self:ApplyFontObject(bar.label, barFontSz, barFontNm, text)
                 bar.label:ClearAllPoints()
-                bar.label:SetPoint("LEFT", bar, "LEFT", barH + 2, 0)
-                bar.label:SetPoint("RIGHT", bar, "RIGHT", -32, 0)
+                bar.label:SetPoint("LEFT",  bar, "LEFT",  iconOffset, 0)
+                bar.label:SetPoint("RIGHT", bar, "RIGHT", -(rightReserve + 4), 0)
                 bar.label:SetText(data.name or "")
             end
+            if bar.stackText then
+                self:ApplyFontObject(bar.stackText, barFontSz, barFontNm, text)
+                bar.stackText:ClearAllPoints()
+                if showStacks then
+                    local stackRight = showTime and -34 or -4
+                    bar.stackText:SetPoint("RIGHT", bar, "RIGHT", stackRight, 0)
+                    bar.stackText:SetText(stackStr or "")
+                    bar.stackText:SetShown(stackStr ~= nil)
+                else
+                    bar.stackText:SetText(""); bar.stackText:Hide()
+                end
+            end
             if bar.timeText then
-                self:ApplyFontObject(bar.timeText, math_max(7, barH - 4), text.fontName, text)
-                bar.timeText:ClearAllPoints(); bar.timeText:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
+                self:ApplyFontObject(bar.timeText, barFontSz, barFontNm, text)
+                bar.timeText:ClearAllPoints()
+                if showTime then
+                    bar.timeText:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
+                    bar.timeText:SetShown(dur > 0)
+                else
+                    bar.timeText:SetText(""); bar.timeText:Hide()
+                end
             end
             bar:Show(); shown = shown + 1
         else
@@ -1256,9 +1346,42 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
         frame.Castbar.Time:SetShown(cfg.showTimeText ~= false)
     end
     if frame.Castbar.Icon then
-        local iconSize = math_max(4, barH - 2)
+        local iconSize = Clamp(cfg.iconSize or math_max(4, barH - 2), 4, 60)
+        local showIcon = cfg.showIcon ~= false
+        local iconPos  = cfg.iconPosition or "outside"
+        local iconSide = cfg.iconSide or "left"
         frame.Castbar.Icon:SetSize(iconSize, iconSize)
-        frame.Castbar.Icon:SetShown(cfg.showIcon ~= false)
+        frame.Castbar.Icon:SetShown(showIcon)
+        frame.Castbar.Icon:ClearAllPoints()
+        if iconPos == "inside" then
+            if iconSide == "right" then
+                frame.Castbar.Icon:SetPoint("RIGHT", frame.Castbar, "RIGHT", -4, 0)
+            else
+                frame.Castbar.Icon:SetPoint("LEFT", frame.Castbar, "LEFT", 4, 0)
+            end
+        else
+            if iconSide == "right" then
+                frame.Castbar.Icon:SetPoint("LEFT", frame.Castbar, "RIGHT", 4, 0)
+            else
+                frame.Castbar.Icon:SetPoint("RIGHT", frame.Castbar, "LEFT", -4, 0)
+            end
+        end
+        -- Adjust spell text to avoid overlapping an inside icon
+        if frame.Castbar.Text then
+            frame.Castbar.Text:ClearAllPoints()
+            if showIcon and iconPos == "inside" then
+                if iconSide == "right" then
+                    frame.Castbar.Text:SetPoint("LEFT",  frame.Castbar, "LEFT",  4, 0)
+                    frame.Castbar.Text:SetPoint("RIGHT", frame.Castbar, "RIGHT", -(iconSize + 8), 0)
+                else
+                    frame.Castbar.Text:SetPoint("LEFT",  frame.Castbar, "LEFT",  iconSize + 8, 0)
+                    frame.Castbar.Text:SetPoint("RIGHT", frame.Castbar, "RIGHT", -4, 0)
+                end
+            else
+                frame.Castbar.Text:SetPoint("LEFT", frame.Castbar, "LEFT", 4, 0)
+                frame.Castbar.Text:SetPoint("RIGHT", frame.Castbar, "RIGHT", -30, 0)
+            end
+        end
     end
     if not enabled then
         frame.Castbar:Hide()
@@ -1603,10 +1726,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
         or (groupKey == "raid"  and "raidMember")
         or (groupKey == "tank"  and "tankMember")
 
-    -- Propagate appearance changes to all already-spawned member frames.
-    -- ApplyFrameColors is called so that health/power color mode changes (class,
-    -- custom, etc.) take effect immediately rather than waiting for the next
-    -- health event to trigger PostUpdate.
+    -- Propagate appearance and text changes to all already-spawned member frames.
     for i = 1, select('#', header:GetChildren()) do
         local child = select(i, header:GetChildren())
         if child then
@@ -1616,6 +1736,9 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
             if child.Health and memberUnitKey then
                 self:ApplyFrameColors(child, memberUnitKey)
                 self:ApplyStatusBarTexture(child)
+                self:ApplyFrameFonts(child, memberUnitKey)
+                self:ApplyTextTags(child, memberUnitKey)
+                self:ApplyTextPositions(child, memberUnitKey)
             end
         end
     end
@@ -2865,6 +2988,7 @@ function UnitFrames:StyleFrame(frame)
         UnitFrames:ApplySmoothBarValue(powerBar, cur, max)
         local col = UnitFrames:ResolvePowerColor(capturedUnitKey, unit2)
         powerBar:SetStatusBarColor(col[1], col[2], col[3], 1)
+        UnitFrames:UpdatePowerBarForRole(powerBar, capturedUnitKey, unit2)
     end
     -- PostUpdateColor fires from oUF's UpdateColor path (e.g. power type changes,
     -- zone transitions). When all colorXxx flags are false oUF skips SetStatusBarColor
@@ -2872,6 +2996,7 @@ function UnitFrames:StyleFrame(frame)
     power.PostUpdateColor = function(powerBar, unit2, _color, _r, _g, _b)
         local col = UnitFrames:ResolvePowerColor(capturedUnitKey, unit2)
         powerBar:SetStatusBarColor(col[1], col[2], col[3], 1)
+        UnitFrames:UpdatePowerBarForRole(powerBar, capturedUnitKey, unit2)
     end
     frame.Power = power
 
