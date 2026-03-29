@@ -25,7 +25,7 @@ local CURRENT_SEASON_DUNGEONS = {
     { spellID = 1254563, name = "Nexus-Point Xenas" },
     { spellID = 1254555, name = "Pit of Saron" },
     { spellID = 1254551, name = "Seat of the Triumvirate" },
-    { spellID = 1254557, name = "Skyreach" },
+    { spellIDs = { 159898, 1254557 }, name = "Skyreach", aliases = { "Path of the Skies" } },
     { spellID = 1254400, name = "Windrunner Spire" },
 }
 
@@ -600,6 +600,12 @@ local function EnsureRow(frame, index)
     row.icon:SetPoint("CENTER", row.iconBackdrop, "CENTER", 0, 0)
     row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
+    row.cooldownOverlay = row:CreateTexture(nil, "ARTWORK")
+    row.cooldownOverlay:SetPoint("TOPLEFT", row.icon, "TOPLEFT", 0, 0)
+    row.cooldownOverlay:SetPoint("BOTTOMRIGHT", row.icon, "BOTTOMRIGHT", 0, 0)
+    row.cooldownOverlay:SetColorTexture(0.95, 0.62, 0.10, 0.30)
+    row.cooldownOverlay:SetShown(false)
+
     row.label = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     row.label:SetPoint("LEFT", row.iconBackdrop, "RIGHT", 12, 0)
     row.label:SetPoint("RIGHT", row, "RIGHT", -10, 0)
@@ -654,12 +660,29 @@ local function EnsureRow(frame, index)
 end
 
 NormalizeSpellEntry = function(entry)
+    local chosenSpellID = entry.spellID
+    local isKnown = false
+
+    if type(entry.spellIDs) == "table" and #entry.spellIDs > 0 then
+        chosenSpellID = entry.spellIDs[1]
+        for _, spellID in ipairs(entry.spellIDs) do
+            if IsSpellKnownSafe(spellID) then
+                chosenSpellID = spellID
+                isKnown = true
+                break
+            end
+        end
+    else
+        isKnown = IsSpellKnownSafe(chosenSpellID)
+    end
+
     return {
-        label = entry.name or GetSpellName(entry.spellID, entry.name),
-        icon = GetSpellIcon(entry.spellID),
-        spellID = entry.spellID,
-        known = IsSpellKnownSafe(entry.spellID),
-        uid = "spell:" .. tostring(entry.spellID),
+        label = entry.name or GetSpellName(chosenSpellID, entry.name),
+        icon = GetSpellIcon(chosenSpellID),
+        spellID = chosenSpellID,
+        known = isKnown,
+        aliases = entry.aliases,
+        uid = entry.uid or ("spell:" .. tostring(chosenSpellID)),
     }
 end
 
@@ -733,6 +756,14 @@ function Teleports:FindGroupFinderTeleportInfo(activityName, listingName)
             if matchText ~= "" and haystack:find(matchText, 1, true) and #matchText > bestLength then
                 bestMatch = entry
                 bestLength = #matchText
+            end
+
+            for _, alias in ipairs(entry.aliases or {}) do
+                local aliasText = NormalizeMatchText(alias)
+                if aliasText ~= "" and haystack:find(aliasText, 1, true) and #aliasText > bestLength then
+                    bestMatch = entry
+                    bestLength = #aliasText
+                end
             end
         end
     end
@@ -1009,13 +1040,25 @@ function Teleports:RenderBrowser(frame, mode)
                 row.icon:SetTexture(entry.icon)
                 row.label:SetText(entry.label or "Teleport")
                 local statusText = GetEntryStatus(entry)
+                local cooldownSeconds = entry.known and GetEntryCooldown(entry) or 0
+                local isOnCooldown = cooldownSeconds > 0
                 row.status:SetText(statusText)
                 row.status:SetShown(statusText ~= "")
                 row:UpdateLayout(statusText ~= "")
+
+                if isOnCooldown then
+                    row.status:SetTextColor(1.00, 0.73, 0.28)
+                elseif entry.known then
+                    row.status:SetTextColor(0.86, 0.82, 0.72)
+                else
+                    row.status:SetTextColor(1.00, 0.45, 0.45)
+                end
+
                 row.label:SetTextColor(entry.known and 1 or 0.56, entry.known and 0.96 or 0.56,
                     entry.known and 0.90 or 0.56)
                 row.icon:SetDesaturated(not entry.known)
                 row.bg:SetAlpha((nextRow % 2 == 0) and 0.05 or 0.02)
+                row.cooldownOverlay:SetShown(isOnCooldown)
                 row.divider:SetShown(true)
                 row:ClearAllPoints()
                 row:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 0, -contentHeight)
