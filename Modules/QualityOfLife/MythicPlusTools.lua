@@ -955,7 +955,7 @@ function MPT:GetMasqueGroup(kind)
     end
 
     local label = "Mythic+ Interrupts"
-    self.masqueGroups[kind] = Masque:Group("TwichUI Redux", label)
+    self.masqueGroups[kind] = Masque:Group("TwichUI Reformed", label)
     return self.masqueGroups[kind]
 end
 

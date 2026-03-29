@@ -2263,7 +2263,12 @@ function UnitFrames:RefreshCastbarLayout()
     )
 
     castbar:SetSize(Clamp(settings.width or 260, 120, 600), Clamp(settings.height or 20, 10, 60))
-    castbar:SetShown(settings.enabled ~= false)
+    if settings.enabled == false then
+        castbar:Hide()
+    elseif not self._castbarState then
+        -- Only show if a cast is actually in progress; hide on initial load / layout refresh.
+        castbar:Hide()
+    end
     castbar:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
     castbar:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
 
@@ -2275,6 +2280,9 @@ function UnitFrames:RefreshCastbarLayout()
     end
     if castbar.icon then
         castbar.icon:SetShown(showIcon)
+    end
+    if self._masqueGroup and self._masqueGroup.ReSkin then
+        self._masqueGroup:ReSkin()
     end
 
     -- Position the icon based on iconPosition (inside/outside) and iconSide (left/right).
@@ -2660,12 +2668,26 @@ function UnitFrames:OnEnable()
     if Masque then
         local castbar = self.frames.castbar
         if castbar and castbar.iconButton then
-            local masqueGroup = Masque:NewGroup("TwichUI", "Castbar Icon")
+            local masqueGroup = Masque:Group("TwichUI Reformed", "Castbar Icon")
             masqueGroup:AddButton(castbar.iconButton, {
-                Icon    = castbar.icon,
-                Normal  = false,
-                Checked = false,
+                Icon        = castbar.icon,
+                Highlight   = nil,
+                Normal      = false,
+                Pushed      = false,
+                Disabled    = false,
+                Checked     = false,
+                Border      = false,
+                Cooldown    = nil,
+                AutoCast    = nil,
+                AutoCastable = nil,
+                HotKey      = nil,
+                Count       = false,
+                Name        = nil,
+                Duration    = false,
+                FloatingBG  = nil,
+                Flash       = nil,
             })
+            masqueGroup:ReSkin()
             self._masqueGroup = masqueGroup
         end
     end

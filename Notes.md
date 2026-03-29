@@ -46,6 +46,10 @@
 - In the configuraiton for unit frames, we say "standalone ouf..." can we make this simpler to understand for new players? SOmething that explains that this is where you configure your health bars and party and raid frames
 - When I activate test mode to test say party frames (and others), they dont exactly represent what they look like. For example, they seem to mostly all be colored green, even though they are set to class color, and class color works outside of test mode. We should mimic a real environment as closely as possible (ElvUI can do this). With various random classes, etc.
 
+- Can we add more options to customize the highlights? Especially target highlight. Its very thick and odd, maybe a highlight width, or the option to make it a nice glow instead of a border.
+
+- I am in a group, and the party frames are not displaying.
+
 ### Texts
 
 ### Auras
