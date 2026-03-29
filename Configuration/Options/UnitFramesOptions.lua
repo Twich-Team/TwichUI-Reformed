@@ -89,6 +89,9 @@ local COLOR_DEFAULTS = {
     classBar = { 1, 1, 1, 1 },
     classBarBackground = { 0.05, 0.06, 0.08, 0.9 },
     classBarBorder = { 0.24, 0.26, 0.32, 0.9 },
+    nameText = { 1, 1, 1, 1 },
+    healthText = { 1, 1, 1, 1 },
+    powerText = { 1, 1, 1, 1 },
 }
 
 local ROOT_TEXT_DEFAULTS = {
@@ -696,6 +699,12 @@ local function BuildTextGroup(order, name, basePath, unitKey)
                             true
                         end),
                     }),
+                nameColor = BuildColor(10, "Name Color", "Name text color.", ExtendPath(basePath, "nameColor"),
+                    COLOR_DEFAULTS.nameText, true, { disabled = disabled }),
+                healthColor = BuildColor(11, "Health Color", "Health text color.", ExtendPath(basePath, "healthColor"),
+                    COLOR_DEFAULTS.healthText, true, { disabled = disabled }),
+                powerColor = BuildColor(12, "Power Color", "Power text color.", ExtendPath(basePath, "powerColor"),
+                    COLOR_DEFAULTS.powerText, true, { disabled = disabled }),
             }),
             positions = Widgets.IGroup(3, "Positioning", {
                 namePoint = BuildSelect(1, "Name Point", "Name anchor point.", ExtendPath(basePath, "namePoint"),

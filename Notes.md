@@ -1,6 +1,7 @@
 ## Configuration
 
 - When I open the Debugger or Error Log from within the configuration, please place it so that it is on the left or right side of the configuration, whichever has more space so it looks clean and is easy to get to without having to drag the window off the top of the configuration interface.
+- When I drag the configuration window, it can snap around. For example if i click and drag it might work fine. Then I click and drag again and it feels "offset" from where my mouse is.
 
 ## Onboarding & Wizard
 
@@ -46,9 +47,6 @@
 - When I activate test mode to test say party frames (and others), they dont exactly represent what they look like. For example, they seem to mostly all be colored green, even though they are set to class color, and class color works outside of test mode. We should mimic a real environment as closely as possible (ElvUI can do this). With various random classes, etc.
 
 ### Texts
-
-- When i change the text options on the frames, they dont update. for example, in player, if i set name to custom tag, and enter a custom tag, it doesnt update when hit enter or when i click refresh. In fact, it doesnt seem to work at all, even after a reload.
-- I would like to be able to set colors for texts. For example the name text.
 
 ### Auras
 

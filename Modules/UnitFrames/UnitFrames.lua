@@ -564,6 +564,9 @@ function UnitFrames:GetTextConfigFor(unitKey)
     merged.customNameTag   = scoped.customNameTag
     merged.customHealthTag = scoped.customHealthTag
     merged.customPowerTag  = scoped.customPowerTag
+    merged.nameColor       = scoped.nameColor
+    merged.healthColor     = scoped.healthColor
+    merged.powerColor      = scoped.powerColor
 
     -- Apply per-unit overrides (not for group member types)
     if unitKey ~= "partyMember" and unitKey ~= "raidMember" and unitKey ~= "tankMember" then
@@ -763,7 +766,10 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     container:SetHeight(math_max(1, shown * barH + math_max(0, shown - 1) * spacing))
 end
 
-local function BuildHealthTag(format)
+local function BuildHealthTag(format, customTag)
+    if format == "custom" then
+        return (customTag and customTag ~= "") and customTag or "[perhp<$%]"
+    end
     if format == "current" then
         return "[curhp]"
     end
@@ -776,7 +782,10 @@ local function BuildHealthTag(format)
     return "[perhp<$%]"
 end
 
-local function BuildPowerTag(format)
+local function BuildPowerTag(format, customTag)
+    if format == "custom" then
+        return (customTag and customTag ~= "") and customTag or "[perpp<$%]"
+    end
     if format == "current" then
         return "[curpp]"
     end
@@ -789,7 +798,10 @@ local function BuildPowerTag(format)
     return "[perpp<$%]"
 end
 
-local function BuildNameTag(format)
+local function BuildNameTag(format, customTag)
+    if format == "custom" then
+        return (customTag and customTag ~= "") and customTag or "[name]"
+    end
     if format == "short" then
         return "[name(8)]"
     end
@@ -827,12 +839,30 @@ function UnitFrames:ApplyFrameFonts(frame, unitKey)
     local text = self:GetTextConfigFor(unitKey)
     if frame.Name then
         self:ApplyFontObject(frame.Name, Clamp(text.nameFontSize or 11, 6, 28), text.fontName, text)
+        local nc = text.nameColor
+        if nc then
+            frame.Name:SetTextColor(nc[1] or 1, nc[2] or 1, nc[3] or 1, nc[4] or 1)
+        else
+            frame.Name:SetTextColor(1, 1, 1, 1)
+        end
     end
     if frame.HealthValue then
         self:ApplyFontObject(frame.HealthValue, Clamp(text.healthFontSize or 10, 6, 28), text.fontName, text)
+        local hc = text.healthColor
+        if hc then
+            frame.HealthValue:SetTextColor(hc[1] or 1, hc[2] or 1, hc[3] or 1, hc[4] or 1)
+        else
+            frame.HealthValue:SetTextColor(1, 1, 1, 1)
+        end
     end
     if frame.PowerValue then
         self:ApplyFontObject(frame.PowerValue, Clamp(text.powerFontSize or 9, 6, 28), text.fontName, text)
+        local pc = text.powerColor
+        if pc then
+            frame.PowerValue:SetTextColor(pc[1] or 1, pc[2] or 1, pc[3] or 1, pc[4] or 1)
+        else
+            frame.PowerValue:SetTextColor(1, 1, 1, 1)
+        end
     end
 end
 
