@@ -99,30 +99,20 @@ local function ScanBySpellIds(unit, lookup, onlyMine)
         local slots = { C_UnitAuras.GetAuraSlots(unit, filter) }
         for i = 2, #slots do
             local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
-            -- spellId can be a 'secret' type in combat — pcall the boolean test AND the table lookup.
+            -- spellId can be a 'secret' type in combat — pcall the table lookup.
             local _ok_cfg, _cfg = false, nil
-            if data then
-                _ok_cfg, _cfg = pcall(function()
-                    if data.spellId then return lookup[data.spellId] end
-                end)
+            if data and data.spellId then
+                _ok_cfg, _cfg = pcall(function() return lookup[data.spellId] end)
             end
-            if _ok_cfg and _cfg then
-                -- isPlayerAura is a raw Blizzard bool — may be secret. Use IsAuraFilteredOutByInstanceID.
-                local passPlayer = not onlyMine
-                if not passPlayer and C_UnitAuras.IsAuraFilteredOutByInstanceID then
-                    passPlayer = not C_UnitAuras.IsAuraFilteredOutByInstanceID(
-                        unit, data.auraInstanceID, filter .. "|PLAYER")
-                end
-                if passPlayer then
-                    -- duration / expirationTime / applications may also be secret type — strip via pcall.
-                    local _okd, _dur = pcall(function() return (data.duration or 0) + 0 end)
-                    local _oke, _exp = pcall(function() return (data.expirationTime or 0) + 0 end)
-                    local _oka, _app = pcall(function() return (data.applications or 0) + 0 end)
+            if data and _ok_cfg and _cfg then
+                if not onlyMine or data.isPlayerAura then
+                    local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
                     result[#result + 1] = {
                         icon           = data.icon,
-                        duration       = _okd and type(_dur) == "number" and _dur or 0,
-                        expirationTime = _oke and type(_exp) == "number" and _exp or 0,
-                        applications   = _oka and type(_app) == "number" and _app or 0,
+                        duration       = timing.duration,
+                        expirationTime = timing.expirationTime,
+                        applications   = timing.applications,
+                        durationObject = timing.durationObject,
                     }
                 end
             end
@@ -135,55 +125,30 @@ end
 local function ScanByFilter(unit, source, onlyMine)
     if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then return {} end
     local result = {}
-
-    -- Use Blizzard's own composite filter flags so GetAuraSlots pre-classifies for us.
-    -- This avoids reading ANY tainted boolean/string fields from raw AuraData.
-    local filterStrings
+    local filters
     if source == "HELPFUL" then
-        filterStrings = { "HELPFUL" }
-    elseif source == "HARMFUL" then
-        filterStrings = { "HARMFUL" }
-    elseif source == "DISPELLABLE" then
-        filterStrings = { "HARMFUL|RAID_PLAYER_DISPELLABLE" }
-    elseif source == "DISPELLABLE_OR_BOSS" then
-        -- RAID_PLAYER_DISPELLABLE = dispellable by the active player.
-        -- IMPORTANT = boss/priority debuffs (proxy for isBossAura).
-        filterStrings = { "HARMFUL|RAID_PLAYER_DISPELLABLE", "HARMFUL|IMPORTANT" }
-    else  -- ALL
-        filterStrings = { "HELPFUL", "HARMFUL" }
+        filters = { "HELPFUL" }
+    elseif source == "HARMFUL" or source == "DISPELLABLE" or source == "DISPELLABLE_OR_BOSS" then
+        filters = { "HARMFUL" }
+    else
+        filters = { "HELPFUL", "HARMFUL" }
     end
-
-    local seen = {}  -- deduplicate auraInstanceIDs across multi-filter scans
-    for _, f in ipairs(filterStrings) do
-        -- pcall-wrap GetAuraSlots (best practice per ElvUI/DandersFrames).
-        local ok, slotData = pcall(function() return { C_UnitAuras.GetAuraSlots(unit, f) } end)
-        if ok and slotData then
-            for i = 2, #slotData do
-                local data = C_UnitAuras.GetAuraDataBySlot(unit, slotData[i])
-                if data then
-                    local aid = data.auraInstanceID   -- integer, never a secret type
-                    if aid and not seen[aid] then
-                        seen[aid] = true
-                        -- Use IsAuraFilteredOutByInstanceID for the player-cast check.
-                        -- Its return value is a plain Lua bool (C function result), never secret.
-                        local passPlayer = not onlyMine
-                        if not passPlayer and C_UnitAuras.IsAuraFilteredOutByInstanceID then
-                            local base = f:match("^([^|]+)") or "HARMFUL"
-                            passPlayer = not C_UnitAuras.IsAuraFilteredOutByInstanceID(
-                                unit, aid, base .. "|PLAYER")
-                        end
-                        if passPlayer then
-                            local _okd, _dur = pcall(function() return (data.duration or 0) + 0 end)
-                            local _oke, _exp = pcall(function() return (data.expirationTime or 0) + 0 end)
-                            local _oka, _app = pcall(function() return (data.applications or 0) + 0 end)
-                            result[#result + 1] = {
-                                icon           = data.icon,
-                                duration       = _okd and type(_dur) == "number" and _dur or 0,
-                                expirationTime = _oke and type(_exp) == "number" and _exp or 0,
-                                applications   = _oka and type(_app) == "number" and _app or 0,
-                            }
-                        end
-                    end
+    for _, f in ipairs(filters) do
+        local playerFilter = f .. "|PLAYER"
+        local slots = { C_UnitAuras.GetAuraSlots(unit, f) }
+        for i = 2, #slots do
+            local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
+            if data then
+                local passPlayer = not onlyMine or data.isPlayerAura
+                if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
+                    local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
+                    result[#result + 1] = {
+                        icon           = data.icon,
+                        duration       = timing.duration,
+                        expirationTime = timing.expirationTime,
+                        applications   = timing.applications,
+                        durationObject = timing.durationObject,
+                    }
                 end
             end
         end
@@ -265,21 +230,8 @@ local function CreateIconSlot(parent)
     return slot
 end
 
-local function UpdateDurationText(fs, expiry, duration)
-    if not expiry or expiry <= 0 or not duration or duration <= 0 then
-        fs:SetText(""); return
-    end
-    local rem = expiry - GetTime()
-    if rem <= 0 then
-        fs:SetText(""); return
-    end
-    if rem > 60 then
-        fs:SetText(math_floor(rem / 60) .. "m")
-    elseif rem > 10 then
-        fs:SetText(math_floor(rem))
-    else
-        fs:SetText(format("%.1f", rem))
-    end
+local function UpdateDurationText(fs, expiry, duration, durationObject)
+    UnitFrames:UpdateAuraRemainingText(fs, durationObject, expiry, duration)
 end
 
 -- ============================================================
@@ -300,7 +252,7 @@ local function EnsureIconContainer(frame, idx)
             self2._lastTick = 0
             for _, slot in ipairs(self2._slots) do
                 if slot:IsShown() and slot.dur then
-                    UpdateDurationText(slot.dur, slot._expiry, slot._duration)
+                    UpdateDurationText(slot.dur, slot._expiry, slot._duration, slot._durationObject)
                 end
             end
         end)
@@ -393,7 +345,7 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
         slot.dur:ClearAllPoints()
         slot.dur:SetPoint(durAnchor, slot, durAnchor, daOfs[1], daOfs[2])
         slot.dur:SetFont(_G.STANDARD_TEXT_FONT, durFont, "OUTLINE")
-        UpdateDurationText(slot.dur, data.expirationTime, data.duration)
+        UpdateDurationText(slot.dur, data.expirationTime, data.duration, data.durationObject)
         slot.dur:SetShown(showDur)
 
         local caOfs = ANCHOR_OFS[cntAnchor] or { 0, 0 }
@@ -403,14 +355,16 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
         slot.count:SetText(n > 1 and tostring(n) or "")
         slot.count:SetShown(showCount and n > 1)
 
-        slot._expiry   = data.expirationTime
-        slot._duration = data.duration
+        slot._expiry         = data.expirationTime
+        slot._duration       = data.duration
+        slot._durationObject = data.durationObject
 
         slot:Show()
     end
 
     -- Hide unused slots
     for i = shown + 1, #container._slots do
+        container._slots[i]._durationObject = nil
         container._slots[i]:Hide()
     end
 
@@ -543,7 +497,7 @@ local function UpdateBorderIndicator(frame, idx, cfg, isActive)
         border._chasePixelW = Clamp(cfg.chasePixelW or 6, 1, 24) -- length along edge
         border._chasePixelH = Clamp(cfg.chasePixelH or 2, 1, 12) -- thickness
         border._chaseColor  = type(cfg.chaseColor) == "table" and cfg.chaseColor or nil
-        local count         = Clamp(cfg.chaseCount or 4, 1, 20)
+        local count         = Clamp(cfg.chaseCount or 3, 1, 8)
         border._chaseDots   = border._chaseDots or {}
         for di = #border._chaseDots + 1, count do
             local dt = border:CreateTexture(nil, "OVERLAY")

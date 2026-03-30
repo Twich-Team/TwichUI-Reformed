@@ -27,9 +27,11 @@ local GetSpecializationInfo = _G.GetSpecializationInfo
 local StatusBarInterpolation = (_G.Enum and _G.Enum.StatusBarInterpolation) or _G.StatusBarInterpolation
 local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 local C_UnitAuras = _G.C_UnitAuras
+local issecretvalue = _G.issecretvalue or function() return false end
 local math_min = math.min
 local math_max = math.max
 local math_abs = math.abs
+local StatusBarTimerDirection = (_G.Enum and _G.Enum.StatusBarTimerDirection) or nil
 
 -- Gradient compat: SetGradient (9.0+) or SetGradientAlpha (legacy).
 -- For VERTICAL: arg1/2 = bottom color, arg3/4 = top color.
@@ -48,6 +50,158 @@ end
 local function UFDebug(msg)
     local dc = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
     if dc and dc.Log then dc:Log("unitframes", msg, false) end
+end
+
+local function ReadAuraNumber(value)
+    if value == nil then return nil end
+    if issecretvalue and issecretvalue(value) then return nil end
+    if type(value) == "number" then return value end
+
+    local okTonumber, numericValue = pcall(tonumber, value)
+    if okTonumber and type(numericValue) == "number" then
+        return numericValue
+    end
+
+    local okAdd, coercedValue = pcall(function()
+        return value + 0
+    end)
+    if okAdd and type(coercedValue) == "number" then
+        return coercedValue
+    end
+
+    return nil
+end
+
+local function SafeAuraDebugValue(value, fallback)
+    if value == nil then return fallback or "nil" end
+    if issecretvalue and issecretvalue(value) then return "<secret>" end
+
+    local okString, stringValue = pcall(tostring, value)
+    if okString and type(stringValue) == "string" then
+        return stringValue
+    end
+
+    return fallback or "<unprintable>"
+end
+
+local function BuildAuraTimingDebugKey(contextKey, unit, auraData, reason)
+    return table.concat({
+        SafeAuraDebugValue(contextKey, "unknown"),
+        SafeAuraDebugValue(unit, "nil"),
+        SafeAuraDebugValue(auraData and auraData.auraInstanceID, "nil"),
+        SafeAuraDebugValue(auraData and auraData.spellId, "nil"),
+        SafeAuraDebugValue(reason, "unknown"),
+    }, ":")
+end
+
+function UnitFrames:LogAuraTimingOnce(contextKey, unit, auraData, reason, detail)
+    self._auraTimingDebugSeen = self._auraTimingDebugSeen or {}
+    local key = BuildAuraTimingDebugKey(contextKey, unit, auraData, reason)
+    if self._auraTimingDebugSeen[key] then return end
+    self._auraTimingDebugSeen[key] = true
+
+    UFDebug(string.format(
+        "AuraTiming: context=%s unit=%s spellId=%s auraInstanceID=%s reason=%s %s",
+        SafeAuraDebugValue(contextKey, "unknown"),
+        SafeAuraDebugValue(unit, "nil"),
+        SafeAuraDebugValue(auraData and auraData.spellId, "nil"),
+        SafeAuraDebugValue(auraData and auraData.auraInstanceID, "nil"),
+        SafeAuraDebugValue(reason, "unknown"),
+        SafeAuraDebugValue(detail or "", "")
+    ))
+end
+
+function UnitFrames:ResolveAuraTiming(unit, auraData, contextKey)
+    local timing = {
+        duration = ReadAuraNumber(auraData and auraData.duration) or 0,
+        expirationTime = ReadAuraNumber(auraData and auraData.expirationTime) or 0,
+        applications = ReadAuraNumber(auraData and auraData.applications) or 0,
+        durationObject = nil,
+    }
+
+    if unit and auraData and auraData.auraInstanceID and C_UnitAuras and C_UnitAuras.GetAuraDuration then
+        local okDurationObject, durationObject = pcall(C_UnitAuras.GetAuraDuration, unit, auraData.auraInstanceID)
+        if okDurationObject and durationObject then
+            timing.durationObject = durationObject
+            if timing.duration <= 0 or timing.expirationTime <= 0 then
+                self:LogAuraTimingOnce(
+                    contextKey,
+                    unit,
+                    auraData,
+                    "duration-object-fallback",
+                    string.format("numericDuration=%s numericExpiration=%s", tostring(timing.duration), tostring(timing.expirationTime))
+                )
+            end
+        elseif (timing.duration <= 0 or timing.expirationTime <= 0) and auraData.duration ~= nil then
+            self:LogAuraTimingOnce(
+                contextKey,
+                unit,
+                auraData,
+                "timer-unavailable",
+                string.format("durationType=%s expirationType=%s", type(auraData.duration), type(auraData.expirationTime))
+            )
+        end
+    end
+
+    return timing
+end
+
+function UnitFrames:GetAuraRemainingTime(durationObject, expirationTime, duration)
+    if durationObject and durationObject.GetRemainingDuration then
+        local okRemaining, remaining = pcall(durationObject.GetRemainingDuration, durationObject)
+        if okRemaining and type(remaining) == "number" and not (issecretvalue and issecretvalue(remaining)) then
+            return math_max(0, remaining)
+        end
+    end
+
+    if expirationTime and expirationTime > 0 and duration and duration > 0 then
+        return math_max(0, expirationTime - GetTime())
+    end
+
+    return 0
+end
+
+function UnitFrames:UpdateAuraRemainingText(fs, durationObject, expirationTime, duration)
+    if not fs then return false end
+
+    if durationObject and durationObject.GetRemainingDuration then
+        local okRemaining, remaining = pcall(durationObject.GetRemainingDuration, durationObject)
+        if okRemaining and remaining ~= nil then
+            if issecretvalue and issecretvalue(remaining) then
+                fs:SetFormattedText("%.1f", remaining)
+                return true
+            end
+
+            if type(remaining) == "number" then
+                remaining = math_max(0, remaining)
+                if remaining <= 0 then
+                    fs:SetText("")
+                    return false
+                end
+                fs:SetText(self:FormatAuraRemainingTime(remaining))
+                return true
+            end
+        end
+    end
+
+    local remaining = self:GetAuraRemainingTime(nil, expirationTime, duration)
+    if remaining <= 0 then
+        fs:SetText("")
+        return false
+    end
+
+    fs:SetText(self:FormatAuraRemainingTime(remaining))
+    return true
+end
+
+function UnitFrames:FormatAuraRemainingTime(remaining)
+    if not remaining or remaining <= 0 then return "" end
+    if remaining > 60 then
+        return math.floor(remaining / 60) .. "m"
+    elseif remaining > 10 then
+        return string.format("%d", math.floor(remaining + 0.5))
+    end
+    return string.format("%.1f", remaining)
 end
 
 -- Returns the power bar fill colour for a unit's current power type.
@@ -808,6 +962,20 @@ function UnitFrames:UpdateRoleIcon(frame, unitKey)
     end
 end
 
+local function GetDebugRoleIconState(frame, unitKey)
+    local cfg = UnitFrames:GetRoleIconConfig(unitKey)
+    local unit = ResolveFrameUnit(frame)
+    local role = (unit and UnitExists(unit) and UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)) or ""
+    if role == "" then role = "NONE" end
+
+    return {
+        enabled = cfg.enabled == true,
+        filter = cfg.filter or "all",
+        role = role,
+        shown = frame and frame.TwichRoleIcon and frame.TwichRoleIcon.IsShown and frame.TwichRoleIcon:IsShown() or false,
+    }
+end
+
 -- ---------------------------------------------------------------------------
 -- Extra Info Bar (Task 3)
 -- ---------------------------------------------------------------------------
@@ -1351,21 +1519,17 @@ function UnitFrames:EnsureAuraBarsContainer(frame)
         local stackText = bar:CreateFontString(nil, "OVERLAY")
         stackText:SetJustifyH("CENTER"); bar.stackText = stackText
         bar:SetScript("OnUpdate", function(self2, _)
-            if not self2._duration or self2._duration <= 0 then
-                self2:SetValue(1)
-                if self2.timeText then self2.timeText:SetText("") end
-                return
-            end
-            local remaining = math_max(0, (self2._expiry or 0) - GetTime())
-            self2:SetValue(remaining)
-            if self2.timeText then
-                if remaining > 10 then
-                    self2.timeText:SetText(string.format("%d", math.floor(remaining + 0.5)))
-                elseif remaining > 0 then
-                    self2.timeText:SetText(string.format("%.1f", remaining))
+            local remaining = UnitFrames:GetAuraRemainingTime(nil, self2._expiry, self2._duration)
+            if not self2._usesDurationObjectFill then
+                if remaining > 0 and self2._duration and self2._duration > 0 then
+                    self2:SetValue(remaining)
                 else
-                    self2.timeText:SetText("")
+                    self2:SetValue((self2._duration and self2._duration > 0) and 0 or 1)
                 end
+            end
+
+            if self2.timeText then
+                UnitFrames:UpdateAuraRemainingText(self2.timeText, self2._durationObject, self2._expiry, self2._duration)
             end
         end)
         bar:Hide()
@@ -1382,16 +1546,17 @@ local function CollectAuraData(list, unit, auraFilter, maxCount, onlyMine, filte
     for i = 2, #slots do
         local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
         if data then
+            local timing = UnitFrames:ResolveAuraTiming(unit, data, "bars")
             local d = {}
             for k, v in pairs(data) do d[k] = v end
-            -- Blizzard can return 'secret' typed numbers for duration/expirationTime/applications.
-            -- These blow up on comparison even after tonumber().  Strip via arithmetic pcall.
-            local _okd, _sd  = pcall(function() return (d.duration or 0) + 0 end)
-            d.duration       = _okd and type(_sd) == "number" and _sd or 0
-            local _oke, _se  = pcall(function() return (d.expirationTime or 0) + 0 end)
-            d.expirationTime = _oke and type(_se) == "number" and _se or 0
-            local _oka, _sa  = pcall(function() return (d.applications or 0) + 0 end)
-            d.applications   = _oka and type(_sa) == "number" and _sa or 0
+            d.name           = data.name
+            d.icon           = data.icon
+            d.auraInstanceID = data.auraInstanceID
+            d.spellId        = data.spellId
+            d.duration       = timing.duration
+            d.expirationTime = timing.expirationTime
+            d.applications   = timing.applications
+            d.durationObject = timing.durationObject
             d.isPlayerAura   = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
             d.isHarmfulAura  = auraFilter:find("HARMFUL") ~= nil
             if (not onlyMine or d.isPlayerAura) and AuraMatchesDisplayMode(filterMode, d) then
@@ -1462,8 +1627,30 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             end
             local dur = tonumber(data.duration) or 0
             local exp = tonumber(data.expirationTime) or 0
-            if dur > 0 then
-                bar:SetMinMaxValues(0, dur); bar:SetValue(math_max(0, exp - GetTime()))
+            bar._durationObject = data.durationObject
+            bar._usesDurationObjectFill = false
+            if data.durationObject and bar.SetTimerDuration then
+                local timerDirection = StatusBarTimerDirection and StatusBarTimerDirection.RemainingTime or nil
+                local okTimer = false
+                if timerDirection ~= nil and StatusBarInterpolation and StatusBarInterpolation.Immediate then
+                    okTimer = pcall(bar.SetTimerDuration, bar, data.durationObject, StatusBarInterpolation.Immediate, timerDirection)
+                else
+                    okTimer = pcall(bar.SetTimerDuration, bar, data.durationObject)
+                end
+                if okTimer then
+                    bar._usesDurationObjectFill = true
+                end
+            end
+            if bar._usesDurationObjectFill then
+                bar._duration = dur; bar._expiry = exp
+                if barColor then
+                    bar:SetStatusBarColor(barColor[1] or 0, barColor[2] or 0, barColor[3] or 0, barColor[4] or 0.85)
+                else
+                    bar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 0.85)
+                end
+            elseif dur > 0 then
+                bar:SetMinMaxValues(0, dur)
+                bar:SetValue(math_max(0, exp - GetTime()))
                 bar._duration = dur; bar._expiry = exp
                 if barColor then
                     bar:SetStatusBarColor(barColor[1] or 0, barColor[2] or 0, barColor[3] or 0, barColor[4] or 0.85)
@@ -1473,6 +1660,8 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             else
                 bar:SetMinMaxValues(0, 1); bar:SetValue(1)
                 bar._duration = 0; bar._expiry = 0
+                bar._durationObject = nil
+                bar._usesDurationObjectFill = false
                 if barColor then
                     bar:SetStatusBarColor(barColor[1] or 0, barColor[2] or 0, barColor[3] or 0, barColor[4] or 0.7)
                 else
@@ -1515,14 +1704,14 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
                 bar.timeText:ClearAllPoints()
                 if showTime then
                     bar.timeText:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
-                    bar.timeText:SetShown(dur > 0)
+                    bar.timeText:SetShown(bar._usesDurationObjectFill or dur > 0 or data.durationObject ~= nil)
                 else
                     bar.timeText:SetText(""); bar.timeText:Hide()
                 end
             end
             bar:Show(); shown = shown + 1
         else
-            bar._duration = nil; bar._expiry = nil; bar:Hide()
+            bar._duration = nil; bar._expiry = nil; bar._durationObject = nil; bar._usesDurationObjectFill = false; bar:Hide()
         end
     end
     container:SetWidth(frameWidth)
@@ -4279,15 +4468,15 @@ function UnitFrames:BuildDebugReport()
                     local cs = c.IsShown and c:IsShown() or false
                     local cw = c.GetWidth and math.floor(c:GetWidth() + 0.5) or 0
                     local ch = c.GetHeight and math.floor(c:GetHeight() + 0.5) or 0
-                    local roleIcon = c.TwichRoleIcon
-                    local roleShown = roleIcon and roleIcon.IsShown and roleIcon:IsShown() or false
                     local memberKey = (k == "party" and "partyMember") or (k == "raid" and "raidMember") or
                         (k == "tank" and "tankMember") or nil
-                    local roleCfg = memberKey and self:GetRoleIconConfig(memberKey) or nil
-                    tinsert(lines, string.format("    child%d: unit=%-8s %dx%d shown=%s roleIcon:%s/%s",
+                    local roleState = memberKey and GetDebugRoleIconState(c, memberKey) or nil
+                    tinsert(lines, string.format("    child%d: unit=%-8s %dx%d shown=%s roleIcon:%s/%s role=%s filter=%s",
                         i, cu, cw, ch, tostring(cs),
-                        roleCfg and tostring(roleCfg.enabled) or "n/a",
-                        roleShown and "shown" or "hidden"))
+                        roleState and tostring(roleState.enabled) or "n/a",
+                        roleState and (roleState.shown and "shown" or "hidden") or "n/a",
+                        roleState and roleState.role or "n/a",
+                        roleState and roleState.filter or "n/a"))
                 end
             end
         end
@@ -4409,6 +4598,17 @@ function UnitFrames:OnEnable()
                 db.groups.party.roleIcon.enabled = true
             end
             db._migrated.partyRoleIconDefault = true
+        end
+
+        if not db._migrated.partyRoleIconFilterDefault then
+            db.groups = db.groups or {}
+            db.groups.party = db.groups.party or {}
+            db.groups.party.roleIcon = db.groups.party.roleIcon or {}
+            local filter = db.groups.party.roleIcon.filter
+            if filter == nil or filter == "nonDps" then
+                db.groups.party.roleIcon.filter = "all"
+            end
+            db._migrated.partyRoleIconFilterDefault = true
         end
     end
 
