@@ -7,7 +7,6 @@
 - My brother is testing the addon for me. When he installed it, it did not show him the wizard automatically, i had to have him use /tui wizard reset. It should show the first time a person logs into any character (so if he has two characters, it will show once for character 1 and once for character 2). It should also show when I determine players need to re-run the wizard via some override when I update the addon.
 - The placement of elements via the layout worked great, except the chat sizing was a little strange. it was too large for him. can we more aggressively scale the chat sizing on different resolutions than my own which created the layout?
 - I would like a nice panel to display when players update the addon if i have news or new features to inform them of. This panel should only show once and only when the addon has been updated and only if i provide it information to display to the player. Make it simple for me to add sections to display that information (such as bugs, new features, breaking changes, etc.). This panel should be dismissable by the player, permenantly disableable somewhere in the configuration. Additionally, if its the players first time installing and setting up the addon, this panel will not display until after they complete the wizard process and the final reload finishes.
-- The wizard now needs to disable the ElvUI unit frames module, and we probably need to do this towards the begining of the wizard process
 
 ### Layouts
 
@@ -19,14 +18,7 @@
 
 ## Notifications
 
-- For the satchel watch notification, we have icons for dps, heal, and tank. can we add a selector to allow to choose between blizzard and the twichui variants? Like we have in the unit frame role icons.
-
 ## Datatext
-
-- Increase the maximum allowed texts to six per panel
-- In the configuration, we try to be simple with naming the slots, "Left Slot", "Middle Slot", but then we lose consistency after "Right Slot". Lets lose this and just go with "Slot 1", "Slot 2", where slot one starts on the left.
-- Friends is not showing my friends that are online in the game
-- The currencies datatext capped logic isnt working very well. So there is a season maximum for a currency, say 500. you can collect upt o 500 at that point. but you can also spend them, which doesnt increase the amount you can spend. so say i have 500/500 collected as the max. If i spendd 50, i have 450 on hand, but i have still collected 500/500 and cannot collect more.
 
 ## Mythic+
 
@@ -45,17 +37,13 @@
 ### General
 
 - In the configuraiton for unit frames, we say "standalone ouf..." can we make this simpler to understand for new players? SOmething that explains that this is where you configure your health bars and party and raid frames
-
-notes
-
-- remove overheal from player plate
-- make threat glow less
-- tank frames are covered by boss timers
-- the filter for uselss buffs went away in combat (devotion aura shows on everyone, i get all the nonsense)
+- I believe the Spell Groups section of the Unit Frame configuraiton doesnt do anything anymore, lets remove it
 
 ### Texts
 
 ### Auras
+
+- The aura filtering to remove nonsense buffs from myself is not working in raids still. Devotion aura shows on others, and weekly auras and skyriding auras appear on my frame.w
 
 ## Bugs for tomorrow
 

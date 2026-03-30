@@ -6,6 +6,7 @@
 - Fixed an issue that caused tabs in the debugger to show as different colors
 - Fixed an issue that caused Battle.Net tells to appear in the whisper color
 - Fixed an issue that caused the accent on the chat edit box to not change to the channel color
+- Fixed an issue where dragging the configuration UI might cause it to snap around
 
 #### New
 

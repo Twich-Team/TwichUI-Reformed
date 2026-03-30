@@ -623,6 +623,32 @@ local function SmartPositionNextToConfig(toolPanel)
     end
 end
 
+local function BeginConfigFrameDrag(frame)
+    if not frame or frame.isDragging then
+        return
+    end
+
+    frame.isDragging = true
+    frame:StartMoving()
+end
+
+local function EndConfigFrameDrag(frame)
+    if not frame or not frame.isDragging then
+        return
+    end
+
+    frame.isDragging = nil
+    frame:StopMovingOrSizing()
+
+    local centerX, centerY = frame:GetCenter()
+    if not (centerX and centerY) then
+        return
+    end
+
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", centerX, centerY)
+end
+
 local function GetOrderedEntries(section)
     local ordered = {}
     for key, option in pairs(section and section.args or {}) do
@@ -1256,8 +1282,8 @@ function UI:EnsureFrame()
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:SetScript("OnDragStart", BeginConfigFrameDrag)
+    frame:SetScript("OnDragStop", EndConfigFrameDrag)
     frame:EnableKeyboard(false)
     frame:SetScript("OnKeyDown", function(_, key)
         self:CommitBinding(key)
@@ -1275,10 +1301,10 @@ function UI:EnsureFrame()
     frame.TitleBar:EnableMouse(true)
     frame.TitleBar:RegisterForDrag("LeftButton")
     frame.TitleBar:SetScript("OnDragStart", function()
-        frame:StartMoving()
+        BeginConfigFrameDrag(frame)
     end)
     frame.TitleBar:SetScript("OnDragStop", function()
-        frame:StopMovingOrSizing()
+        EndConfigFrameDrag(frame)
     end)
 
     frame.TitleAccent = frame.TitleBar:CreateTexture(nil, "BORDER")
