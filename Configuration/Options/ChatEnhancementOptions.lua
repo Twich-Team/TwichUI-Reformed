@@ -1234,6 +1234,7 @@ end
 -- ────────────────────────────────────────────────────────────────────────────
 
 local DEFAULT_HISTORY_LIMIT = 350
+local DEFAULT_PERSIST_CHAT_HISTORY = true
 
 function Options:GetChatHistoryLimit()
     return tonumber(self:GetChatEnhancementDB().chatHistoryLimit) or DEFAULT_HISTORY_LIMIT
@@ -1242,6 +1243,24 @@ end
 function Options:SetChatHistoryLimit(info, value)
     local n = math.max(50, math.min(500, tonumber(value) or DEFAULT_HISTORY_LIMIT))
     self:GetChatEnhancementDB().chatHistoryLimit = n
+    self:RefreshChatStylingModule()
+end
+
+function Options:IsChatHistoryPersistenceEnabled()
+    local value = self:GetChatEnhancementDB().persistChatHistory
+    if value == nil then
+        return DEFAULT_PERSIST_CHAT_HISTORY
+    end
+
+    return value == true
+end
+
+function Options:SetChatHistoryPersistenceEnabled(info, value)
+    local db = self:GetChatEnhancementDB()
+    db.persistChatHistory = value == true
+    if value ~= true then
+        db.persistedChatHistory = nil
+    end
     self:RefreshChatStylingModule()
 end
 

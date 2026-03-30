@@ -1395,6 +1395,10 @@ end
 
 function ChatStylingModule:ResolveCustomChannelAbbreviation(label)
     local settings = self.settings
+    if not settings or not settings.abbreviations then
+        return label:match("^(%d+)%.")
+    end
+
     local cleanLabel = label:lower():gsub("^%d+%.%s*", "")
 
     for key, matchers in pairs(CUSTOM_CHANNEL_MATCHERS) do
@@ -1411,6 +1415,10 @@ end
 
 function ChatStylingModule:ResolveChannelAbbreviation(channelRef, label)
     local settings = self.settings
+    if not settings or not settings.abbreviations then
+        return nil
+    end
+
     local mappedKey = CHANNEL_REF_TO_KEY[channelRef]
 
     if mappedKey then
@@ -1425,6 +1433,14 @@ function ChatStylingModule:ResolveChannelAbbreviation(channelRef, label)
 end
 
 function ChatStylingModule:ApplyChannelAbbreviations(message)
+    if type(message) ~= "string" or message == "" then
+        return message
+    end
+
+    if not self.settings or not self.settings.abbreviations then
+        return message
+    end
+
     return message:gsub("(|Hchannel:([^|]+)|h)%[(.-)%](|h)", function(prefix, channelRef, label, suffix)
         local abbreviation = self:ResolveChannelAbbreviation(channelRef, label)
         if not abbreviation or abbreviation == "" then
@@ -1437,6 +1453,10 @@ end
 
 function ChatStylingModule:BuildPrefix()
     local settings = self.settings
+    if not settings then
+        return ""
+    end
+
     local segments = {}
     local accentR, accentG, accentB = self:GetShellAccentColor()
 
@@ -1459,6 +1479,9 @@ function ChatStylingModule:FormatMessage(message)
 
     local formatted = message
     local settings = self.settings
+    if not settings then
+        return formatted
+    end
 
     if settings.abbreviationsEnabled then
         formatted = self:ApplyChannelAbbreviations(formatted)

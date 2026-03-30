@@ -18,9 +18,6 @@
 
 ## Chat
 
-- Battle net whispers are colored the same color as normal whispers, can we make them the battle net tell color
-- Most chat addons retain some chat history and restore it when lost (like after a reload, relog) can we do the same thing
-
 ## Notifications
 
 ## Datatext
@@ -47,6 +44,13 @@
 ### General
 
 - In the configuraiton for unit frames, we say "standalone ouf..." can we make this simpler to understand for new players? SOmething that explains that this is where you configure your health bars and party and raid frames
+
+notes
+
+- remove overheal from player plate
+- make threat glow less
+- tank frames are covered by boss timers
+- the filter for uselss buffs went away in combat (devotion aura shows on everyone, i get all the nonsense)
 
 ### Texts
 

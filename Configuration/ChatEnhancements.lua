@@ -1231,12 +1231,23 @@ local function BuildChatEnhancementConfiguration()
                     get = "GetChatHistoryLimit",
                     set = "SetChatHistoryLimit",
                 },
+                persistHistory = {
+                    type = "toggle",
+                    name = "Persist History Across Reloads",
+                    desc =
+                    "Save recent chat lines from each chat window and restore them after a reload or relog when Blizzard would otherwise drop them.",
+                    order = 3,
+                    width = "full",
+                    handler = Options,
+                    get = "IsChatHistoryPersistenceEnabled",
+                    set = "SetChatHistoryPersistenceEnabled",
+                },
                 addonRedirect = {
                     type = "toggle",
                     name = "Redirect Addon Output",
                     desc =
                     "Route CHAT_MSG_ADDON traffic into a chat window named \"AddOns\". Create that window first via the + tab button, name it AddOns, then enable this.",
-                    order = 3,
+                    order = 4,
                     width = "half",
                     handler = Options,
                     get = "IsAddonRedirectEnabled",

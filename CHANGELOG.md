@@ -4,7 +4,7 @@
 
 - Fixed an issue where the Skyreach seasonal teleport was not available within any teleports menu
 - Fixed an issue that caused tabs in the debugger to show as different colors
-- Fixed an issue that caused Battle.Net tells to appear in the whisper color.
+- Fixed an issue that caused Battle.Net tells to appear in the whisper color
 
 #### New
 

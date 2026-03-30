@@ -322,6 +322,7 @@ function ChatRendererModule:RefreshSettings()
         hideHeader = options:IsHeaderHidden(),
         hideRealm = options:IsRealmHidden(),
         historyLimit = options:GetChatHistoryLimit(),
+        persistHistory = options:IsChatHistoryPersistenceEnabled(),
         messageFadeDelay = options:GetMessageFadeDelay(),
         messageFadeDuration = options:GetMessageFadeDuration(),
         messageFadeMinAlpha = options:GetMessageFadeMinAlpha(),
@@ -1411,6 +1412,155 @@ function ChatRendererModule:CreateEntry(message, r, g, b, accessID)
     return entry
 end
 
+function ChatRendererModule:GetPersistedHistoryStore()
+    local options = GetOptions()
+    if not options or type(options.GetChatEnhancementDB) ~= "function" then
+        return nil
+    end
+
+    local db = options:GetChatEnhancementDB()
+    db.persistedChatHistory = db.persistedChatHistory or {}
+    return db.persistedChatHistory
+end
+
+function ChatRendererModule:GetFrameHistoryKey(frame)
+    if not frame or frame.isTemporary then
+        return nil
+    end
+
+    return frame.GetName and frame:GetName() or nil
+end
+
+function ChatRendererModule:SerializeEntry(entry)
+    if not entry or not IsUsablePlainString(entry.message) or HasSecretValues(entry.message, entry.accessID) then
+        return nil
+    end
+
+    return {
+        accessID = entry.accessID,
+        b = entry.b,
+        g = entry.g,
+        message = entry.message,
+        r = entry.r,
+        speakerKey = entry.speakerKey,
+        timestamp = tonumber(entry.timestamp) or time(),
+    }
+end
+
+function ChatRendererModule:CreateEntryFromSnapshot(snapshot)
+    if type(snapshot) ~= "table" or not IsUsablePlainString(snapshot.message) then
+        return nil
+    end
+
+    local entry = self:CreateEntry(snapshot.message, snapshot.r, snapshot.g, snapshot.b, snapshot.accessID)
+    entry.animateIn = false
+    entry.speakerKey = snapshot.speakerKey or entry.speakerKey
+    entry.timestamp = tonumber(snapshot.timestamp) or time()
+    entry.entryTime = GetTime()
+    return entry
+end
+
+function ChatRendererModule:PersistFrameHistory(frame)
+    if not (self.settings and self.settings.persistHistory) then
+        return
+    end
+
+    local store = self:GetPersistedHistoryStore()
+    local key = self:GetFrameHistoryKey(frame)
+    local renderer = frame and frame.TwichUICustomRenderer or nil
+    if not store or not key or not renderer then
+        return
+    end
+
+    local entries = renderer.entries or {}
+    if #entries == 0 then
+        store[key] = nil
+        return
+    end
+
+    local cap = (self.settings and self.settings.historyLimit) or ROW_CAP
+    local startIndex = mathMax(1, #entries - cap + 1)
+    local snapshots = {}
+    for index = startIndex, #entries do
+        local snapshot = self:SerializeEntry(entries[index])
+        if snapshot then
+            snapshots[#snapshots + 1] = snapshot
+        end
+    end
+
+    store[key] = #snapshots > 0 and snapshots or nil
+end
+
+function ChatRendererModule:PersistAllFrameHistories()
+    if not (self.settings and self.settings.persistHistory) then
+        return
+    end
+
+    for _, frameName in ipairs(CHAT_FRAMES or {}) do
+        local frame = _G[frameName]
+        if frame and frame.TwichUICustomRenderer then
+            self:PersistFrameHistory(frame)
+        end
+    end
+end
+
+function ChatRendererModule:ClearPersistedFrameHistory(frame)
+    local store = self:GetPersistedHistoryStore()
+    local key = self:GetFrameHistoryKey(frame)
+    if store and key then
+        store[key] = nil
+    end
+end
+
+function ChatRendererModule:HasPersistedHistory(frame)
+    local store = self:GetPersistedHistoryStore()
+    local key = self:GetFrameHistoryKey(frame)
+    local snapshots = store and key and store[key] or nil
+    return type(snapshots) == "table" and #snapshots > 0
+end
+
+function ChatRendererModule:RestorePersistedHistory(frame)
+    if not (self.settings and self.settings.persistHistory) then
+        return false
+    end
+
+    local renderer = frame and frame.TwichUICustomRenderer or nil
+    local store = self:GetPersistedHistoryStore()
+    local key = self:GetFrameHistoryKey(frame)
+    local snapshots = store and key and store[key] or nil
+    if not renderer or type(snapshots) ~= "table" or #snapshots == 0 then
+        return false
+    end
+
+    renderer.entries = {}
+    local cap = (self.settings and self.settings.historyLimit) or ROW_CAP
+    local startIndex = mathMax(1, #snapshots - cap + 1)
+    for index = startIndex, #snapshots do
+        local entry = self:CreateEntryFromSnapshot(snapshots[index])
+        if entry then
+            renderer.entries[#renderer.entries + 1] = entry
+        end
+    end
+
+    if #renderer.entries == 0 then
+        return false
+    end
+
+    self:RebuildGrouping(renderer)
+    self:RelayoutRenderer(renderer)
+    self:ScrollToBottom(renderer)
+    if frame and frame.TwichUIOriginalClear then
+        frame.TwichUIOriginalClear(frame)
+    elseif frame and frame.Clear then
+        frame:Clear()
+    end
+    return true
+end
+
+function ChatRendererModule:HandlePersistedHistorySave()
+    self:PersistAllFrameHistories()
+end
+
 function ChatRendererModule:PushMessage(frame, message, r, g, b, accessID)
     local renderer = frame and frame.TwichUICustomRenderer
     if not renderer then
@@ -1806,9 +1956,15 @@ function ChatRendererModule:RefreshFrame(frame)
     renderer:SetShown(self:IsEnabled())
     self:RefreshViewportInsetsForFrame(frame)
 
-    if self:IsEnabled() and #(renderer.entries or {}) == 0 and type(frame.GetNumMessages) == "function" and
-        (tonumber(frame:GetNumMessages()) or 0) > 0 then
-        self:SeedFromChatFrame(frame)
+    if self:IsEnabled() and #(renderer.entries or {}) == 0 then
+        local restored = false
+        if self:HasPersistedHistory(frame) then
+            restored = self:RestorePersistedHistory(frame)
+        end
+
+        if not restored and type(frame.GetNumMessages) == "function" and (tonumber(frame:GetNumMessages()) or 0) > 0 then
+            self:SeedFromChatFrame(frame)
+        end
     end
 end
 
@@ -1848,6 +2004,7 @@ function ChatRendererModule:HookChatFrame(frame)
         frame.Clear = function(chatFrame, ...)
             if ChatRendererModule:IsEnabled() and chatFrame.TwichUICustomRenderer then
                 ChatRendererModule:ClearRenderer(chatFrame)
+                ChatRendererModule:ClearPersistedFrameHistory(chatFrame)
             end
 
             return originalClear(chatFrame, ...)
@@ -1870,9 +2027,16 @@ function ChatRendererModule:HookChatFrame(frame)
         if selfFrame.TwichUICustomRenderer then
             selfFrame.TwichUICustomRenderer:SetShown(ChatRendererModule:IsEnabled())
             ChatRendererModule:RelayoutRenderer(selfFrame.TwichUICustomRenderer)
-            if ChatRendererModule:IsEnabled() and #(selfFrame.TwichUICustomRenderer.entries or {}) == 0 and
-                type(selfFrame.GetNumMessages) == "function" and (tonumber(selfFrame:GetNumMessages()) or 0) > 0 then
-                ChatRendererModule:SeedFromChatFrame(selfFrame)
+            if ChatRendererModule:IsEnabled() and #(selfFrame.TwichUICustomRenderer.entries or {}) == 0 then
+                local restored = false
+                if ChatRendererModule:HasPersistedHistory(selfFrame) then
+                    restored = ChatRendererModule:RestorePersistedHistory(selfFrame)
+                end
+
+                if not restored and type(selfFrame.GetNumMessages) == "function" and
+                    (tonumber(selfFrame:GetNumMessages()) or 0) > 0 then
+                    ChatRendererModule:SeedFromChatFrame(selfFrame)
+                end
             end
         end
     end)
@@ -2045,6 +2209,7 @@ function ChatRendererModule:OnEnable()
     self:RefreshSettings()
     self:InstallFrameHooks()
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "HandleLifecycleRefresh")
+    self:RegisterEvent("PLAYER_LOGOUT", "HandlePersistedHistorySave")
     self:RegisterEvent("UPDATE_CHAT_WINDOWS", "HandleLifecycleRefresh")
     self:RegisterEvent("UPDATE_FLOATING_CHAT_WINDOWS", "HandleLifecycleRefresh")
     for _, eventName in ipairs(CLASS_CACHE_EVENTS) do
@@ -2066,7 +2231,11 @@ function ChatRendererModule:OnEnable()
     for _, frameName in ipairs(CHAT_FRAMES or {}) do
         local frame = _G[frameName]
         if frame and frame.TwichUICustomRenderer and #frame.TwichUICustomRenderer.entries == 0 then
-            self:SeedFromChatFrame(frame)
+            if self:HasPersistedHistory(frame) then
+                self:RestorePersistedHistory(frame)
+            else
+                self:SeedFromChatFrame(frame)
+            end
         end
     end
 
@@ -2074,6 +2243,7 @@ function ChatRendererModule:OnEnable()
 end
 
 function ChatRendererModule:OnDisable()
+    self:PersistAllFrameHistories()
     self:RefreshSettings()
     if self.refreshAllTimer then
         self:CancelTimer(self.refreshAllTimer)
@@ -2081,6 +2251,7 @@ function ChatRendererModule:OnDisable()
     end
     self:CancelLifecycleRefreshes()
     self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+    self:UnregisterEvent("PLAYER_LOGOUT")
     self:UnregisterEvent("UPDATE_CHAT_WINDOWS")
     self:UnregisterEvent("UPDATE_FLOATING_CHAT_WINDOWS")
     for _, eventName in ipairs(CLASS_CACHE_EVENTS) do
