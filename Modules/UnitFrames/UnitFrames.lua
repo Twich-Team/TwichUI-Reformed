@@ -3978,6 +3978,7 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
 
     if not preview.castbar then
         preview.castbar = CreateFrame("StatusBar", nil, UIParent, "BackdropTemplate")
+        preview.castbar:SetClipsChildren(false)
         preview.castbar:SetBackdrop({
             bgFile = "Interface\\Buttons\\WHITE8x8",
             edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -3987,11 +3988,15 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         preview.castbar.bg:SetAllPoints(preview.castbar)
         preview.castbar.bg:SetColorTexture(0.05, 0.06, 0.08, 0.9)
 
-        preview.castbar.icon = preview.castbar:CreateTexture(nil, "ARTWORK")
-        preview.castbar.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        preview.castbar.icon:SetSize(20, 20)
-        preview.castbar.icon:SetTexture(136243)
-        -- Point is set dynamically in the refresh section below.
+        local iconButton = CreateFrame("Button", nil, preview.castbar)
+        iconButton:SetSize(20, 20)
+        iconButton:SetPoint("RIGHT", preview.castbar, "LEFT", -6, 0)
+        local iconTex = iconButton:CreateTexture(nil, "ARTWORK")
+        iconTex:SetAllPoints(iconButton)
+        iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        iconTex:SetTexture(136243)
+        preview.castbar.iconButton = iconButton
+        preview.castbar.icon = iconTex
 
         preview.castbar.spellText = preview.castbar:CreateFontString(nil, "OVERLAY")
         preview.castbar.spellText:SetPoint("LEFT", preview.castbar, "LEFT", 6, 0)
@@ -4005,9 +4010,11 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
     do
         local castSettings = db.castbar or {}
         local layout = self:GetLayoutSettings("castbar")
-        local palette = self:GetPalette("singles")
+        local palette = self:GetPalette("player", "player")
         local text = self:GetTextConfigFor("player")
         local castPreview = preview.castbar
+        local texName = (castSettings.texture and castSettings.texture ~= "") and castSettings.texture
+            or ((db.texture and db.texture ~= "") and db.texture or nil)
         castPreview:ClearAllPoints()
         castPreview:SetPoint(
             layout.point or "BOTTOM",
@@ -4017,12 +4024,17 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
             tonumber(layout.y) or 220
         )
         castPreview:SetSize(Clamp(castSettings.width or 260, 120, 600), Clamp(castSettings.height or 20, 10, 60))
-        castPreview:SetStatusBarTexture(GetThemeTexture())
+        castPreview:SetStatusBarTexture(texName and GetLSMTexture(texName) or GetThemeTexture())
         if castSettings.useCustomColor == true and type(castSettings.color) == "table" then
             castPreview:SetStatusBarColor(castSettings.color[1] or 1, castSettings.color[2] or 1,
                 castSettings.color[3] or 1, castSettings.color[4] or 1)
         else
             castPreview:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 1)
+        end
+        castPreview:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
+        castPreview:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
+        if castPreview.bg then
+            castPreview.bg:SetColorTexture(palette.background[1], palette.background[2], palette.background[3], 0.9)
         end
         castPreview:SetMinMaxValues(0, 100)
         castPreview:SetValue(64)
@@ -4046,22 +4058,26 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
             local showIcon = castSettings.showIcon ~= false
             local iconPos  = castSettings.iconPosition or "outside"
             local iconSide = castSettings.iconSide or "left"
+            if castPreview.iconButton then
+                castPreview.iconButton:SetSize(iconSize, iconSize)
+                castPreview.iconButton:SetShown(showIcon)
+            end
             if castPreview.icon then
-                castPreview.icon:SetSize(iconSize, iconSize)
                 castPreview.icon:SetShown(showIcon)
-                -- Mirror RefreshCastbarLayout icon positioning.
-                castPreview.icon:ClearAllPoints()
+            end
+            if castPreview.iconButton then
+                castPreview.iconButton:ClearAllPoints()
                 if iconPos == "inside" then
                     if iconSide == "right" then
-                        castPreview.icon:SetPoint("RIGHT", castPreview, "RIGHT", -4, 0)
+                        castPreview.iconButton:SetPoint("RIGHT", castPreview, "RIGHT", -4, 0)
                     else
-                        castPreview.icon:SetPoint("LEFT", castPreview, "LEFT", 4, 0)
+                        castPreview.iconButton:SetPoint("LEFT", castPreview, "LEFT", 4, 0)
                     end
                 else
                     if iconSide == "right" then
-                        castPreview.icon:SetPoint("LEFT", castPreview, "RIGHT", 6, 0)
+                        castPreview.iconButton:SetPoint("LEFT", castPreview, "RIGHT", 6, 0)
                     else
-                        castPreview.icon:SetPoint("RIGHT", castPreview, "LEFT", -6, 0)
+                        castPreview.iconButton:SetPoint("RIGHT", castPreview, "LEFT", -6, 0)
                     end
                 end
             end
