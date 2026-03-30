@@ -733,6 +733,118 @@ function UnitFrames:GetLayoutSettings(key)
     return db.layout[key]
 end
 
+local HEAL_PREDICTION_DEFAULTS = {
+    enabled = true,
+    showPlayer = true,
+    showOthers = true,
+    maxOverflow = 1.05,
+    texture = nil,
+    playerColor = { 0.34, 0.84, 0.54, 0.75 },
+    otherColor = { 0.56, 0.92, 0.72, 0.45 },
+}
+
+local function ResolveHealPredictionUnitKey(unitKey)
+    if unitKey and type(unitKey) == "string" and unitKey:match("^boss%d+$") then
+        return "boss"
+    end
+
+    return unitKey
+end
+
+function UnitFrames:GetHealPredictionConfig(unitKey)
+    local resolvedUnitKey = ResolveHealPredictionUnitKey(unitKey)
+    local settings = self:GetUnitSettings(resolvedUnitKey)
+    local cfg = type(settings.healPrediction) == "table" and settings.healPrediction or {}
+
+    return {
+        enabled = cfg.enabled ~= false,
+        showPlayer = cfg.showPlayer ~= false,
+        showOthers = cfg.showOthers ~= false,
+        maxOverflow = Clamp(tonumber(cfg.maxOverflow) or HEAL_PREDICTION_DEFAULTS.maxOverflow, 1, 1.5),
+        texture = cfg.texture,
+        playerColor = CopyColor(type(cfg.playerColor) == "table" and cfg.playerColor or
+        HEAL_PREDICTION_DEFAULTS.playerColor),
+        otherColor = CopyColor(type(cfg.otherColor) == "table" and cfg.otherColor or HEAL_PREDICTION_DEFAULTS.otherColor),
+    }
+end
+
+function UnitFrames:ApplyHealPredictionSettings(frame, unitKey)
+    if not frame or not frame.HealthPrediction then return end
+
+    local cfg = self:GetHealPredictionConfig(unitKey)
+    local db = self:GetDB()
+    local textureName = (cfg.texture and cfg.texture ~= "") and cfg.texture or db.texture
+    local texture = (textureName and textureName ~= "") and GetLSMTexture(textureName) or GetThemeTexture()
+    local health = frame.Health
+    local element = frame.HealthPrediction
+
+    element.incomingHealOverflow = cfg.maxOverflow
+    if element.values and element.values.SetIncomingHealOverflowPercent then
+        element.values:SetIncomingHealOverflowPercent(cfg.maxOverflow)
+    end
+
+    if element.healingPlayer then
+        element.healingPlayer:SetStatusBarTexture(texture)
+        element.healingPlayer:SetStatusBarColor(cfg.playerColor[1] or 1, cfg.playerColor[2] or 1,
+            cfg.playerColor[3] or 1, cfg.playerColor[4] or 1)
+        element.healingPlayer:SetShown(cfg.enabled and cfg.showPlayer)
+    end
+
+    if element.healingOther then
+        element.healingOther:SetStatusBarTexture(texture)
+        element.healingOther:SetStatusBarColor(cfg.otherColor[1] or 1, cfg.otherColor[2] or 1,
+            cfg.otherColor[3] or 1, cfg.otherColor[4] or 1)
+        element.healingOther:SetShown(cfg.enabled and cfg.showOthers)
+    end
+
+    if health then
+        local anchorTexture = health.GetStatusBarTexture and health:GetStatusBarTexture() or nil
+        if element.healingPlayer then
+            element.healingPlayer:ClearAllPoints()
+            element.healingPlayer:SetPoint("TOP", health, "TOP", 0, 0)
+            element.healingPlayer:SetPoint("BOTTOM", health, "BOTTOM", 0, 0)
+            element.healingPlayer:SetPoint("LEFT", anchorTexture or health, anchorTexture and "RIGHT" or "LEFT", 0, 0)
+            element.healingPlayer:SetWidth(math_max(1, health:GetWidth()))
+        end
+        if element.healingOther then
+            local otherAnchor = (element.healingPlayer and element.healingPlayer.GetStatusBarTexture and element.healingPlayer:GetStatusBarTexture()) or
+            anchorTexture or health
+            local otherPoint = (element.healingPlayer and element.healingPlayer.GetStatusBarTexture and element.healingPlayer:GetStatusBarTexture()) and
+                "RIGHT"
+                or (anchorTexture and "RIGHT" or "LEFT")
+            element.healingOther:ClearAllPoints()
+            element.healingOther:SetPoint("TOP", health, "TOP", 0, 0)
+            element.healingOther:SetPoint("BOTTOM", health, "BOTTOM", 0, 0)
+            element.healingOther:SetPoint("LEFT", otherAnchor, otherPoint, 0, 0)
+            element.healingOther:SetWidth(math_max(1, health:GetWidth()))
+        end
+    end
+end
+
+function UnitFrames:ApplyPreviewHealPrediction(frame, unitKey, state)
+    if not frame or not frame.HealthPrediction then return end
+
+    local cfg = self:GetHealPredictionConfig(unitKey)
+    local element = frame.HealthPrediction
+    local maxHealth = math_max(1, tonumber(state and state.healthMax) or 1)
+    local playerHeal = tonumber(state and state.incomingPlayer) or 0
+    local otherHeal = tonumber(state and state.incomingOther) or 0
+
+    self:ApplyHealPredictionSettings(frame, unitKey)
+
+    if element.healingPlayer then
+        element.healingPlayer:SetMinMaxValues(0, maxHealth)
+        element.healingPlayer:SetValue(playerHeal)
+        element.healingPlayer:SetShown(cfg.enabled and cfg.showPlayer and playerHeal > 0)
+    end
+
+    if element.healingOther then
+        element.healingOther:SetMinMaxValues(0, maxHealth)
+        element.healingOther:SetValue(otherHeal)
+        element.healingOther:SetShown(cfg.enabled and cfg.showOthers and otherHeal > 0)
+    end
+end
+
 function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
     local db = self:GetDB()
     db.colors = db.colors or {}
@@ -2718,6 +2830,10 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
 
     self:ApplyStatusBarTexture(frame)
     self:ApplyFrameColors(frame, unitKey)
+    self:ApplyHealPredictionSettings(frame, unitKey)
+    if frame.HealthPrediction and frame.HealthPrediction.ForceUpdate and frame.unit then
+        frame.HealthPrediction:ForceUpdate()
+    end
     self:ApplyFrameFonts(frame, unitKey)
     self:ApplyTextTags(frame, unitKey)
     self:ApplyTextPositions(frame, unitKey)
@@ -2813,6 +2929,10 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
             if child.Health and memberUnitKey then
                 self:ApplyFrameColors(child, memberUnitKey)
                 self:ApplyStatusBarTexture(child)
+                self:ApplyHealPredictionSettings(child, memberUnitKey)
+                if child.HealthPrediction and child.HealthPrediction.ForceUpdate then
+                    child.HealthPrediction:ForceUpdate()
+                end
                 self:ApplyFrameFonts(child, memberUnitKey)
                 self:ApplyTextTags(child, memberUnitKey)
                 self:ApplyTextPositions(child, memberUnitKey)
@@ -3689,6 +3809,8 @@ local function BuildPreviewUnitState(unitKey, label, mockClass)
         castIcon = PREVIEW_CAST_ICONS[((index - 1) % #PREVIEW_CAST_ICONS) + 1],
         castDuration = castDuration,
         castProgress = castProgress,
+        incomingPlayer = math.floor(healthMax * 0.12),
+        incomingOther = math.floor(healthMax * 0.07),
         classPowerMax = unitKey == "player" and 5 or nil,
         classPowerValue = unitKey == "player" and 3 or nil,
         infoTexts = {
@@ -3876,6 +3998,7 @@ function UnitFrames:ApplyPreviewFrameData(frame, unitKey, label, mockClass)
     if frame.Power then
         self:ApplySmoothBarValue(frame.Power, state.powerCur, state.powerMax)
     end
+    self:ApplyPreviewHealPrediction(frame, unitKey, state)
 
     local textCfg = self:GetTextConfigFor(unitKey)
     if frame.Name then
@@ -4446,6 +4569,33 @@ function UnitFrames:StyleFrame(frame)
         healthBar:SetStatusBarColor(palette.health[1], palette.health[2], palette.health[3], 1)
     end
     frame.Health = health
+
+    local healingPlayer = CreateFrame("StatusBar", nil, health)
+    healingPlayer:SetFrameLevel(health:GetFrameLevel() + 1)
+    healingPlayer:SetMinMaxValues(0, 1)
+    healingPlayer:SetValue(0)
+    healingPlayer:SetPoint("TOP", health, "TOP", 0, 0)
+    healingPlayer:SetPoint("BOTTOM", health, "BOTTOM", 0, 0)
+    healingPlayer:SetPoint("LEFT", health, "LEFT", 0, 0)
+    healingPlayer:SetWidth(math_max(1, health:GetWidth()))
+
+    local healingOther = CreateFrame("StatusBar", nil, health)
+    healingOther:SetFrameLevel(health:GetFrameLevel() + 1)
+    healingOther:SetMinMaxValues(0, 1)
+    healingOther:SetValue(0)
+    healingOther:SetPoint("TOP", health, "TOP", 0, 0)
+    healingOther:SetPoint("BOTTOM", health, "BOTTOM", 0, 0)
+    healingOther:SetPoint("LEFT", health, "LEFT", 0, 0)
+    healingOther:SetWidth(math_max(1, health:GetWidth()))
+
+    frame.HealthPrediction = {
+        healingPlayer = healingPlayer,
+        healingOther = healingOther,
+        incomingHealOverflow = HEAL_PREDICTION_DEFAULTS.maxOverflow,
+        PostUpdate = function(element)
+            UnitFrames:ApplyHealPredictionSettings(element.__owner, capturedUnitKey)
+        end,
+    }
 
     local power = CreateFrame("StatusBar", nil, frame)
     power:SetPoint("TOPLEFT", health, "BOTTOMLEFT", 0, -1)

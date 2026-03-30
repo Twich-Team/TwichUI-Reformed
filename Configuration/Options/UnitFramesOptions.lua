@@ -294,6 +294,16 @@ local PLAYER_CASTBAR_DEFAULTS = {
     useCustomBackground = false,
 }
 
+local HEAL_PREDICTION_DEFAULTS = {
+    enabled = true,
+    showPlayer = true,
+    showOthers = true,
+    maxOverflow = 1.05,
+    texture = nil,
+    playerColor = { 0.34, 0.84, 0.54, 0.75 },
+    otherColor = { 0.56, 0.92, 0.72, 0.45 },
+}
+
 local EMBEDDED_CASTBAR_DEFAULTS = {
     target = { enabled = true, detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
     party  = { enabled = true, detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
@@ -1031,7 +1041,7 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             ExtendPath(basePath, "buffBarColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
                 disabled = function()
                     return BarModeDisabled()() or
-                    GetPathValue(ExtendPath(basePath, "buffUseThemeAccentFill"), false) == true
+                        GetPathValue(ExtendPath(basePath, "buffUseThemeAccentFill"), false) == true
                 end,
             }),
         buffBarBackground = BuildColor(7, "Background", "Optional background color override used only for buff bars.",
@@ -1078,7 +1088,7 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             ExtendPath(basePath, "debuffBarColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
                 disabled = function()
                     return BarModeDisabled()() or
-                    GetPathValue(ExtendPath(basePath, "debuffUseThemeAccentFill"), false) == true
+                        GetPathValue(ExtendPath(basePath, "debuffUseThemeAccentFill"), false) == true
                 end,
             }),
         debuffBarBackground = BuildColor(7, "Background", "Optional background color override used only for debuff bars.",
@@ -1680,6 +1690,69 @@ local function BuildInfoBarTab(order, basePath)
     }
 end
 
+local function BuildHealPredictionGroup(order, basePath)
+    local disabled = ModuleDisabled()
+    local function DisabledWhenOff(extra)
+        return ModuleDisabled(function()
+            if GetPathValue(ExtendPath(basePath, "enabled"), HEAL_PREDICTION_DEFAULTS.enabled) ~= true then
+                return true
+            end
+
+            if type(extra) == "function" then
+                return extra() == true
+            end
+
+            return false
+        end)
+    end
+
+    return Widgets.IGroup(order, "Heal Prediction", {
+        enabled = BuildToggle(1, "Enable",
+            "Show incoming heal prediction visually on the health bar.",
+            ExtendPath(basePath, "enabled"), HEAL_PREDICTION_DEFAULTS.enabled, {
+                disabled = disabled,
+                refreshConfig = true,
+            }),
+        showPlayer = BuildToggle(2, "Show Your Heals",
+            "Display the portion of incoming healing cast by you.",
+            ExtendPath(basePath, "showPlayer"), HEAL_PREDICTION_DEFAULTS.showPlayer, {
+                disabled = DisabledWhenOff(),
+                refreshConfig = true,
+            }),
+        showOthers = BuildToggle(3, "Show Other Heals",
+            "Display the portion of incoming healing from other players.",
+            ExtendPath(basePath, "showOthers"), HEAL_PREDICTION_DEFAULTS.showOthers, {
+                disabled = DisabledWhenOff(),
+                refreshConfig = true,
+            }),
+        maxOverflow = BuildRange(4, "Max Overflow",
+            "How far predicted healing may extend past full health. 1.00 clamps to the frame width.",
+            ExtendPath(basePath, "maxOverflow"), HEAL_PREDICTION_DEFAULTS.maxOverflow, 1, 1.5, 0.01, {
+                disabled = DisabledWhenOff(),
+                refreshConfig = true,
+            }),
+        texture = BuildTextureSelect(5, "Texture",
+            "Optional texture override for heal prediction bars.",
+            ExtendPath(basePath, "texture"), "Use Health Texture", {
+                disabled = DisabledWhenOff(),
+            }),
+        playerColor = BuildColor(6, "Your Heals Color",
+            "Color for incoming heals cast by you.",
+            ExtendPath(basePath, "playerColor"), HEAL_PREDICTION_DEFAULTS.playerColor, true, {
+                disabled = DisabledWhenOff(function()
+                    return GetPathValue(ExtendPath(basePath, "showPlayer"), HEAL_PREDICTION_DEFAULTS.showPlayer) ~= true
+                end),
+            }),
+        otherColor = BuildColor(7, "Other Heals Color",
+            "Color for incoming heals from other players.",
+            ExtendPath(basePath, "otherColor"), HEAL_PREDICTION_DEFAULTS.otherColor, true, {
+                disabled = DisabledWhenOff(function()
+                    return GetPathValue(ExtendPath(basePath, "showOthers"), HEAL_PREDICTION_DEFAULTS.showOthers) ~= true
+                end),
+            }),
+    })
+end
+
 local function BuildSingleUnitTab(unitKey, label)
     local defaults = SINGLE_UNIT_DEFAULTS[unitKey]
     local layoutDefaults = SINGLE_LAYOUT_DEFAULTS[unitKey]
@@ -1769,7 +1842,8 @@ local function BuildSingleUnitTab(unitKey, label)
                                 end),
                             }),
                     }),
-                    highlights = Widgets.IGroup(3, "Highlights", {
+                    healPrediction = BuildHealPredictionGroup(3, ExtendPath(basePath, "healPrediction")),
+                    highlights = Widgets.IGroup(4, "Highlights", {
                         showTarget = BuildToggle(1, "Target Highlight",
                             "Show the target highlight on this frame. Disable to hide it even when globally on.",
                             ExtendPath(basePath, "highlights", "showTarget"), true, { disabled = disabled }),
@@ -1777,7 +1851,7 @@ local function BuildSingleUnitTab(unitKey, label)
                             "Show the mouseover highlight on this frame. Disable to hide it even when globally on.",
                             ExtendPath(basePath, "highlights", "showMouseover"), true, { disabled = disabled }),
                     }),
-                    roleIcon = BuildRoleIconGroup(4, ExtendPath(basePath, "roleIcon"), false),
+                    roleIcon = BuildRoleIconGroup(5, ExtendPath(basePath, "roleIcon"), false),
                     copyFrom = BuildCopyFromSingle(unitKey),
                 },
             },
@@ -1985,9 +2059,10 @@ local function BuildGroupTab(groupKey, label)
             "Show the mouseover highlight on group member frames. Disable to hide it even when globally on.",
             { "units", memberKey, "highlights", "showMouseover" }, true, { disabled = disabled }),
     })
+    frameTab.args.healPrediction = BuildHealPredictionGroup(4, { "units", memberKey, "healPrediction" })
     -- Healer-only power bar is meaningful for party and raid — not for tank
     if groupKey == "party" or groupKey == "raid" then
-        frameTab.args.power = Widgets.IGroup(4, "Power Bar", {
+        frameTab.args.power = Widgets.IGroup(5, "Power Bar", {
             healerOnlyPower = BuildToggle(1, "Healer Only",
                 "When enabled, only show the power bar for frames whose unit has the Healer role assigned. All other roles will have the power bar hidden. Enabled by default — disable to show power for all roles.",
                 ExtendPath(basePath, "healerOnlyPower"), true, {
@@ -2065,6 +2140,7 @@ local function BuildBossTab()
                             "Show the mouseover highlight on boss frames. Disable to hide it even when globally on.",
                             { "units", "boss", "highlights", "showMouseover" }, true, { disabled = disabled }),
                     }),
+                    healPrediction = BuildHealPredictionGroup(3, { "units", "boss", "healPrediction" }),
                 },
             },
             layout = BuildLayoutGroup(2, "Layout", "boss", GROUP_LAYOUT_DEFAULTS.boss, {
