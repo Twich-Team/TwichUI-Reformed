@@ -1159,6 +1159,7 @@ function UnitFrames:GetRoleIconConfig(unitKey)
         enabled  = get("enabled", scope == "party"),
         corner   = get("corner", "TOPRIGHT"),
         size     = get("size", 18),
+        alpha    = get("alpha", 1),
         insetX   = get("insetX", 2),
         insetY   = get("insetY", 2),
         filter   = get("filter", "all"),
@@ -1401,6 +1402,7 @@ function UnitFrames:ApplyRoleIconSettings(frame, unitKey)
 
     local sz = Clamp(cfg.size, 8, 40)
     icon:SetSize(sz, sz)
+    icon:SetAlpha(Clamp(cfg.alpha or 1, 0, 1))
     icon:ClearAllPoints()
     icon:SetDrawLayer("OVERLAY", 7)
 
@@ -3358,6 +3360,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
                 self:ApplyFrameFonts(child, memberUnitKey)
                 self:ApplyTextTags(child, memberUnitKey)
                 self:ApplyTextPositions(child, memberUnitKey)
+                self:ApplyUnitCastbarSettings(child, memberUnitKey)
                 self:ApplyRoleIconSettings(child, memberUnitKey)
                 self:ApplyStateIndicatorSettings(child, memberUnitKey, "combatIndicator")
                 self:ApplyStateIndicatorSettings(child, memberUnitKey, "restingIndicator")

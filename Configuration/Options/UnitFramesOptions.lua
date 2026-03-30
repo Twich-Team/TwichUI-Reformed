@@ -1649,9 +1649,11 @@ local function BuildRoleIconGroup(order, basePath, defaultEnabled)
             ExtendPath(basePath, "corner"), "TOPRIGHT", ROLE_ICON_CORNER_VALUES, { disabled = isRoleOff }),
         size = BuildRange(5, "Size", "Role icon size in pixels.",
             ExtendPath(basePath, "size"), 18, 8, 40, 1, { disabled = isRoleOff }),
-        insetX = BuildRange(6, "X Inset", "Horizontal inset from the corner edge.",
+        alpha = BuildRange(6, "Alpha", "Opacity of the role icon.",
+            ExtendPath(basePath, "alpha"), 1, 0, 1, 0.01, { disabled = isRoleOff }),
+        insetX = BuildRange(7, "X Inset", "Horizontal inset from the corner edge.",
             ExtendPath(basePath, "insetX"), 2, 0, 20, 1, { disabled = isRoleOff }),
-        insetY = BuildRange(7, "Y Inset", "Vertical inset from the corner edge.",
+        insetY = BuildRange(8, "Y Inset", "Vertical inset from the corner edge.",
             ExtendPath(basePath, "insetY"), 2, 0, 20, 1, { disabled = isRoleOff }),
     })
 end
@@ -1666,8 +1668,8 @@ local function BuildStateIndicatorGroup(order, label, basePath, indicatorKey)
     return Widgets.IGroup(order, label, {
         enabled = BuildToggle(1, "Show " .. label,
             label == "Resting Indicator"
-                and "Display the resting icon on this frame when the represented unit is the player and resting."
-                or "Display the combat icon on this frame when the represented unit is in combat.",
+            and "Display the resting icon on this frame when the represented unit is the player and resting."
+            or "Display the combat icon on this frame when the represented unit is in combat.",
             ExtendPath(basePath, "enabled"), false, { disabled = disabled, refreshConfig = true }),
         iconType = BuildSelect(2, "Icon Type",
             "Choose which icon art set to use for this indicator.",
@@ -2190,20 +2192,20 @@ local function BuildGroupTab(groupKey, label)
         order = 1,
         childGroups = "tab",
         args = {
-            frame    = frameTab,
-            layout   = BuildLayoutGroup(2, "Layout", groupKey, layoutDefaults, {
+            frame            = frameTab,
+            layout           = BuildLayoutGroup(2, "Layout", groupKey, layoutDefaults, {
                 disabled = disabled,
             }),
-            text     = BuildTextGroup(3, "Text", textPath, groupKey .. "Member"),
-            auras    = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
-            watchers = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
-            colors   = colorsTab,
-            roleIcon = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"), groupKey == "party"),
-            combatIndicator = BuildStateIndicatorGroup(7, "Combat Indicator",
+            text             = BuildTextGroup(3, "Text", textPath, groupKey .. "Member"),
+            auras            = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
+            watchers         = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
+            colors           = colorsTab,
+            roleIcon         = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"), groupKey == "party"),
+            combatIndicator  = BuildStateIndicatorGroup(7, "Combat Indicator",
                 ExtendPath(basePath, "combatIndicator"), "combatIndicator"),
             restingIndicator = BuildStateIndicatorGroup(8, "Resting Indicator",
                 ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
-            infoBar  = BuildInfoBarTab(9, ExtendPath(basePath, "infoBar")),
+            infoBar          = BuildInfoBarTab(9, ExtendPath(basePath, "infoBar")),
         },
     }
 end

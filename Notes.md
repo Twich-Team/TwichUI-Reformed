@@ -65,11 +65,8 @@
 
 ## Bugs for tomorrow
 
-- Need in combat and resting indicators (use AI to make icons)
-
-bugs:
-1x [ADDON_ACTION_BLOCKED] AddOn 'TwichUI_Reformed' tried to call the protected function 'TwichUIStandaloneDataText_panel3:SetFrameStrata()'.
-[!BugGrabber/BugGrabber.lua]:540: in function '?'
-[!BugGrabber/BugGrabber.lua]:524: in function <!BugGrabber/BugGrabber.lua:524>
-[C]: in function 'SetFrameStrata'
-[TwichUI_Reformed/Modules/Datatexts/StandalonePanels.lua]:381: in function <...chUI_Reformed/Modules/Datatexts/StandalonePanels.lua:375>
+- Alright so we are going to be adding unit frames to our wizard and layout.
+- We need to detect if ElvUI is installed, and if so, have the player choose between TwichUI and ElvUI unit frames. If they choose TwichUI, we need to disable ElvUI unit frames and reload before continuing.
+- After they choose a layout, I want them to be provided with some extra customization options:
+  - Show a frame for myself in party
+  - Show cast bars for party members
