@@ -2126,7 +2126,8 @@ local function BuildEmbeddedCastbarTab(scopeKey, label)
                 backgroundColor = BuildColor(14, "Background Color", "Custom castbar background color.",
                     ExtendPath(path, "backgroundColor"), COLOR_DEFAULTS.background, true, {
                         disabled = ModuleDisabled(function()
-                            return GetPathValue(ExtendPath(path, "useCustomBackground"), defaults.useCustomBackground or false) ~= true
+                            return GetPathValue(ExtendPath(path, "useCustomBackground"),
+                                defaults.useCustomBackground or false) ~= true
                         end),
                     }),
                 iconPosition = BuildSelect(15, "Icon Position",

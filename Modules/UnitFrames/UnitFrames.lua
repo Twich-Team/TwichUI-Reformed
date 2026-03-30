@@ -2305,16 +2305,16 @@ end
 
 function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
     if not frame.Castbar then return end
-    local db       = self:GetDB()
-    local scope    = ResolveCastbarScopeByUnitKey(unitKey)
-    local cfg      = (db.castbars and db.castbars[scope]) or {}
-    local enabled  = cfg.enabled ~= false
-    local detached = cfg.detached == true
-    local barH     = Clamp(cfg.height or 12, 4, 40)
-    local palette  = self:GetPalette(unitKey, frame.unit)
-    local text     = self:GetTextConfigFor(unitKey)
-    local texName  = (db.texture and db.texture ~= "") and db.texture or nil
-    local texture  = texName and GetLSMTexture(texName) or GetThemeTexture()
+    local db              = self:GetDB()
+    local scope           = ResolveCastbarScopeByUnitKey(unitKey)
+    local cfg             = (db.castbars and db.castbars[scope]) or {}
+    local enabled         = cfg.enabled ~= false
+    local detached        = cfg.detached == true
+    local barH            = Clamp(cfg.height or 12, 4, 40)
+    local palette         = self:GetPalette(unitKey, frame.unit)
+    local text            = self:GetTextConfigFor(unitKey)
+    local texName         = (db.texture and db.texture ~= "") and db.texture or nil
+    local texture         = texName and GetLSMTexture(texName) or GetThemeTexture()
     local backgroundColor = palette.background
     local backgroundAlpha = 0.9
 
