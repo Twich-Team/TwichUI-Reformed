@@ -2076,8 +2076,8 @@ local function BuildGroupTab(groupKey, label)
         or ((groupKey == "party" or groupKey == "raid") and "Row Spacing" or "Y Spacing")
     local rowSpacingDesc = usesGrowthDirection and "Gap between members when growing up or down."
         or ((groupKey == "party" or groupKey == "raid")
-        and "Vertical spacing between party or raid rows."
-        or "Vertical spacing between members.")
+            and "Vertical spacing between party or raid rows."
+            or "Vertical spacing between members.")
     local xSpacingDesc = usesGrowthDirection
         and "Gap between members when growing left or right."
         or "Horizontal spacing between members."
@@ -2101,9 +2101,9 @@ local function BuildGroupTab(groupKey, label)
                         disabled = disabled,
                     }),
                 point = BuildSelect(4, growthName, growthDesc, growthPath, growthDefault, growthValues, {
-                        disabled = disabled,
-                        refreshConfig = true,
-                    }),
+                    disabled = disabled,
+                    refreshConfig = true,
+                }),
                 xOffset = BuildRange(5, "X Spacing", xSpacingDesc,
                     ExtendPath(basePath, "xOffset"), defaults.xOffset or 0, -120, 120, 1, {
                         disabled = disabled,
