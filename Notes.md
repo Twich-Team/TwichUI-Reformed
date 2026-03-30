@@ -1,6 +1,5 @@
 ## Configuration
 
-- When I open the Debugger or Error Log from within the configuration, please place it so that it is on the left or right side of the configuration, whichever has more space so it looks clean and is easy to get to without having to drag the window off the top of the configuration interface.
 - When I drag the configuration window, it can snap around. For example if i click and drag it might work fine. Then I click and drag again and it feels "offset" from where my mouse is.
 - PLease remove the legacy Raid Frame Tweaks from the configuraiton UI and the functional code, make sure it doesnt effect our new unit frames and aura system.
 
@@ -20,6 +19,7 @@
 ## Chat
 
 - Battle net whispers are colored the same color as normal whispers, can we make them the battle net tell color
+- Most chat addons retain some chat history and restore it when lost (like after a reload, relog) can we do the same thing
 
 ## Notifications
 
@@ -47,17 +47,6 @@
 ### General
 
 - In the configuraiton for unit frames, we say "standalone ouf..." can we make this simpler to understand for new players? SOmething that explains that this is where you configure your health bars and party and raid frames
-
-- When I target myself to test target of target, there is a black bar at the bottom, im not sure what it is. I attached an image of it. I have power bar disabled for this frame.
-- I need to be able to place the dungeon role icon on the frames (like tank, dps, healer). I'd also like to only show it based on role (like only show healers and tanks).
-- Can we add an optional area like ElvUI's extra info bar, which basically extends the unitframe out vertically to include a new row at the bottom that we can put custom texts with custom textures and what not. defaults off. allow custom texts using ouf tags, allow choice of font, font size, font color (including class color).
-- Add the ability to enable/disable masque support for the castbar icons, default it is disabled.
-
-- When i choose inside bar for target of target icon type cast bar,it moves the text to the right like the icon is there but its not there.
-- show only healer power bar for party does not change the frames until after reload, then it just shows an empty bar there isntead of resizing the healthbar to fit.
-- The shortened name tag doesnt shorten the name (like using [name(4)] will still return the full name even if its longer than 4 characters)
-- Does overheal and incoming heals still exist? Can we add that capability?
-- The only mine check does not work on auras when configured in the aura designer
 
 ### Texts
 

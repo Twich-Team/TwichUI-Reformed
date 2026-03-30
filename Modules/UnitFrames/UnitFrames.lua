@@ -1323,6 +1323,7 @@ end
 -- Collapses height to 0 for non-healers so health bar fills the whole frame.
 function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
     local healerOnly = false
+    local effectiveShowPower = self:GetEffectiveShowPower(unitKey)
     if unitKey == "partyMember" then
         -- Default to healer-only (nil means never explicitly turned off → treat as true).
         -- Only disable when the user has explicitly stored false.
@@ -1334,9 +1335,9 @@ function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
     -- Determine desired state first, then bail early if nothing changed.
     -- This is called from PostUpdate/PostUpdateColor (every power tick), so avoiding
     -- redundant SetHeight/SetAlpha/Show/Hide calls is critical for performance.
-    local shouldCollapse = false
+    local shouldCollapse = effectiveShowPower ~= true
     local role = nil
-    if healerOnly and unit and UnitGroupRolesAssigned then
+    if not shouldCollapse and healerOnly and unit and UnitGroupRolesAssigned then
         role = UnitGroupRolesAssigned(unit) or ""
         shouldCollapse = (role ~= "HEALER")
     end
@@ -1345,8 +1346,8 @@ function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
     powerBar._roleCollapsed = shouldCollapse
 
     if shouldCollapse then
-        UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=%s → COLLAPSE", tostring(unitKey),
-            tostring(role)))
+        UFDebug(string.format("UpdatePowerBarForRole: key=%s showPower=%s healerOnly=%s role=%s → COLLAPSE",
+            tostring(unitKey), tostring(effectiveShowPower == true), tostring(healerOnly), tostring(role)))
         powerBar:SetHeight(0)
         powerBar:SetAlpha(0)
         if powerBar._ownerFrame and powerBar._detached ~= true and powerBar._ownerFrame.Health then
@@ -1354,6 +1355,7 @@ function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
             health:ClearAllPoints()
             health:SetAllPoints(powerBar._ownerFrame)
         end
+        powerBar:Hide()
         if powerBar.border then
             powerBar.border:SetAlpha(0)
             powerBar.border:Hide()
@@ -1369,6 +1371,7 @@ function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
         end
         powerBar:SetHeight(restoreH)
         powerBar:SetAlpha(1)
+        powerBar:Show()
         if powerBar._ownerFrame and powerBar._detached ~= true and powerBar._ownerFrame.Health then
             local health = powerBar._ownerFrame.Health
             health:ClearAllPoints()
@@ -5227,6 +5230,72 @@ function UnitFrames:ApplyBlizzardPlayerCastbarVisibility()
     end
 end
 
+function UnitFrames:ShouldHideBlizzardRaidFrames()
+    local db = self.GetDB and self:GetDB() or nil
+    if not db or db.enabled == false then
+        return false
+    end
+
+    local groups = db.groups or {}
+    local raidEnabled = not (type(groups.raid) == "table" and groups.raid.enabled == false)
+    local tankEnabled = not (type(groups.tank) == "table" and groups.tank.enabled == false)
+
+    return raidEnabled or tankEnabled
+end
+
+function UnitFrames:ApplyBlizzardRaidFrameVisibility()
+    local suppress = self:ShouldHideBlizzardRaidFrames()
+    local targets = {
+        _G.CompactPartyFrame,
+        _G.CompactRaidFrameContainer,
+        _G.CompactRaidFrameManager,
+        _G.CompactRaidFrameManagerContainer,
+        _G.CompactRaidFrameManagerDisplayFrame,
+    }
+
+    local function ApplySuppression(frame)
+        if not frame then
+            return
+        end
+
+        frame._twichUIOriginalParent = frame._twichUIOriginalParent or frame:GetParent() or UIParent
+        if not frame._twichUIRaidHooked then
+            frame:HookScript("OnShow", function(selfFrame)
+                if selfFrame._twichUISuppressRaidFrame == true then
+                    selfFrame:Hide()
+                end
+            end)
+            frame._twichUIRaidHooked = true
+        end
+
+        frame._twichUISuppressRaidFrame = suppress
+        if suppress then
+            if frame.IgnoreFramePositionManager ~= true then
+                frame.IgnoreFramePositionManager = true
+            end
+            frame:Hide()
+        else
+            if frame:GetParent() ~= frame._twichUIOriginalParent then
+                frame:SetParent(frame._twichUIOriginalParent)
+            end
+            if frame.IgnoreFramePositionManager == true then
+                frame.IgnoreFramePositionManager = nil
+            end
+            frame._twichUISuppressRaidFrame = nil
+        end
+    end
+
+    for _, frame in ipairs(targets) do
+        ApplySuppression(frame)
+    end
+end
+
+function UnitFrames:OnAddonLoaded(_, addonName)
+    if addonName == "Blizzard_CompactRaidFrames" or addonName == "Blizzard_EditMode" then
+        self:ApplyBlizzardRaidFrameVisibility()
+    end
+end
+
 function UnitFrames:RefreshAllFrames()
     if InCombatLockdown() then
         self._queuedRefresh = true
@@ -5234,6 +5303,7 @@ function UnitFrames:RefreshAllFrames()
     end
 
     self:ApplyBlizzardPlayerCastbarVisibility()
+    self:ApplyBlizzardRaidFrameVisibility()
 
     for unitKey, frame in pairs(self.frames) do
         if unitKey ~= "castbar" then
@@ -6244,6 +6314,7 @@ function UnitFrames:OnEnable()
     end
 
     self:ApplyBlizzardPlayerCastbarVisibility()
+    self:ApplyBlizzardRaidFrameVisibility()
 
     self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
     self:RegisterMessage("TWICH_CONFIG_RESTORED", "OnConfigRestored")
@@ -6269,6 +6340,7 @@ function UnitFrames:OnEnable()
     self:RegisterEvent("PLAYER_ROLES_ASSIGNED", "RefreshAllFrames")
     self:RegisterEvent("ROLE_CHANGED_INFORM", "RefreshAllFrames")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "RefreshAllFrames")
+    self:RegisterEvent("ADDON_LOADED", "OnAddonLoaded")
 
     self.ticker = C_Timer.NewTicker(0.05, function()
         if UnitFrames._castbarState then
@@ -6377,6 +6449,7 @@ function UnitFrames:OnDisable()
     end
 
     self:ApplyBlizzardPlayerCastbarVisibility()
+    self:ApplyBlizzardRaidFrameVisibility()
 
     self:StopCastbar()
 end
