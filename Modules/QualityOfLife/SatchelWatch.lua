@@ -507,22 +507,32 @@ function SW:SendNotification(dungeonName, roles, groupType, dungeonID)
     local groupLabel = groupLabels[groupType] or "Group Finder"
 
     ---@type TwichUI_SatchelNotificationWidget
+    ---@diagnostic disable-next-line: param-type-mismatch
     local message = CreateWidget(AceGUI, "TwichUI_SatchelNotification")
+    ---@diagnostic disable-next-line: undefined-field
+    message:SetRoleIconType(GetDB().roleIconType)
+    ---@diagnostic disable-next-line: undefined-field
     message:SetNotification(dungeonName, roles, groupLabel)
     if groupType == "raid" then
+        ---@diagnostic disable-next-line: undefined-field
         message:SetEncounterProgress(GetEncounterProgress(dungeonID))
     else
+        ---@diagnostic disable-next-line: undefined-field
         message:SetEncounterProgress(nil)
     end
     if type(dungeonID) == "number" and dungeonID > 0 then
+        ---@diagnostic disable-next-line: undefined-field
         message:SetQueueCallback(function()
             self:QueueForDungeon(dungeonID, groupType)
         end)
+        ---@diagnostic disable-next-line: undefined-field
         message:SetIgnoreCallback(function()
             self:StopMonitoringDungeon(dungeonID, groupType)
         end)
     else
+        ---@diagnostic disable-next-line: undefined-field
         message:SetQueueCallback(nil)
+        ---@diagnostic disable-next-line: undefined-field
         message:SetIgnoreCallback(nil)
     end
 

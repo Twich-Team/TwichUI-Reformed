@@ -87,6 +87,16 @@ function Options:SetNotifyForTanks(info, value)
     RefreshPeriodicTimer()
 end
 
+function Options:GetRoleIconType(info)
+    local db = self:GetSatchelWatchDB()
+    return db.roleIconType or "standard"
+end
+
+function Options:SetRoleIconType(info, value)
+    local db = self:GetSatchelWatchDB()
+    db.roleIconType = value == "twich" and "twich" or "standard"
+end
+
 function Options:GetNotifyOnlyWhenNotInGroup(info)
     local db = self:GetSatchelWatchDB()
     return db.notifyOnlyWhenNotInGroup or false

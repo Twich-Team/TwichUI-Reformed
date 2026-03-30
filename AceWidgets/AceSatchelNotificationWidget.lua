@@ -5,7 +5,7 @@ local T = unpack(TwichRx)
 local AceGUI = LibStub("AceGUI-3.0")
 
 local WIDGET_TYPE = "TwichUI_SatchelNotification"
-local Type, Version = WIDGET_TYPE, 1
+local Type, Version = WIDGET_TYPE, 2
 
 local FRAME_WIDTH = 280
 local FRAME_HEIGHT = 90
@@ -13,10 +13,65 @@ local ROLE_ICON_SIZE = 26
 local TITLE_RIGHT_PADDING = 92
 
 local ROLE_ATLASES = {
-    Tank = "UI-LFG-RoleIcon-Tank",
-    Healer = "UI-LFG-RoleIcon-Healer",
-    DPS = "UI-LFG-RoleIcon-DPS",
+    Tank = {
+        standard = { atlas = "UI-LFG-RoleIcon-Tank" },
+        twich = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Tank", width = 64, height = 74 },
+    },
+    Healer = {
+        standard = { atlas = "UI-LFG-RoleIcon-Healer" },
+        twich = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Healer", width = 64, height = 68 },
+    },
+    DPS = {
+        standard = { atlas = "UI-LFG-RoleIcon-DPS" },
+        twich = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_DPS", width = 64, height = 74 },
+    },
 }
+
+local function GetScaledIconSize(iconDef)
+    if type(iconDef) ~= "table" then
+        return ROLE_ICON_SIZE, ROLE_ICON_SIZE
+    end
+
+    local width = tonumber(iconDef.width) or ROLE_ICON_SIZE
+    local height = tonumber(iconDef.height) or ROLE_ICON_SIZE
+    if width <= 0 or height <= 0 then
+        return ROLE_ICON_SIZE, ROLE_ICON_SIZE
+    end
+
+    local scale = ROLE_ICON_SIZE / height
+    return math.max(1, math.floor((width * scale) + 0.5)), math.max(1, math.floor((height * scale) + 0.5))
+end
+
+local function ApplyRoleIconArt(icon, role, iconType)
+    if not icon then
+        return false
+    end
+
+    local roleDefs = ROLE_ATLASES[role]
+    local art = roleDefs and (roleDefs[iconType] or roleDefs.standard) or nil
+    if not art then
+        icon:Hide()
+        return false
+    end
+
+    if art.atlas then
+        icon:SetAtlas(art.atlas)
+        icon:SetTexCoord(0, 1, 0, 1)
+        icon:SetSize(ROLE_ICON_SIZE, ROLE_ICON_SIZE)
+        return true
+    end
+
+    if art.texture then
+        icon:SetAtlas(nil)
+        icon:SetTexture(art.texture)
+        icon:SetTexCoord(0, 1, 0, 1)
+        icon:SetSize(GetScaledIconSize(art))
+        return true
+    end
+
+    icon:Hide()
+    return false
+end
 
 local function ApplyIgnoreButtonStyle(button)
     if not button then
@@ -150,6 +205,7 @@ local function Constructor()
         end
         ApplyIgnoreButtonStyle(self.ignoreButton)
         self.frame.tooltipEncounterData = nil
+        self.iconType = "standard"
         self:SetNotification("", {}, "")
         self:SetEncounterProgress(nil)
         self:SetClickCallback(nil)
@@ -169,6 +225,10 @@ local function Constructor()
         self:SetIgnoreCallback(nil)
     end
 
+    function methods:SetRoleIconType(iconType)
+        self.iconType = iconType == "twich" and "twich" or "standard"
+    end
+
     ---@param dungeonName string
     ---@param roles string[]
     ---@param groupLabel string
@@ -177,28 +237,24 @@ local function Constructor()
         self.groupText:SetText("")
 
         local shown = 0
-        local visibleRoles = {}
         for _, icon in ipairs(self.roleIcons) do
             icon:Hide()
             icon:SetAtlas(nil)
+            icon:SetTexture(nil)
+            icon:SetTexCoord(0, 1, 0, 1)
+            icon:SetSize(ROLE_ICON_SIZE, ROLE_ICON_SIZE)
         end
 
-        for _, role in ipairs(roles or {}) do
-            local atlas = ROLE_ATLASES[role]
-            if atlas then
-                table.insert(visibleRoles, atlas)
-            end
-        end
-
-        for index = #visibleRoles, 1, -1 do
+        for index = #(roles or {}), 1, -1 do
             shown = shown + 1
             local icon = self.roleIcons[shown]
             if not icon then
                 break
             end
 
-            icon:SetAtlas(visibleRoles[index])
-            icon:Show()
+            if ApplyRoleIconArt(icon, roles[index], self.iconType) then
+                icon:Show()
+            end
         end
     end
 
@@ -254,6 +310,7 @@ local function Constructor()
         widget[method] = func
     end
 
+    ---@diagnostic disable-next-line: return-type-mismatch
     return AceGUI:RegisterAsWidget(widget)
 end
 

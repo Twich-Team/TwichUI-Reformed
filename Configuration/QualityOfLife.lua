@@ -713,6 +713,18 @@ local function BuildSatchelWatchTab()
     end
 
     local currentExpansionLevel = type(GetAccountExpansionLevel) == "function" and GetAccountExpansionLevel() or nil
+    local roleIconTypeValues = {
+        standard = string.format("Standard (Blizzard)  |A:%s:22:22|a |A:%s:22:22|a |A:%s:22:22|a",
+            "UI-LFG-RoleIcon-Tank",
+            "UI-LFG-RoleIcon-Healer",
+            "UI-LFG-RoleIcon-DPS"),
+        twich = table.concat({
+            "Twich Icons",
+            "|TInterface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Tank:19:16:0:0|t",
+            "|TInterface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Healer:21:22:0:0|t",
+            "|TInterface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_DPS:19:22:0:0|t",
+        }, "  "),
+    }
 
     local tab = {
         type = "group",
@@ -735,6 +747,17 @@ local function BuildSatchelWatchTab()
             },
             rolesGroup = W.IGroup(10, "Roles", {
                 desc = W.Description(1, "Select the roles for which you wish to be notified of satchel availability."),
+                roleIconType = {
+                    type = "select",
+                    name = "Role Icon Style",
+                    desc = "Choose whether Satchel Watch notifications use Blizzard role icons or the TwichUI variants.",
+                    order = 2,
+                    width = "full",
+                    values = roleIconTypeValues,
+                    handler = SWOptions,
+                    get = "GetRoleIconType",
+                    set = "SetRoleIconType",
+                },
                 tank = {
                     type = "toggle",
                     name = ("|A:%s:24:24|a "):format("UI-LFG-RoleIcon-Tank") .. "Tank",

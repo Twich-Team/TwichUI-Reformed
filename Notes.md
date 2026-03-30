@@ -1,7 +1,6 @@
 ## Configuration
 
 - When I drag the configuration window, it can snap around. For example if i click and drag it might work fine. Then I click and drag again and it feels "offset" from where my mouse is.
-- PLease remove the legacy Raid Frame Tweaks from the configuraiton UI and the functional code, make sure it doesnt effect our new unit frames and aura system.
 
 ## Onboarding & Wizard
 
@@ -19,6 +18,8 @@
 ## Chat
 
 ## Notifications
+
+- For the satchel watch notification, we have icons for dps, heal, and tank. can we add a selector to allow to choose between blizzard and the twichui variants? Like we have in the unit frame role icons.
 
 ## Datatext
 
@@ -63,3 +64,7 @@ notes
 - After they choose a layout, I want them to be provided with some extra customization options:
   - Show a frame for myself in party
   - Show cast bars for party members
+
+# Mythic+ Minion Checkpoint
+
+- I would like to expand upon our Mythic+ Tools. We currently have a Mythic+ Timer that shows a lot of the information we need for the run. I would like to enhance that tracker by adding minion checkpoints. What this allows is a new section in the configuration that pulls a list of the current season's dungeons. The player can select a dungeon. They will be provided with an interface to configure custom checkpoints. By default, we will provide a checkpoint for each boss. The player can also add additional checkpoints with a name they provide. For each checkpoint, the player can enter a percentage of minions expected to be cleared by the checkpoint. The last boss will always be 100%. Now on the timer, when in that dungeon, the timer updates to have tick marks in the minion bars at each checkpoint. The "Bosses" area becomes "Checkpoints". The Boss function remains the same with the boss name and the time completed/pending, but we will add an extra data point for the minion percentage configured. For custom checkpoints, we will add them to the timer in Checkpoints, in the order of percentage. so if a custom checkpoint is 15%, and boss 1 is 10%, boss 2 is 20%, it will be between boss 1 and boss 2. It will complete with the same animation, coloring, etc as a boss when the percentage is complete. If a boss is killed before the percentage is reached, that percentage is colored red. This is to assist in the amount of trash killed throughout the dungeon.

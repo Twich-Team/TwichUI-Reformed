@@ -5,6 +5,7 @@
 - Fixed an issue where the Skyreach seasonal teleport was not available within any teleports menu
 - Fixed an issue that caused tabs in the debugger to show as different colors
 - Fixed an issue that caused Battle.Net tells to appear in the whisper color
+- Fixed an issue that caused the accent on the chat edit box to not change to the channel color
 
 #### New
 
@@ -17,6 +18,7 @@
 - New layout: Class Fantasy. This layout favors flair over simplicity, and adds several subtle (and a couple not-so-subtle) class fantasy additions to the interface, providing a more fantasy feel
 - Added a button to access the debugger from the configuration interface
 - Added logic to attempt to smartly place the newly opened Debugger or Error Log frames around the configuration UI
+- Added chat history persistence across reloads
 
 #### Other
 
