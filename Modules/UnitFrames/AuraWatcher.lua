@@ -38,6 +38,18 @@ local MAX_INDICATORS = 6   -- indicator slots per frame
 local MAX_ICONS      = 12  -- icon slots per indicator
 local TIMER_RATE     = 0.1 -- icon timer update frequency (seconds)
 
+local function ResolveFrameUnit(frame)
+    if type(frame) ~= "table" then
+        return nil
+    end
+
+    return frame:GetAttribute("unit") or frame.unit
+end
+
+local function IsValidAuraUnit(unit)
+    return UnitFrames:IsValidAuraUnit(unit)
+end
+
 local function GetAuraWatcherTextStyle(frame, cfg, prefix)
     local unitKey = frame and frame._awState and frame._awState.unitKey or "player"
     local base = UnitFrames.GetTextConfigFor and UnitFrames:GetTextConfigFor(unitKey) or nil
@@ -128,7 +140,7 @@ end
 
 -- Scan unit auras matching a spell-ID lookup table.
 local function ScanBySpellIds(unit, lookup, onlyMine)
-    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then return {} end
+    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then return {} end
     local result = {}
     for _, filter in ipairs({ "HELPFUL", "HARMFUL" }) do
         local slots = { C_UnitAuras.GetAuraSlots(unit, filter) }
@@ -159,7 +171,7 @@ end
 
 -- Scan unit auras matching a generic filter (HELPFUL / HARMFUL / DISPELLABLE / etc).
 local function ScanByFilter(unit, source, onlyMine)
-    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then return {} end
+    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then return {} end
     local result = {}
     local filters
     if source == "HELPFUL" then
@@ -193,8 +205,8 @@ end
 
 -- Resolve which auras are active for a given indicator config on a frame.
 local function ResolveAuras(frame, cfg)
-    local unit = frame.unit
-    if not unit then return {} end
+    local unit = ResolveFrameUnit(frame)
+    if not IsValidAuraUnit(unit) then return {} end
     local source   = cfg.source or "HARMFUL"
     local onlyMine = cfg.onlyMine and true or false
 
@@ -622,8 +634,8 @@ end
 --- UNIT_AURA fires on this frame's unit. Scans auras and refreshes all indicators.
 function UnitFrames:AWUpdate(frame)
     if not frame or not frame._awState then return end
-    local unit = frame.unit
-    if not unit then
+    local unit = ResolveFrameUnit(frame)
+    if not IsValidAuraUnit(unit) then
         self:AWHideAll(frame)
         return
     end

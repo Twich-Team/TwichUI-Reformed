@@ -36,12 +36,14 @@ local OUTLINE_VALUES                   = {
 }
 
 local NAME_FORMAT_VALUES               = {
+    none = "None",
     full = "Full Name",
     short = "Short Name",
     custom = "Custom Tag",
 }
 
 local RESOURCE_FORMAT_VALUES           = {
+    none = "None",
     percent = "Percent",
     current = "Current Value",
     currentPercent = "Current and Percent",
@@ -239,6 +241,7 @@ local GROUP_DEFAULTS = {
         height = 36,
         point = "TOP",
         xOffset = 0,
+        rowSpacing = 6,
         yOffset = -6,
         showPlayer = true,
         showSolo = false,
@@ -249,6 +252,7 @@ local GROUP_DEFAULTS = {
         height = 30,
         point = "TOP",
         xOffset = 0,
+        rowSpacing = 6,
         yOffset = -6,
         showSolo = false,
         groupBy = "GROUP",
@@ -266,7 +270,8 @@ local GROUP_DEFAULTS = {
         xOffset = 0,
         yOffset = -6,
         showSolo = false,
-        groupFilter = "MAINTANK,MAINASSIST",
+        roleFilter = "TANK",
+        groupFilter = "",
         unitsPerColumn = 2,
         maxColumns = 1,
         columnSpacing = 6,
@@ -878,17 +883,20 @@ local function BuildTextGroup(order, name, basePath, unitKey)
                 nameFormat = BuildSelect(1, "Name", "Name tag format.", ExtendPath(basePath, "nameFormat"),
                     textDefault("nameFormat"), NAME_FORMAT_VALUES, {
                         disabled = disabled,
+                        refreshConfig = true,
                     }),
                 customNameTag = BuildInput(2, "Custom Name Tag", "Custom oUF tag string used when Name is set to Custom.",
                     ExtendPath(basePath, "customNameTag"), "", {
                         disabled = ModuleDisabled(function()
                             return GetEffectiveTextValue(unitKey, "nameFormat", "full") ~= "custom"
                         end),
+                        refreshConfig = true,
                         width = "full",
                     }),
                 healthFormat = BuildSelect(3, "Health", "Health text format.", ExtendPath(basePath, "healthFormat"),
                     textDefault("healthFormat"), RESOURCE_FORMAT_VALUES, {
                         disabled = disabled,
+                        refreshConfig = true,
                     }),
                 customHealthTag = BuildInput(4, "Custom Health Tag",
                     "Custom oUF tag string used when Health is set to Custom.", ExtendPath(basePath, "customHealthTag"),
@@ -896,11 +904,13 @@ local function BuildTextGroup(order, name, basePath, unitKey)
                         disabled = ModuleDisabled(function()
                             return GetEffectiveTextValue(unitKey, "healthFormat", "percent") ~= "custom"
                         end),
+                        refreshConfig = true,
                         width = "full",
                     }),
                 powerFormat = BuildSelect(5, "Power", "Power text format.", ExtendPath(basePath, "powerFormat"),
                     textDefault("powerFormat"), RESOURCE_FORMAT_VALUES, {
                         disabled = disabled,
+                        refreshConfig = true,
                     }),
                 customPowerTag = BuildInput(6, "Custom Power Tag",
                     "Custom oUF tag string used when Power is set to Custom.", ExtendPath(basePath, "customPowerTag"), "",
@@ -908,6 +918,7 @@ local function BuildTextGroup(order, name, basePath, unitKey)
                         disabled = ModuleDisabled(function()
                             return GetEffectiveTextValue(unitKey, "powerFormat", "percent") ~= "custom"
                         end),
+                        refreshConfig = true,
                         width = "full",
                     }),
             }),
@@ -2046,6 +2057,14 @@ local function BuildGroupTab(groupKey, label)
     local textPath = { "text", "scopes", groupKey }
     local auraPath = { "auras", "scopes", groupKey }
     local disabled = ModuleDisabled()
+    local rowSpacingPath = (groupKey == "party" or groupKey == "raid") and ExtendPath(basePath, "rowSpacing")
+        or ExtendPath(basePath, "yOffset")
+    local rowSpacingDefault = (groupKey == "party" or groupKey == "raid") and (defaults.rowSpacing or math.abs(defaults.yOffset or -6))
+        or (defaults.yOffset or -6)
+    local rowSpacingName = (groupKey == "party" or groupKey == "raid") and "Row Spacing" or "Y Spacing"
+    local rowSpacingDesc = (groupKey == "party" or groupKey == "raid")
+        and "Vertical spacing between party or raid rows."
+        or "Vertical spacing between members."
     local frameTab = {
         type = "group",
         name = "Frame",
@@ -2073,8 +2092,8 @@ local function BuildGroupTab(groupKey, label)
                     ExtendPath(basePath, "xOffset"), defaults.xOffset or 0, -120, 120, 1, {
                         disabled = disabled,
                     }),
-                yOffset = BuildRange(6, "Y Spacing", "Vertical spacing between members.", ExtendPath(basePath, "yOffset"),
-                    defaults.yOffset or -6, -120, 120, 1, {
+                yOffset = BuildRange(6, rowSpacingName, rowSpacingDesc, rowSpacingPath,
+                    rowSpacingDefault, (groupKey == "party" or groupKey == "raid") and 0 or -120, 120, 1, {
                         disabled = disabled,
                     }),
             }),
@@ -2135,20 +2154,25 @@ local function BuildGroupTab(groupKey, label)
                 ExtendPath(basePath, "showSolo"), defaults.showSolo, {
                     disabled = disabled,
                 }),
-            groupFilter = BuildInput(2, "Group Filter", "Secure header group filter string.",
+            roleFilter = BuildInput(2, "Role Filter", "Secure header role filter string. Defaults to TANK.",
+                ExtendPath(basePath, "roleFilter"), defaults.roleFilter, {
+                    disabled = disabled,
+                    width = "full",
+                }),
+            groupFilter = BuildInput(3, "Group Filter", "Optional secure header group filter string applied in addition to the role filter.",
                 ExtendPath(basePath, "groupFilter"), defaults.groupFilter, {
                     disabled = disabled,
                     width = "full",
                 }),
-            unitsPerColumn = BuildRange(3, "Units Per Column", "Maximum units per column.",
+            unitsPerColumn = BuildRange(4, "Units Per Column", "Maximum units per column.",
                 ExtendPath(basePath, "unitsPerColumn"), defaults.unitsPerColumn, 1, 8, 1, {
                     disabled = disabled,
                 }),
-            maxColumns = BuildRange(4, "Max Columns", "Maximum number of tank columns.",
+            maxColumns = BuildRange(5, "Max Columns", "Maximum number of tank columns.",
                 ExtendPath(basePath, "maxColumns"), defaults.maxColumns, 1, 4, 1, {
                     disabled = disabled,
                 }),
-            columnSpacing = BuildRange(5, "Column Spacing", "Space between tank columns.",
+            columnSpacing = BuildRange(6, "Column Spacing", "Space between tank columns.",
                 ExtendPath(basePath, "columnSpacing"), defaults.columnSpacing, 0, 40, 1, {
                     disabled = disabled,
                 }),
@@ -2171,16 +2195,22 @@ local function BuildGroupTab(groupKey, label)
             { "units", memberKey, "highlights", "showEnemyTarget" }, true, { disabled = disabled }),
     })
     frameTab.args.healPrediction = BuildHealPredictionGroup(4, { "units", memberKey, "healPrediction" })
-    -- Healer-only power bar is meaningful for party and raid — not for tank
-    if groupKey == "party" or groupKey == "raid" then
-        frameTab.args.power = Widgets.IGroup(5, "Power Bar", {
-            healerOnlyPower = BuildToggle(1, "Healer Only",
-                "When enabled, only show the power bar for frames whose unit has the Healer role assigned. All other roles will have the power bar hidden. Enabled by default — disable to show power for all roles.",
-                ExtendPath(basePath, "healerOnlyPower"), true, {
-                    disabled = disabled,
-                }),
-        })
-    end
+    frameTab.args.power = Widgets.IGroup(5, "Power Bar", {
+        showPower = BuildToggle(1, "Show Power",
+            "Show the power bar on these group member frames.",
+            ExtendPath(basePath, "showPower"), true, {
+                disabled = disabled,
+                refreshConfig = true,
+            }),
+        healerOnlyPower = BuildToggle(2, "Healer Only",
+            "When enabled, only show the power bar for frames whose unit has the Healer role assigned. All other roles will have the power bar hidden. Enabled by default — disable to show power for all roles.",
+            ExtendPath(basePath, "healerOnlyPower"), true, {
+                disabled = ModuleDisabled(function()
+                    return groupKey ~= "party" and groupKey ~= "raid"
+                        or GetPathValue(ExtendPath(basePath, "showPower"), true) ~= true
+                end),
+            }),
+    })
     frameTab.args.copyFrom = BuildCopyFromGroup(groupKey)
 
     local colorsTab = BuildColorScopeTab(groupKey, "Colors")
@@ -2200,7 +2230,7 @@ local function BuildGroupTab(groupKey, label)
             auras            = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
             watchers         = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
             colors           = colorsTab,
-            roleIcon         = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"), groupKey == "party"),
+            roleIcon         = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"), groupKey == "party" or groupKey == "tank"),
             combatIndicator  = BuildStateIndicatorGroup(7, "Combat Indicator",
                 ExtendPath(basePath, "combatIndicator"), "combatIndicator"),
             restingIndicator = BuildStateIndicatorGroup(8, "Resting Indicator",

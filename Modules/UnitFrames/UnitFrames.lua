@@ -380,6 +380,44 @@ local function ResolveFrameUnit(frame)
     return frame:GetAttribute("unit") or frame.unit
 end
 
+local function NormalizeHeaderFilterValue(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    local trimmed = value:match("^%s*(.-)%s*$")
+    if trimmed == "" then
+        return nil
+    end
+
+    return trimmed
+end
+
+local function ResolveGroupRowSpacing(settings, fallback)
+    if type(settings) == "table" and settings.rowSpacing ~= nil then
+        return math_abs(tonumber(settings.rowSpacing) or fallback or 6)
+    end
+
+    if type(settings) == "table" and settings.yOffset ~= nil then
+        return math_abs(tonumber(settings.yOffset) or fallback or 6)
+    end
+
+    return math_abs(fallback or 6)
+end
+
+local function ResolveHeaderYOffset(settings, fallback)
+    if type(settings) == "table" and settings.rowSpacing ~= nil then
+        local spacing = ResolveGroupRowSpacing(settings, fallback)
+        local point = tostring(settings.point or "TOP")
+        if point:find("BOTTOM") then
+            return spacing
+        end
+        return -spacing
+    end
+
+    return tonumber(settings and settings.yOffset) or fallback or -6
+end
+
 local function CopyColor(color, fallback)
     local source = type(color) == "table" and color or fallback or { 1, 1, 1, 1 }
     return {
@@ -706,6 +744,10 @@ local function IsValidAuraUnit(unit)
     if unit:match("^party%d+$") or unit:match("^raid%d+$") then return true end
     if unit:match("^boss%d+$") or unit:match("^arena%d+$") then return true end
     return false
+end
+
+function UnitFrames:IsValidAuraUnit(unit)
+    return IsValidAuraUnit(unit)
 end
 
 local cachedDispelClass, cachedDispelSpec, cachedDispelTypes
@@ -1121,8 +1163,14 @@ end
 -- Returns whether the power bar should be shown for the given unitKey.
 -- Group member types always show power (per group config); single units read showPower.
 function UnitFrames:GetEffectiveShowPower(unitKey)
-    if unitKey == "partyMember" or unitKey == "raidMember" or unitKey == "tankMember" then
-        return true
+    if unitKey == "partyMember" then
+        return self:GetGroupSettings("party").showPower ~= false
+    end
+    if unitKey == "raidMember" then
+        return self:GetGroupSettings("raid").showPower ~= false
+    end
+    if unitKey == "tankMember" then
+        return self:GetGroupSettings("tank").showPower ~= false
     end
     local key = (unitKey and unitKey:match("^boss")) and "boss" or (unitKey or "")
     return self:GetUnitSettings(key).showPower ~= false
@@ -1156,7 +1204,7 @@ function UnitFrames:GetRoleIconConfig(unitKey)
     end
 
     return {
-        enabled  = get("enabled", scope == "party"),
+        enabled  = get("enabled", scope == "party" or scope == "tank"),
         corner   = get("corner", "TOPRIGHT"),
         size     = get("size", 18),
         alpha    = get("alpha", 1),
@@ -2232,7 +2280,7 @@ end
 
 function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     if not frame.AuraBars then return end
-    local unit = frame.unit
+    local unit = ResolveFrameUnit(frame)
     if not unit and not frame._isTestPreview then return end
     local aura       = self:GetAuraConfigFor(unitKey)
     local maxBars    = math_max(1, math_min(math.floor(tonumber(aura.maxIcons) or 8), MAX_AURA_BARS))
@@ -2401,6 +2449,9 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
 end
 
 local function BuildHealthTag(format, customTag)
+    if format == "none" then
+        return nil
+    end
     if format == "custom" then
         return (customTag and customTag ~= "") and customTag or "[perhp<$%]"
     end
@@ -2417,6 +2468,9 @@ local function BuildHealthTag(format, customTag)
 end
 
 local function BuildPowerTag(format, customTag)
+    if format == "none" then
+        return nil
+    end
     if format == "custom" then
         return (customTag and customTag ~= "") and customTag or "[perpp<$%]"
     end
@@ -2433,6 +2487,9 @@ local function BuildPowerTag(format, customTag)
 end
 
 local function BuildNameTag(format, customTag)
+    if format == "none" then
+        return nil
+    end
     if format == "custom" then
         return (customTag and customTag ~= "") and customTag or "[name]"
     end
@@ -2454,18 +2511,30 @@ function UnitFrames:ApplyTextTags(frame, unitKey)
 
     if frame.Name then
         frame:Untag(frame.Name)
-        frame:Tag(frame.Name, nameTag)
-        if frame.Name.UpdateTag then frame.Name:UpdateTag() end
+        if nameTag and nameTag ~= "" then
+            frame:Tag(frame.Name, nameTag)
+            if frame.Name.UpdateTag then frame.Name:UpdateTag() end
+        else
+            frame.Name:SetText("")
+        end
     end
     if frame.HealthValue then
         frame:Untag(frame.HealthValue)
-        frame:Tag(frame.HealthValue, healthTag)
-        if frame.HealthValue.UpdateTag then frame.HealthValue:UpdateTag() end
+        if healthTag and healthTag ~= "" then
+            frame:Tag(frame.HealthValue, healthTag)
+            if frame.HealthValue.UpdateTag then frame.HealthValue:UpdateTag() end
+        else
+            frame.HealthValue:SetText("")
+        end
     end
     if frame.PowerValue then
         frame:Untag(frame.PowerValue)
-        frame:Tag(frame.PowerValue, powerTag)
-        if frame.PowerValue.UpdateTag then frame.PowerValue:UpdateTag() end
+        if powerTag and powerTag ~= "" then
+            frame:Tag(frame.PowerValue, powerTag)
+            if frame.PowerValue.UpdateTag then frame.PowerValue:UpdateTag() end
+        else
+            frame.PowerValue:SetText("")
+        end
     end
 end
 
@@ -2605,8 +2674,8 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
             if frame._isTestPreview then
                 self:RefreshPreviewAuraIcons(frame, unitKey)
             elseif frame.Auras.ForceUpdate then
-                local resolvedUnit = frame.unit
-                if resolvedUnit then
+                local resolvedUnit = ResolveFrameUnit(frame)
+                if self:IsValidAuraUnit(resolvedUnit) then
                     frame.Auras:ForceUpdate()
                 else
                     frame.Auras:Hide()
@@ -3193,7 +3262,7 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
             enabled = group.enabled,
             width = group.width,
             height = group.height,
-            showPower = true,
+            showPower = group.showPower ~= false,
             powerHeight = 8,
         }
     elseif unitKey == "raidMember" then
@@ -3202,7 +3271,7 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
             enabled = group.enabled,
             width = group.width,
             height = group.height,
-            showPower = true,
+            showPower = group.showPower ~= false,
             powerHeight = 7,
         }
     elseif unitKey == "tankMember" then
@@ -3211,7 +3280,7 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
             enabled = group.enabled,
             width = group.width,
             height = group.height,
-            showPower = true,
+            showPower = group.showPower ~= false,
             powerHeight = 8,
         }
     else
@@ -3292,7 +3361,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
 
     header:SetAttribute("point", settings.point or "TOP")
     header:SetAttribute("xOffset", tonumber(settings.xOffset) or 0)
-    header:SetAttribute("yOffset", tonumber(settings.yOffset) or -6)
+    header:SetAttribute("yOffset", ResolveHeaderYOffset(settings, -6))
     header:SetAttribute("unitsPerColumn", math_max(1, tonumber(settings.unitsPerColumn) or 5))
     header:SetAttribute("maxColumns", math_max(1, tonumber(settings.maxColumns) or 1))
     header:SetAttribute("columnSpacing", tonumber(settings.columnSpacing) or 8)
@@ -3324,10 +3393,13 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
             header:SetVisibility('custom hide')
         end
     elseif groupKey == "tank" then
+        local roleFilter = NormalizeHeaderFilterValue(settings.roleFilter) or "TANK"
+        local groupFilter = NormalizeHeaderFilterValue(settings.groupFilter)
         header:SetAttribute("showRaid", enabled)
         header:SetAttribute("showParty", false)
         header:SetAttribute("showSolo", settings.showSolo == true)
-        header:SetAttribute("groupFilter", settings.groupFilter or "MAINTANK,MAINASSIST")
+        header:SetAttribute("roleFilter", roleFilter)
+        header:SetAttribute("groupFilter", groupFilter)
         if enabled and not testMode then
             header:SetVisibility('raid')
         else
@@ -3351,20 +3423,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
                 self:ApplyHighlightSettings(child)
             end
             if child.Health and memberUnitKey then
-                self:ApplyFrameColors(child, memberUnitKey)
-                self:ApplyStatusBarTexture(child)
-                self:ApplyHealPredictionSettings(child, memberUnitKey)
-                if child.HealthPrediction and child.HealthPrediction.ForceUpdate then
-                    child.HealthPrediction:ForceUpdate()
-                end
-                self:ApplyFrameFonts(child, memberUnitKey)
-                self:ApplyTextTags(child, memberUnitKey)
-                self:ApplyTextPositions(child, memberUnitKey)
-                self:ApplyUnitCastbarSettings(child, memberUnitKey)
-                self:ApplyRoleIconSettings(child, memberUnitKey)
-                self:ApplyStateIndicatorSettings(child, memberUnitKey, "combatIndicator")
-                self:ApplyStateIndicatorSettings(child, memberUnitKey, "restingIndicator")
-                self:ApplyInfoBarSettings(child, memberUnitKey)
+                self:ApplySingleFrameSettings(child, memberUnitKey)
                 -- Re-evaluate healer-only power bar visibility immediately so layout
                 -- changes take effect without waiting for the next power event.
                 if child.Power then
@@ -4073,7 +4132,7 @@ function UnitFrames:UpdateMovers()
             local layout = self:GetLayoutSettings(key)
             local w = Clamp(gs.width or entry.defaultW, 70, 500)
             local rowH = Clamp(gs.height or entry.defaultH, 14, 120)
-            local yOff = math_abs(tonumber(gs.yOffset) or 6)
+            local yOff = ResolveGroupRowSpacing(gs, 6)
             local rows = math_max(1, tonumber(gs.unitsPerColumn) or entry.defaultRows)
             -- Use the configured maxColumns for ALL group types (not just raid) so
             -- horizontally-arranged party/tank layouts get an accurate mover size.
@@ -4749,12 +4808,13 @@ function UnitFrames:BuildPreviewGroups()
         local layout = self:GetLayoutSettings("party")
         local width = Clamp(settings.width or 180, 80, 500)
         local height = Clamp(settings.height or 36, 14, 120)
-        local yOffset = tonumber(settings.yOffset) or -6
+        local rowSpacing = ResolveGroupRowSpacing(settings, 6)
         local colSpacing = tonumber(settings.columnSpacing) or 6
         local unitsPerColumn = math_max(1, tonumber(settings.unitsPerColumn) or 5)
         local maxColumns = math_max(1, tonumber(settings.maxColumns) or 1)
         PositionContainer(party, layout)
-        party:SetSize((width + colSpacing) * maxColumns - colSpacing, (height + math_abs(yOffset)) * unitsPerColumn)
+        party:SetSize((width + colSpacing) * maxColumns - colSpacing,
+            height * unitsPerColumn + rowSpacing * math_max(0, unitsPerColumn - 1))
         for index = 1, 5 do
             local partyMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
             if not party.rows[index] then
@@ -4769,7 +4829,7 @@ function UnitFrames:BuildPreviewGroups()
             local rowIndex = (index - 1) % unitsPerColumn
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", party, "TOPLEFT", column * (width + colSpacing),
-                -(rowIndex * (height + math_abs(yOffset))))
+                -(rowIndex * (height + rowSpacing)))
             row:SetShown(column < maxColumns)
         end
     end
@@ -4780,12 +4840,13 @@ function UnitFrames:BuildPreviewGroups()
         local layout = self:GetLayoutSettings("raid")
         local width = Clamp(settings.width or 120, 70, 300)
         local height = Clamp(settings.height or 30, 14, 80)
-        local yOffset = tonumber(settings.yOffset) or -6
+        local rowSpacing = ResolveGroupRowSpacing(settings, 6)
         local colSpacing = tonumber(settings.columnSpacing) or 6
         local unitsPerColumn = math_max(1, tonumber(settings.unitsPerColumn) or 5)
         local maxColumns = math_max(1, tonumber(settings.maxColumns) or 4)
         PositionContainer(raid, layout)
-        raid:SetSize((width + colSpacing) * maxColumns, (height + math_abs(yOffset)) * unitsPerColumn)
+        raid:SetSize((width + colSpacing) * maxColumns - colSpacing,
+            height * unitsPerColumn + rowSpacing * math_max(0, unitsPerColumn - 1))
         for index = 1, 20 do
             local raidMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
             if not raid.rows[index] then
@@ -4799,7 +4860,7 @@ function UnitFrames:BuildPreviewGroups()
             local rowIndex = (index - 1) % unitsPerColumn
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", raid, "TOPLEFT", column * (width + colSpacing),
-                -(rowIndex * (height + math_abs(yOffset))))
+                -(rowIndex * (height + rowSpacing)))
             row:SetShown(column < maxColumns)
         end
     end
@@ -5596,7 +5657,8 @@ function UnitFrames:SpawnHeaders(oUF)
         "showRaid", true,
         "showParty", false,
         "showSolo", false,
-        "groupFilter", "MAINTANK,MAINASSIST",
+        "roleFilter", "TANK",
+        "groupFilter", nil,
         "yOffset", -6,
         "point", "TOP",
         "maxColumns", 1,
@@ -5870,6 +5932,17 @@ function UnitFrames:OnEnable()
             db._migrated.partyRoleIconDefault = true
         end
 
+        if not db._migrated.groupRowSpacing then
+            db.groups = db.groups or {}
+            for _, gk in ipairs({ "party", "raid" }) do
+                db.groups[gk] = db.groups[gk] or {}
+                if db.groups[gk].rowSpacing == nil then
+                    db.groups[gk].rowSpacing = math_abs(tonumber(db.groups[gk].yOffset) or 6)
+                end
+            end
+            db._migrated.groupRowSpacing = true
+        end
+
         if not db._migrated.partyRoleIconFilterDefault then
             db.groups = db.groups or {}
             db.groups.party = db.groups.party or {}
@@ -5879,6 +5952,32 @@ function UnitFrames:OnEnable()
                 db.groups.party.roleIcon.filter = "all"
             end
             db._migrated.partyRoleIconFilterDefault = true
+        end
+
+        if not db._migrated.tankRoleIconDefault then
+            db.groups = db.groups or {}
+            db.groups.tank = db.groups.tank or {}
+            db.groups.tank.roleIcon = db.groups.tank.roleIcon or {}
+            if db.groups.tank.roleIcon.enabled == nil then
+                db.groups.tank.roleIcon.enabled = true
+            end
+            db._migrated.tankRoleIconDefault = true
+        end
+
+        if not db._migrated.tankRoleFilterDefault then
+            db.groups = db.groups or {}
+            db.groups.tank = db.groups.tank or {}
+
+            if db.groups.tank.roleFilter == nil or db.groups.tank.roleFilter == "" then
+                db.groups.tank.roleFilter = "TANK"
+            end
+
+            local legacyGroupFilter = NormalizeHeaderFilterValue(db.groups.tank.groupFilter)
+            if legacyGroupFilter == "MAINTANK,MAINASSIST" then
+                db.groups.tank.groupFilter = nil
+            end
+
+            db._migrated.tankRoleFilterDefault = true
         end
     end
 
