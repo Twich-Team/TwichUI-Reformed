@@ -2467,24 +2467,39 @@ local function BuildGeneralTab()
                 scale = BuildRange(5, "Scale", "Overall Unit Frames scale.", { "scale" }, db.scale or 1, 0.6, 1.6, 0.01),
                 frameAlpha = BuildRange(6, "Alpha", "Overall Unit Frames alpha.", { "frameAlpha" }, db.frameAlpha or 1,
                     0.15, 1, 0.01),
-                texture = BuildTextureSelect(7, "Bar Texture", "Global statusbar texture used by the frames.",
+                distanceFade = BuildToggle(7, "Distance Fade",
+                    "Fade party, raid, and tank unit buttons when Blizzard reports they are out of range.",
+                    { "distanceFade", "enabled" }, db.distanceFade and db.distanceFade.enabled == true, {
+                        refreshConfig = true,
+                    }),
+                distanceFadeAlpha = BuildRange(8, "Out of Range Alpha",
+                    "Alpha to use for party, raid, and tank unit buttons when they are outside range.",
+                    { "distanceFade", "outsideAlpha" },
+                    (db.distanceFade and db.distanceFade.outsideAlpha) or 0.45, 0.05, 1, 0.01, {
+                        disabled = ModuleDisabled(function()
+                            local fade = GetPathValue({ "distanceFade", "enabled" }, false)
+                            return fade ~= true
+                        end),
+                        refreshConfig = true,
+                    }),
+                texture = BuildTextureSelect(9, "Bar Texture", "Global statusbar texture used by the frames.",
                     { "texture" }, "Use theme texture"),
-                bgTexture = BuildTextureSelect(8, "Background Texture",
+                bgTexture = BuildTextureSelect(10, "Background Texture",
                     "Texture used for the empty (lost health) portion of health bars. Falls back to the bar texture when unset.",
                     { "bgTexture" }, "Use bar texture"),
-                powerTexture = BuildTextureSelect(9, "Power Bar Texture",
+                powerTexture = BuildTextureSelect(11, "Power Bar Texture",
                     "Optional texture override for the power bar fill. Falls back to the global bar texture when unset.",
                     { "powerTexture" }, "Use bar texture"),
-                powerBgTexture = BuildTextureSelect(10, "Power Background Texture",
+                powerBgTexture = BuildTextureSelect(12, "Power Background Texture",
                     "Texture for the empty portion of power bars. Falls back to the background texture when unset.",
                     { "powerBgTexture" }, "Use background texture"),
-                smoothBars = BuildToggle(11, "Smooth Bars", "Enable value interpolation for health, power, and castbars.",
+                smoothBars = BuildToggle(13, "Smooth Bars", "Enable value interpolation for health, power, and castbars.",
                     { "smoothBars" }, db.smoothBars ~= false),
-                showHealthText = BuildToggle(12, "Show Health Text", "Show health text tags on frames.",
+                showHealthText = BuildToggle(14, "Show Health Text", "Show health text tags on frames.",
                     { "showHealthText" }, db.showHealthText ~= false),
-                showPowerText = BuildToggle(13, "Show Power Text", "Show power text tags on frames.", { "showPowerText" },
+                showPowerText = BuildToggle(15, "Show Power Text", "Show power text tags on frames.", { "showPowerText" },
                     db.showPowerText ~= false),
-                useClassColor = BuildToggle(14, "Use Class Color",
+                useClassColor = BuildToggle(16, "Use Class Color",
                     "Use class color for health bars when a scope does not override it.", { "useClassColor" },
                     db.useClassColor == true),
             }),
@@ -2867,6 +2882,9 @@ function Options:GetDB()
     if db.lockFrames == nil then db.lockFrames = true end
     if db.scale == nil then db.scale = 1 end
     if db.frameAlpha == nil then db.frameAlpha = 1 end
+    if type(db.distanceFade) ~= "table" then db.distanceFade = {} end
+    if db.distanceFade.enabled == nil then db.distanceFade.enabled = false end
+    if db.distanceFade.outsideAlpha == nil then db.distanceFade.outsideAlpha = 0.45 end
     if db.smoothBars == nil then db.smoothBars = true end
     if db.showHealthText == nil then db.showHealthText = true end
     if db.showPowerText == nil then db.showPowerText = true end

@@ -3992,7 +3992,7 @@ function MPT:BuildMythicPlusTimerNotification(kind, state, checkpoint)
         local checkpointName = checkpoint and checkpoint.name or "Boss Checkpoint"
         local checkpointTime = checkpoint and checkpoint.time or "Pending"
         local checkpointPercent = checkpoint and checkpoint.percent and FormatCheckpointPercentText(checkpoint.percent) or
-        nil
+            nil
         local detail
         if checkpoint and checkpoint.kind == "custom" then
             detail = format("Checkpoint reached at %s forces in %s.", tostring(checkpointPercent or "--"), mapName)
@@ -4059,7 +4059,7 @@ function MPT:HandleMythicPlusTimerNotifications(state)
 
     for _, checkpoint in ipairs(state.checkpoints or {}) do
         current.checkpointStates[tostring(checkpoint.id or checkpoint.name or "checkpoint")] = checkpoint.completed ==
-        true
+            true
     end
 
     if previous then

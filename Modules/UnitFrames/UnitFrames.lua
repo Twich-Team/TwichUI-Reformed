@@ -17,8 +17,14 @@ local UnitFrames = T:NewModule("UnitFrames", "AceEvent-3.0")
 local CreateFrame = _G.CreateFrame
 local InCombatLockdown = _G.InCombatLockdown
 local UIParent = _G.UIParent
+local CheckInteractDistance = _G.CheckInteractDistance
 local UnitExists = _G.UnitExists
 local UnitClass = _G.UnitClass
+local UnitInRange = _G.UnitInRange
+local UnitInParty = _G.UnitInParty
+local UnitInRaid = _G.UnitInRaid
+local UnitIsConnected = _G.UnitIsConnected
+local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local UnitIsPlayer = _G.UnitIsPlayer
 local UnitIsUnit = _G.UnitIsUnit
 local UnitAffectingCombat = _G.UnitAffectingCombat
@@ -30,11 +36,45 @@ local GetSpecializationInfo = _G.GetSpecializationInfo
 local StatusBarInterpolation = (_G.Enum and _G.Enum.StatusBarInterpolation) or _G.StatusBarInterpolation
 local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 local C_UnitAuras = _G.C_UnitAuras
+local C_Spell = _G.C_Spell
+local C_SpellBook = _G.C_SpellBook
 local issecretvalue = _G.issecretvalue or function() return false end
 local math_min = math.min
 local math_max = math.max
 local math_abs = math.abs
 local StatusBarTimerDirection = (_G.Enum and _G.Enum.StatusBarTimerDirection) or nil
+
+local FRIENDLY_RANGE_SPELLS = {
+    DEATHKNIGHT = { 47541 },
+    DEMONHUNTER = {},
+    DRUID = { 8936 },
+    EVOKER = { 355913 },
+    HUNTER = {},
+    MAGE = { 1459 },
+    MONK = { 116670 },
+    PALADIN = { 85673 },
+    PRIEST = { 17, 2050 },
+    ROGUE = { 36554, 921 },
+    SHAMAN = { 8004 },
+    WARLOCK = { 5697 },
+    WARRIOR = {},
+}
+
+local RESURRECT_RANGE_SPELLS = {
+    DEATHKNIGHT = { 61999 },
+    DEMONHUNTER = {},
+    DRUID = { 50769 },
+    EVOKER = { 361227 },
+    HUNTER = {},
+    MAGE = {},
+    MONK = { 115178 },
+    PALADIN = { 7328 },
+    PRIEST = { 2006 },
+    ROGUE = {},
+    SHAMAN = { 2008 },
+    WARLOCK = { 20707 },
+    WARRIOR = {},
+}
 
 -- Gradient compat: SetGradient (9.0+) or SetGradientAlpha (legacy).
 -- For VERTICAL: arg1/2 = bottom color, arg3/4 = top color.
@@ -386,6 +426,197 @@ local function Clamp(value, minimum, maximum)
     end
 
     return numeric
+end
+
+local RANGE_FADE_UNIT_KEYS = {
+    partyMember = true,
+    raidMember = true,
+    tankMember = true,
+}
+
+function UnitFrames:GetDistanceFadeConfig()
+    local db = self:GetDB()
+    if type(db.distanceFade) ~= "table" then
+        db.distanceFade = {}
+    end
+
+    if db.distanceFade.enabled == nil then
+        db.distanceFade.enabled = false
+    end
+    if db.distanceFade.outsideAlpha == nil then
+        db.distanceFade.outsideAlpha = 0.45
+    end
+
+    return db.distanceFade
+end
+
+function UnitFrames:GetBaseFrameAlpha()
+    return Clamp(self:GetDB().frameAlpha or 1, 0.15, 1)
+end
+
+function UnitFrames:ShouldUseDistanceFade(unitKey)
+    return RANGE_FADE_UNIT_KEYS[unitKey] == true
+end
+
+function UnitFrames:ResetRangeSpellCache()
+    self._activeRangeSpellCache = nil
+end
+
+function UnitFrames:IsRangeCheckSpellKnown(spellID)
+    if type(spellID) ~= "number" then
+        return false
+    end
+
+    if C_SpellBook and type(C_SpellBook.IsSpellInSpellBook) == "function" then
+        local okKnown, isKnown = pcall(C_SpellBook.IsSpellInSpellBook, spellID)
+        if okKnown and isKnown then
+            return true
+        end
+    end
+
+    return false
+end
+
+function UnitFrames:GetActiveRangeSpellList(bucket)
+    local _, classToken = UnitClass("player")
+    if not classToken then
+        return nil
+    end
+
+    self._activeRangeSpellCache = self._activeRangeSpellCache or {}
+    local cacheKey = table.concat({ classToken, bucket or "friendly" }, ":")
+    local cached = self._activeRangeSpellCache[cacheKey]
+    if cached then
+        return cached
+    end
+
+    local source = (bucket == "resurrect" and RESURRECT_RANGE_SPELLS[classToken]) or FRIENDLY_RANGE_SPELLS[classToken] or
+    {}
+    local spells = {}
+    for _, spellID in ipairs(source) do
+        if self:IsRangeCheckSpellKnown(spellID) then
+            spells[#spells + 1] = spellID
+        end
+    end
+
+    self._activeRangeSpellCache[cacheKey] = spells
+    return spells
+end
+
+function UnitFrames:UnitInConfiguredSpellRange(unit, bucket)
+    if not unit or not C_Spell or type(C_Spell.IsSpellInRange) ~= "function" then
+        return nil
+    end
+
+    local spells = self:GetActiveRangeSpellList(bucket)
+    if type(spells) ~= "table" or #spells == 0 then
+        return nil
+    end
+
+    local hadCheckedResult = false
+    for _, spellID in ipairs(spells) do
+        local okRange, range = pcall(C_Spell.IsSpellInRange, spellID, unit)
+        if okRange and not (issecretvalue and issecretvalue(range)) and range ~= nil then
+            if range == true or range == 1 then
+                return true
+            end
+
+            hadCheckedResult = true
+        end
+    end
+
+    if hadCheckedResult then
+        return false
+    end
+
+    return nil
+end
+
+function UnitFrames:GetFriendlyUnitRangeState(unit)
+    if not unit or not UnitExists(unit) then
+        return nil, false
+    end
+
+    local okRange, inRange, wasChecked = pcall(UnitInRange, unit)
+    if okRange and not (issecretvalue and issecretvalue(wasChecked)) and wasChecked ~= nil then
+        if wasChecked == true or wasChecked == 1 then
+            if not (issecretvalue and issecretvalue(inRange)) and inRange ~= nil then
+                return (inRange == true or inRange == 1), true
+            end
+        end
+    end
+
+    local spellBucket = (UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)) and "resurrect" or "friendly"
+    local spellRange = self:UnitInConfiguredSpellRange(unit, spellBucket)
+    if spellRange ~= nil then
+        return spellRange, true
+    end
+
+    if not InCombatLockdown() and type(CheckInteractDistance) == "function" then
+        local okInteract, interactInRange = pcall(CheckInteractDistance, unit, 4)
+        if okInteract and not (issecretvalue and issecretvalue(interactInRange)) and interactInRange ~= nil then
+            return interactInRange == true or interactInRange == 1, true
+        end
+    end
+
+    return nil, false
+end
+
+function UnitFrames:ConfigureRangeFade(frame, unitKey)
+    if not frame then
+        return
+    end
+
+    local baseAlpha = self:GetBaseFrameAlpha()
+    local distanceFade = self:GetDistanceFadeConfig()
+    local shouldEnable = distanceFade.enabled == true and frame._isTestPreview ~= true and
+        self:ShouldUseDistanceFade(unitKey)
+
+    if not frame.Range then
+        frame.Range = {}
+    end
+
+    frame.Range.insideAlpha = baseAlpha
+    frame.Range.outsideAlpha = Clamp(math_min(baseAlpha, tonumber(distanceFade.outsideAlpha) or 0.45), 0.05, 1)
+    frame.Range.Override = function(owner)
+        local element = owner.Range
+        local unit = owner.unit
+        local inRange = nil
+        local isEligible = false
+
+        if unit and UnitExists(unit) and not (UnitIsUnit and UnitIsUnit(unit, "player")) and
+            (not UnitIsConnected or UnitIsConnected(unit)) then
+            inRange, isEligible = UnitFrames:GetFriendlyUnitRangeState(unit)
+        end
+
+        owner:SetAlpha(isEligible and (inRange and element.insideAlpha or element.outsideAlpha) or element.insideAlpha)
+
+        if element.PostUpdate then
+            return element:PostUpdate(owner, inRange, isEligible)
+        end
+    end
+
+    if type(frame.EnableElement) ~= "function" or type(frame.DisableElement) ~= "function" or
+        type(frame.IsElementEnabled) ~= "function" then
+        frame:SetAlpha(baseAlpha)
+        return
+    end
+
+    if shouldEnable then
+        if not frame:IsElementEnabled("Range") then
+            frame:EnableElement("Range")
+        end
+        if frame.Range and type(frame.Range.ForceUpdate) == "function" then
+            frame.Range:ForceUpdate()
+        else
+            frame:UpdateAllElements("ForceUpdate")
+        end
+    else
+        if frame:IsElementEnabled("Range") then
+            frame:DisableElement("Range")
+        end
+        frame:SetAlpha(baseAlpha)
+    end
 end
 
 local function ResolveFrameUnit(frame)
@@ -3579,7 +3810,8 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
 
     local db = self:GetDB()
     frame:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
-    frame:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
+    frame:SetAlpha(self:GetBaseFrameAlpha())
+    self:ConfigureRangeFade(frame, unitKey)
 
     -- Header children (party/raid/tank members) have their visibility fully managed
     -- by SecureGroupHeaderTemplate + RegisterUnitWatch.  Calling SetShown from insecure
@@ -3689,7 +3921,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
     end
 
     header:SetScale(Clamp(self:GetDB().scale or 1, 0.6, 1.6))
-    header:SetAlpha(Clamp(self:GetDB().frameAlpha or 1, 0.15, 1))
+    header:SetAlpha(self:GetBaseFrameAlpha())
 
     -- Determine the unitKey used for member frames of this group.
     local memberUnitKey = (groupKey == "party" and "partyMember")
@@ -5276,6 +5508,12 @@ end
 
 function UnitFrames:ApplyBlizzardRaidFrameVisibility()
     local suppress = self:ShouldHideBlizzardRaidFrames()
+    if not self._blizzardRaidHiddenRoot then
+        self._blizzardRaidHiddenRoot = CreateFrame("Frame", nil, UIParent)
+        self._blizzardRaidHiddenRoot:Hide()
+    end
+
+    local hiddenRoot = self._blizzardRaidHiddenRoot
     local targets = {
         _G.CompactPartyFrame,
         _G.CompactRaidFrameContainer,
@@ -5290,13 +5528,8 @@ function UnitFrames:ApplyBlizzardRaidFrameVisibility()
         end
 
         frame._twichUIOriginalParent = frame._twichUIOriginalParent or frame:GetParent() or UIParent
-        if not frame._twichUIRaidHooked then
-            frame:HookScript("OnShow", function(selfFrame)
-                if selfFrame._twichUISuppressRaidFrame == true then
-                    selfFrame:Hide()
-                end
-            end)
-            frame._twichUIRaidHooked = true
+        if frame._twichUIOriginalIgnoreFramePositionManager == nil then
+            frame._twichUIOriginalIgnoreFramePositionManager = frame.IgnoreFramePositionManager
         end
 
         frame._twichUISuppressRaidFrame = suppress
@@ -5304,14 +5537,14 @@ function UnitFrames:ApplyBlizzardRaidFrameVisibility()
             if frame.IgnoreFramePositionManager ~= true then
                 frame.IgnoreFramePositionManager = true
             end
-            frame:Hide()
+            if frame:GetParent() ~= hiddenRoot then
+                frame:SetParent(hiddenRoot)
+            end
         else
             if frame:GetParent() ~= frame._twichUIOriginalParent then
                 frame:SetParent(frame._twichUIOriginalParent)
             end
-            if frame.IgnoreFramePositionManager == true then
-                frame.IgnoreFramePositionManager = nil
-            end
+            frame.IgnoreFramePositionManager = frame._twichUIOriginalIgnoreFramePositionManager
             frame._twichUISuppressRaidFrame = nil
         end
     end
@@ -6371,6 +6604,8 @@ function UnitFrames:OnEnable()
     self:RegisterEvent("PLAYER_ROLES_ASSIGNED", "RefreshAllFrames")
     self:RegisterEvent("ROLE_CHANGED_INFORM", "RefreshAllFrames")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "RefreshAllFrames")
+    self:RegisterEvent("SPELLS_CHANGED", "ResetRangeSpellCache")
+    self:RegisterEvent("PLAYER_TALENT_UPDATE", "ResetRangeSpellCache")
     self:RegisterEvent("ADDON_LOADED", "OnAddonLoaded")
 
     self.ticker = C_Timer.NewTicker(0.05, function()

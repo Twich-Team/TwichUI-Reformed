@@ -592,6 +592,15 @@ function ChatStylingModule:GetOptions()
     return configurationModule.Options.ChatEnhancement
 end
 
+function ChatStylingModule:SetChatFrameLock(locked)
+    local options = self:GetOptions()
+    if not options or type(options.SetChatLocked) ~= "function" then
+        return
+    end
+
+    options:SetChatLocked(nil, locked == true)
+end
+
 function ChatStylingModule:RefreshSettings()
     local options = self:GetOptions()
 
@@ -1266,6 +1275,7 @@ function ChatStylingModule:OpenFrameUtilityMenu(frame, anchor)
     end
 
     local menu = GetChatTabMenu()
+    local isLocked = self.settings and self.settings.locked == true
 
     local entries = {
         {
@@ -1286,6 +1296,14 @@ function ChatStylingModule:OpenFrameUtilityMenu(frame, anchor)
             func = function()
                 PlayMenuSound("TwichUI-Menu-Confirm")
                 self:OpenTabContextMenu(targetFrame)
+            end,
+        },
+        {
+            text = isLocked and "Unlock Frame" or "Lock Frame",
+            notCheckable = true,
+            func = function()
+                PlayMenuSound("TwichUI-Menu-Confirm")
+                self:SetChatFrameLock(not isLocked)
             end,
         },
         {
