@@ -776,6 +776,8 @@ local VALID_GROWTH_DIRECTIONS = {
     RIGHT = true,
 }
 
+local MAX_BOSS_FRAMES = 5
+
 local VALID_HEADER_POINTS = {
     TOP = true,
     BOTTOM = true,
@@ -1027,6 +1029,31 @@ local function CopyColor(color, fallback)
     }
 end
 
+
+local function ResolveBossGeometry(settings, width, height, frameCount)
+    local count = math_max(1, math_min(MAX_BOSS_FRAMES, tonumber(frameCount) or MAX_BOSS_FRAMES))
+    local rows = math_max(1, math_min(count, tonumber(settings and settings.unitsPerColumn) or count))
+    local cols = math_max(1, math.ceil(count / rows))
+
+    return BuildGroupGeometry(settings, width, height, rows, cols, 8, 8, "DOWN", "LEFT")
+end
+
+local function GetBossFrameOffset(geometry, index, activeCount)
+    local count = math_max(1, math_min(activeCount or MAX_BOSS_FRAMES, geometry.rows * geometry.cols))
+    local resolvedIndex = math_max(1, math_min(index, count))
+    return GetGroupGeometryOffset(geometry, resolvedIndex)
+end
+
+local function CountActiveBossUnits()
+    local count = 0
+    for index = 1, MAX_BOSS_FRAMES do
+        if UnitExists("boss" .. index) then
+            count = count + 1
+        end
+    end
+
+    return count
+end
 local function NormalizeColor(color, fallback)
     if type(color) == "table" then
         if type(color[1]) == "number" or type(color[2]) == "number" or type(color[3]) == "number" then
@@ -4163,6 +4190,11 @@ function UnitFrames:ApplyBossLayout()
 
     local layout = self:GetLayoutSettings("boss")
     local settings = self:GetGroupSettings("boss")
+    local bossUnit = self:GetUnitSettings("boss")
+    local width = Clamp(bossUnit.width or 220, 120, 500)
+    local height = Clamp(bossUnit.height or 36, 16, 120)
+    local activeCount = CountActiveBossUnits()
+    local geometry = ResolveBossGeometry(settings, width, height, activeCount > 0 and activeCount or MAX_BOSS_FRAMES)
 
     self.bossAnchor:ClearAllPoints()
     self.bossAnchor:SetPoint(
@@ -4172,22 +4204,19 @@ function UnitFrames:ApplyBossLayout()
         tonumber(layout.x) or -300,
         tonumber(layout.y) or 0
     )
+    self.bossAnchor:SetSize(geometry.width, geometry.height)
 
     local showBossFrames = settings.enabled ~= false and self:GetDB().testMode ~= true
     self.bossAnchor:SetScale(Clamp(self:GetDB().scale or 1, 0.6, 1.6))
     self.bossAnchor:SetAlpha(Clamp(self:GetDB().frameAlpha or 1, 0.15, 1))
     self.bossAnchor:SetShown(showBossFrames)
 
-    local yOffset = tonumber(settings.yOffset) or -8
-    for index = 1, 5 do
+    for index = 1, MAX_BOSS_FRAMES do
         local frame = self.frames["boss" .. index]
         if frame then
             frame:ClearAllPoints()
-            if index == 1 then
-                frame:SetPoint("TOP", self.bossAnchor, "TOP", 0, 0)
-            else
-                frame:SetPoint("TOP", self.frames["boss" .. (index - 1)], "BOTTOM", 0, yOffset)
-            end
+            local x, y = GetBossFrameOffset(geometry, index, activeCount)
+            frame:SetPoint("TOPLEFT", self.bossAnchor, "TOPLEFT", x, -y)
             frame:SetShown(showBossFrames)
         end
     end
@@ -4873,12 +4902,11 @@ function UnitFrames:UpdateMovers()
             local layout = self:GetLayoutSettings("boss")
             local w = Clamp(bs.width or 220, 120, 500)
             local rowH = Clamp(bs.height or 36, 16, 120)
-            local yOff = math_abs(tonumber(gs.yOffset) or 8)
-            local mh = (rowH + yOff) * 5 - yOff
+            local geometry = ResolveBossGeometry(gs, w, rowH, MAX_BOSS_FRAMES)
             PlaceMover(mover,
                 layout.point or "RIGHT", layout.relativePoint or layout.point or "RIGHT",
                 tonumber(layout.x) or -300, tonumber(layout.y) or 0,
-                w, mh, gs.enabled ~= false)
+                geometry.width, geometry.height, gs.enabled ~= false)
         end
     end
 
@@ -5471,7 +5499,7 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         local bossUnit = self:GetUnitSettings("boss")
         local width = Clamp(bossUnit.width or 220, 120, 500)
         local height = Clamp(bossUnit.height or 36, 16, 120)
-        local yOffset = tonumber(bossGroup.yOffset) or -8
+        local geometry = ResolveBossGeometry(bossGroup, width, height, MAX_BOSS_FRAMES)
 
         preview.bossAnchor:ClearAllPoints()
         preview.bossAnchor:SetPoint(
@@ -5481,10 +5509,10 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
             tonumber(bossLayout.x) or -60,
             tonumber(bossLayout.y) or 520
         )
-        preview.bossAnchor:SetSize(width, (height + math.abs(yOffset)) * 5)
+        preview.bossAnchor:SetSize(geometry.width, geometry.height)
 
         local bossClasses = { "DEATHKNIGHT", "WARLOCK", "MAGE", "WARRIOR", "PRIEST" }
-        for index = 1, 5 do
+        for index = 1, MAX_BOSS_FRAMES do
             local key = "bossPreview" .. index
             local bossMockClass = bossClasses[index] or "DEATHKNIGHT"
             if not preview[key] then
@@ -5495,11 +5523,8 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
             end
 
             preview[key]:ClearAllPoints()
-            if index == 1 then
-                preview[key]:SetPoint("TOP", preview.bossAnchor, "TOP", 0, 0)
-            else
-                preview[key]:SetPoint("TOP", preview["bossPreview" .. (index - 1)], "BOTTOM", 0, yOffset)
-            end
+            local x, y = GetBossFrameOffset(geometry, index, MAX_BOSS_FRAMES)
+            preview[key]:SetPoint("TOPLEFT", preview.bossAnchor, "TOPLEFT", x, -y)
             preview[key]:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
             preview[key]:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
         end
@@ -6405,7 +6430,7 @@ function UnitFrames:SpawnBossFrames(oUF)
     self.bossAnchor:SetSize(260, 220)
     self:RegisterLayoutFrame("boss", self.bossAnchor)
 
-    for index = 1, 5 do
+    for index = 1, MAX_BOSS_FRAMES do
         local key = "boss" .. index
         local frame = self:SpawnSingleFrame(oUF, key, key)
         if index == 1 then

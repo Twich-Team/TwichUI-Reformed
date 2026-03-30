@@ -279,7 +279,12 @@ local GROUP_DEFAULTS                   = {
     },
     boss = {
         enabled = true,
+        growthDirection = "DOWN",
+        xOffset = 0,
         yOffset = -8,
+        unitsPerColumn = 5,
+        columnSpacing = 8,
+        columnAnchorPoint = "LEFT",
     },
 }
 
@@ -2121,8 +2126,43 @@ local function BuildBossTab()
                             unitDefaults.height, 16, 120, 1, {
                                 disabled = disabled,
                             }),
-                        yOffset = BuildRange(4, "Stack Y Offset", "Vertical spacing between boss frames.",
+                        growthDirection = BuildSelect(4, "Growth Direction",
+                            "Primary direction boss frames grow before wrapping into a new column or row.",
+                            { "groups", "boss", "growthDirection" }, groupDefaults.growthDirection or "DOWN",
+                            GROW_DIR_VALUES, {
+                                disabled = disabled,
+                                refreshConfig = true,
+                            }),
+                        unitsPerColumn = BuildRange(5, "Frames Before Wrap",
+                            "How many boss frames to place in the primary direction before starting a new column or row.",
+                            { "groups", "boss", "unitsPerColumn" }, groupDefaults.unitsPerColumn or 5, 1, 5, 1, {
+                                disabled = disabled,
+                                refreshConfig = true,
+                            }),
+                        xOffset = BuildRange(6, "Horizontal Spacing",
+                            "Primary spacing used when boss frames grow left or right.",
+                            { "groups", "boss", "xOffset" }, groupDefaults.xOffset or 0, -120, 120, 1, {
+                                disabled = disabled,
+                            }),
+                        yOffset = BuildRange(7, "Vertical Spacing",
+                            "Primary spacing used when boss frames grow up or down.",
                             { "groups", "boss", "yOffset" }, groupDefaults.yOffset, -120, 120, 1, {
+                                disabled = disabled,
+                            }),
+                        columnSpacing = BuildRange(8, "Wrap Spacing",
+                            "Gap between wrapped boss columns or rows.",
+                            { "groups", "boss", "columnSpacing" }, groupDefaults.columnSpacing or 8, 0, 80, 1, {
+                                disabled = disabled,
+                            }),
+                        columnAnchorPoint = BuildSelect(9, "Wrap Direction",
+                            "Which side newly wrapped boss columns or rows grow toward.",
+                            { "groups", "boss", "columnAnchorPoint" },
+                            groupDefaults.columnAnchorPoint or "LEFT", {
+                                LEFT = "Left",
+                                RIGHT = "Right",
+                                TOP = "Top",
+                                BOTTOM = "Bottom",
+                            }, {
                                 disabled = disabled,
                             }),
                     }),
@@ -2940,6 +2980,14 @@ function Options:GetDB()
     if db.showPowerText == nil then db.showPowerText = true end
     if type(db.units) ~= "table" then db.units = {} end
     if type(db.groups) ~= "table" then db.groups = {} end
+    if type(db.groups.boss) ~= "table" then db.groups.boss = {} end
+    if db.groups.boss.growthDirection == nil then db.groups.boss.growthDirection = GROUP_DEFAULTS.boss.growthDirection end
+    if db.groups.boss.xOffset == nil then db.groups.boss.xOffset = GROUP_DEFAULTS.boss.xOffset end
+    if db.groups.boss.yOffset == nil then db.groups.boss.yOffset = GROUP_DEFAULTS.boss.yOffset end
+    if db.groups.boss.unitsPerColumn == nil then db.groups.boss.unitsPerColumn = GROUP_DEFAULTS.boss.unitsPerColumn end
+    if db.groups.boss.columnSpacing == nil then db.groups.boss.columnSpacing = GROUP_DEFAULTS.boss.columnSpacing end
+    if db.groups.boss.columnAnchorPoint == nil then db.groups.boss.columnAnchorPoint = GROUP_DEFAULTS.boss
+        .columnAnchorPoint end
     if type(db.layout) ~= "table" then db.layout = {} end
     if type(db.colors) ~= "table" then db.colors = {} end
     if type(db.colors.scopes) ~= "table" then db.colors.scopes = {} end
