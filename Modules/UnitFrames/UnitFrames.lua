@@ -453,8 +453,10 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
 
     if unitColors then
         if type(unitColors.power) == "table" then palette.power = CopyColor(unitColors.power) end
-        if type(unitColors.powerBackground) == "table" then palette.powerBackground = CopyColor(unitColors
-            .powerBackground) end
+        if type(unitColors.powerBackground) == "table" then
+            palette.powerBackground = CopyColor(unitColors
+                .powerBackground)
+        end
         if type(unitColors.powerBorder) == "table" then palette.powerBorder = CopyColor(unitColors.powerBorder) end
         if type(unitColors.cast) == "table" then palette.cast = CopyColor(unitColors.cast) end
         if type(unitColors.background) == "table" then palette.background = CopyColor(unitColors.background) end
@@ -572,7 +574,8 @@ function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
     powerBar._roleCollapsed = shouldCollapse
 
     if shouldCollapse then
-        UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=%s → COLLAPSE", tostring(unitKey), tostring(role)))
+        UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=%s → COLLAPSE", tostring(unitKey),
+            tostring(role)))
         powerBar:SetHeight(0)
         powerBar:SetAlpha(0)
         if powerBar._ownerFrame and powerBar._detached ~= true and powerBar._ownerFrame.Health then
@@ -587,9 +590,11 @@ function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
     else
         local restoreH = powerBar._designedHeight or 8
         if healerOnly then
-            UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=HEALER → RESTORE h=%d", tostring(unitKey), restoreH))
+            UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=HEALER → RESTORE h=%d",
+                tostring(unitKey), restoreH))
         else
-            UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=false → RESTORE h=%d", tostring(unitKey), restoreH))
+            UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=false → RESTORE h=%d", tostring(unitKey),
+                restoreH))
         end
         powerBar:SetHeight(restoreH)
         powerBar:SetAlpha(1)
@@ -1018,7 +1023,7 @@ function UnitFrames:ApplyStatusBarTexture(frame)
 
     local powerBgTextureName = db.powerBgTexture
     local powerBgTexture = (powerBgTextureName and powerBgTextureName ~= "") and GetLSMTexture(powerBgTextureName) or
-    bgTexture
+        bgTexture
 
     if frame.Health and frame.Health.SetStatusBarTexture then
         frame.Health:SetStatusBarTexture(texture)
@@ -1374,7 +1379,7 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     local barColor   = aura.barColor      -- may be a table {r,g,b,a} or nil
     local bgColor    = aura.barBackground -- may be a table {r,g,b,a} or nil
     local barFontSz  = (aura.barFontSize and aura.barFontSize > 0) and Clamp(aura.barFontSize, 6, 20) or
-    math_max(7, barH - 4)
+        math_max(7, barH - 4)
     local barFontNm  = aura.barFontName or text.fontName
     local showTime   = aura.showTime ~= false
     local showStacks = aura.showStacks ~= false
@@ -2030,7 +2035,7 @@ function UnitFrames:ApplyUnitFrameSize(frame, settings, unitKey)
             if frame.Power.border then frame.Power.border:SetAlpha(1) end
             frame.Power:Show()
             if detached then
-                frame.Power._designedHeight = powerHeight  -- stored for runtime collapse/restore
+                frame.Power._designedHeight = powerHeight -- stored for runtime collapse/restore
                 frame.Power:SetWidth(Clamp(settings.powerWidth or width, 40, 600))
                 frame.Power:SetHeight(powerHeight)
                 -- If the power bar has been freely placed by its mover, an absolute
@@ -2050,7 +2055,7 @@ function UnitFrames:ApplyUnitFrameSize(frame, settings, unitKey)
                 end
                 frame.Health:SetAllPoints(frame)
             else
-                frame.Power._designedHeight = powerHeight  -- stored for runtime collapse/restore
+                frame.Power._designedHeight = powerHeight -- stored for runtime collapse/restore
                 frame.Power:SetHeight(powerHeight)
                 frame.Power:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
                 frame.Power:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
@@ -2069,7 +2074,7 @@ function UnitFrames:ApplyUnitFrameSize(frame, settings, unitKey)
                 local healerOnly = (unitKey == "partyMember" and self:GetGroupSettings("party").healerOnlyPower ~= false)
                     or (unitKey == "raidMember" and self:GetGroupSettings("raid").healerOnlyPower ~= false)
                 if healerOnly then
-                    frame.Power._roleCollapsed = nil  -- force fresh evaluation
+                    frame.Power._roleCollapsed = nil -- force fresh evaluation
                     self:UpdatePowerBarForRole(frame.Power, unitKey, frame.unit)
                 end
             end
@@ -2712,13 +2717,13 @@ function UnitFrames:GetMoverInspector()
 
     -- Arrow layout: cross pattern centred on panel (shifted down for W/H row)
     local row1Y    = -91
-    local row2Y    = row1Y - S - G                        -- -114
-    local row3Y    = row2Y - S - G                        -- -137
+    local row2Y    = row1Y - S - G                       -- -114
+    local row3Y    = row2Y - S - G                       -- -137
 
-    local btnUp    = MakeNudgeBtn("\226\134\145", 0, 1)   -- ↑
-    local btnLeft  = MakeNudgeBtn("\226\134\144", -1, 0)  -- ←
-    local btnRight = MakeNudgeBtn("\226\134\146", 1, 0)   -- →
-    local btnDown  = MakeNudgeBtn("\226\134\147", 0, -1)  -- ↓
+    local btnUp    = MakeNudgeBtn("\226\134\145", 0, 1)  -- ↑
+    local btnLeft  = MakeNudgeBtn("\226\134\144", -1, 0) -- ←
+    local btnRight = MakeNudgeBtn("\226\134\146", 1, 0)  -- →
+    local btnDown  = MakeNudgeBtn("\226\134\147", 0, -1) -- ↓
 
     btnUp:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2, row1Y)
     btnLeft:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2 - S - G, row2Y)
@@ -3546,7 +3551,7 @@ function UnitFrames:StyleFrame(frame)
         local effShow = UnitFrames:GetEffectiveShowPower(capturedUnitKey)
         -- If power bar is configured off, prevent oUF re-showing it during update events.
         if not effShow then
-            powerBar:SetHeight(0)  -- collapse so health fills the full frame
+            powerBar:SetHeight(0) -- collapse so health fills the full frame
             powerBar:Hide()
             if powerBar.border then powerBar.border:Hide() end
             return
@@ -3565,7 +3570,7 @@ function UnitFrames:StyleFrame(frame)
     power.PostUpdateColor = function(powerBar, unit2, _color, _r, _g, _b)
         local effShow = UnitFrames:GetEffectiveShowPower(capturedUnitKey)
         if not effShow then
-            powerBar:SetHeight(0)  -- collapse so health fills the full frame
+            powerBar:SetHeight(0) -- collapse so health fills the full frame
             powerBar:Hide()
             if powerBar.border then powerBar.border:Hide() end
             return
@@ -4316,7 +4321,7 @@ function UnitFrames:OnEnable()
         if not (db._migrated and db._migrated.healerOnlyPower) then
             db._migrated = db._migrated or {}
             if db.groups then
-                for _, gk in ipairs({"party", "raid"}) do
+                for _, gk in ipairs({ "party", "raid" }) do
                     if type(db.groups[gk]) == "table" and db.groups[gk].healerOnlyPower == false then
                         db.groups[gk].healerOnlyPower = nil
                     end

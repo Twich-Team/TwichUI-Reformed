@@ -679,7 +679,8 @@ local function GetDefaultCastbarSpellOffsetX()
 
     local iconPosition = castbar.iconPosition or PLAYER_CASTBAR_DEFAULTS.iconPosition
     local iconSide = castbar.iconSide or PLAYER_CASTBAR_DEFAULTS.iconSide
-    local iconSize = tonumber(castbar.iconSize) or PLAYER_CASTBAR_DEFAULTS.iconSize or PLAYER_CASTBAR_DEFAULTS.height or 20
+    local iconSize = tonumber(castbar.iconSize) or PLAYER_CASTBAR_DEFAULTS.iconSize or PLAYER_CASTBAR_DEFAULTS.height or
+    20
     iconSize = math.max(12, math.min(50, iconSize))
 
     if showIcon ~= false and iconPosition == "inside" and iconSide ~= "right" then
