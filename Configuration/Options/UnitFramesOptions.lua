@@ -138,6 +138,21 @@ local ROLE_ICON_PREVIEW_STANDARD = {
     DAMAGER = { texture = ROLE_ICON_PREVIEW_TEXTURE, width = 19, height = 19, textureWidth = 64, textureHeight = 64, texCoord = { 20 / 64, 39 / 64, 22 / 64, 41 / 64 } },
 }
 
+local STATE_ICON_PREVIEW_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon"
+local STATE_ICON_PREVIEW_TWICH = {
+    combat = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Combat", width = 64, height = 70 },
+    resting = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Resting", width = 64, height = 63 },
+}
+local STATE_ICON_PREVIEW_STANDARD = {
+    combat = { texture = STATE_ICON_PREVIEW_TEXTURE, width = 32, height = 32, textureWidth = 64, textureHeight = 64, texCoord = { 0.5, 1, 0, 0.49 } },
+    resting = { texture = STATE_ICON_PREVIEW_TEXTURE, width = 32, height = 27, textureWidth = 64, textureHeight = 64, texCoord = { 0, 0.5, 0, 0.421875 } },
+}
+
+local STATE_INDICATOR_DEFAULTS = {
+    combatIndicator = { point = "CENTER", relativePoint = "TOP", offsetX = 0, offsetY = 10, size = 20 },
+    restingIndicator = { point = "CENTER", relativePoint = "TOPLEFT", offsetX = -2, offsetY = 8, size = 18 },
+}
+
 -- Default tag/justify for info bar text slots (mirrors INFO_BAR_TEXT_DEFAULTS in the engine)
 local INFO_BAR_SLOT_DEFAULTS = {
     { tag = "[name]",     justify = "LEFT" },
@@ -600,6 +615,36 @@ local function BuildRoleIconPreviewMarkup(iconDef, targetHeight)
     return string.format("|T%s:%d:%d:0:0|t", iconDef.texture, width, height)
 end
 
+local function BuildStateIndicatorPreviewMarkup(iconDef, targetHeight)
+    targetHeight = tonumber(targetHeight) or 22
+    if type(iconDef) ~= "table" or not iconDef.texture then
+        return ""
+    end
+
+    local sourceWidth = tonumber(iconDef.width) or targetHeight
+    local sourceHeight = tonumber(iconDef.height) or targetHeight
+    if sourceWidth <= 0 or sourceHeight <= 0 then
+        sourceWidth = targetHeight
+        sourceHeight = targetHeight
+    end
+
+    local scale = targetHeight / sourceHeight
+    local width = math.max(1, math.floor((sourceWidth * scale) + 0.5))
+    local height = math.max(1, math.floor((sourceHeight * scale) + 0.5))
+    local tex = iconDef.texCoord
+    if type(tex) == "table" and #tex >= 4 then
+        local textureWidth = tonumber(iconDef.textureWidth) or sourceWidth
+        local textureHeight = tonumber(iconDef.textureHeight) or sourceHeight
+        return string.format("|T%s:%d:%d:0:0:%d:%d:%d:%d:%d:%d|t", iconDef.texture, width, height,
+            textureWidth, textureHeight,
+            math.floor((tex[1] * textureWidth) + 0.5),
+            math.floor((tex[2] * textureWidth) + 0.5),
+            math.floor((tex[3] * textureHeight) + 0.5),
+            math.floor((tex[4] * textureHeight) + 0.5))
+    end
+    return string.format("|T%s:%d:%d:0:0|t", iconDef.texture, width, height)
+end
+
 local function BuildRoleIconTypeValues()
     return {
         standard = string.format("%s  %s %s %s",
@@ -612,6 +657,19 @@ local function BuildRoleIconTypeValues()
             BuildRoleIconPreviewMarkup(ROLE_ICON_PREVIEW_TWICH.TANK, 22),
             BuildRoleIconPreviewMarkup(ROLE_ICON_PREVIEW_TWICH.HEALER, 22),
             BuildRoleIconPreviewMarkup(ROLE_ICON_PREVIEW_TWICH.DAMAGER, 22)),
+    }
+end
+
+local function BuildStateIndicatorTypeValues()
+    return {
+        standard = string.format("%s  %s %s",
+            ROLE_ICON_TYPE_VALUES.standard,
+            BuildStateIndicatorPreviewMarkup(STATE_ICON_PREVIEW_STANDARD.combat, 22),
+            BuildStateIndicatorPreviewMarkup(STATE_ICON_PREVIEW_STANDARD.resting, 22)),
+        twich = string.format("%s  %s %s",
+            ROLE_ICON_TYPE_VALUES.twich,
+            BuildStateIndicatorPreviewMarkup(STATE_ICON_PREVIEW_TWICH.combat, 22),
+            BuildStateIndicatorPreviewMarkup(STATE_ICON_PREVIEW_TWICH.resting, 22)),
     }
 end
 
@@ -1598,6 +1656,39 @@ local function BuildRoleIconGroup(order, basePath, defaultEnabled)
     })
 end
 
+local function BuildStateIndicatorGroup(order, label, basePath, indicatorKey)
+    local defaults = STATE_INDICATOR_DEFAULTS[indicatorKey] or {}
+    local disabled = ModuleDisabled()
+    local isOff = ModuleDisabled(function()
+        return GetPathValue(ExtendPath(basePath, "enabled"), false) ~= true
+    end)
+
+    return Widgets.IGroup(order, label, {
+        enabled = BuildToggle(1, "Show " .. label,
+            label == "Resting Indicator"
+                and "Display the resting icon on this frame when the represented unit is the player and resting."
+                or "Display the combat icon on this frame when the represented unit is in combat.",
+            ExtendPath(basePath, "enabled"), false, { disabled = disabled, refreshConfig = true }),
+        iconType = BuildSelect(2, "Icon Type",
+            "Choose which icon art set to use for this indicator.",
+            ExtendPath(basePath, "iconType"), "standard", BuildStateIndicatorTypeValues,
+            { disabled = isOff, refreshConfig = true, width = "full" }),
+        point = BuildSelect(3, "Icon Point",
+            "Which point of the indicator should be anchored.",
+            ExtendPath(basePath, "point"), defaults.point or "CENTER", POINT_VALUES, { disabled = isOff }),
+        relativePoint = BuildSelect(4, "Frame Point",
+            "Which point on the frame the indicator should anchor to.",
+            ExtendPath(basePath, "relativePoint"), defaults.relativePoint or "TOP", POINT_VALUES,
+            { disabled = isOff }),
+        offsetX = BuildRange(5, "X Offset", "Horizontal offset from the chosen frame point.",
+            ExtendPath(basePath, "offsetX"), defaults.offsetX or 0, -200, 200, 1, { disabled = isOff }),
+        offsetY = BuildRange(6, "Y Offset", "Vertical offset from the chosen frame point.",
+            ExtendPath(basePath, "offsetY"), defaults.offsetY or 0, -200, 200, 1, { disabled = isOff }),
+        size = BuildRange(7, "Size", "Indicator size in pixels.",
+            ExtendPath(basePath, "size"), defaults.size or 18, 8, 64, 1, { disabled = isOff }),
+    })
+end
+
 --- Builds a full Info Bar tab for a given base path (units/X/infoBar or groups/X/infoBar).
 local function BuildInfoBarTab(order, basePath)
     local disabled    = ModuleDisabled()
@@ -1860,6 +1951,10 @@ local function BuildSingleUnitTab(unitKey, label)
                             ExtendPath(basePath, "highlights", "showEnemyTarget"), true, { disabled = disabled }),
                     }),
                     roleIcon = BuildRoleIconGroup(5, ExtendPath(basePath, "roleIcon"), false),
+                    combatIndicator = BuildStateIndicatorGroup(6, "Combat Indicator",
+                        ExtendPath(basePath, "combatIndicator"), "combatIndicator"),
+                    restingIndicator = BuildStateIndicatorGroup(7, "Resting Indicator",
+                        ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
                     copyFrom = BuildCopyFromSingle(unitKey),
                 },
             },
@@ -2104,7 +2199,11 @@ local function BuildGroupTab(groupKey, label)
             watchers = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
             colors   = colorsTab,
             roleIcon = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"), groupKey == "party"),
-            infoBar  = BuildInfoBarTab(7, ExtendPath(basePath, "infoBar")),
+            combatIndicator = BuildStateIndicatorGroup(7, "Combat Indicator",
+                ExtendPath(basePath, "combatIndicator"), "combatIndicator"),
+            restingIndicator = BuildStateIndicatorGroup(8, "Resting Indicator",
+                ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
+            infoBar  = BuildInfoBarTab(9, ExtendPath(basePath, "infoBar")),
         },
     }
 end
@@ -2161,6 +2260,10 @@ local function BuildBossTab()
                             { "units", "boss", "highlights", "showEnemyTarget" }, true, { disabled = disabled }),
                     }),
                     healPrediction = BuildHealPredictionGroup(3, { "units", "boss", "healPrediction" }),
+                    combatIndicator = BuildStateIndicatorGroup(4, "Combat Indicator",
+                        { "units", "boss", "combatIndicator" }, "combatIndicator"),
+                    restingIndicator = BuildStateIndicatorGroup(5, "Resting Indicator",
+                        { "units", "boss", "restingIndicator" }, "restingIndicator"),
                 },
             },
             layout = BuildLayoutGroup(2, "Layout", "boss", GROUP_LAYOUT_DEFAULTS.boss, {

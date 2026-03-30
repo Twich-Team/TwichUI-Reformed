@@ -20,8 +20,11 @@ local UIParent = _G.UIParent
 local UnitExists = _G.UnitExists
 local UnitClass = _G.UnitClass
 local UnitIsPlayer = _G.UnitIsPlayer
+local UnitIsUnit = _G.UnitIsUnit
+local UnitAffectingCombat = _G.UnitAffectingCombat
 local UnitPowerType = _G.UnitPowerType
 local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
+local IsResting = _G.IsResting
 local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
 local StatusBarInterpolation = (_G.Enum and _G.Enum.StatusBarInterpolation) or _G.StatusBarInterpolation
@@ -484,6 +487,41 @@ local TWICH_ROLE_TEXTURES = {
     DAMAGER = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_DPS", width = 64, height = 74 },
 }
 
+local STATE_ICON_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon"
+
+local STANDARD_STATE_TEXTURES = {
+    combat = { texture = STATE_ICON_TEXTURE, texCoord = { 0.5, 1, 0, 0.49 }, width = 32, height = 32 },
+    resting = { texture = STATE_ICON_TEXTURE, texCoord = { 0, 0.5, 0, 0.421875 }, width = 32, height = 27 },
+}
+
+local TWICH_STATE_TEXTURES = {
+    combat = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Combat", width = 64, height = 70 },
+    resting = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Resting", width = 64, height = 63 },
+}
+
+local STATE_INDICATOR_DEFS = {
+    combatIndicator = {
+        stateKey = "combat",
+        hostKey = "TwichCombatIndicatorHost",
+        textureKey = "TwichCombatIndicator",
+        defaultPoint = "CENTER",
+        defaultRelativePoint = "TOP",
+        defaultOffsetX = 0,
+        defaultOffsetY = 10,
+        defaultSize = 20,
+    },
+    restingIndicator = {
+        stateKey = "resting",
+        hostKey = "TwichRestingIndicatorHost",
+        textureKey = "TwichRestingIndicator",
+        defaultPoint = "CENTER",
+        defaultRelativePoint = "TOPLEFT",
+        defaultOffsetX = -2,
+        defaultOffsetY = 8,
+        defaultSize = 18,
+    },
+}
+
 local function GetRoleIconArt(iconType, role)
     if iconType == "twich" then
         return TWICH_ROLE_TEXTURES[role]
@@ -507,8 +545,16 @@ local function GetRoleIconArt(iconType, role)
     end
 end
 
-local function GetScaledRoleIconSize(size, art)
-    local boundedSize = Clamp(size or 18, 8, 40)
+local function GetStateIndicatorArt(iconType, stateKey)
+    if iconType == "twich" then
+        return TWICH_STATE_TEXTURES[stateKey]
+    end
+
+    return STANDARD_STATE_TEXTURES[stateKey]
+end
+
+local function GetScaledIconSize(size, art, minimumSize, maximumSize)
+    local boundedSize = Clamp(size or 18, minimumSize or 8, maximumSize or 64)
     if type(art) ~= "table" or art.atlas then
         return boundedSize, boundedSize
     end
@@ -521,6 +567,10 @@ local function GetScaledRoleIconSize(size, art)
 
     local scale = boundedSize / math_max(width, height)
     return math_max(1, width * scale), math_max(1, height * scale)
+end
+
+local function GetScaledRoleIconSize(size, art)
+    return GetScaledIconSize(size, art, 8, 40)
 end
 
 local INFO_BAR_TEXT_DEFAULTS = {
@@ -1114,6 +1164,206 @@ function UnitFrames:GetRoleIconConfig(unitKey)
         filter   = get("filter", "all"),
         iconType = get("iconType", "standard"),
     }
+end
+
+function UnitFrames:GetStateIndicatorConfig(unitKey, indicatorKey)
+    local indicatorDef = STATE_INDICATOR_DEFS[indicatorKey]
+    if not indicatorDef then
+        return {
+            enabled = false,
+            point = "CENTER",
+            relativePoint = "CENTER",
+            offsetX = 0,
+            offsetY = 0,
+            size = 18,
+            iconType = "standard",
+        }
+    end
+
+    local db = self:GetDB()
+    local scope = ResolveScopeByUnitKey(unitKey)
+
+    local groupCfg = {}
+    if scope == "party" or scope == "raid" or scope == "tank" then
+        local grp = db.groups and db.groups[scope] or {}
+        groupCfg = type(grp[indicatorKey]) == "table" and grp[indicatorKey] or {}
+    end
+
+    local unitCfg = {}
+    local unitConfigKey = unitKey
+    if scope == "boss" then
+        unitConfigKey = "boss"
+    end
+    if scope == "singles" or scope == "boss" then
+        local u = db.units and db.units[unitConfigKey] or {}
+        unitCfg = type(u[indicatorKey]) == "table" and u[indicatorKey] or {}
+    end
+
+    local function get(k, default)
+        if unitCfg[k] ~= nil then return unitCfg[k] end
+        if groupCfg[k] ~= nil then return groupCfg[k] end
+        return default
+    end
+
+    return {
+        enabled = get("enabled", false),
+        point = get("point", indicatorDef.defaultPoint),
+        relativePoint = get("relativePoint", indicatorDef.defaultRelativePoint),
+        offsetX = get("offsetX", indicatorDef.defaultOffsetX),
+        offsetY = get("offsetY", indicatorDef.defaultOffsetY),
+        size = get("size", indicatorDef.defaultSize),
+        iconType = get("iconType", "standard"),
+    }
+end
+
+function UnitFrames:ApplyStateIndicatorSettings(frame, unitKey, indicatorKey)
+    if not frame then return end
+
+    local indicatorDef = STATE_INDICATOR_DEFS[indicatorKey]
+    if not indicatorDef then
+        return
+    end
+
+    local hostKey = indicatorDef.hostKey
+    local textureKey = indicatorDef.textureKey
+
+    if not frame[hostKey] then
+        local host = CreateFrame("Frame", nil, frame)
+        host:SetAllPoints(frame)
+        host:SetFrameStrata(frame:GetFrameStrata())
+        host:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 6))
+        frame[hostKey] = host
+        frame[textureKey] = host:CreateTexture(nil, "OVERLAY", nil, 1)
+    else
+        frame[hostKey]:SetFrameStrata(frame:GetFrameStrata())
+        frame[hostKey]:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 6))
+    end
+
+    local host = frame[hostKey]
+    local icon = frame[textureKey]
+    local cfg = self:GetStateIndicatorConfig(unitKey, indicatorKey)
+
+    if not cfg.enabled then
+        icon:Hide()
+        host:Hide()
+        return
+    end
+
+    host:Show()
+    icon:ClearAllPoints()
+    icon:SetDrawLayer("OVERLAY", 7)
+    icon:SetPoint(cfg.point or indicatorDef.defaultPoint, host, cfg.relativePoint or indicatorDef.defaultRelativePoint,
+        tonumber(cfg.offsetX) or indicatorDef.defaultOffsetX, tonumber(cfg.offsetY) or indicatorDef.defaultOffsetY)
+
+    local art = GetStateIndicatorArt(cfg.iconType, indicatorDef.stateKey)
+        or GetStateIndicatorArt("standard", indicatorDef.stateKey)
+    if art and art.atlas then
+        icon:SetAtlas(art.atlas, false)
+        icon:SetTexCoord(0, 1, 0, 1)
+        icon:SetSize(GetScaledIconSize(cfg.size, art, 8, 64))
+    elseif art and art.texture then
+        icon:SetTexture(art.texture)
+        if art.texCoord then
+            icon:SetTexCoord(unpack(art.texCoord))
+        else
+            icon:SetTexCoord(0, 1, 0, 1)
+        end
+        icon:SetSize(GetScaledIconSize(cfg.size, art, 8, 64))
+    else
+        icon:Hide()
+        return
+    end
+
+    if not frame._twichStateIndicatorOnShowHooked then
+        frame._twichStateIndicatorOnShowHooked = true
+        frame:HookScript("OnShow", function(f)
+            UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "combatIndicator")
+            UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "restingIndicator")
+        end)
+    end
+
+    if not frame._twichStateIndicatorOnAttributeChangedHooked then
+        frame._twichStateIndicatorOnAttributeChangedHooked = true
+        frame:HookScript("OnAttributeChanged", function(f, name)
+            if name == "unit" then
+                UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "combatIndicator")
+                UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "restingIndicator")
+            end
+        end)
+    end
+
+    self:UpdateStateIndicator(frame, unitKey, indicatorKey)
+end
+
+function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
+    local indicatorDef = STATE_INDICATOR_DEFS[indicatorKey]
+    if not indicatorDef then
+        return
+    end
+
+    local icon = frame and frame[indicatorDef.textureKey]
+    local host = frame and frame[indicatorDef.hostKey]
+    if not icon then
+        return
+    end
+
+    local cfg = self:GetStateIndicatorConfig(unitKey, indicatorKey)
+    if not cfg.enabled then
+        icon:Hide()
+        if host then
+            host:Hide()
+        end
+        return
+    end
+
+    if host then
+        host:Show()
+    end
+
+    local shouldShow = false
+    local unit = ResolveFrameUnit(frame)
+    if frame and frame._isTestPreview then
+        if indicatorKey == "combatIndicator" then
+            shouldShow = frame._testInCombat == true
+        elseif indicatorKey == "restingIndicator" then
+            shouldShow = frame._testIsResting == true
+        end
+    elseif unit and UnitExists(unit) then
+        if indicatorKey == "combatIndicator" then
+            local okCombat, inCombat = pcall(UnitAffectingCombat, unit)
+            shouldShow = okCombat and inCombat == true
+        elseif indicatorKey == "restingIndicator" then
+            local okPlayer, isPlayer = pcall(UnitIsUnit, unit, "player")
+            shouldShow = okPlayer and isPlayer == true and IsResting and IsResting() == true
+        end
+    end
+
+    if shouldShow then
+        icon:Show()
+    else
+        icon:Hide()
+    end
+end
+
+function UnitFrames:RefreshStateIndicatorFrames()
+    for _, frame in pairs(self.frames) do
+        if frame then
+            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "combatIndicator")
+            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "restingIndicator")
+        end
+    end
+
+    for _, header in pairs(self.headers) do
+        if header then
+            for index = 1, select('#', header:GetChildren()) do
+                local child = select(index, header:GetChildren())
+                if child then
+                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "combatIndicator")
+                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "restingIndicator")
+                end
+            end
+        end
+    end
 end
 
 --- Applies role icon layout settings to a frame (lazy texture creation + positioning).
@@ -3013,6 +3263,8 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     self:ApplyHighlightSettings(frame)
     self:ApplyUnitCastbarSettings(frame, unitKey)
     self:ApplyRoleIconSettings(frame, unitKey)
+    self:ApplyStateIndicatorSettings(frame, unitKey, "combatIndicator")
+    self:ApplyStateIndicatorSettings(frame, unitKey, "restingIndicator")
     self:ApplyInfoBarSettings(frame, unitKey)
 end
 
@@ -3107,6 +3359,8 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
                 self:ApplyTextTags(child, memberUnitKey)
                 self:ApplyTextPositions(child, memberUnitKey)
                 self:ApplyRoleIconSettings(child, memberUnitKey)
+                self:ApplyStateIndicatorSettings(child, memberUnitKey, "combatIndicator")
+                self:ApplyStateIndicatorSettings(child, memberUnitKey, "restingIndicator")
                 self:ApplyInfoBarSettings(child, memberUnitKey)
                 -- Re-evaluate healer-only power bar visibility immediately so layout
                 -- changes take effect without waiting for the next power event.
@@ -3969,6 +4223,8 @@ local function BuildPreviewUnitState(unitKey, label, mockClass)
         index = index,
         name = name,
         role = role,
+        inCombat = unitKey ~= "player" and unitKey ~= "pet" and not (unitKey == "partyMember" and index == 1),
+        isResting = unitKey == "player" or ((unitKey == "partyMember" or unitKey == "raidMember") and index == 1),
         classToken = mockClass,
         healthCur = healthCur,
         healthMax = healthMax,
@@ -4159,6 +4415,8 @@ function UnitFrames:ApplyPreviewFrameData(frame, unitKey, label, mockClass)
     frame._testRole = state.role
     frame._testMockClass = mockClass
     frame._testAuraList = BuildPreviewAuraList(state)
+    frame._testInCombat = state.inCombat == true
+    frame._testIsResting = state.isResting == true and state.inCombat ~= true
 
     self:ApplySingleFrameSettings(frame, unitKey)
 
@@ -4296,6 +4554,8 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
             tonumber(layout.y) or 0
         )
         frame:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
+        self:UpdateStateIndicator(frame, entry.key, "combatIndicator")
+        self:UpdateStateIndicator(frame, entry.key, "restingIndicator")
         frame:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
     end
 
@@ -5569,6 +5829,14 @@ function UnitFrames:OnUnitTargetChanged()
     self:RefreshHighlightFrames()
 end
 
+function UnitFrames:OnUnitFlagsChanged()
+    self:RefreshStateIndicatorFrames()
+end
+
+function UnitFrames:OnPlayerRestingChanged()
+    self:RefreshStateIndicatorFrames()
+end
+
 function UnitFrames:OnEnable()
     -- Migration: old default was nil (no value stored) or false for healerOnlyPower.
     -- New semantics: nil means ON by default; false means explicitly OFF. If savedvars has
@@ -5634,6 +5902,10 @@ function UnitFrames:OnEnable()
     self:RegisterEvent("UNIT_THREAT_LIST_UPDATE", "OnThreatChanged")
     self:RegisterEvent("NAME_PLATE_UNIT_ADDED", "OnUnitTargetChanged")
     self:RegisterEvent("NAME_PLATE_UNIT_REMOVED", "OnUnitTargetChanged")
+    self:RegisterEvent("UNIT_FLAGS", "OnUnitFlagsChanged")
+    self:RegisterEvent("PLAYER_UPDATE_RESTING", "OnPlayerRestingChanged")
+    self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnUnitFlagsChanged")
+    self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnUnitFlagsChanged")
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "RefreshAllFrames")
     self:RegisterEvent("PLAYER_ROLES_ASSIGNED", "RefreshAllFrames")
     self:RegisterEvent("ROLE_CHANGED_INFORM", "RefreshAllFrames")
