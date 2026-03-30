@@ -1359,6 +1359,10 @@ local function GetDurabilityState()
 end
 
 local function SetDurabilityPanelText(panel)
+    if not (panel and panel.text) then
+        return
+    end
+
     local percent = select(1, GetDurabilityState())
     local r, g, b
     local overrideR, overrideG, overrideB, overrideA = GetColorOverride("durability")
@@ -1368,7 +1372,11 @@ local function SetDurabilityPanelText(panel)
         r, g, b = GetStatusColor(100 - percent, "ping")
     end
 
-    SetPanelText(panel, format("Durability %s", FormatPercent(percent)), "durability", r, g, b, overrideA or 1)
+    local previousText = panel.text:GetText()
+    local percentText = ColorizeText(FormatPercent(percent), r, g, b, overrideA or 1)
+    panel.text:SetText(format("Durability %s", percentText))
+    panel.text:SetTextColor(1, 1, 1, 1)
+    DataTextModule:MaybeFlashPanel(panel, "durability", previousText, panel.text:GetText() or "")
 end
 
 local function GetCurrencyDB()
