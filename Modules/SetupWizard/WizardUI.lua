@@ -58,14 +58,14 @@ local C                  = {
 }
 
 local STEP_DEFS          = {
-    { id = "welcome", title = "Welcome" },
-    { id = "ui",      title = "UI & Chat" },
-    { id = "layout",  title = "Layout" },
+    { id = "welcome",    title = "Welcome" },
+    { id = "ui",         title = "UI & Chat" },
+    { id = "layout",     title = "Layout" },
     { id = "unitframes", title = "Unit Frames" },
-    { id = "theme",   title = "Theme" },
-    { id = "fonts",   title = "Font Sizes" },
-    { id = "elvui",   title = "ElvUI" },
-    { id = "finish",  title = "Finish" },
+    { id = "theme",      title = "Theme" },
+    { id = "fonts",      title = "Font Sizes" },
+    { id = "elvui",      title = "ElvUI" },
+    { id = "finish",     title = "Finish" },
 }
 
 -- ─── UI namespace ───────────────────────────────────────────────────────────
@@ -759,21 +759,21 @@ function UI:Show()
         self.selectedUIScalePreset = "auto"
         self.selectedUIScaleValue = autoScale
     end
-    self.applyChatSetup    = true
-    self.elvuiConflictInfo = SetupWizardModule:DetectElvUIConflicts()
-    self.useTwichChat      = true
-    self.useTwichDatatext  = true
+    self.applyChatSetup     = true
+    self.elvuiConflictInfo  = SetupWizardModule:DetectElvUIConflicts()
+    self.useTwichChat       = true
+    self.useTwichDatatext   = true
     self.useTwichUnitFrames = true
-    self.showPlayerInParty = true
-    self.showPartyCastbars = true
-    self.uiScaleRefs       = {}
+    self.showPlayerInParty  = true
+    self.showPartyCastbars  = true
+    self.uiScaleRefs        = {}
 
-    local unitFrameChoices = SetupWizardModule:GetUnitFrameWizardChoices()
+    local unitFrameChoices  = SetupWizardModule:GetUnitFrameWizardChoices()
     self.useTwichUnitFrames = unitFrameChoices.useTwichUnitFrames ~= false
-    self.showPlayerInParty = unitFrameChoices.showPlayerInParty ~= false
-    self.showPartyCastbars = unitFrameChoices.showPartyCastbars ~= false
+    self.showPlayerInParty  = unitFrameChoices.showPlayerInParty ~= false
+    self.showPartyCastbars  = unitFrameChoices.showPartyCastbars ~= false
 
-    local pendingState = SetupWizardModule:GetPendingWizardState()
+    local pendingState      = SetupWizardModule:GetPendingWizardState()
     if type(pendingState) == "table" then
         self.currentStep = math.max(1, math.min(#STEP_DEFS, tonumber(pendingState.resumeStep) or 1))
         self.selectedLayout = pendingState.selectedLayout or self.selectedLayout
@@ -805,11 +805,11 @@ function UI:Show()
     end
 
     -- Clear prior build state so steps rebuild with fresh data
-    self.stepBuilt         = {}
-    self.layoutCardRefs    = {}
-    self.themeCardRefs     = {}
-    self.unitFrameRefs     = {}
-    self.finishRefs        = {}
+    self.stepBuilt      = {}
+    self.layoutCardRefs = {}
+    self.themeCardRefs  = {}
+    self.unitFrameRefs  = {}
+    self.finishRefs     = {}
     self:_RenderStep(self.currentStep)
 
     -- Fade in — OnFinished locks the base alpha so the frame stays visible
@@ -967,7 +967,7 @@ function UI:_RefreshUIScaleSummary()
             refs.summaryText:SetText("UI scale: Default game value (1.00).")
         elseif self.selectedUIScalePreset == "auto" then
             refs.summaryText:SetText(string.format(
-            "UI scale: Auto (recommended, calculated %.2f based on screen height).", value))
+                "UI scale: Auto (recommended, calculated %.2f based on screen height).", value))
         else
             refs.summaryText:SetText(string.format("UI scale: Manual %.2f.", value))
         end

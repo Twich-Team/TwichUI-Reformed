@@ -655,7 +655,7 @@ function SetupWizardModule:ApplyFontSizes(sizes)
 
     -- Apply chat message font size
     local chatOpts = T:GetModule("Configuration", true) and T:GetModule("Configuration", true).Options and
-    T:GetModule("Configuration", true).Options.ChatEnhancement
+        T:GetModule("Configuration", true).Options.ChatEnhancement
     if chatOpts and type(chatOpts.GetChatEnhancementDB) == "function" then
         local chatDB = chatOpts:GetChatEnhancementDB()
         if chatDB then
@@ -683,7 +683,7 @@ function SetupWizardModule:ApplyFontSizes(sizes)
 
     -- Apply standalone datatext panel font size
     local datatextOpts = T:GetModule("Configuration", true) and T:GetModule("Configuration", true).Options and
-    T:GetModule("Configuration", true).Options.Datatext
+        T:GetModule("Configuration", true).Options.Datatext
     if datatextOpts and type(datatextOpts.GetStandaloneDB) == "function" then
         local standaloneDB = datatextOpts:GetStandaloneDB()
         if standaloneDB and standaloneDB.style then
