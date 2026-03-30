@@ -49,7 +49,7 @@ end
 local function BroadcastChange(key)
     local theme = GetThemeModule()
     if not theme then return end
-    -- Notify all theme subscribers (Chat, RaidFrames, etc.)
+    -- Notify all theme subscribers (Chat, UnitFrames, etc.)
     theme:SendMessage("TWICH_THEME_CHANGED", key)
     -- Refresh Standalone data panels so they pick up the new theme defaults
     local datatextModule = T:GetModule("Datatexts", true)
@@ -354,7 +354,7 @@ function Options:ResetAllFrameOverrides()
             chatOpts:RefreshChatStylingModule()
         end
     end
-    -- Re-broadcast to all other frame modules (Chat, RaidFrames, etc.)
+    -- Re-broadcast to all other frame modules (Chat, UnitFrames, etc.)
     BroadcastChange(nil)
     -- Clear MythicPlusTools bar texture and font overrides so they fall back
     -- to the global statusBarTexture and globalFont settings.

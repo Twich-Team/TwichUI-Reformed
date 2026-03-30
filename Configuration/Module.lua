@@ -31,7 +31,6 @@ local CHARACTER_BINDINGS = 2
 --- @field GossipHotkeys GossipHotkeysConfigurationOptions
 --- @field BestInSlot BestInSlotConfigurationOptions
 --- @field NotificationPanel NotificationPanelConfigurationOptions
---- @field RaidFrames RaidFramesConfigurationOptions
 --- @field UnitFrames UnitFramesConfigurationOptions
 --- @field MythicPlusTools MythicPlusToolsConfigurationOptions
 --- @field About AboutConfigurationOptions

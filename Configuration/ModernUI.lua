@@ -98,13 +98,6 @@ local NAV_ITEMS = {
         accent = { 0.91, 0.45, 0.45 },
         path = { "unitFrames" },
     },
-    {
-        id = "raidFrames",
-        title = "Raid Frame Tweaks",
-        description = "Legacy ElvUI raid/party highlight tweaks.",
-        accent = { 0.91, 0.45, 0.45 },
-        path = { "raidFrames" },
-    },
 }
 
 local FEATURE_CARDS = {
@@ -248,9 +241,6 @@ local PAGE_NAME_OVERRIDES = {
         content      = "Content",
         gathering    = "Gathering",
         bestInSlot   = "Best In Slot",
-    },
-    raidFrames = {
-        dispellableDebuffsTab = "Dispellable Glow",
     },
     unitFrames = {
         singles = "Single Units",
@@ -867,9 +857,6 @@ local function GetPreviewType(path)
     end
     if key:find("Notification Panel", 1, true) == 1 then
         return "notifications"
-    end
-    if key:find("raidFrames.dispellableDebuffsTab", 1, true) == 1 then
-        return "raid"
     end
     if key:find("unitFrames", 1, true) == 1 then
         return "unitframes"
@@ -2824,57 +2811,6 @@ local function PopulateChoresPreviewShell(shell)
     end
 end
 
-local function GetRaidPreviewModule()
-    return T:GetModule("RaidFrames", true)
-end
-
-local function CreateRaidPreviewUnit(parent, width, height, label)
-    local unit = CreateFrame("Button", nil, parent, "BackdropTemplate")
-    unit:SetSize(width, height)
-    unit:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
-    })
-    unit:SetBackdropColor(0.06, 0.06, 0.08, 0.96)
-    unit:SetBackdropBorderColor(0.16, 0.16, 0.2, 0.9)
-
-    unit.Health = CreateFrame("Frame", nil, unit, "BackdropTemplate")
-    unit.Health:SetPoint("TOPLEFT", unit, "TOPLEFT", 2, -2)
-    unit.Health:SetPoint("BOTTOMRIGHT", unit, "BOTTOMRIGHT", -2, 2)
-    unit.Health.backdrop = CreateFrame("Frame", nil, unit.Health, "BackdropTemplate")
-    unit.Health.backdrop:SetAllPoints(unit.Health)
-    unit.Health.backdrop:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
-    })
-    unit.Health.backdrop:SetBackdropColor(0.12, 0.13, 0.16, 0.96)
-    unit.Health.backdrop:SetBackdropBorderColor(0.22, 0.24, 0.3, 0.9)
-
-    unit.Health.Fill = unit.Health:CreateTexture(nil, "BACKGROUND")
-    unit.Health.Fill:SetPoint("TOPLEFT", unit.Health, "TOPLEFT", 1, -1)
-    unit.Health.Fill:SetPoint("BOTTOMRIGHT", unit.Health, "BOTTOMRIGHT", -1, 1)
-    unit.Health.Fill:SetColorTexture(0.18, 0.44, 0.22, 0.95)
-
-    unit.Name = unit:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    unit.Name:SetPoint("LEFT", unit, "LEFT", 10, 0)
-    unit.Name:SetPoint("RIGHT", unit, "RIGHT", -10, 0)
-    unit.Name:SetJustifyH("LEFT")
-    unit.Name:SetTextColor(1, 0.95, 0.82)
-    unit.Name:SetText(label or "Party")
-
-    unit.Status = unit:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    unit.Status:SetPoint("RIGHT", unit, "RIGHT", -10, 0)
-    unit.Status:SetJustifyH("RIGHT")
-    unit.Status:SetTextColor(0.8, 0.84, 0.9)
-    unit.Status:SetText("Magic")
-
-    return unit
-end
-
 function UI:RenderPreviewStrip(parent, y, path, width)
     local key = JoinPath(path)
     local preview = nil
@@ -3120,38 +3056,6 @@ function UI:RenderPreviewStrip(parent, y, path, width)
             local options = ConfigurationModule.Options and ConfigurationModule.Options.NotificationPanel
             if options and options.TestKeystoneNotification then
                 options:TestKeystoneNotification()
-            end
-        end)
-        return y + preview:GetHeight() + ROW_SPACING
-    end
-
-    if key:find("raidFrames.dispellableDebuffsTab", 1, true) == 1 then
-        local raidModule = GetRaidPreviewModule()
-        preview = CreateFrame("Frame", nil, parent)
-        preview:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
-        preview:SetSize(width, 180)
-
-        local sampleA = CreateRaidPreviewUnit(preview, math.min(156, width - 32), 42, "Tankrin")
-        sampleA:SetPoint("TOPLEFT", preview, "TOPLEFT", 18, -24)
-        local sampleB = CreateRaidPreviewUnit(preview, math.min(156, width - 32), 42, "Cleanseme")
-        sampleB:SetPoint("TOPLEFT", sampleA, "BOTTOMLEFT", 0, -18)
-        sampleB.Status:SetText("Dispellable")
-        sampleB.Health.Fill:SetColorTexture(0.22, 0.35, 0.5, 0.95)
-        local sampleC = CreateRaidPreviewUnit(preview, math.min(156, width - 32), 42, "Leafsong")
-        sampleC:SetPoint("TOPLEFT", sampleB, "BOTTOMLEFT", 0, -18)
-        sampleC.Status:SetText("Poison")
-        sampleC.Health.Fill:SetColorTexture(0.24, 0.46, 0.26, 0.95)
-
-        if raidModule and raidModule.ShowGlow then
-            raidModule:ShowGlow(sampleB, true)
-            raidModule:ShowGlow(sampleC, true)
-        end
-
-        preview:SetScript("OnHide", function()
-            if raidModule and raidModule.HideGlow then
-                raidModule:HideGlow(sampleA)
-                raidModule:HideGlow(sampleB)
-                raidModule:HideGlow(sampleC)
             end
         end)
         return y + preview:GetHeight() + ROW_SPACING

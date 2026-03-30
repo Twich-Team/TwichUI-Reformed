@@ -110,30 +110,6 @@ end
 
 T:RegisterChatCommand("tui", OpenConfigurationPanel)
 
-local function StartRaidFrameGlowTest()
-    local module = T:GetModule("RaidFrames", true)
-    if not module or not module.IsEnabled or not module:IsEnabled() then
-        T:Print("[TwichUI] RaidFrames module is not enabled")
-        return
-    end
-
-    module:StartTest(8)
-end
-
-T:RegisterChatCommand("tuirftest", StartRaidFrameGlowTest)
-
-local function DebugRaidFrameUnit(input)
-    local module = T:GetModule("RaidFrames", true)
-    if not module or type(module.DebugUnit) ~= "function" then
-        T:Print("[TwichUI] RaidFrames debug is unavailable")
-        return
-    end
-
-    module:DebugUnit(type(input) == "string" and input ~= "" and input or "player")
-end
-
-T:RegisterChatCommand("tuirfdebug", DebugRaidFrameUnit)
-
 local function FindTexture(input)
     local f = (GetMouseFoci and GetMouseFoci()[1]) or GetMouseFocus()
     if not f then

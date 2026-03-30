@@ -93,7 +93,6 @@ function T:OnInitialize()
         { module = self:GetModule("SmartMount"),                                 enabled = Options.SmartMount:GetEnabled() },
         { module = self:GetModule("EasyFish"),                                   enabled = Options.EasyFish:GetEnabled() },
         { module = self:GetModule("Datatexts"),                                  enabled = Options.Datatext:IsModuleEnabled() },
-        { module = self:GetModule("RaidFrames"),                                 enabled = Options.RaidFrames:GetEnabled() },
         { module = self:GetModule("UnitFrames"),                                 enabled = Options.UnitFrames:GetEnabled() },
         { module = self:GetModule("BestInSlot"),                                 enabled = Options.BestInSlot:IsBestInSlotModuleEnabled() },
         { module = self:GetModule("QualityOfLife"):GetModule("Gathering"),       enabled = Options.Gathering:GetEnabled() },
