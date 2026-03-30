@@ -84,6 +84,23 @@ local function SafeAuraDebugValue(value, fallback)
     return fallback or "<unprintable>"
 end
 
+local function ReadSafeUnitGUID(unit)
+    if not unit or unit == "" then
+        return nil
+    end
+
+    local okGuid, guid = pcall(UnitGUID, unit)
+    if not okGuid or guid == nil then
+        return nil
+    end
+
+    if issecretvalue and issecretvalue(guid) then
+        return nil
+    end
+
+    return guid
+end
+
 local function SafeColorDebugValue(color)
     if type(color) ~= "table" then
         return "nil"
@@ -2541,20 +2558,150 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
     end
 end
 
-function UnitFrames:UpdateUnitHighlights(frame)
+local function ApplyHighlightGlow(glowFrame, color)
+    if not glowFrame then return end
+
+    local r = color[1] or 1
+    local g = color[2] or 1
+    local b = color[3] or 1
+    local a = color[4] or 1
+
+    SetGradientCompat(glowFrame._top, "VERTICAL", r, g, b, a, r, g, b, 0)
+    SetGradientCompat(glowFrame._bottom, "VERTICAL", r, g, b, 0, r, g, b, a)
+    SetGradientCompat(glowFrame._left, "HORIZONTAL", r, g, b, 0, r, g, b, a)
+    SetGradientCompat(glowFrame._right, "HORIZONTAL", r, g, b, a, r, g, b, 0)
+end
+
+local function ShowHighlightElements(borderFrame, glowFrame, mode, color)
+    if mode == "glow" and glowFrame then
+        ApplyHighlightGlow(glowFrame, color)
+        glowFrame:Show()
+        if borderFrame then
+            borderFrame:Hide()
+        end
+    elseif borderFrame then
+        borderFrame:SetBackdropBorderColor(color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1)
+        borderFrame:Show()
+        if glowFrame then
+            glowFrame:Hide()
+        end
+    elseif glowFrame then
+        ApplyHighlightGlow(glowFrame, color)
+        glowFrame:Show()
+    end
+end
+
+local function CreateGlowContainer(frame, frameLevel)
+    local glowContainer = CreateFrame("Frame", nil, frame)
+    glowContainer:SetAllPoints(frame)
+    glowContainer:SetFrameLevel(frameLevel)
+    glowContainer:SetClipsChildren(false)
+    glowContainer:Hide()
+
+    local function MakeGlowTexture()
+        local texture = glowContainer:CreateTexture(nil, "BACKGROUND")
+        texture:SetTexture("Interface\\Buttons\\WHITE8x8")
+        texture:SetBlendMode("ADD")
+        return texture
+    end
+
+    glowContainer._top = MakeGlowTexture()
+    glowContainer._bottom = MakeGlowTexture()
+    glowContainer._left = MakeGlowTexture()
+    glowContainer._right = MakeGlowTexture()
+
+    return glowContainer
+end
+
+local function IsHostileUnitForHighlight(unit)
+    if not unit or unit == "" or not UnitExists(unit) then
+        return false
+    end
+
+    local okAttack, canAttack = pcall(UnitCanAttack, "player", unit)
+    if okAttack and canAttack == true then
+        return true
+    end
+
+    local okFriend, isFriend = pcall(UnitIsFriend, "player", unit)
+    return okFriend and isFriend == false
+end
+
+function UnitFrames:BuildEnemyTargetLookup()
+    local lookup = {}
+
+    local function CaptureTargetedUnit(hostileUnit)
+        if not IsHostileUnitForHighlight(hostileUnit) then
+            return
+        end
+
+        local targetUnit = hostileUnit .. "target"
+        if not UnitExists(targetUnit) then
+            return
+        end
+
+        local guid = ReadSafeUnitGUID(targetUnit)
+        if guid then
+            lookup[guid] = true
+        end
+    end
+
+    CaptureTargetedUnit("target")
+    CaptureTargetedUnit("focus")
+
+    for index = 1, 5 do
+        CaptureTargetedUnit("boss" .. index)
+        CaptureTargetedUnit("arena" .. index)
+    end
+
+    for index = 1, 40 do
+        CaptureTargetedUnit("nameplate" .. index)
+    end
+
+    return lookup
+end
+
+function UnitFrames:RefreshHighlightFrames(enemyTargetLookup)
+    enemyTargetLookup = enemyTargetLookup or self:BuildEnemyTargetLookup()
+
+    for _, frame in pairs(self.frames) do
+        if frame then
+            self:UpdateUnitHighlights(frame, enemyTargetLookup)
+        end
+    end
+
+    for _, header in pairs(self.headers) do
+        if header then
+            for index = 1, select('#', header:GetChildren()) do
+                local child = select(index, header:GetChildren())
+                if child then
+                    self:UpdateUnitHighlights(child, enemyTargetLookup)
+                end
+            end
+        end
+    end
+end
+
+function UnitFrames:UpdateUnitHighlights(frame, enemyTargetLookup)
     if not frame then return end
-    local db               = self:GetDB()
-    local highlights       = db.highlights or {}
-    local unit             = frame.unit
-    local unitKey          = frame._unitKey or unit
+    local db = self:GetDB()
+    local highlights = db.highlights or {}
+    local unit = frame.unit or (frame.GetAttribute and frame:GetAttribute("unit"))
+    local unitKey = frame._unitKey or unit
     -- Per-unit overrides stored at db.units[unitKey].highlights
-    local unitHL           = (db.units and db.units[unitKey] and db.units[unitKey].highlights) or {}
-    local targetEnabled    = highlights.showTarget ~= false and unitHL.showTarget ~= false
+    local unitHL = (db.units and db.units[unitKey] and db.units[unitKey].highlights) or {}
+    local targetEnabled = highlights.showTarget ~= false and unitHL.showTarget ~= false
     local mouseoverEnabled = highlights.showMouseover ~= false and unitHL.showMouseover ~= false
+    local threatEnabled = highlights.showThreat == true and unitHL.showThreat ~= false
+    local enemyTargetEnabled = highlights.showEnemyTarget == true and unitHL.showEnemyTarget ~= false
 
     -- Reset both target elements before deciding which to show
     if frame.TwichTargetHighlight then frame.TwichTargetHighlight:Hide() end
     if frame.TwichTargetGlow then frame.TwichTargetGlow:Hide() end
+    if frame.TwichThreatHighlight then frame.TwichThreatHighlight:Hide() end
+    if frame.TwichThreatGlow then frame.TwichThreatGlow:Hide() end
+    if frame.TwichEnemyTargetHighlight then frame.TwichEnemyTargetHighlight:Hide() end
+    if frame.TwichEnemyTargetGlow then frame.TwichEnemyTargetGlow:Hide() end
 
     if targetEnabled then
         local showTarget = false
@@ -2563,25 +2710,28 @@ function UnitFrames:UpdateUnitHighlights(frame)
             showTarget = ok and isUnit == true
         end
         if showTarget then
-            local c    = highlights.targetColor or { 1.0, 0.82, 0.0, 0.9 }
+            local c = highlights.targetColor or { 1.0, 0.82, 0.0, 0.9 }
             local mode = highlights.targetMode or "border"
-            if mode == "glow" and frame.TwichTargetGlow then
-                local r, g, b = c[1] or 1, c[2] or 0.82, c[3] or 0
-                local a = c[4] or 0.9
-                local gf = frame.TwichTargetGlow
-                -- VERTICAL: bottom→top. TOP edge: color at bottom (frame edge), fade to transparent at top.
-                SetGradientCompat(gf._top, "VERTICAL", r, g, b, a, r, g, b, 0)
-                -- BOT edge: transparent at bottom, color at top (frame edge).
-                SetGradientCompat(gf._bottom, "VERTICAL", r, g, b, 0, r, g, b, a)
-                -- HORIZONTAL: left→right. LEFT edge: transparent at left, color at right (frame edge).
-                SetGradientCompat(gf._left, "HORIZONTAL", r, g, b, 0, r, g, b, a)
-                -- RIGHT edge: color at left (frame edge), transparent at right.
-                SetGradientCompat(gf._right, "HORIZONTAL", r, g, b, a, r, g, b, 0)
-                gf:Show()
-            elseif frame.TwichTargetHighlight then
-                frame.TwichTargetHighlight:SetBackdropBorderColor(c[1] or 1, c[2] or 0.82, c[3] or 0, c[4] or 0.9)
-                frame.TwichTargetHighlight:Show()
-            end
+            ShowHighlightElements(frame.TwichTargetHighlight, frame.TwichTargetGlow, mode, c)
+        end
+    end
+
+    if threatEnabled and unit and unit ~= "" then
+        local threatStatus = UnitThreatSituation(unit)
+        if threatStatus and threatStatus >= 2 then
+            local c = highlights.threatColor or { 1.0, 0.24, 0.18, 0.95 }
+            local mode = highlights.threatMode or "glow"
+            ShowHighlightElements(frame.TwichThreatHighlight, frame.TwichThreatGlow, mode, c)
+        end
+    end
+
+    if enemyTargetEnabled and unit and unit ~= "" then
+        local unitGuid = ReadSafeUnitGUID(unit)
+        local targetedLookup = enemyTargetLookup or self:BuildEnemyTargetLookup()
+        if unitGuid and targetedLookup[unitGuid] then
+            local c = highlights.enemyTargetColor or { 1.0, 0.55, 0.18, 0.85 }
+            local mode = highlights.enemyTargetMode or "border"
+            ShowHighlightElements(frame.TwichEnemyTargetHighlight, frame.TwichEnemyTargetGlow, mode, c)
         end
     end
 
@@ -2599,32 +2749,52 @@ end
 function UnitFrames:ApplyHighlightSettings(frame)
     if not frame then return end
     local highlights = self:GetDB().highlights or {}
-    local width = Clamp(highlights.targetWidth or 2, 1, 12)
+    local targetWidth = Clamp(highlights.targetWidth or 2, 1, 12)
+    local threatWidth = Clamp(highlights.threatWidth or 3, 1, 16)
+    local enemyTargetWidth = Clamp(highlights.enemyTargetWidth or 2, 1, 16)
+
+    local function ApplyBorderFrame(borderFrame, width)
+        if not borderFrame then return end
+        borderFrame:ClearAllPoints()
+        borderFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", -width, width)
+        borderFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", width, -width)
+        borderFrame:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = width })
+    end
+
+    local function ApplyGlowFrame(glowFrame, width)
+        if not glowFrame then return end
+        local spread = math_max(4, width * 3)
+        glowFrame._top:ClearAllPoints()
+        glowFrame._top:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, 0)
+        glowFrame._top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, spread)
+        glowFrame._bottom:ClearAllPoints()
+        glowFrame._bottom:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, 0)
+        glowFrame._bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -spread)
+        glowFrame._left:ClearAllPoints()
+        glowFrame._left:SetPoint("TOPRIGHT", frame, "TOPLEFT", 0, 0)
+        glowFrame._left:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -spread, 0)
+        glowFrame._right:ClearAllPoints()
+        glowFrame._right:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, 0)
+        glowFrame._right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", spread, 0)
+    end
+
     if frame.TwichTargetHighlight then
-        frame.TwichTargetHighlight:ClearAllPoints()
-        frame.TwichTargetHighlight:SetPoint("TOPLEFT", frame, "TOPLEFT", -width, width)
-        frame.TwichTargetHighlight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", width, -width)
-        frame.TwichTargetHighlight:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = width })
+        ApplyBorderFrame(frame.TwichTargetHighlight, targetWidth)
     end
     if frame.TwichTargetGlow then
-        local gf = frame.TwichTargetGlow
-        local spread = math_max(4, width * 3)
-        -- Top edge: above the frame, gradient fades upward
-        gf._top:ClearAllPoints()
-        gf._top:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, 0)
-        gf._top:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, spread)
-        -- Bottom edge: below the frame
-        gf._bottom:ClearAllPoints()
-        gf._bottom:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, 0)
-        gf._bottom:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, -spread)
-        -- Left edge
-        gf._left:ClearAllPoints()
-        gf._left:SetPoint("TOPRIGHT", frame, "TOPLEFT", 0, 0)
-        gf._left:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", -spread, 0)
-        -- Right edge
-        gf._right:ClearAllPoints()
-        gf._right:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, 0)
-        gf._right:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", spread, 0)
+        ApplyGlowFrame(frame.TwichTargetGlow, targetWidth)
+    end
+    if frame.TwichThreatHighlight then
+        ApplyBorderFrame(frame.TwichThreatHighlight, threatWidth)
+    end
+    if frame.TwichThreatGlow then
+        ApplyGlowFrame(frame.TwichThreatGlow, threatWidth)
+    end
+    if frame.TwichEnemyTargetHighlight then
+        ApplyBorderFrame(frame.TwichEnemyTargetHighlight, enemyTargetWidth)
+    end
+    if frame.TwichEnemyTargetGlow then
+        ApplyGlowFrame(frame.TwichEnemyTargetGlow, enemyTargetWidth)
     end
     self:UpdateUnitHighlights(frame)
 end
@@ -4777,35 +4947,28 @@ function UnitFrames:StyleFrame(frame)
 
     EnsureBackdrop(frame)
 
+    local function CreateBorderHighlight(frameLevel)
+        local highlight = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        highlight:SetPoint("TOPLEFT", frame, "TOPLEFT", -2, 2)
+        highlight:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 2, -2)
+        highlight:SetFrameLevel(frameLevel)
+        highlight:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 2 })
+        highlight:SetBackdropBorderColor(1, 1, 1, 0)
+        highlight:Hide()
+        return highlight
+    end
+
     -- Target highlight
-    local targetHL = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    targetHL:SetPoint("TOPLEFT", frame, "TOPLEFT", -2, 2)
-    targetHL:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 2, -2)
-    targetHL:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 3))
-    targetHL:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 2 })
-    targetHL:SetBackdropBorderColor(1, 0.82, 0, 0)
-    targetHL:Hide()
+    local targetHL = CreateBorderHighlight(math_max(1, frame:GetFrameLevel() + 3))
     frame.TwichTargetHighlight = targetHL
 
-    -- Target glow: 8 gradient textures forming a soft outer halo.
-    -- Rendered one level below the unit frame so the interior is covered by
-    -- the frame's own content. SetClipsChildren(false) lets them spill outward.
-    local glowContainer = CreateFrame("Frame", nil, frame)
-    glowContainer:SetAllPoints(frame)
-    glowContainer:SetFrameLevel(math_max(0, frame:GetFrameLevel() - 1))
-    glowContainer:SetClipsChildren(false)
-    glowContainer:Hide()
-    local function MkGTex()
-        local t = glowContainer:CreateTexture(nil, "BACKGROUND")
-        t:SetTexture("Interface\\Buttons\\WHITE8x8")
-        t:SetBlendMode("ADD")
-        return t
-    end
-    glowContainer._top    = MkGTex()
-    glowContainer._bottom = MkGTex()
-    glowContainer._left   = MkGTex()
-    glowContainer._right  = MkGTex()
-    frame.TwichTargetGlow = glowContainer
+    frame.TwichTargetGlow = CreateGlowContainer(frame, math_max(0, frame:GetFrameLevel() - 1))
+
+    frame.TwichThreatHighlight = CreateBorderHighlight(math_max(1, frame:GetFrameLevel() + 4))
+    frame.TwichThreatGlow = CreateGlowContainer(frame, math_max(0, frame:GetFrameLevel() - 1))
+
+    frame.TwichEnemyTargetHighlight = CreateBorderHighlight(math_max(1, frame:GetFrameLevel() + 5))
+    frame.TwichEnemyTargetGlow = CreateGlowContainer(frame, math_max(0, frame:GetFrameLevel() - 1))
 
     -- Mouseover highlight
     local hoverHL         = CreateFrame("Frame", nil, frame, "BackdropTemplate")
@@ -5388,42 +5551,22 @@ end
 -- Without this, frames that were previously targeted keep their highlight until
 -- the next time the mouse enters/leaves them.
 function UnitFrames:OnTargetChanged()
-    for _, frame in pairs(self.frames) do
-        if frame and frame.TwichTargetHighlight then
-            self:UpdateUnitHighlights(frame)
-        end
-    end
-    for _, header in pairs(self.headers) do
-        if header then
-            for i = 1, select('#', header:GetChildren()) do
-                local child = select(i, header:GetChildren())
-                if child and child.TwichTargetHighlight then
-                    self:UpdateUnitHighlights(child)
-                end
-            end
-        end
-    end
+    self:RefreshHighlightFrames()
 end
 
 -- Refresh mouseover highlights on every frame when the WoW mouseover unit changes.
 -- This ensures that frames whose unit matches the new mouseover unit light up even
 -- if the cursor moved to them between frames without triggering OnEnter/OnLeave.
 function UnitFrames:OnMouseoverChanged()
-    for _, frame in pairs(self.frames) do
-        if frame and frame.TwichMouseoverHighlight then
-            self:UpdateUnitHighlights(frame)
-        end
-    end
-    for _, header in pairs(self.headers) do
-        if header then
-            for i = 1, select('#', header:GetChildren()) do
-                local child = select(i, header:GetChildren())
-                if child and child.TwichMouseoverHighlight then
-                    self:UpdateUnitHighlights(child)
-                end
-            end
-        end
-    end
+    self:RefreshHighlightFrames()
+end
+
+function UnitFrames:OnThreatChanged()
+    self:RefreshHighlightFrames()
+end
+
+function UnitFrames:OnUnitTargetChanged()
+    self:RefreshHighlightFrames()
 end
 
 function UnitFrames:OnEnable()
@@ -5486,6 +5629,11 @@ function UnitFrames:OnEnable()
     self:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP", "HandlePlayerCastEvent")
     self:RegisterEvent("PLAYER_TARGET_CHANGED", "OnTargetChanged")
     self:RegisterEvent("UPDATE_MOUSEOVER_UNIT", "OnMouseoverChanged")
+    self:RegisterEvent("UNIT_TARGET", "OnUnitTargetChanged")
+    self:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE", "OnThreatChanged")
+    self:RegisterEvent("UNIT_THREAT_LIST_UPDATE", "OnThreatChanged")
+    self:RegisterEvent("NAME_PLATE_UNIT_ADDED", "OnUnitTargetChanged")
+    self:RegisterEvent("NAME_PLATE_UNIT_REMOVED", "OnUnitTargetChanged")
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "RefreshAllFrames")
     self:RegisterEvent("PLAYER_ROLES_ASSIGNED", "RefreshAllFrames")
     self:RegisterEvent("ROLE_CHANGED_INFORM", "RefreshAllFrames")
