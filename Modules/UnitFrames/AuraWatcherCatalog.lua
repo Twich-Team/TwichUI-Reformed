@@ -92,10 +92,10 @@ local SPEC_NAMES = {
 local CATALOG = {
     -- ── Holy Paladin ────────────────────────────────────────
     PALADIN_1 = {
-        { key = "BeaconOfLight",      display = "Beacon of Light",      spellIds = { 53563 }, color = { 1.00, 0.93, 0.47 } },
-        { key = "BeaconOfFaith",      display = "Beacon of Faith",      spellIds = { 156910 }, color = { 1.00, 0.84, 0.28 } },
-        { key = "BeaconOfVirtue",     display = "Beacon of Virtue",     spellIds = { 200025 }, color = { 1.00, 0.88, 0.37 } },
-        { key = "BeaconOfTheSavior",  display = "Beacon of the Savior", spellIds = { 1244893 }, color = { 0.93, 0.80, 0.47 } },
+        { key = "BeaconOfLight",      display = "Beacon of Light",      spellIds = { 53563 }, color = { 1.00, 0.93, 0.47 }, promoteHelpful = true },
+        { key = "BeaconOfFaith",      display = "Beacon of Faith",      spellIds = { 156910 }, color = { 1.00, 0.84, 0.28 }, promoteHelpful = true },
+        { key = "BeaconOfVirtue",     display = "Beacon of Virtue",     spellIds = { 200025 }, color = { 1.00, 0.88, 0.37 }, promoteHelpful = true },
+        { key = "BeaconOfTheSavior",  display = "Beacon of the Savior", spellIds = { 1244893 }, color = { 0.93, 0.80, 0.47 }, promoteHelpful = true },
         { key = "EternalFlame",       display = "Eternal Flame",        spellIds = { 156322 }, color = { 1.00, 0.60, 0.28 } },
         { key = "BlessingOfProtection", display = "Blessing of Protection", spellIds = { 1022 }, color = { 0.94, 0.82, 0.31 }, secret = true },
         { key = "BlessingOfSacrifice", display = "Blessing of Sacrifice", spellIds = { 6940 }, color = { 0.94, 0.50, 0.50 }, secret = true },

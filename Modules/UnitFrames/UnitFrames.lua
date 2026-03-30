@@ -31,6 +31,7 @@ local UnitAffectingCombat = _G.UnitAffectingCombat
 local UnitPowerType = _G.UnitPowerType
 local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
 local IsResting = _G.IsResting
+local GetSpellInfo = _G.GetSpellInfo
 local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
 local StatusBarInterpolation = (_G.Enum and _G.Enum.StatusBarInterpolation) or _G.StatusBarInterpolation
@@ -245,11 +246,7 @@ function UnitFrames:ShouldUseAuraTimerFill(durationObject, expirationTime, durat
     if durationObject and durationObject.GetRemainingDuration then
         local okRemaining, remaining = pcall(durationObject.GetRemainingDuration, durationObject)
         if okRemaining and remaining ~= nil then
-            if issecretvalue and issecretvalue(remaining) then
-                return true
-            end
-
-            if type(remaining) == "number" and remaining > 0 then
+            if not (issecretvalue and issecretvalue(remaining)) and type(remaining) == "number" and remaining > 0 then
                 return true
             end
         end
@@ -258,20 +255,152 @@ function UnitFrames:ShouldUseAuraTimerFill(durationObject, expirationTime, durat
     return expirationTime and expirationTime > 0 and duration and duration > 0
 end
 
-function UnitFrames:ShouldKeepGenericHelpfulAura(unit, data, timing, onlyMine)
-    if onlyMine ~= true then
+local function IsGroupMemberAuraUnitKey(unitKey)
+    return unitKey == "partyMember" or unitKey == "raidMember" or unitKey == "tankMember"
+end
+
+function UnitFrames:GetHelpfulAuraPromotionLookup()
+    local specKey = self.AWGetSpecKey and self:AWGetSpecKey() or nil
+    local cache = self._helpfulAuraPromotionCache
+    if cache and cache.specKey == specKey and cache.lookup and cache.nameLookup then
+        return cache.lookup, cache.nameLookup
+    end
+
+    local lookup = {}
+    local nameLookup = {}
+    if specKey and self.AWGetSpecCatalog then
+        local catalog = self:AWGetSpecCatalog(specKey) or {}
+        for _, entry in ipairs(catalog) do
+            if entry and entry.promoteHelpful == true and type(entry.spellIds) == "table" then
+                if type(entry.display) == "string" and entry.display ~= "" then
+                    nameLookup[entry.display] = true
+                end
+
+                for _, rawSpellId in ipairs(entry.spellIds) do
+                    local spellId = tonumber(rawSpellId)
+                    if spellId and spellId > 0 then
+                        lookup[spellId] = true
+
+                        local spellName = nil
+                        if C_Spell and C_Spell.GetSpellName then
+                            local okSpellName, resolvedName = pcall(C_Spell.GetSpellName, spellId)
+                            if okSpellName and type(resolvedName) == "string" and resolvedName ~= "" then
+                                spellName = resolvedName
+                            end
+                        end
+                        if not spellName and GetSpellInfo then
+                            local okLegacyName, legacyName = pcall(GetSpellInfo, spellId)
+                            if okLegacyName and type(legacyName) == "string" and legacyName ~= "" then
+                                spellName = legacyName
+                            end
+                        end
+                        if spellName then
+                            nameLookup[spellName] = true
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    self._helpfulAuraPromotionCache = {
+        specKey = specKey,
+        lookup = lookup,
+        nameLookup = nameLookup,
+    }
+
+    return lookup, nameLookup
+end
+
+function UnitFrames:IsPromotedHelpfulAura(data)
+    if not data then
+        return false
+    end
+
+    local spellLookup, nameLookup = self:GetHelpfulAuraPromotionLookup()
+
+    local okSpellId, spellId = pcall(function()
+        if data.spellId == nil or (issecretvalue and issecretvalue(data.spellId)) then
+            return nil
+        end
+
+        return tonumber(data.spellId)
+    end)
+
+    if okSpellId and type(spellId) == "number" and spellId > 0 and spellLookup[spellId] == true then
         return true
     end
+
+    local okName, auraName = pcall(function()
+        if data.name == nil or (issecretvalue and issecretvalue(data.name)) then
+            return nil
+        end
+
+        return tostring(data.name)
+    end)
+
+    return okName and type(auraName) == "string" and auraName ~= "" and nameLookup[auraName] == true
+end
+
+function UnitFrames:PopulateHelpfulAuraMetadata(unit, data, timing, unitKey, onlyMine)
+    if not data or data.isHarmfulAura == true then
+        return data
+    end
+
+    timing = timing or self:ResolveAuraTiming(unit, data, "icons")
+    local promoted = self:IsPromotedHelpfulAura(data) == true
+    local stacks = tonumber(timing and timing.applications) or 0
+    local isTransient = stacks > 1
+        or self:ShouldUseAuraTimerFill(
+            timing and timing.durationObject,
+            timing and timing.expirationTime,
+            timing and timing.duration
+        )
+
+    data.twichPromotedHelpful = promoted
+    data.twichTransientHelpful = isTransient
+
+    if promoted then
+        data.twichKeepHelpful = true
+    elseif IsGroupMemberAuraUnitKey(unitKey) then
+        data.twichKeepHelpful = isTransient
+    elseif onlyMine == true then
+        data.twichKeepHelpful = isTransient
+    else
+        data.twichKeepHelpful = true
+    end
+
+    return data
+end
+
+function UnitFrames:GetHelpfulAuraSortPriority(data)
+    if not data or data.isHarmfulAura == true then
+        return 0
+    end
+
+    if data.twichPromotedHelpful == true then
+        return 300
+    end
+
+    if data.isPlayerAura == true then
+        return 200
+    end
+
+    if data.twichTransientHelpful == true then
+        return 100
+    end
+
+    return 0
+end
+
+function UnitFrames:ShouldKeepGenericHelpfulAura(unit, data, timing, onlyMine, unitKey)
+    self:PopulateHelpfulAuraMetadata(unit, data, timing, unitKey, onlyMine)
 
     if not data or not timing then
         return false
     end
 
-    if (tonumber(timing.applications) or 0) > 1 then
-        return true
-    end
-
-    return self:ShouldUseAuraTimerFill(timing.durationObject, timing.expirationTime, timing.duration)
+    return data.twichKeepHelpful == true
 end
 
 function UnitFrames:UpdateAuraRemainingText(fs, durationObject, expirationTime, duration)
@@ -2751,10 +2880,25 @@ function UnitFrames:EnsureAuraBarsContainer(frame)
     return container
 end
 
-local function CollectAuraData(list, unit, auraFilter, maxCount, onlyMine, filterMode)
+local function CompareHelpfulAuraData(a, b)
+    local aPriority = UnitFrames:GetHelpfulAuraSortPriority(a)
+    local bPriority = UnitFrames:GetHelpfulAuraSortPriority(b)
+    if aPriority ~= bPriority then
+        return aPriority > bPriority
+    end
+
+    if a.isPlayerAura ~= b.isPlayerAura then
+        return a.isPlayerAura == true
+    end
+
+    return (tonumber(a.auraInstanceID) or 0) < (tonumber(b.auraInstanceID) or 0)
+end
+
+local function CollectAuraData(list, unit, unitKey, auraFilter, maxCount, onlyMine, filterMode)
     if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then return end
     local playerFilter = auraFilter .. "|PLAYER"
     local slots = { C_UnitAuras.GetAuraSlots(unit, auraFilter) }
+    local candidates = {}
     for i = 2, #slots do
         local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
         if data then
@@ -2771,13 +2915,24 @@ local function CollectAuraData(list, unit, auraFilter, maxCount, onlyMine, filte
             d.durationObject = timing.durationObject
             d.isPlayerAura   = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
             d.isHarmfulAura  = auraFilter:find("HARMFUL") ~= nil
+            if auraFilter == "HELPFUL" then
+                UnitFrames:PopulateHelpfulAuraMetadata(unit, d, timing, unitKey, onlyMine)
+            end
             if (not onlyMine or d.isPlayerAura)
                 and AuraMatchesDisplayMode(filterMode, d)
-                and (auraFilter ~= "HELPFUL" or UnitFrames:ShouldKeepGenericHelpfulAura(unit, d, timing, onlyMine)) then
-                list[#list + 1] = d
-                if #list >= maxCount then return end
+                and (auraFilter ~= "HELPFUL" or UnitFrames:ShouldKeepGenericHelpfulAura(unit, d, timing, onlyMine,
+                    unitKey)) then
+                candidates[#candidates + 1] = d
             end
         end
+    end
+
+    if auraFilter == "HELPFUL" then
+        table.sort(candidates, CompareHelpfulAuraData)
+    end
+
+    for i = 1, math.min(maxCount, #candidates) do
+        list[#list + 1] = candidates[i]
     end
 end
 
@@ -2802,13 +2957,13 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     if frame._isTestPreview then
         auraList = self:GetPreviewAuraListForFrame(frame, unitKey)
     elseif filter == "HELPFUL" then
-        CollectAuraData(auraList, unit, "HELPFUL", maxBars, onlyMine, filter)
+        CollectAuraData(auraList, unit, unitKey, "HELPFUL", maxBars, onlyMine, filter)
     elseif filter == "HARMFUL" or filter == "DISPELLABLE" or filter == "DISPELLABLE_OR_BOSS" then
-        CollectAuraData(auraList, unit, "HARMFUL", maxBars, onlyMine, filter)
+        CollectAuraData(auraList, unit, unitKey, "HARMFUL", maxBars, onlyMine, filter)
     else
-        CollectAuraData(auraList, unit, "HELPFUL", maxBars, onlyMine, filter)
+        CollectAuraData(auraList, unit, unitKey, "HELPFUL", maxBars, onlyMine, filter)
         if #auraList < maxBars then
-            CollectAuraData(auraList, unit, "HARMFUL", maxBars - #auraList, onlyMine, filter)
+            CollectAuraData(auraList, unit, unitKey, "HARMFUL", maxBars - #auraList, onlyMine, filter)
         end
     end
 
@@ -3124,25 +3279,41 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
     local yOff                  = Clamp(aura.yOffset or 6, -40, 60)
     local filter                = aura.filter or "ALL"
     local capturedUK            = unitKey
+    local onlyMine              = aura.onlyMine == true
 
-    frame.Auras.onlyShowPlayer  = aura.onlyMine == true
+    frame.Auras.onlyShowPlayer  = onlyMine
     frame.Auras.twichFilterMode = filter
+    frame.Auras.PostProcessAuraData = function(element, unit, data)
+        if data and data.isHarmfulAura ~= true then
+            local timing = UnitFrames:ResolveAuraTiming(unit, data, "icons")
+            UnitFrames:PopulateHelpfulAuraMetadata(unit, data, timing, capturedUK, onlyMine)
+        end
+
+        return data
+    end
     frame.Auras.FilterAura      = function(element, _, data)
         if element.onlyShowPlayer and data.isPlayerAura ~= true then return false end
         if not AuraMatchesDisplayMode(element.twichFilterMode, data) then
             return false
         end
 
-        if data and data.isHarmfulAura ~= true and element.onlyShowPlayer then
-            local owner = element.__owner or element:GetParent()
-            local unit = ResolveFrameUnit(owner)
-            local timing = UnitFrames:ResolveAuraTiming(unit, data, "icons")
-            if not UnitFrames:ShouldKeepGenericHelpfulAura(unit, data, timing, true) then
+        if data and data.isHarmfulAura ~= true then
+            if data.twichKeepHelpful == nil then
+                local owner = element.__owner or element:GetParent()
+                local unit = ResolveFrameUnit(owner)
+                local timing = UnitFrames:ResolveAuraTiming(unit, data, "icons")
+                UnitFrames:PopulateHelpfulAuraMetadata(unit, data, timing, capturedUK, element.onlyShowPlayer)
+            end
+
+            if data.twichKeepHelpful ~= true then
                 return false
             end
         end
 
         return true
+    end
+    frame.Auras.SortBuffs       = function(a, b)
+        return CompareHelpfulAuraData(a, b)
     end
 
     frame.Auras._forceHide      = (not aurasEnabled) or aura.barMode == true
