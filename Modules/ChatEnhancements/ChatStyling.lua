@@ -174,6 +174,32 @@ local CHANNEL_TYPE_TO_KEY        = {
     YELL = "yell",
 }
 
+local SLASH_PREFIX_TO_KEY        = {
+    bnet = "battleNetWhisper",
+    bnw = "battleNetWhisper",
+    e = "emote",
+    em = "emote",
+    emote = "emote",
+    g = "guild",
+    guild = "guild",
+    i = "instance",
+    instance = "instance",
+    o = "officer",
+    officer = "officer",
+    p = "party",
+    party = "party",
+    r = "raid",
+    raid = "raid",
+    raidwarning = "raidLeader",
+    rw = "raidLeader",
+    s = "say",
+    say = "say",
+    w = "whisper",
+    whisper = "whisper",
+    y = "yell",
+    yell = "yell",
+}
+
 -- Persistent tab utility context menu (same pattern as chatContextMenu in ChatRenderer).
 local chatTabMenu                = nil
 local function GetChatTabMenu()
@@ -911,12 +937,39 @@ function ChatStylingModule:ResolveChannelKeyFromChatType(chatType, channelTarget
     return CHANNEL_TYPE_TO_KEY[chatType]
 end
 
+function ChatStylingModule:ResolveChannelKeyFromEditText(editBox)
+    if not editBox or type(editBox.GetText) ~= "function" then
+        return nil
+    end
+
+    local text = editBox:GetText() or ""
+    local slashCommand, remainder = text:match("^%s*/([^%s]+)%s*(.*)$")
+    if not slashCommand or slashCommand == "" then
+        return nil
+    end
+
+    local normalizedCommand = NormalizeMatcher(slashCommand)
+    local mappedKey = normalizedCommand and SLASH_PREFIX_TO_KEY[normalizedCommand] or nil
+    if mappedKey then
+        return mappedKey
+    end
+
+    if normalizedCommand == "channel" or normalizedCommand == "chat" then
+        return self:ResolveChannelKeyFromLabel(remainder)
+    end
+
+    return self:ResolveChannelKeyFromLabel(slashCommand)
+end
+
 function ChatStylingModule:GetEditBoxAccentColor(editBox)
     local chatType = editBox and ((editBox.GetAttribute and editBox:GetAttribute("chatType")) or editBox.chatType) or nil
     local channelTarget = editBox and
         ((editBox.GetAttribute and (editBox:GetAttribute("channelTarget") or editBox:GetAttribute("tellTarget"))) or
             editBox.channelTarget or editBox.tellTarget) or nil
     local key = self:ResolveChannelKeyFromChatType(chatType, channelTarget)
+    if not key and editBox then
+        key = self:ResolveChannelKeyFromEditText(editBox)
+    end
     if not key and editBox then
         local headerText = editBox.header and editBox.header:GetText() or ""
         local suffixText = editBox.headerSuffix and editBox.headerSuffix:GetText() or ""
@@ -1840,6 +1893,9 @@ function ChatStylingModule:EnsureEditBoxChrome()
         if name == "chatType" or name == "tellTarget" or name == "channelTarget" then
             ChatStylingModule:ApplyEditBoxChrome()
         end
+    end)
+    editBox:HookScript("OnTextChanged", function()
+        ChatStylingModule:ApplyEditBoxChrome()
     end)
     -- Re-apply our custom position whenever the chat frame is repositioned/resized by WoW.
     local chatFrame = _G.ChatFrame1
