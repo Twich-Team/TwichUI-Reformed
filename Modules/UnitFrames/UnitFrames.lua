@@ -3271,18 +3271,18 @@ end
 
 function UnitFrames:ApplyAuraSettings(frame, unitKey)
     if not frame or not frame.Auras then return end
-    local aura                  = self:GetAuraConfigFor(unitKey)
-    local aurasEnabled          = aura.enabled ~= false
-    local maxIcons              = math_max(1, math.floor(tonumber(aura.maxIcons) or 8))
-    local iconSize              = Clamp(aura.iconSize or 18, 10, 40)
-    local spacing               = Clamp(aura.spacing or 2, 0, 8)
-    local yOff                  = Clamp(aura.yOffset or 6, -40, 60)
-    local filter                = aura.filter or "ALL"
-    local capturedUK            = unitKey
-    local onlyMine              = aura.onlyMine == true
+    local aura                      = self:GetAuraConfigFor(unitKey)
+    local aurasEnabled              = aura.enabled ~= false
+    local maxIcons                  = math_max(1, math.floor(tonumber(aura.maxIcons) or 8))
+    local iconSize                  = Clamp(aura.iconSize or 18, 10, 40)
+    local spacing                   = Clamp(aura.spacing or 2, 0, 8)
+    local yOff                      = Clamp(aura.yOffset or 6, -40, 60)
+    local filter                    = aura.filter or "ALL"
+    local capturedUK                = unitKey
+    local onlyMine                  = aura.onlyMine == true
 
-    frame.Auras.onlyShowPlayer  = onlyMine
-    frame.Auras.twichFilterMode = filter
+    frame.Auras.onlyShowPlayer      = onlyMine
+    frame.Auras.twichFilterMode     = filter
     frame.Auras.PostProcessAuraData = function(element, unit, data)
         if data and data.isHarmfulAura ~= true then
             local timing = UnitFrames:ResolveAuraTiming(unit, data, "icons")
@@ -3291,7 +3291,7 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
 
         return data
     end
-    frame.Auras.FilterAura      = function(element, _, data)
+    frame.Auras.FilterAura          = function(element, _, data)
         if element.onlyShowPlayer and data.isPlayerAura ~= true then return false end
         if not AuraMatchesDisplayMode(element.twichFilterMode, data) then
             return false
@@ -3312,11 +3312,11 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
 
         return true
     end
-    frame.Auras.SortBuffs       = function(a, b)
+    frame.Auras.SortBuffs           = function(a, b)
         return CompareHelpfulAuraData(a, b)
     end
 
-    frame.Auras._forceHide      = (not aurasEnabled) or aura.barMode == true
+    frame.Auras._forceHide          = (not aurasEnabled) or aura.barMode == true
 
     if aura.barMode == true then
         -- Bar mode: hide icon grid, show bar container
