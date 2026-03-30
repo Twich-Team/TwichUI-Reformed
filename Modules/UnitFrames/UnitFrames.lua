@@ -491,7 +491,7 @@ function UnitFrames:GetActiveRangeSpellList(bucket)
     end
 
     local source = (bucket == "resurrect" and RESURRECT_RANGE_SPELLS[classToken]) or FRIENDLY_RANGE_SPELLS[classToken] or
-    {}
+        {}
     local spells = {}
     for _, spellID in ipairs(source) do
         if self:IsRangeCheckSpellKnown(spellID) then
@@ -1000,11 +1000,13 @@ local STATE_ICON_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon"
 local STANDARD_STATE_TEXTURES = {
     combat = { texture = STATE_ICON_TEXTURE, texCoord = { 0.5, 1, 0, 0.49 }, width = 32, height = 32 },
     resting = { texture = STATE_ICON_TEXTURE, texCoord = { 0, 0.5, 0, 0.421875 }, width = 32, height = 27 },
+    spirit = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
 }
 
 local TWICH_STATE_TEXTURES = {
     combat = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Combat", width = 64, height = 70 },
     resting = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Resting", width = 64, height = 63 },
+    spirit = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
 }
 
 local STATE_INDICATOR_DEFS = {
@@ -1017,6 +1019,7 @@ local STATE_INDICATOR_DEFS = {
         defaultOffsetX = 0,
         defaultOffsetY = 10,
         defaultSize = 20,
+        defaultAlpha = 1,
     },
     restingIndicator = {
         stateKey = "resting",
@@ -1027,6 +1030,18 @@ local STATE_INDICATOR_DEFS = {
         defaultOffsetX = -2,
         defaultOffsetY = 8,
         defaultSize = 18,
+        defaultAlpha = 1,
+    },
+    spiritIndicator = {
+        stateKey = "spirit",
+        hostKey = "TwichSpiritIndicatorHost",
+        textureKey = "TwichSpiritIndicator",
+        defaultPoint = "CENTER",
+        defaultRelativePoint = "CENTER",
+        defaultOffsetX = 0,
+        defaultOffsetY = 0,
+        defaultSize = 24,
+        defaultAlpha = 0.9,
     },
 }
 
@@ -1698,6 +1713,7 @@ function UnitFrames:GetStateIndicatorConfig(unitKey, indicatorKey)
             offsetX = 0,
             offsetY = 0,
             size = 18,
+            alpha = 1,
             iconType = "standard",
         }
     end
@@ -1734,7 +1750,8 @@ function UnitFrames:GetStateIndicatorConfig(unitKey, indicatorKey)
         offsetX = get("offsetX", indicatorDef.defaultOffsetX),
         offsetY = get("offsetY", indicatorDef.defaultOffsetY),
         size = get("size", indicatorDef.defaultSize),
-        iconType = get("iconType", "standard"),
+        alpha = Clamp(get("alpha", indicatorDef.defaultAlpha or 1), 0, 1),
+        iconType = get("iconType", indicatorDef.stateKey == "spirit" and "twich" or "standard"),
     }
 end
 
@@ -1776,6 +1793,7 @@ function UnitFrames:ApplyStateIndicatorSettings(frame, unitKey, indicatorKey)
     icon:SetDrawLayer("OVERLAY", 7)
     icon:SetPoint(cfg.point or indicatorDef.defaultPoint, host, cfg.relativePoint or indicatorDef.defaultRelativePoint,
         tonumber(cfg.offsetX) or indicatorDef.defaultOffsetX, tonumber(cfg.offsetY) or indicatorDef.defaultOffsetY)
+    icon:SetAlpha(Clamp(cfg.alpha or indicatorDef.defaultAlpha or 1, 0, 1))
 
     local art = GetStateIndicatorArt(cfg.iconType, indicatorDef.stateKey)
         or GetStateIndicatorArt("standard", indicatorDef.stateKey)
@@ -1801,6 +1819,7 @@ function UnitFrames:ApplyStateIndicatorSettings(frame, unitKey, indicatorKey)
         frame:HookScript("OnShow", function(f)
             UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "combatIndicator")
             UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "restingIndicator")
+            UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "spiritIndicator")
         end)
     end
 
@@ -1810,6 +1829,7 @@ function UnitFrames:ApplyStateIndicatorSettings(frame, unitKey, indicatorKey)
             if name == "unit" then
                 UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "combatIndicator")
                 UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "restingIndicator")
+                UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "spiritIndicator")
             end
         end)
     end
@@ -1849,6 +1869,8 @@ function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
             shouldShow = frame._testInCombat == true
         elseif indicatorKey == "restingIndicator" then
             shouldShow = frame._testIsResting == true
+        elseif indicatorKey == "spiritIndicator" then
+            shouldShow = frame._testIsDead == true
         end
     elseif unit and UnitExists(unit) then
         if indicatorKey == "combatIndicator" then
@@ -1857,6 +1879,10 @@ function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
         elseif indicatorKey == "restingIndicator" then
             local okPlayer, isPlayer = pcall(UnitIsUnit, unit, "player")
             shouldShow = okPlayer and isPlayer == true and IsResting and IsResting() == true
+        elseif indicatorKey == "spiritIndicator" then
+            local okPlayer, isPlayer = pcall(UnitIsPlayer, unit)
+            local okDead, isDead = pcall(UnitIsDeadOrGhost, unit)
+            shouldShow = okPlayer and isPlayer == true and okDead and isDead == true
         end
     end
 
@@ -1872,6 +1898,7 @@ function UnitFrames:RefreshStateIndicatorFrames()
         if frame then
             self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "combatIndicator")
             self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "restingIndicator")
+            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "spiritIndicator")
         end
     end
 
@@ -1882,6 +1909,7 @@ function UnitFrames:RefreshStateIndicatorFrames()
                 if child then
                     self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "combatIndicator")
                     self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "restingIndicator")
+                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "spiritIndicator")
                 end
             end
         end
@@ -3843,6 +3871,7 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     self:ApplyRoleIconSettings(frame, unitKey)
     self:ApplyStateIndicatorSettings(frame, unitKey, "combatIndicator")
     self:ApplyStateIndicatorSettings(frame, unitKey, "restingIndicator")
+    self:ApplyStateIndicatorSettings(frame, unitKey, "spiritIndicator")
     self:ApplyInfoBarSettings(frame, unitKey)
 end
 
@@ -4769,6 +4798,7 @@ end
 local function BuildPreviewUnitState(unitKey, label, mockClass)
     local index = GetPreviewIndexFromLabel(label)
     local role = GetPreviewRoleForUnitKey(unitKey, index)
+    local isDead = (unitKey == "partyMember" or unitKey == "raidMember" or unitKey == "tankMember") and index == 2
     local healthMax = 1000000 + (index * 125000)
     local healthCur = math_max(1, math.floor(healthMax * (0.42 + ((index % 4) * 0.12))))
     local powerMax = 100
@@ -4793,11 +4823,18 @@ local function BuildPreviewUnitState(unitKey, label, mockClass)
         healthCur = math_max(1, math.floor(healthMax * (0.68 - ((index - 1) * 0.08))))
     end
 
+    if isDead then
+        healthCur = 0
+        powerCur = 0
+        castProgress = 0
+    end
+
     return {
         index = index,
         name = name,
         role = role,
         inCombat = unitKey ~= "player" and unitKey ~= "pet" and not (unitKey == "partyMember" and index == 1),
+        isDead = isDead,
         isResting = unitKey == "player" or ((unitKey == "partyMember" or unitKey == "raidMember") and index == 1),
         classToken = mockClass,
         healthCur = healthCur,
@@ -4990,6 +5027,7 @@ function UnitFrames:ApplyPreviewFrameData(frame, unitKey, label, mockClass)
     frame._testMockClass = mockClass
     frame._testAuraList = BuildPreviewAuraList(state)
     frame._testInCombat = state.inCombat == true
+    frame._testIsDead = state.isDead == true
     frame._testIsResting = state.isResting == true and state.inCombat ~= true
 
     self:ApplySingleFrameSettings(frame, unitKey)
@@ -5084,6 +5122,10 @@ function UnitFrames:ApplyPreviewFrameData(frame, unitKey, label, mockClass)
             self:RefreshPreviewAuraIcons(frame, unitKey)
         end
     end
+
+    self:UpdateStateIndicator(frame, unitKey, "combatIndicator")
+    self:UpdateStateIndicator(frame, unitKey, "restingIndicator")
+    self:UpdateStateIndicator(frame, unitKey, "spiritIndicator")
 end
 
 function UnitFrames:CreatePreviewFrame(parent, width, height, label, scopeOrUnitKey, mockClass)
@@ -5130,6 +5172,7 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         frame:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
         self:UpdateStateIndicator(frame, entry.key, "combatIndicator")
         self:UpdateStateIndicator(frame, entry.key, "restingIndicator")
+        self:UpdateStateIndicator(frame, entry.key, "spiritIndicator")
         frame:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
     end
 
@@ -5427,6 +5470,11 @@ function UnitFrames:RefreshPreviewVisibility()
                 shouldShow = shouldShow and (self:GetUnitSettings(key).enabled ~= false)
             elseif key == "party" or key == "raid" or key == "tank" then
                 shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
+                if key == "party" then
+                    shouldShow = shouldShow and (db.testPreviewParty ~= false)
+                elseif key == "raid" then
+                    shouldShow = shouldShow and (db.testPreviewRaid ~= false)
+                end
             end
             container:SetShown(shouldShow)
         end
@@ -6724,6 +6772,19 @@ function UnitFrames:SetTestMode(enabled)
     local db = self:GetDB()
     db.testMode = enabled == true
     self:RefreshAllFrames()
+end
+
+function UnitFrames:SetTestPreviewGroupEnabled(groupKey, enabled)
+    local db = self:GetDB()
+    if groupKey == "party" then
+        db.testPreviewParty = enabled ~= false
+    elseif groupKey == "raid" then
+        db.testPreviewRaid = enabled ~= false
+    else
+        return
+    end
+
+    self:RefreshPreviewVisibility()
 end
 
 function UnitFrames:SetFrameLock(locked)

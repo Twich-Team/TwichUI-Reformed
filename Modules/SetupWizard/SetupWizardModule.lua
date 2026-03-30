@@ -288,6 +288,7 @@ function SetupWizardModule:PrepareConfigSnapshotSection(sectionKey, sectionVal)
                     scales)
                 ScalePixelConfig(unitConfig.combatIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
                 ScalePixelConfig(unitConfig.restingIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
+                ScalePixelConfig(unitConfig.spiritIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
             end
         end
     end
@@ -304,6 +305,7 @@ function SetupWizardModule:PrepareConfigSnapshotSection(sectionKey, sectionVal)
                 ScalePixelConfig(groupConfig.roleIcon, { "insetX" }, { "insetY" }, { "size" }, scales)
                 ScalePixelConfig(groupConfig.combatIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
                 ScalePixelConfig(groupConfig.restingIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
+                ScalePixelConfig(groupConfig.spiritIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
             end
         end
     end

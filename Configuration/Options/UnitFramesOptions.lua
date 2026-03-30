@@ -139,15 +139,18 @@ local STATE_ICON_PREVIEW_TEXTURE       = "Interface\\CharacterFrame\\UI-StateIco
 local STATE_ICON_PREVIEW_TWICH         = {
     combat = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Combat", width = 64, height = 70 },
     resting = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Resting", width = 64, height = 63 },
+    spirit = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
 }
 local STATE_ICON_PREVIEW_STANDARD      = {
     combat = { texture = STATE_ICON_PREVIEW_TEXTURE, width = 32, height = 32, textureWidth = 64, textureHeight = 64, texCoord = { 0.5, 1, 0, 0.49 } },
     resting = { texture = STATE_ICON_PREVIEW_TEXTURE, width = 32, height = 27, textureWidth = 64, textureHeight = 64, texCoord = { 0, 0.5, 0, 0.421875 } },
+    spirit = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
 }
 
 local STATE_INDICATOR_DEFAULTS         = {
-    combatIndicator = { point = "CENTER", relativePoint = "TOP", offsetX = 0, offsetY = 10, size = 20 },
-    restingIndicator = { point = "CENTER", relativePoint = "TOPLEFT", offsetX = -2, offsetY = 8, size = 18 },
+    combatIndicator = { point = "CENTER", relativePoint = "TOP", offsetX = 0, offsetY = 10, size = 20, alpha = 1 },
+    restingIndicator = { point = "CENTER", relativePoint = "TOPLEFT", offsetX = -2, offsetY = 8, size = 18, alpha = 1 },
+    spiritIndicator = { point = "CENTER", relativePoint = "CENTER", offsetX = 0, offsetY = 0, size = 24, alpha = 0.9 },
 }
 
 -- Default tag/justify for info bar text slots (mirrors INFO_BAR_TEXT_DEFAULTS in the engine)
@@ -1494,30 +1497,37 @@ local function BuildStateIndicatorGroup(order, label, basePath, indicatorKey)
     local isOff = ModuleDisabled(function()
         return GetPathValue(ExtendPath(basePath, "enabled"), false) ~= true
     end)
+    local isSpiritIndicator = indicatorKey == "spiritIndicator"
+    local toggleDescription = "Display the combat icon on this frame when the represented unit is in combat."
+    if label == "Resting Indicator" then
+        toggleDescription = "Display the resting icon on this frame when the represented unit is the player and resting."
+    elseif isSpiritIndicator then
+        toggleDescription = "Display the spirit icon on this frame when the represented unit is a dead or ghost player."
+    end
 
     return Widgets.IGroup(order, label, {
         enabled = BuildToggle(1, "Show " .. label,
-            label == "Resting Indicator"
-            and "Display the resting icon on this frame when the represented unit is the player and resting."
-            or "Display the combat icon on this frame when the represented unit is in combat.",
+            toggleDescription,
             ExtendPath(basePath, "enabled"), false, { disabled = disabled, refreshConfig = true }),
-        iconType = BuildSelect(2, "Icon Type",
+        iconType = not isSpiritIndicator and BuildSelect(2, "Icon Type",
             "Choose which icon art set to use for this indicator.",
             ExtendPath(basePath, "iconType"), "standard", BuildStateIndicatorTypeValues,
-            { disabled = isOff, refreshConfig = true, width = "full" }),
-        point = BuildSelect(3, "Icon Point",
+            { disabled = isOff, refreshConfig = true, width = "full" }) or nil,
+        point = BuildSelect(isSpiritIndicator and 2 or 3, "Icon Point",
             "Which point of the indicator should be anchored.",
             ExtendPath(basePath, "point"), defaults.point or "CENTER", POINT_VALUES, { disabled = isOff }),
-        relativePoint = BuildSelect(4, "Frame Point",
+        relativePoint = BuildSelect(isSpiritIndicator and 3 or 4, "Frame Point",
             "Which point on the frame the indicator should anchor to.",
             ExtendPath(basePath, "relativePoint"), defaults.relativePoint or "TOP", POINT_VALUES,
             { disabled = isOff }),
-        offsetX = BuildRange(5, "X Offset", "Horizontal offset from the chosen frame point.",
+        offsetX = BuildRange(isSpiritIndicator and 4 or 5, "X Offset", "Horizontal offset from the chosen frame point.",
             ExtendPath(basePath, "offsetX"), defaults.offsetX or 0, -200, 200, 1, { disabled = isOff }),
-        offsetY = BuildRange(6, "Y Offset", "Vertical offset from the chosen frame point.",
+        offsetY = BuildRange(isSpiritIndicator and 5 or 6, "Y Offset", "Vertical offset from the chosen frame point.",
             ExtendPath(basePath, "offsetY"), defaults.offsetY or 0, -200, 200, 1, { disabled = isOff }),
-        size = BuildRange(7, "Size", "Indicator size in pixels.",
+        size = BuildRange(isSpiritIndicator and 6 or 7, "Size", "Indicator size in pixels.",
             ExtendPath(basePath, "size"), defaults.size or 18, 8, 64, 1, { disabled = isOff }),
+        alpha = BuildRange(isSpiritIndicator and 7 or 8, "Alpha", "Opacity of the indicator.",
+            ExtendPath(basePath, "alpha"), defaults.alpha or 1, 0, 1, 0.01, { disabled = isOff }),
     })
 end
 
@@ -1787,6 +1797,8 @@ local function BuildSingleUnitTab(unitKey, label)
                         ExtendPath(basePath, "combatIndicator"), "combatIndicator"),
                     restingIndicator = BuildStateIndicatorGroup(7, "Resting Indicator",
                         ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
+                    spiritIndicator = BuildStateIndicatorGroup(8, "Spirit Indicator",
+                        ExtendPath(basePath, "spiritIndicator"), "spiritIndicator"),
                     copyFrom = BuildCopyFromSingle(unitKey),
                 },
             },
@@ -2070,7 +2082,9 @@ local function BuildGroupTab(groupKey, label)
                 ExtendPath(basePath, "combatIndicator"), "combatIndicator"),
             restingIndicator = BuildStateIndicatorGroup(8, "Resting Indicator",
                 ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
-            infoBar          = BuildInfoBarTab(9, ExtendPath(basePath, "infoBar")),
+            spiritIndicator  = BuildStateIndicatorGroup(9, "Spirit Indicator",
+                ExtendPath(basePath, "spiritIndicator"), "spiritIndicator"),
+            infoBar          = BuildInfoBarTab(10, ExtendPath(basePath, "infoBar")),
         },
     }
 end
@@ -2131,6 +2145,8 @@ local function BuildBossTab()
                         { "units", "boss", "combatIndicator" }, "combatIndicator"),
                     restingIndicator = BuildStateIndicatorGroup(5, "Resting Indicator",
                         { "units", "boss", "restingIndicator" }, "restingIndicator"),
+                    spiritIndicator = BuildStateIndicatorGroup(6, "Spirit Indicator",
+                        { "units", "boss", "spiritIndicator" }, "spiritIndicator"),
                 },
             },
             layout = BuildLayoutGroup(2, "Layout", "boss", GROUP_LAYOUT_DEFAULTS.boss, {
@@ -2446,7 +2462,39 @@ local function BuildGeneralTab()
                             end
                         end,
                     }),
-                unlockMovers = BuildToggle(3, "Unlock Movers", "Show layout movers so frames can be repositioned.",
+                testPreviewParty = BuildToggle(3, "Show Party Preview",
+                    "While Test Mode is enabled, show or hide the party preview container so it is easier to separate from raid frames.",
+                    { "testPreviewParty" }, db.testPreviewParty ~= false, {
+                        refreshConfig = true,
+                        disabled = function()
+                            return GetPathValue({ "testMode" }, false) ~= true
+                        end,
+                        set = function(value)
+                            local module = GetModule()
+                            if module and type(module.SetTestPreviewGroupEnabled) == "function" then
+                                module:SetTestPreviewGroupEnabled("party", value == true)
+                            else
+                                SetPathValue({ "testPreviewParty" }, value == true, true)
+                            end
+                        end,
+                    }),
+                testPreviewRaid = BuildToggle(4, "Show Raid Preview",
+                    "While Test Mode is enabled, show or hide the raid preview container so it is easier to separate from party frames.",
+                    { "testPreviewRaid" }, db.testPreviewRaid ~= false, {
+                        refreshConfig = true,
+                        disabled = function()
+                            return GetPathValue({ "testMode" }, false) ~= true
+                        end,
+                        set = function(value)
+                            local module = GetModule()
+                            if module and type(module.SetTestPreviewGroupEnabled) == "function" then
+                                module:SetTestPreviewGroupEnabled("raid", value == true)
+                            else
+                                SetPathValue({ "testPreviewRaid" }, value == true, true)
+                            end
+                        end,
+                    }),
+                unlockMovers = BuildToggle(5, "Unlock Movers", "Show layout movers so frames can be repositioned.",
                     { "lockFrames" }, db.lockFrames ~= true, {
                         refreshConfig = true,
                         get = function()
@@ -2461,13 +2509,13 @@ local function BuildGeneralTab()
                             end
                         end,
                     }),
-                refreshNow = BuildExecute(4, "Refresh Frames", "Re-apply the current Unit Frames settings.", function()
+                refreshNow = BuildExecute(6, "Refresh Frames", "Re-apply the current Unit Frames settings.", function()
                     RefreshModule()
                 end),
-                scale = BuildRange(5, "Scale", "Overall Unit Frames scale.", { "scale" }, db.scale or 1, 0.6, 1.6, 0.01),
-                frameAlpha = BuildRange(6, "Alpha", "Overall Unit Frames alpha.", { "frameAlpha" }, db.frameAlpha or 1,
+                scale = BuildRange(7, "Scale", "Overall Unit Frames scale.", { "scale" }, db.scale or 1, 0.6, 1.6, 0.01),
+                frameAlpha = BuildRange(8, "Alpha", "Overall Unit Frames alpha.", { "frameAlpha" }, db.frameAlpha or 1,
                     0.15, 1, 0.01),
-                distanceFade = BuildToggle(7, "Distance Fade",
+                distanceFade = BuildToggle(9, "Distance Fade",
                     "Fade party, raid, and tank unit buttons when Blizzard reports they are out of range.",
                     { "distanceFade", "enabled" }, db.distanceFade and db.distanceFade.enabled == true, {
                         refreshConfig = true,
@@ -2879,6 +2927,8 @@ function Options:GetDB()
     local db = profile.unitFrames
     if db.enabled == nil then db.enabled = true end
     if db.testMode == nil then db.testMode = false end
+    if db.testPreviewParty == nil then db.testPreviewParty = true end
+    if db.testPreviewRaid == nil then db.testPreviewRaid = true end
     if db.lockFrames == nil then db.lockFrames = true end
     if db.scale == nil then db.scale = 1 end
     if db.frameAlpha == nil then db.frameAlpha = 1 end
