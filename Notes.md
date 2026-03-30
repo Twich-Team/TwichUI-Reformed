@@ -65,9 +65,11 @@
 
 ## Bugs for tomorrow
 
-- I have aura bars enabled for target. The aura bars do not count down debuffs on target that player caused while in dungeons, they show but no timer and no callapsing bar as it times out.
-- I need to be able to style buffs differently from debuffs on aura bars.
-- AI generated role icons
 - Need in combat and resting indicators (use AI to make icons)
-- Need targeted by/threat/aggro indicator
-- Heal prediction
+
+bugs:
+1x [ADDON_ACTION_BLOCKED] AddOn 'TwichUI_Reformed' tried to call the protected function 'TwichUIStandaloneDataText_panel3:SetFrameStrata()'.
+[!BugGrabber/BugGrabber.lua]:540: in function '?'
+[!BugGrabber/BugGrabber.lua]:524: in function <!BugGrabber/BugGrabber.lua:524>
+[C]: in function 'SetFrameStrata'
+[TwichUI_Reformed/Modules/Datatexts/StandalonePanels.lua]:381: in function <...chUI_Reformed/Modules/Datatexts/StandalonePanels.lua:375>

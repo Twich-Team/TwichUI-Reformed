@@ -162,8 +162,8 @@ local COLOR_DEFAULTS = {
     border = { 0.24, 0.26, 0.32, 1 },
     targetHighlight = { 1.0, 0.82, 0.0, 0.9 },
     mouseoverHighlight = { 1.0, 1.0, 1.0, 0.08 },
-        threatHighlight = { 1.0, 0.24, 0.18, 0.95 },
-        enemyTargetHighlight = { 1.0, 0.55, 0.18, 0.85 },
+    threatHighlight = { 1.0, 0.24, 0.18, 0.95 },
+    enemyTargetHighlight = { 1.0, 0.55, 0.18, 0.85 },
     shadow = { 0, 0, 0, 0.85 },
     classBar = { 1, 1, 1, 1 },
     classBarBackground = { 0.05, 0.06, 0.08, 0.9 },
@@ -1851,13 +1851,13 @@ local function BuildSingleUnitTab(unitKey, label)
                             ExtendPath(basePath, "highlights", "showTarget"), true, { disabled = disabled }),
                         showMouseover = BuildToggle(2, "Mouseover Highlight",
                             "Show the mouseover highlight on this frame. Disable to hide it even when globally on.",
-                                ExtendPath(basePath, "highlights", "showMouseover"), true, { disabled = disabled }),
-                            showThreat = BuildToggle(3, "Threat Highlight",
-                                "Show the aggro or threat highlight on this frame. Disable to hide it even when globally on.",
-                                ExtendPath(basePath, "highlights", "showThreat"), true, { disabled = disabled }),
-                            showEnemyTarget = BuildToggle(4, "Enemy Target Highlight",
-                                "Show the highlight when enemies are targeting this unit. Disable to hide it even when globally on.",
-                                ExtendPath(basePath, "highlights", "showEnemyTarget"), true, { disabled = disabled }),
+                            ExtendPath(basePath, "highlights", "showMouseover"), true, { disabled = disabled }),
+                        showThreat = BuildToggle(3, "Threat Highlight",
+                            "Show the aggro or threat highlight on this frame. Disable to hide it even when globally on.",
+                            ExtendPath(basePath, "highlights", "showThreat"), true, { disabled = disabled }),
+                        showEnemyTarget = BuildToggle(4, "Enemy Target Highlight",
+                            "Show the highlight when enemies are targeting this unit. Disable to hide it even when globally on.",
+                            ExtendPath(basePath, "highlights", "showEnemyTarget"), true, { disabled = disabled }),
                     }),
                     roleIcon = BuildRoleIconGroup(5, ExtendPath(basePath, "roleIcon"), false),
                     copyFrom = BuildCopyFromSingle(unitKey),
@@ -2065,13 +2065,13 @@ local function BuildGroupTab(groupKey, label)
             { "units", memberKey, "highlights", "showTarget" }, true, { disabled = disabled }),
         showMouseover = BuildToggle(2, "Mouseover Highlight",
             "Show the mouseover highlight on group member frames. Disable to hide it even when globally on.",
-                { "units", memberKey, "highlights", "showMouseover" }, true, { disabled = disabled }),
-            showThreat = BuildToggle(3, "Threat Highlight",
-                "Show the aggro or threat highlight on group member frames. Disable to hide it even when globally on.",
-                { "units", memberKey, "highlights", "showThreat" }, true, { disabled = disabled }),
-            showEnemyTarget = BuildToggle(4, "Enemy Target Highlight",
-                "Show the highlight when enemies are targeting this unit. Disable to hide it even when globally on.",
-                { "units", memberKey, "highlights", "showEnemyTarget" }, true, { disabled = disabled }),
+            { "units", memberKey, "highlights", "showMouseover" }, true, { disabled = disabled }),
+        showThreat = BuildToggle(3, "Threat Highlight",
+            "Show the aggro or threat highlight on group member frames. Disable to hide it even when globally on.",
+            { "units", memberKey, "highlights", "showThreat" }, true, { disabled = disabled }),
+        showEnemyTarget = BuildToggle(4, "Enemy Target Highlight",
+            "Show the highlight when enemies are targeting this unit. Disable to hide it even when globally on.",
+            { "units", memberKey, "highlights", "showEnemyTarget" }, true, { disabled = disabled }),
     })
     frameTab.args.healPrediction = BuildHealPredictionGroup(4, { "units", memberKey, "healPrediction" })
     -- Healer-only power bar is meaningful for party and raid — not for tank
@@ -2152,13 +2152,13 @@ local function BuildBossTab()
                             { "units", "boss", "highlights", "showTarget" }, true, { disabled = disabled }),
                         showMouseover = BuildToggle(2, "Mouseover Highlight",
                             "Show the mouseover highlight on boss frames. Disable to hide it even when globally on.",
-                                { "units", "boss", "highlights", "showMouseover" }, true, { disabled = disabled }),
-                            showThreat = BuildToggle(3, "Threat Highlight",
-                                "Show the aggro or threat highlight on boss frames. Disable to hide it even when globally on.",
-                                { "units", "boss", "highlights", "showThreat" }, true, { disabled = disabled }),
-                            showEnemyTarget = BuildToggle(4, "Enemy Target Highlight",
-                                "Show the highlight when enemies are targeting this unit. Disable to hide it even when globally on.",
-                                { "units", "boss", "highlights", "showEnemyTarget" }, true, { disabled = disabled }),
+                            { "units", "boss", "highlights", "showMouseover" }, true, { disabled = disabled }),
+                        showThreat = BuildToggle(3, "Threat Highlight",
+                            "Show the aggro or threat highlight on boss frames. Disable to hide it even when globally on.",
+                            { "units", "boss", "highlights", "showThreat" }, true, { disabled = disabled }),
+                        showEnemyTarget = BuildToggle(4, "Enemy Target Highlight",
+                            "Show the highlight when enemies are targeting this unit. Disable to hide it even when globally on.",
+                            { "units", "boss", "highlights", "showEnemyTarget" }, true, { disabled = disabled }),
                     }),
                     healPrediction = BuildHealPredictionGroup(3, { "units", "boss", "healPrediction" }),
                 },
@@ -2549,53 +2549,53 @@ local function BuildGeneralTab()
                             return GetPathValue({ "highlights", "showMouseover" }, true) ~= true
                         end),
                     }),
-                    showThreat = BuildToggle(7, "Threat Highlight",
-                        "Highlight frames that currently have meaningful threat or aggro.",
-                        { "highlights", "showThreat" }, true, { refreshConfig = true }),
-                    threatMode = BuildSelect(8, "Threat Style", "Sharp border or additive glow for threat.",
-                        { "highlights", "threatMode" }, "glow", { border = "Border", glow = "Glow" }, {
-                            disabled = ModuleDisabled(function()
-                                return GetPathValue({ "highlights", "showThreat" }, true) ~= true
-                            end),
-                            refreshConfig = true,
-                        }),
-                    threatWidth = BuildRange(9, "Threat Width", "Border thickness or glow spread in pixels.",
-                        { "highlights", "threatWidth" }, 3, 1, 16, 1, {
-                            disabled = ModuleDisabled(function()
-                                return GetPathValue({ "highlights", "showThreat" }, true) ~= true
-                            end),
-                        }),
-                    threatColor = BuildColor(10, "Threat Color", "Color for the threat highlight.",
-                        { "highlights", "threatColor" }, COLOR_DEFAULTS.threatHighlight, true, {
-                            disabled = ModuleDisabled(function()
-                                return GetPathValue({ "highlights", "showThreat" }, true) ~= true
-                            end),
-                        }),
-                    showEnemyTarget = BuildToggle(11, "Enemy Target Highlight",
-                        "Highlight frames when hostile units are targeting them.",
-                        { "highlights", "showEnemyTarget" }, true, { refreshConfig = true }),
-                    enemyTargetMode = BuildSelect(12, "Enemy Target Style",
-                        "Sharp border or additive glow when enemies are targeting a unit.",
-                        { "highlights", "enemyTargetMode" }, "border", { border = "Border", glow = "Glow" }, {
-                            disabled = ModuleDisabled(function()
-                                return GetPathValue({ "highlights", "showEnemyTarget" }, true) ~= true
-                            end),
-                            refreshConfig = true,
-                        }),
-                    enemyTargetWidth = BuildRange(13, "Enemy Target Width",
-                        "Border thickness or glow spread in pixels.",
-                        { "highlights", "enemyTargetWidth" }, 2, 1, 16, 1, {
-                            disabled = ModuleDisabled(function()
-                                return GetPathValue({ "highlights", "showEnemyTarget" }, true) ~= true
-                            end),
-                        }),
-                    enemyTargetColor = BuildColor(14, "Enemy Target Color",
-                        "Color for the targeted-by-enemy highlight.",
-                        { "highlights", "enemyTargetColor" }, COLOR_DEFAULTS.enemyTargetHighlight, true, {
-                            disabled = ModuleDisabled(function()
-                                return GetPathValue({ "highlights", "showEnemyTarget" }, true) ~= true
-                            end),
-                        }),
+                showThreat = BuildToggle(7, "Threat Highlight",
+                    "Highlight frames that currently have meaningful threat or aggro.",
+                    { "highlights", "showThreat" }, true, { refreshConfig = true }),
+                threatMode = BuildSelect(8, "Threat Style", "Sharp border or additive glow for threat.",
+                    { "highlights", "threatMode" }, "glow", { border = "Border", glow = "Glow" }, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue({ "highlights", "showThreat" }, true) ~= true
+                        end),
+                        refreshConfig = true,
+                    }),
+                threatWidth = BuildRange(9, "Threat Width", "Border thickness or glow spread in pixels.",
+                    { "highlights", "threatWidth" }, 3, 1, 16, 1, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue({ "highlights", "showThreat" }, true) ~= true
+                        end),
+                    }),
+                threatColor = BuildColor(10, "Threat Color", "Color for the threat highlight.",
+                    { "highlights", "threatColor" }, COLOR_DEFAULTS.threatHighlight, true, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue({ "highlights", "showThreat" }, true) ~= true
+                        end),
+                    }),
+                showEnemyTarget = BuildToggle(11, "Enemy Target Highlight",
+                    "Highlight frames when hostile units are targeting them.",
+                    { "highlights", "showEnemyTarget" }, true, { refreshConfig = true }),
+                enemyTargetMode = BuildSelect(12, "Enemy Target Style",
+                    "Sharp border or additive glow when enemies are targeting a unit.",
+                    { "highlights", "enemyTargetMode" }, "border", { border = "Border", glow = "Glow" }, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue({ "highlights", "showEnemyTarget" }, true) ~= true
+                        end),
+                        refreshConfig = true,
+                    }),
+                enemyTargetWidth = BuildRange(13, "Enemy Target Width",
+                    "Border thickness or glow spread in pixels.",
+                    { "highlights", "enemyTargetWidth" }, 2, 1, 16, 1, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue({ "highlights", "showEnemyTarget" }, true) ~= true
+                        end),
+                    }),
+                enemyTargetColor = BuildColor(14, "Enemy Target Color",
+                    "Color for the targeted-by-enemy highlight.",
+                    { "highlights", "enemyTargetColor" }, COLOR_DEFAULTS.enemyTargetHighlight, true, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue({ "highlights", "showEnemyTarget" }, true) ~= true
+                        end),
+                    }),
             }),
         },
     }
@@ -2913,12 +2913,12 @@ function Options:GetDB()
     if type(db.castbars) ~= "table" then db.castbars = {} end
     if type(db.classBar) ~= "table" then db.classBar = {} end
     if type(db.highlights) ~= "table" then db.highlights = {} end
-        if db.highlights.showThreat == nil then db.highlights.showThreat = true end
-        if db.highlights.threatMode == nil then db.highlights.threatMode = "glow" end
-        if db.highlights.threatWidth == nil then db.highlights.threatWidth = 3 end
-        if db.highlights.showEnemyTarget == nil then db.highlights.showEnemyTarget = true end
-        if db.highlights.enemyTargetMode == nil then db.highlights.enemyTargetMode = "border" end
-        if db.highlights.enemyTargetWidth == nil then db.highlights.enemyTargetWidth = 2 end
+    if db.highlights.showThreat == nil then db.highlights.showThreat = true end
+    if db.highlights.threatMode == nil then db.highlights.threatMode = "glow" end
+    if db.highlights.threatWidth == nil then db.highlights.threatWidth = 3 end
+    if db.highlights.showEnemyTarget == nil then db.highlights.showEnemyTarget = true end
+    if db.highlights.enemyTargetMode == nil then db.highlights.enemyTargetMode = "border" end
+    if db.highlights.enemyTargetWidth == nil then db.highlights.enemyTargetWidth = 2 end
     if type(db.powerTypeColors) ~= "table" then db.powerTypeColors = {} end
 
     return db

@@ -780,7 +780,7 @@ function UnitFrames:GetHealPredictionConfig(unitKey)
         maxOverflow = Clamp(tonumber(cfg.maxOverflow) or HEAL_PREDICTION_DEFAULTS.maxOverflow, 1, 1.5),
         texture = cfg.texture,
         playerColor = CopyColor(type(cfg.playerColor) == "table" and cfg.playerColor or
-        HEAL_PREDICTION_DEFAULTS.playerColor),
+            HEAL_PREDICTION_DEFAULTS.playerColor),
         otherColor = CopyColor(type(cfg.otherColor) == "table" and cfg.otherColor or HEAL_PREDICTION_DEFAULTS.otherColor),
     }
 end
@@ -825,7 +825,7 @@ function UnitFrames:ApplyHealPredictionSettings(frame, unitKey)
         end
         if element.healingOther then
             local otherAnchor = (element.healingPlayer and element.healingPlayer.GetStatusBarTexture and element.healingPlayer:GetStatusBarTexture()) or
-            anchorTexture or health
+                anchorTexture or health
             local otherPoint = (element.healingPlayer and element.healingPlayer.GetStatusBarTexture and element.healingPlayer:GetStatusBarTexture()) and
                 "RIGHT"
                 or (anchorTexture and "RIGHT" or "LEFT")
@@ -4959,19 +4959,19 @@ function UnitFrames:StyleFrame(frame)
     end
 
     -- Target highlight
-    local targetHL = CreateBorderHighlight(math_max(1, frame:GetFrameLevel() + 3))
-    frame.TwichTargetHighlight = targetHL
+    local targetHL                  = CreateBorderHighlight(math_max(1, frame:GetFrameLevel() + 3))
+    frame.TwichTargetHighlight      = targetHL
 
-    frame.TwichTargetGlow = CreateGlowContainer(frame, math_max(0, frame:GetFrameLevel() - 1))
+    frame.TwichTargetGlow           = CreateGlowContainer(frame, math_max(0, frame:GetFrameLevel() - 1))
 
-    frame.TwichThreatHighlight = CreateBorderHighlight(math_max(1, frame:GetFrameLevel() + 4))
-    frame.TwichThreatGlow = CreateGlowContainer(frame, math_max(0, frame:GetFrameLevel() - 1))
+    frame.TwichThreatHighlight      = CreateBorderHighlight(math_max(1, frame:GetFrameLevel() + 4))
+    frame.TwichThreatGlow           = CreateGlowContainer(frame, math_max(0, frame:GetFrameLevel() - 1))
 
     frame.TwichEnemyTargetHighlight = CreateBorderHighlight(math_max(1, frame:GetFrameLevel() + 5))
-    frame.TwichEnemyTargetGlow = CreateGlowContainer(frame, math_max(0, frame:GetFrameLevel() - 1))
+    frame.TwichEnemyTargetGlow      = CreateGlowContainer(frame, math_max(0, frame:GetFrameLevel() - 1))
 
     -- Mouseover highlight
-    local hoverHL         = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    local hoverHL                   = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     hoverHL:SetAllPoints(frame)
     hoverHL:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 2))
     hoverHL:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
