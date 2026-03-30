@@ -2916,6 +2916,27 @@ function ChatStylingModule:HandleLifecycleRefresh()
     }
 end
 
+function ChatStylingModule:HandleSpecChangeRefresh(_, unit)
+    if unit ~= nil and unit ~= "player" then
+        return
+    end
+
+    self:RefreshSettings()
+    self:HandleLifecycleRefresh()
+
+    if self.specChangeRefreshTimer then
+        self:CancelTimer(self.specChangeRefreshTimer)
+        self.specChangeRefreshTimer = nil
+    end
+
+    self.specChangeRefreshTimer = self:ScheduleTimer(function()
+        ChatStylingModule.specChangeRefreshTimer = nil
+        ChatStylingModule:RefreshSettings()
+        ChatStylingModule:RefreshAllVisuals()
+        ChatStylingModule:ApplyPositionOverride()
+    end, 1.0)
+end
+
 function ChatStylingModule:InstallFrameHooks()
     if self.frameHooksInstalled then
         return
@@ -2979,6 +3000,11 @@ function ChatStylingModule:OnEnable()
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "HandleLifecycleRefresh")
     self:RegisterEvent("UPDATE_CHAT_WINDOWS", "HandleLifecycleRefresh")
     self:RegisterEvent("UPDATE_FLOATING_CHAT_WINDOWS", "HandleLifecycleRefresh")
+    self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", "HandleSpecChangeRefresh")
+    self:RegisterEvent("ACTIVE_TALENT_GROUP_CHANGED", "HandleSpecChangeRefresh")
+    self:RegisterEvent("PLAYER_LOOT_SPEC_UPDATED", "HandleSpecChangeRefresh")
+    self:RegisterEvent("PLAYER_TALENT_UPDATE", "HandleSpecChangeRefresh")
+    self:RegisterEvent("TRAIT_CONFIG_UPDATED", "HandleSpecChangeRefresh")
     -- Whisper tab routing (always registered; setting is checked in the handler).
     self:RegisterEvent("CHAT_MSG_WHISPER", "HandleWhisperMessage")
     self:RegisterEvent("CHAT_MSG_WHISPER_INFORM", "HandleWhisperOutboundMessage")
@@ -3024,10 +3050,19 @@ function ChatStylingModule:OnDisable()
         self:CancelTimer(self.refreshAllTimer)
         self.refreshAllTimer = nil
     end
+    if self.specChangeRefreshTimer then
+        self:CancelTimer(self.specChangeRefreshTimer)
+        self.specChangeRefreshTimer = nil
+    end
     self:CancelLifecycleRefreshes()
     self:UnregisterEvent("PLAYER_ENTERING_WORLD")
     self:UnregisterEvent("UPDATE_CHAT_WINDOWS")
     self:UnregisterEvent("UPDATE_FLOATING_CHAT_WINDOWS")
+    self:UnregisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+    self:UnregisterEvent("ACTIVE_TALENT_GROUP_CHANGED")
+    self:UnregisterEvent("PLAYER_LOOT_SPEC_UPDATED")
+    self:UnregisterEvent("PLAYER_TALENT_UPDATE")
+    self:UnregisterEvent("TRAIT_CONFIG_UPDATED")
     self:UnregisterEvent("CHAT_MSG_WHISPER")
     self:UnregisterEvent("CHAT_MSG_WHISPER_INFORM")
     self:RefreshAllVisuals()

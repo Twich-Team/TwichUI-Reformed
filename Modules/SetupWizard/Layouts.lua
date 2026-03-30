@@ -98,20 +98,21 @@ SetupWizardModule.THEME_PRESETS = {
 SetupWizardModule.AVAILABLE_LAYOUTS = {
     -- Captured: 2026-03-28  |  3440x1440  |  layout id: signature
     -- Captured: 2026-03-30  |  3440x1440  |  layout id: standard
+    -- Captured: 2026-03-30  |  3440x1440  |  layout id: standard
     {
         id                  = "standard",
         name                = "Standard",
-        description         = "Add a description here.",
+        description         = "Party and unit frames centered",
         role                = "any", -- "any" | "dps" | "healer" | "tank"
         referenceResolution = { w = 3440, h = 1440 },
         frames              = {
             ChatFrame1      = { x = 0.00000, y = 0.02083, w = 0.17500, h = 0.19931, scaleMode = "height" },
-            UF_boss         = { x = 0.46221, y = 0.84583, w = 0.07558, h = 0.15278 },
-            UF_boss1        = { x = 0.42733, y = 0.97083, w = 0.14535, h = 0.02778 },
-            UF_boss2        = { x = 0.42733, y = 0.92917, w = 0.14535, h = 0.02778 },
-            UF_boss3        = { x = 0.42733, y = 0.88750, w = 0.14535, h = 0.02778 },
-            UF_boss4        = { x = 0.42733, y = 0.84583, w = 0.14535, h = 0.02778 },
-            UF_boss5        = { x = 0.42733, y = 0.80417, w = 0.14535, h = 0.02778 },
+            UF_boss         = { x = 0.27965, y = 0.93611, w = 0.14535, h = 0.02431 },
+            UF_boss1        = { x = 0.51599, y = 0.92222, w = 0.14535, h = 0.02431 },
+            UF_boss2        = { x = 0.42733, y = 0.00000, w = 0.14535, h = 0.02431 },
+            UF_boss3        = { x = 0.53401, y = 0.78819, w = 0.14535, h = 0.02431 },
+            UF_boss4        = { x = 0.42733, y = 0.00000, w = 0.14535, h = 0.02431 },
+            UF_boss5        = { x = 0.42733, y = 0.00000, w = 0.14535, h = 0.02431 },
             UF_castbar      = { x = 0.44593, y = 0.22917, w = 0.10814, h = 0.02083 },
             UF_focus        = { x = 0.64041, y = 0.59792, w = 0.06395, h = 0.02361 },
             UF_party        = { x = 0.00000, y = 0.00000, w = 0.00000, h = 0.00000 },
@@ -715,6 +716,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     raid_3126 = true,
                     raid_3156 = true,
                     raid_3159 = true,
+                    roleIconType = "twich",
                     sound = "TwichUI Alert 2"
                 },
                 smartMount = {
@@ -1443,13 +1445,22 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             }
                         }
                     },
+                    distanceFade = {
+                        enabled = true,
+                        outsideAlpha = 0.45
+                    },
                     enabled = true,
                     frameAlpha = 1,
                     groups = {
                         boss = {
+                            columnAnchorPoint = "LEFT",
+                            columnSpacing = 8,
                             enabled = true,
+                            growthDirection = "DOWN",
                             height = 36,
+                            unitsPerColumn = 2,
                             width = 220,
+                            xOffset = 5,
                             yOffset = -20
                         },
                         party = {
@@ -1494,6 +1505,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             rowSpacing = 8,
                             showPlayer = false,
                             showSolo = true,
+                            spiritIndicator = {
+                                enabled = true,
+                                size = 47
+                            },
                             unitsPerColumn = 1,
                             width = 180,
                             xOffset = 0,
@@ -1547,6 +1562,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             rowSpacing = 18,
                             showPlayer = false,
                             showSolo = true,
+                            spiritIndicator = {
+                                enabled = true,
+                                offsetY = 3
+                            },
                             unitsPerColumn = 5,
                             width = 125,
                             xOffset = 0,
@@ -1648,10 +1667,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     },
                     layout = {
                         boss = {
-                            point = "TOP",
-                            relativePoint = "TOP",
-                            x = 0,
-                            y = -2
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            x = 962,
+                            y = 1348
                         },
                         boss1 = {
                             point = "BOTTOMLEFT",
@@ -1715,7 +1734,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         tank = {
                             point = "BOTTOMLEFT",
                             relativePoint = "BOTTOMLEFT",
-                            x = 1264,
+                            x = 1209,
                             y = 49
                         },
                         tankMember = {},
@@ -1751,6 +1770,8 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         }
                     },
                     testMode = false,
+                    testPreviewParty = false,
+                    testPreviewRaid = true,
                     text = {
                         fontName = "Exo2 Bold",
                         healthFontSize = 10,
@@ -1907,7 +1928,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     units = {
                         boss = {
                             enabled = true,
-                            height = 40,
+                            height = 35,
                             powerHeight = 8,
                             showPower = true,
                             width = 500
@@ -2234,21 +2255,23 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
             })
         end,
     },
+    -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Captured: 2026-03-30  |  3440x1440  |  layout id: standard_left
+    -- Captured: 2026-03-30  |  3440x1440  |  layout id: standard_offset
     {
-        id                  = "standard_left",
-        name                = "StandardOffCenter",
-        description         = "Add a description here.",
+        id                  = "standard_offset",
+        name                = "Standard Offset",
+        description         = "Party and unit frames off to the left side",
         role                = "any", -- "any" | "dps" | "healer" | "tank"
         referenceResolution = { w = 3440, h = 1440 },
         frames              = {
             ChatFrame1      = { x = 0.00000, y = 0.02083, w = 0.17500, h = 0.19931, scaleMode = "height" },
-            UF_boss         = { x = 0.46221, y = 0.84583, w = 0.07558, h = 0.15278 },
-            UF_boss1        = { x = 0.42733, y = 0.97083, w = 0.14535, h = 0.02778 },
-            UF_boss2        = { x = 0.42733, y = 0.92917, w = 0.14535, h = 0.02778 },
-            UF_boss3        = { x = 0.42733, y = 0.88750, w = 0.14535, h = 0.02778 },
-            UF_boss4        = { x = 0.42733, y = 0.84583, w = 0.14535, h = 0.02778 },
-            UF_boss5        = { x = 0.42733, y = 0.80417, w = 0.14535, h = 0.02778 },
+            UF_boss         = { x = 0.27965, y = 0.93611, w = 0.14535, h = 0.02431 },
+            UF_boss1        = { x = 0.51599, y = 0.92222, w = 0.14535, h = 0.02431 },
+            UF_boss2        = { x = 0.42733, y = 0.00000, w = 0.14535, h = 0.02431 },
+            UF_boss3        = { x = 0.53401, y = 0.78819, w = 0.14535, h = 0.02431 },
+            UF_boss4        = { x = 0.42733, y = 0.00000, w = 0.14535, h = 0.02431 },
+            UF_boss5        = { x = 0.42733, y = 0.00000, w = 0.14535, h = 0.02431 },
             UF_castbar      = { x = 0.44593, y = 0.22917, w = 0.10814, h = 0.02083 },
             UF_focus        = { x = 0.64041, y = 0.59792, w = 0.06395, h = 0.02361 },
             UF_party        = { x = 0.00000, y = 0.00000, w = 0.00000, h = 0.00000 },
@@ -2852,6 +2875,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     raid_3126 = true,
                     raid_3156 = true,
                     raid_3159 = true,
+                    roleIconType = "twich",
                     sound = "TwichUI Alert 2"
                 },
                 smartMount = {
@@ -3580,13 +3604,22 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             }
                         }
                     },
+                    distanceFade = {
+                        enabled = true,
+                        outsideAlpha = 0.45
+                    },
                     enabled = true,
                     frameAlpha = 1,
                     groups = {
                         boss = {
+                            columnAnchorPoint = "LEFT",
+                            columnSpacing = 8,
                             enabled = true,
+                            growthDirection = "DOWN",
                             height = 36,
+                            unitsPerColumn = 2,
                             width = 220,
+                            xOffset = 5,
                             yOffset = -20
                         },
                         party = {
@@ -3631,6 +3664,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             rowSpacing = 8,
                             showPlayer = false,
                             showSolo = true,
+                            spiritIndicator = {
+                                enabled = true,
+                                size = 47
+                            },
                             unitsPerColumn = 1,
                             width = 180,
                             xOffset = 0,
@@ -3684,6 +3721,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             rowSpacing = 18,
                             showPlayer = false,
                             showSolo = true,
+                            spiritIndicator = {
+                                enabled = true,
+                                offsetY = 3
+                            },
                             unitsPerColumn = 5,
                             width = 125,
                             xOffset = 0,
@@ -3785,10 +3826,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     },
                     layout = {
                         boss = {
-                            point = "TOP",
-                            relativePoint = "TOP",
-                            x = 0,
-                            y = -2
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            x = 962,
+                            y = 1348
                         },
                         boss1 = {
                             point = "BOTTOMLEFT",
@@ -3820,8 +3861,8 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         party = {
                             point = "BOTTOMLEFT",
                             relativePoint = "BOTTOMLEFT",
-                            x = 590,
-                            y = 603
+                            x = 689,
+                            y = 488
                         },
                         partyMember = {},
                         pet = {
@@ -3845,15 +3886,15 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         raid = {
                             point = "BOTTOMLEFT",
                             relativePoint = "BOTTOMLEFT",
-                            x = 479,
-                            y = 469
+                            x = 413,
+                            y = 355
                         },
                         raidMember = {},
                         tank = {
                             point = "BOTTOMLEFT",
                             relativePoint = "BOTTOMLEFT",
-                            x = 308,
-                            y = 469
+                            x = 993,
+                            y = 354
                         },
                         tankMember = {},
                         target = {
@@ -3888,6 +3929,8 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         }
                     },
                     testMode = false,
+                    testPreviewParty = true,
+                    testPreviewRaid = true,
                     text = {
                         fontName = "Exo2 Bold",
                         healthFontSize = 10,
@@ -4044,7 +4087,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     units = {
                         boss = {
                             enabled = true,
-                            height = 40,
+                            height = 35,
                             powerHeight = 8,
                             showPower = true,
                             width = 500
@@ -4371,6 +4414,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
             })
         end,
     },
+    -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
