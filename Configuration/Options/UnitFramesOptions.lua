@@ -290,13 +290,14 @@ local PLAYER_CASTBAR_DEFAULTS = {
     timeOffsetX = -6,
     timeOffsetY = 0,
     useCustomColor = false,
+    useCustomBackground = false,
 }
 
 local EMBEDDED_CASTBAR_DEFAULTS = {
-    target = { enabled = true, detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left" },
-    party  = { enabled = true, detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left" },
-    raid   = { enabled = true, detached = false, width = 120, height = 12, iconSize = 14, showIcon = true, showText = true, showTimeText = true, fontSize = 8, timeFontSize = 8, yOffset = -2, iconPosition = "outside", iconSide = "left" },
-    boss   = { enabled = true, detached = false, width = 220, height = 12, iconSize = 18, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left" },
+    target = { enabled = true, detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    party  = { enabled = true, detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    raid   = { enabled = true, detached = false, width = 120, height = 12, iconSize = 14, showIcon = true, showText = true, showTimeText = true, fontSize = 8, timeFontSize = 8, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    boss   = { enabled = true, detached = false, width = 220, height = 12, iconSize = 18, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
 }
 
 local function GetModule()
@@ -2116,7 +2117,19 @@ local function BuildEmbeddedCastbarTab(scopeKey, label)
                             return GetPathValue(ExtendPath(path, "useCustomColor"), false) ~= true
                         end),
                     }),
-                iconPosition = BuildSelect(13, "Icon Position",
+                useCustomBackground = BuildToggle(13, "Custom Background",
+                    "Use a dedicated background color for this scope's castbar.",
+                    ExtendPath(path, "useCustomBackground"), defaults.useCustomBackground or false, {
+                        disabled = disabled,
+                        refreshConfig = true,
+                    }),
+                backgroundColor = BuildColor(14, "Background Color", "Custom castbar background color.",
+                    ExtendPath(path, "backgroundColor"), COLOR_DEFAULTS.background, true, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(path, "useCustomBackground"), defaults.useCustomBackground or false) ~= true
+                        end),
+                    }),
+                iconPosition = BuildSelect(15, "Icon Position",
                     "Place the icon outside the bar frame or embedded inside it.",
                     ExtendPath(path, "iconPosition"), defaults.iconPosition or "outside",
                     { outside = "Outside Bar", inside = "Inside Bar" }, {
@@ -2124,7 +2137,7 @@ local function BuildEmbeddedCastbarTab(scopeKey, label)
                             return GetPathValue(ExtendPath(path, "showIcon"), defaults.showIcon) ~= true
                         end),
                     }),
-                iconSide = BuildSelect(14, "Icon Side",
+                iconSide = BuildSelect(16, "Icon Side",
                     "Which side of the castbar the icon appears on.",
                     ExtendPath(path, "iconSide"), defaults.iconSide or "left",
                     { left = "Left", right = "Right" }, {

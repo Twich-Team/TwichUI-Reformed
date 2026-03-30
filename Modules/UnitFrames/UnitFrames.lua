@@ -2315,6 +2315,13 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
     local text     = self:GetTextConfigFor(unitKey)
     local texName  = (db.texture and db.texture ~= "") and db.texture or nil
     local texture  = texName and GetLSMTexture(texName) or GetThemeTexture()
+    local backgroundColor = palette.background
+    local backgroundAlpha = 0.9
+
+    if cfg.useCustomBackground == true and type(cfg.backgroundColor) == "table" then
+        backgroundColor = cfg.backgroundColor
+        backgroundAlpha = cfg.backgroundColor[4] or 1
+    end
 
     frame.Castbar:SetHeight(barH)
     frame.Castbar.smoothing = self:GetCastbarSmoothingMethod()
@@ -2336,7 +2343,7 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
     else
         frame.Castbar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 1)
     end
-    frame.Castbar:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
+    frame.Castbar:SetBackdropColor(backgroundColor[1], backgroundColor[2], backgroundColor[3], backgroundAlpha)
     frame.Castbar:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
     if frame.Castbar.Text then
         self:ApplyFontObject(frame.Castbar.Text, Clamp(cfg.fontSize or 9, 6, 20), text.fontName, text)
