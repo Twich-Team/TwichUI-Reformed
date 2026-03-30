@@ -892,6 +892,108 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             return GetEffectiveAuraValue(unitKey, field, fallback)
         end
     end
+    local function BarModeDisabled()
+        return ModuleDisabled(function()
+            return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
+        end)
+    end
+
+    local genericBarStyle = Widgets.IGroup(17, "Shared Bar Style", {
+        barTexture = BuildTextureSelect(1, "Texture",
+            "Default status bar texture used for aura bars. Uses the theme texture when set to default.",
+            ExtendPath(basePath, "barTexture"), "Use Theme Texture", {
+                disabled = BarModeDisabled(),
+            }),
+        barFontName = BuildFontSelect(2, "Font", "Default font used for aura bar labels and timers.",
+            ExtendPath(basePath, "barFontName"), "Use Unit Frames Font", {
+                disabled = BarModeDisabled(),
+            }),
+        barFontSize = BuildRange(3, "Font Size", "Default font size for bar labels and time text. Leave at 0 for auto-size.",
+            ExtendPath(basePath, "barFontSize"), auraDefault("barFontSize", 0), 0, 20, 1, {
+                disabled = BarModeDisabled(),
+            }),
+        barColor = BuildColor(4, "Fill Color",
+            "Default aura bar fill color (timed auras). Overrides the palette cast color.",
+            ExtendPath(basePath, "barColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+        barBackground = BuildColor(5, "Background", "Default aura bar background color override.",
+            ExtendPath(basePath, "barBackground"), { 0.04, 0.05, 0.07, 0.95 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+        barBorderColor = BuildColor(6, "Border", "Default aura bar border color override.",
+            ExtendPath(basePath, "barBorderColor"), { 0.16, 0.18, 0.24, 0.85 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+        barTextColor = BuildColor(7, "Text Color", "Default text color for bar labels, stacks, and timers.",
+            ExtendPath(basePath, "barTextColor"), { 1, 1, 1, 1 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+    })
+
+    local buffBarStyle = Widgets.IGroup(18, "Buff Style", {
+        buffBarTexture = BuildTextureSelect(1, "Texture",
+            "Optional texture override used only for buff bars.",
+            ExtendPath(basePath, "buffBarTexture"), "Use Shared Texture", {
+                disabled = BarModeDisabled(),
+            }),
+        buffBarFontName = BuildFontSelect(2, "Font", "Optional font override used only for buff bars.",
+            ExtendPath(basePath, "buffBarFontName"), "Use Shared Font", {
+                disabled = BarModeDisabled(),
+            }),
+        buffBarFontSize = BuildRange(3, "Font Size", "Optional buff bar font size override. Leave at 0 for shared sizing.",
+            ExtendPath(basePath, "buffBarFontSize"), auraDefault("buffBarFontSize", 0), 0, 20, 1, {
+                disabled = BarModeDisabled(),
+            }),
+        buffBarColor = BuildColor(4, "Fill Color", "Optional fill color override used only for buff bars.",
+            ExtendPath(basePath, "buffBarColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+        buffBarBackground = BuildColor(5, "Background", "Optional background color override used only for buff bars.",
+            ExtendPath(basePath, "buffBarBackground"), { 0.04, 0.05, 0.07, 0.95 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+        buffBarBorderColor = BuildColor(6, "Border", "Optional border color override used only for buff bars.",
+            ExtendPath(basePath, "buffBarBorderColor"), { 0.16, 0.18, 0.24, 0.85 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+        buffBarTextColor = BuildColor(7, "Text Color", "Optional text color override used only for buff bars.",
+            ExtendPath(basePath, "buffBarTextColor"), { 1, 1, 1, 1 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+    })
+
+    local debuffBarStyle = Widgets.IGroup(19, "Debuff Style", {
+        debuffBarTexture = BuildTextureSelect(1, "Texture",
+            "Optional texture override used only for debuff bars.",
+            ExtendPath(basePath, "debuffBarTexture"), "Use Shared Texture", {
+                disabled = BarModeDisabled(),
+            }),
+        debuffBarFontName = BuildFontSelect(2, "Font", "Optional font override used only for debuff bars.",
+            ExtendPath(basePath, "debuffBarFontName"), "Use Shared Font", {
+                disabled = BarModeDisabled(),
+            }),
+        debuffBarFontSize = BuildRange(3, "Font Size", "Optional debuff bar font size override. Leave at 0 for shared sizing.",
+            ExtendPath(basePath, "debuffBarFontSize"), auraDefault("debuffBarFontSize", 0), 0, 20, 1, {
+                disabled = BarModeDisabled(),
+            }),
+        debuffBarColor = BuildColor(4, "Fill Color", "Optional fill color override used only for debuff bars.",
+            ExtendPath(basePath, "debuffBarColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+        debuffBarBackground = BuildColor(5, "Background", "Optional background color override used only for debuff bars.",
+            ExtendPath(basePath, "debuffBarBackground"), { 0.04, 0.05, 0.07, 0.95 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+        debuffBarBorderColor = BuildColor(6, "Border", "Optional border color override used only for debuff bars.",
+            ExtendPath(basePath, "debuffBarBorderColor"), { 0.16, 0.18, 0.24, 0.85 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+        debuffBarTextColor = BuildColor(7, "Text Color", "Optional text color override used only for debuff bars.",
+            ExtendPath(basePath, "debuffBarTextColor"), { 1, 1, 1, 1 }, true, {
+                disabled = BarModeDisabled(),
+            }),
+    })
 
     return Widgets.IGroup(order, name, {
         enabled = BuildToggle(1, "Enable", "Show aura icons or bars for this frame type.",
@@ -930,48 +1032,19 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             }),
         barHeight = BuildRange(9, "Bar Height", "Aura bar height in bar mode.", ExtendPath(basePath, "barHeight"),
             auraDefault("barHeight", 14), 8, 30, 1, {
-                disabled = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
-                end),
+                disabled = BarModeDisabled(),
             }),
-        barTexture = BuildTextureSelect(10, "Bar Texture",
-            "Status bar texture used for aura bars. Uses the theme texture when set to default.",
-            ExtendPath(basePath, "barTexture"), "Use Theme Texture", {
-                disabled = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
-                end),
-            }),
-        barFontSize = BuildRange(11, "Bar Font Size", "Font size for bar labels and time text. Leave at 0 for auto-size.",
-            ExtendPath(basePath, "barFontSize"), auraDefault("barFontSize", 0), 0, 20, 1, {
-                disabled = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
-                end),
-            }),
-        showTime = BuildToggle(12, "Show Time", "Show remaining time on aura bars.",
+        showTime = BuildToggle(10, "Show Time", "Show remaining time on aura bars.",
             ExtendPath(basePath, "showTime"), auraDefault("showTime", true), {
-                disabled = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
-                end),
+                disabled = BarModeDisabled(),
             }),
-        showStacks = BuildToggle(13, "Show Stacks", "Show stack count on aura bars (when > 1).",
+        showStacks = BuildToggle(11, "Show Stacks", "Show stack count on aura bars (when > 1).",
             ExtendPath(basePath, "showStacks"), auraDefault("showStacks", true), {
-                disabled = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
-                end),
+                disabled = BarModeDisabled(),
             }),
-        barColor = BuildColor(14, "Bar Color",
-            "Custom aura bar fill color (timed auras). Overrides the palette cast color.",
-            ExtendPath(basePath, "barColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
-                disabled = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
-                end),
-            }),
-        barBackground = BuildColor(15, "Background", "Aura bar background color override.",
-            ExtendPath(basePath, "barBackground"), { 0.04, 0.05, 0.07, 0.95 }, true, {
-                disabled = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(basePath, "barMode"), auraDefault("barMode", false)) ~= true
-                end),
-            }),
+        genericBarStyle = genericBarStyle,
+        buffBarStyle = buffBarStyle,
+        debuffBarStyle = debuffBarStyle,
     })
 end
 

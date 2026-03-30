@@ -84,6 +84,25 @@ local function SafeAuraDebugValue(value, fallback)
     return fallback or "<unprintable>"
 end
 
+local function SafeColorDebugValue(color)
+    if type(color) ~= "table" then
+        return "nil"
+    end
+
+    local r = color[1] or color.r
+    local g = color[2] or color.g
+    local b = color[3] or color.b
+    local a = color[4] or color.a or color.alpha
+
+    return string.format(
+        "%.3f,%.3f,%.3f,%.3f",
+        tonumber(r) or -1,
+        tonumber(g) or -1,
+        tonumber(b) or -1,
+        tonumber(a) or -1
+    )
+end
+
 local function BuildAuraTimingDebugKey(contextKey, unit, auraData, reason)
     return table.concat({
         SafeAuraDebugValue(contextKey, "unknown"),
@@ -159,6 +178,23 @@ function UnitFrames:GetAuraRemainingTime(durationObject, expirationTime, duratio
     end
 
     return 0
+end
+
+function UnitFrames:ShouldUseAuraTimerFill(durationObject, expirationTime, duration)
+    if durationObject and durationObject.GetRemainingDuration then
+        local okRemaining, remaining = pcall(durationObject.GetRemainingDuration, durationObject)
+        if okRemaining and remaining ~= nil then
+            if issecretvalue and issecretvalue(remaining) then
+                return true
+            end
+
+            if type(remaining) == "number" and remaining > 0 then
+                return true
+            end
+        end
+    end
+
+    return expirationTime and expirationTime > 0 and duration and duration > 0
 end
 
 function UnitFrames:UpdateAuraRemainingText(fs, durationObject, expirationTime, duration)
@@ -331,6 +367,81 @@ local function CopyColor(color, fallback)
         source[3] or 1,
         source[4] or 1,
     }
+end
+
+local function NormalizeColor(color, fallback)
+    if type(color) == "table" then
+        if type(color[1]) == "number" or type(color[2]) == "number" or type(color[3]) == "number" then
+            return CopyColor(color, fallback)
+        end
+
+        if type(color.r) == "number" or type(color.g) == "number" or type(color.b) == "number" then
+            return {
+                color.r or 1,
+                color.g or 1,
+                color.b or 1,
+                color.a or color.alpha or 1,
+            }
+        end
+    end
+
+    if fallback == nil then
+        return nil
+    end
+
+    return CopyColor(fallback)
+end
+
+local function ApplyStatusBarVisualColor(bar, color, fallbackAlpha)
+    if not bar or not bar.SetStatusBarColor then
+        return
+    end
+
+    local resolved = NormalizeColor(color, { 1, 1, 1, fallbackAlpha or 1 })
+    if not resolved then
+        resolved = { 1, 1, 1, fallbackAlpha or 1 }
+    end
+
+    local alpha = resolved[4]
+    if type(alpha) ~= "number" then
+        alpha = fallbackAlpha or 1
+    end
+
+    bar:SetStatusBarColor(resolved[1] or 1, resolved[2] or 1, resolved[3] or 1, alpha)
+
+    local texture = bar.GetStatusBarTexture and bar:GetStatusBarTexture() or nil
+    if texture and texture.SetVertexColor then
+        texture:SetVertexColor(resolved[1] or 1, resolved[2] or 1, resolved[3] or 1, alpha)
+    end
+end
+
+local function BuildAuraAppearanceDebugKey(unit, data)
+    return table.concat({
+        SafeAuraDebugValue(unit, "nil"),
+        SafeAuraDebugValue(data and data.auraInstanceID, "nil"),
+        SafeAuraDebugValue(data and data.spellId, "nil"),
+    }, ":")
+end
+
+function UnitFrames:LogAuraAppearanceOnce(unit, data, appearance, isUsingDurationObjectFill, texturePath)
+    self._auraAppearanceDebugSeen = self._auraAppearanceDebugSeen or {}
+    local key = BuildAuraAppearanceDebugKey(unit, data)
+    if self._auraAppearanceDebugSeen[key] then return end
+    self._auraAppearanceDebugSeen[key] = true
+
+    UFDebug(string.format(
+        "AuraAppearance: unit=%s spellId=%s auraInstanceID=%s harmful=%s timerFill=%s texture=%s fill=%s background=%s border=%s text=%s",
+        SafeAuraDebugValue(unit, "nil"),
+        SafeAuraDebugValue(data and data.spellId, "nil"),
+        SafeAuraDebugValue(data and data.auraInstanceID, "nil"),
+        tostring(data and data.isHarmfulAura == true),
+        tostring(isUsingDurationObjectFill == true),
+        SafeAuraDebugValue(texturePath, "nil"),
+        SafeColorDebugValue(appearance and appearance.fillColor),
+        SafeColorDebugValue(appearance and appearance.backgroundColor),
+        SafeColorDebugValue(appearance and appearance.borderColor),
+        SafeColorDebugValue(appearance and appearance.textColor)
+    ))
 end
 
 local ApplyStandaloneCastbarTextAnchors
@@ -1466,6 +1577,22 @@ function UnitFrames:GetAuraConfigFor(unitKey)
         showStacks    = scoped.showStacks,
         barColor      = scoped.barColor,
         barBackground = scoped.barBackground,
+        barBorderColor = scoped.barBorderColor,
+        barTextColor   = scoped.barTextColor,
+        buffBarTexture = scoped.buffBarTexture,
+        buffBarFontSize = scoped.buffBarFontSize,
+        buffBarFontName = scoped.buffBarFontName,
+        buffBarColor = scoped.buffBarColor,
+        buffBarBackground = scoped.buffBarBackground,
+        buffBarBorderColor = scoped.buffBarBorderColor,
+        buffBarTextColor = scoped.buffBarTextColor,
+        debuffBarTexture = scoped.debuffBarTexture,
+        debuffBarFontSize = scoped.debuffBarFontSize,
+        debuffBarFontName = scoped.debuffBarFontName,
+        debuffBarColor = scoped.debuffBarColor,
+        debuffBarBackground = scoped.debuffBarBackground,
+        debuffBarBorderColor = scoped.debuffBarBorderColor,
+        debuffBarTextColor = scoped.debuffBarTextColor,
     }
     if merged.enabled == nil then merged.enabled = true end
     if merged.maxIcons == nil then merged.maxIcons = 8 end
@@ -1483,6 +1610,22 @@ function UnitFrames:GetAuraConfigFor(unitKey)
     if merged.showStacks == nil then merged.showStacks = true end
     if merged.barColor == nil then merged.barColor = nil end           -- nil = palette.cast
     if merged.barBackground == nil then merged.barBackground = nil end -- nil = default backdrop
+    if merged.barBorderColor == nil then merged.barBorderColor = nil end
+    if merged.barTextColor == nil then merged.barTextColor = nil end
+    if merged.buffBarTexture == nil then merged.buffBarTexture = nil end
+    if merged.buffBarFontSize == nil then merged.buffBarFontSize = nil end
+    if merged.buffBarFontName == nil then merged.buffBarFontName = nil end
+    if merged.buffBarColor == nil then merged.buffBarColor = nil end
+    if merged.buffBarBackground == nil then merged.buffBarBackground = nil end
+    if merged.buffBarBorderColor == nil then merged.buffBarBorderColor = nil end
+    if merged.buffBarTextColor == nil then merged.buffBarTextColor = nil end
+    if merged.debuffBarTexture == nil then merged.debuffBarTexture = nil end
+    if merged.debuffBarFontSize == nil then merged.debuffBarFontSize = nil end
+    if merged.debuffBarFontName == nil then merged.debuffBarFontName = nil end
+    if merged.debuffBarColor == nil then merged.debuffBarColor = nil end
+    if merged.debuffBarBackground == nil then merged.debuffBarBackground = nil end
+    if merged.debuffBarBorderColor == nil then merged.debuffBarBorderColor = nil end
+    if merged.debuffBarTextColor == nil then merged.debuffBarTextColor = nil end
 
     -- Per-unit overrides (scope == "singles" only for named units)
     if scope == "singles" and unitKey ~= "partyMember" and unitKey ~= "raidMember" and unitKey ~= "tankMember" then
@@ -1496,6 +1639,50 @@ function UnitFrames:GetAuraConfigFor(unitKey)
         end
     end
     return merged
+end
+
+local function GetAuraBarStyleValue(aura, isHarmfulAura, specificKey, genericKey)
+    if isHarmfulAura then
+        local debuffKey = "debuff" .. specificKey
+        if aura[debuffKey] ~= nil then
+            return aura[debuffKey]
+        end
+    else
+        local buffKey = "buff" .. specificKey
+        if aura[buffKey] ~= nil then
+            return aura[buffKey]
+        end
+    end
+
+    return aura[genericKey]
+end
+
+function UnitFrames:GetAuraBarAppearance(aura, data, palette, text)
+    local isHarmfulAura = data and data.isHarmfulAura == true
+    local textureName = GetAuraBarStyleValue(aura, isHarmfulAura, "BarTexture", "barTexture")
+    local texture = (textureName and textureName ~= "") and GetLSMTexture(textureName) or GetThemeTexture()
+
+    local fillColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarColor", "barColor"), nil)
+    local backgroundColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarBackground", "barBackground"), nil)
+    local borderColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarBorderColor", "barBorderColor"), nil)
+    local textColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarTextColor", "barTextColor"), nil)
+    local fontSize = GetAuraBarStyleValue(aura, isHarmfulAura, "BarFontSize", "barFontSize")
+    local fontName = GetAuraBarStyleValue(aura, isHarmfulAura, "BarFontName", "barFontName") or text.fontName
+
+    if not fillColor then
+        fillColor = NormalizeColor(isHarmfulAura and palette.health or palette.cast, { 1, 1, 1, 0.85 })
+    end
+
+    return {
+        textureName = textureName,
+        texture = texture,
+        fillColor = fillColor,
+        backgroundColor = backgroundColor,
+        borderColor = borderColor,
+        textColor = textColor,
+        fontSize = (fontSize and fontSize > 0) and fontSize or nil,
+        fontName = fontName,
+    }
 end
 
 local MAX_AURA_BARS = 12
@@ -1580,16 +1767,7 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     local container  = frame.AuraBars
     local frameWidth = math_max(40, frame:GetWidth())
     local text       = self:GetTextConfigFor(unitKey)
-    -- Texture: custom aura barTexture > theme default
-    local barTexName = aura.barTexture
-    local texture    = (barTexName and barTexName ~= "") and GetLSMTexture(barTexName) or GetThemeTexture()
     local palette    = self:GetPalette(unitKey, unit)
-    -- Resolve bar-specific colors; fall back to palette entries
-    local barColor   = aura.barColor      -- may be a table {r,g,b,a} or nil
-    local bgColor    = aura.barBackground -- may be a table {r,g,b,a} or nil
-    local barFontSz  = (aura.barFontSize and aura.barFontSize > 0) and Clamp(aura.barFontSize, 6, 20) or
-        math_max(7, barH - 4)
-    local barFontNm  = aura.barFontName or text.fontName
     local showTime   = aura.showTime ~= false
     local showStacks = aura.showStacks ~= false
 
@@ -1611,6 +1789,14 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
         if not bar then break end
         local data = (i <= maxBars) and auraList[i] or nil
         if data then
+            local appearance = self:GetAuraBarAppearance(aura, data, palette, text)
+            local texture = appearance.texture
+            local barColor = appearance.fillColor
+            local bgColor = appearance.backgroundColor
+            local borderColor = appearance.borderColor
+            local textColor = appearance.textColor
+            local barFontSz = Clamp(appearance.fontSize or (barH - 4), 6, 20)
+            local barFontNm = appearance.fontName
             bar:SetWidth(frameWidth); bar:SetHeight(barH)
             bar:ClearAllPoints()
             if i == 1 then
@@ -1625,11 +1811,18 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             else
                 bar:SetBackdropColor(0.04, 0.05, 0.07, 0.95)
             end
+            if borderColor then
+                bar:SetBackdropBorderColor(borderColor[1] or 0, borderColor[2] or 0, borderColor[3] or 0,
+                    borderColor[4] or 0.85)
+            else
+                bar:SetBackdropBorderColor(0.16, 0.18, 0.24, 0.85)
+            end
             local dur = tonumber(data.duration) or 0
             local exp = tonumber(data.expirationTime) or 0
             bar._durationObject = data.durationObject
             bar._usesDurationObjectFill = false
-            if data.durationObject and bar.SetTimerDuration then
+            bar._hasTimer = self:ShouldUseAuraTimerFill(data.durationObject, exp, dur)
+            if bar._hasTimer and data.durationObject and bar.SetTimerDuration then
                 local timerDirection = StatusBarTimerDirection and StatusBarTimerDirection.RemainingTime or nil
                 local okTimer = false
                 if timerDirection ~= nil and StatusBarInterpolation and StatusBarInterpolation.Immediate then
@@ -1641,21 +1834,22 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
                     bar._usesDurationObjectFill = true
                 end
             end
+            self:LogAuraAppearanceOnce(unit, data, appearance, bar._usesDurationObjectFill, texture)
             if bar._usesDurationObjectFill then
                 bar._duration = dur; bar._expiry = exp
                 if barColor then
-                    bar:SetStatusBarColor(barColor[1] or 0, barColor[2] or 0, barColor[3] or 0, barColor[4] or 0.85)
+                    ApplyStatusBarVisualColor(bar, barColor, 0.85)
                 else
-                    bar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 0.85)
+                    ApplyStatusBarVisualColor(bar, palette.cast, 0.85)
                 end
             elseif dur > 0 then
                 bar:SetMinMaxValues(0, dur)
                 bar:SetValue(math_max(0, exp - GetTime()))
                 bar._duration = dur; bar._expiry = exp
                 if barColor then
-                    bar:SetStatusBarColor(barColor[1] or 0, barColor[2] or 0, barColor[3] or 0, barColor[4] or 0.85)
+                    ApplyStatusBarVisualColor(bar, barColor, 0.85)
                 else
-                    bar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 0.85)
+                    ApplyStatusBarVisualColor(bar, palette.cast, 0.85)
                 end
             else
                 bar:SetMinMaxValues(0, 1); bar:SetValue(1)
@@ -1663,9 +1857,9 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
                 bar._durationObject = nil
                 bar._usesDurationObjectFill = false
                 if barColor then
-                    bar:SetStatusBarColor(barColor[1] or 0, barColor[2] or 0, barColor[3] or 0, barColor[4] or 0.7)
+                    ApplyStatusBarVisualColor(bar, barColor, 0.7)
                 else
-                    bar:SetStatusBarColor(palette.health[1], palette.health[2], palette.health[3], 0.7)
+                    ApplyStatusBarVisualColor(bar, palette.health, 0.7)
                 end
             end
             if bar.icon then
@@ -1682,6 +1876,11 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             if showStacks then rightReserve = rightReserve + 20 end
             if bar.label then
                 self:ApplyFontObject(bar.label, barFontSz, barFontNm, text)
+                if textColor then
+                    bar.label:SetTextColor(textColor[1] or 1, textColor[2] or 1, textColor[3] or 1, textColor[4] or 1)
+                else
+                    bar.label:SetTextColor(1, 1, 1, 1)
+                end
                 bar.label:ClearAllPoints()
                 bar.label:SetPoint("LEFT", bar, "LEFT", iconOffset, 0)
                 bar.label:SetPoint("RIGHT", bar, "RIGHT", -(rightReserve + 4), 0)
@@ -1689,6 +1888,12 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             end
             if bar.stackText then
                 self:ApplyFontObject(bar.stackText, barFontSz, barFontNm, text)
+                if textColor then
+                    bar.stackText:SetTextColor(textColor[1] or 1, textColor[2] or 1, textColor[3] or 1,
+                        textColor[4] or 1)
+                else
+                    bar.stackText:SetTextColor(1, 1, 1, 1)
+                end
                 bar.stackText:ClearAllPoints()
                 if showStacks then
                     local stackRight = showTime and -34 or -4
@@ -1701,17 +1906,23 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             end
             if bar.timeText then
                 self:ApplyFontObject(bar.timeText, barFontSz, barFontNm, text)
+                if textColor then
+                    bar.timeText:SetTextColor(textColor[1] or 1, textColor[2] or 1, textColor[3] or 1,
+                        textColor[4] or 1)
+                else
+                    bar.timeText:SetTextColor(1, 1, 1, 1)
+                end
                 bar.timeText:ClearAllPoints()
                 if showTime then
                     bar.timeText:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
-                    bar.timeText:SetShown(bar._usesDurationObjectFill or dur > 0 or data.durationObject ~= nil)
+                    bar.timeText:SetShown(bar._usesDurationObjectFill or bar._hasTimer == true or dur > 0)
                 else
                     bar.timeText:SetText(""); bar.timeText:Hide()
                 end
             end
             bar:Show(); shown = shown + 1
         else
-            bar._duration = nil; bar._expiry = nil; bar._durationObject = nil; bar._usesDurationObjectFill = false; bar:Hide()
+            bar._duration = nil; bar._expiry = nil; bar._durationObject = nil; bar._usesDurationObjectFill = false; bar._hasTimer = nil; bar:Hide()
         end
     end
     container:SetWidth(frameWidth)
