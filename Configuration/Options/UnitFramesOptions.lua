@@ -1746,8 +1746,8 @@ local function BuildGroupTab(groupKey, label)
     if groupKey == "party" or groupKey == "raid" then
         frameTab.args.power = Widgets.IGroup(4, "Power Bar", {
             healerOnlyPower = BuildToggle(1, "Healer Only",
-                "When enabled, only show the power bar for frames whose unit has the Healer role assigned. All other roles will have the power bar hidden.",
-                ExtendPath(basePath, "healerOnlyPower"), false, {
+                "When enabled, only show the power bar for frames whose unit has the Healer role assigned. All other roles will have the power bar hidden. Enabled by default — disable to show power for all roles.",
+                ExtendPath(basePath, "healerOnlyPower"), true, {
                     disabled = disabled,
                 }),
         })

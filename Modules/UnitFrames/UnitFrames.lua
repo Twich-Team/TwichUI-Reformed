@@ -344,27 +344,29 @@ local function NormalizeDispelName(name)
     return (name == "") and "Enrage" or name
 end
 
--- knownHarmful: optional bool — caller can assert harmfulness without reading any Blizzard fields.
-local function AuraMatchesDisplayMode(mode, data, knownHarmful)
+local function AuraMatchesDisplayMode(mode, data)
     if not data then return false end
     if mode == "DISPELLABLE" or mode == "DISPELLABLE_OR_BOSS" then
-        -- Only ever access our OWN synthetic fields here (computed via IsAuraFilteredOutByInstanceID).
-        -- Any direct read of Blizzard's boolean/string AuraData fields (canActivePlayerDispel,
-        -- isHarmful, dispelName, isBossAura) throws on ==, ~=, not, if-then, or — ALL operations.
-        local isHarmful = (knownHarmful == true) or (data.isHarmfulAura == true)
-        if not isHarmful then return false end
-        -- isDispellableByPlayer / isBossImportant are plain Lua bools we set via IsAuraFilteredOutByInstanceID.
-        if data.isDispellableByPlayer == true then return true end
-        if mode == "DISPELLABLE_OR_BOSS" and data.isBossImportant == true then return true end
-        return false
+        -- isHarmful / isHarmfulAura can be secret booleans — wrap comparisons in pcall.
+        local _okh, _harm   = pcall(function() return data.isHarmful == true end)
+        local _okha, _harma = pcall(function() return data.isHarmfulAura == true end)
+        if not ((_okh and _harm) or (_okha and _harma)) then return false end
+        -- dispelName can also be a secret string — guard the table key lookup.
+        local _okd, _canDispel = pcall(function()
+            return GetPlayerDispelTypes()[NormalizeDispelName(data.dispelName or "")] == true
+        end)
+        local canDispel = _okd and _canDispel
+        if mode == "DISPELLABLE" then return canDispel end
+        -- isBossAura can be a secret boolean too.
+        local _okb, _isBoss = pcall(function() return data.isBossAura == true end)
+        return canDispel or (_okb and _isBoss)
     end
     return true
 end
 
 -- Method wrapper so AuraWatcher.lua (loaded after this file) can call it.
--- knownHarmful: optional; pass true when the caller already knows the aura is a debuff.
-function UnitFrames:CheckAuraMatchesFilter(mode, data, knownHarmful)
-    return AuraMatchesDisplayMode(mode, data, knownHarmful)
+function UnitFrames:CheckAuraMatchesFilter(mode, data)
+    return AuraMatchesDisplayMode(mode, data)
 end
 
 function UnitFrames:GetOptions()
@@ -433,8 +435,10 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
             GetThemeColor("successColor", { 0.34, 0.84, 0.54, 1 })),
         power           = CopyColor(scopeColors.power or db.colors.power or
             GetThemeColor("primaryColor", { 0.10, 0.72, 0.74, 1 })),
+        -- Alpha 0 → transparent when empty; the frame backdrop shows through so no black bar.
+        -- Users who want a visible empty-bar tint can set a custom powerBackground color.
         powerBackground = CopyColor(scopeColors.powerBackground or db.colors.powerBackground or
-            GetThemeColor("backgroundColor", { 0.05, 0.06, 0.08, 0.85 })),
+            GetThemeColor("powerBackgroundColor", { 0.05, 0.06, 0.08, 0.0 })),
         powerBorder     = CopyColor(scopeColors.powerBorder or db.colors.powerBorder or
             GetThemeColor("borderColor", { 0.24, 0.26, 0.32, 0.9 })),
         cast            = CopyColor(scopeColors.cast or db.colors.cast or
@@ -466,8 +470,8 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
         elseif type(healthScope.color) == "table" then
             palette.health = CopyColor(healthScope.color)
         end
-        UFDebug(string.format("GetPalette: scope=%s unit=%s mode=custom r=%.2f g=%.2f b=%.2f",
-            tostring(resolvedScope), tostring(unit),
+        UFDebug(string.format("GetPalette: scope=%s mode=custom r=%.2f g=%.2f b=%.2f",
+            tostring(resolvedScope),
             palette.health[1], palette.health[2], palette.health[3]))
     elseif mode == "class" then
         local classToken = nil
@@ -499,8 +503,8 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
                 palette.health = { classColor.r, classColor.g, classColor.b, 1 }
             end
         end
-        UFDebug(string.format("GetPalette: scope=%s unit=%s mode=class token=%s found=%s",
-            tostring(resolvedScope), tostring(unit),
+        UFDebug(string.format("GetPalette: scope=%s mode=class token=%s found=%s",
+            tostring(resolvedScope),
             tostring(classToken), tostring(classColor ~= nil)))
     end
 
@@ -541,19 +545,63 @@ function UnitFrames:ResolvePowerColor(unitKey, unit)
 end
 
 -- Applies healer-only power bar visibility for party/raid frames.
--- Uses alpha rather than SetShown to avoid triggering a health bar re-anchor.
+-- Collapses height to 0 for non-healers so health bar fills the whole frame.
 function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
     local healerOnly = false
     if unitKey == "partyMember" then
-        healerOnly = self:GetGroupSettings("party").healerOnlyPower == true
+        -- Default to healer-only (nil means never explicitly turned off → treat as true).
+        -- Only disable when the user has explicitly stored false.
+        healerOnly = self:GetGroupSettings("party").healerOnlyPower ~= false
     elseif unitKey == "raidMember" then
-        healerOnly = self:GetGroupSettings("raid").healerOnlyPower == true
+        healerOnly = self:GetGroupSettings("raid").healerOnlyPower ~= false
     end
+
+    -- Determine desired state first, then bail early if nothing changed.
+    -- This is called from PostUpdate/PostUpdateColor (every power tick), so avoiding
+    -- redundant SetHeight/SetAlpha/Show/Hide calls is critical for performance.
+    local shouldCollapse = false
+    local role = nil
     if healerOnly and unit and UnitGroupRolesAssigned then
-        local role = UnitGroupRolesAssigned(unit) or ""
-        powerBar:SetAlpha(role == "HEALER" and 1 or 0)
+        role = UnitGroupRolesAssigned(unit) or ""
+        shouldCollapse = (role ~= "HEALER")
+    end
+
+    if powerBar._roleCollapsed == shouldCollapse then return end
+    powerBar._roleCollapsed = shouldCollapse
+
+    if shouldCollapse then
+        UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=%s → COLLAPSE", tostring(unitKey), tostring(role)))
+        powerBar:SetHeight(0)
+        powerBar:SetAlpha(0)
+        if powerBar._ownerFrame and powerBar._detached ~= true and powerBar._ownerFrame.Health then
+            local health = powerBar._ownerFrame.Health
+            health:ClearAllPoints()
+            health:SetAllPoints(powerBar._ownerFrame)
+        end
+        if powerBar.border then
+            powerBar.border:SetAlpha(0)
+            powerBar.border:Hide()
+        end
     else
+        local restoreH = powerBar._designedHeight or 8
+        if healerOnly then
+            UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=HEALER → RESTORE h=%d", tostring(unitKey), restoreH))
+        else
+            UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=false → RESTORE h=%d", tostring(unitKey), restoreH))
+        end
+        powerBar:SetHeight(restoreH)
         powerBar:SetAlpha(1)
+        if powerBar._ownerFrame and powerBar._detached ~= true and powerBar._ownerFrame.Health then
+            local health = powerBar._ownerFrame.Health
+            health:ClearAllPoints()
+            health:SetPoint("TOPLEFT", powerBar._ownerFrame, "TOPLEFT", 0, 0)
+            health:SetPoint("TOPRIGHT", powerBar._ownerFrame, "TOPRIGHT", 0, 0)
+            health:SetPoint("BOTTOM", powerBar, "TOP", 0, 0)
+        end
+        if powerBar.border then
+            powerBar.border:SetAlpha(1)
+            powerBar.border:Show()
+        end
     end
 end
 
@@ -1295,13 +1343,6 @@ local function CollectAuraData(list, unit, auraFilter, maxCount, onlyMine, filte
             d.applications   = _oka and type(_sa) == "number" and _sa or 0
             d.isPlayerAura   = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
             d.isHarmfulAura  = auraFilter:find("HARMFUL") ~= nil
-            -- Classify dispellability/boss status via C API — returns a plain Lua bool, NEVER a secret value.
-            if C_UnitAuras.IsAuraFilteredOutByInstanceID then
-                d.isDispellableByPlayer = not C_UnitAuras.IsAuraFilteredOutByInstanceID(
-                    unit, data.auraInstanceID, "HARMFUL|RAID_PLAYER_DISPELLABLE")
-                d.isBossImportant = not C_UnitAuras.IsAuraFilteredOutByInstanceID(
-                    unit, data.auraInstanceID, "HARMFUL|IMPORTANT")
-            end
             if (not onlyMine or d.isPlayerAura) and AuraMatchesDisplayMode(filterMode, d) then
                 list[#list + 1] = d
                 if #list >= maxCount then return end
@@ -1596,26 +1637,15 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
         return AuraMatchesDisplayMode(element.twichFilterMode, data)
     end
 
-    -- oUF's Auras Enable() calls auras:Show() unconditionally every time a unit is assigned.
-    -- Guard against that with the same _forceHide / OnShow pattern used for Power.
-    local aurasEnabled = aura.enabled ~= false
-    frame.Auras._forceHide = not aurasEnabled or nil
-    if not frame.Auras._twichAurasOnShowHooked then
-        frame.Auras._twichAurasOnShowHooked = true
-        frame.Auras:HookScript("OnShow", function(self2)
-            if self2._forceHide then self2:Hide() end
-        end)
-    end
-
     if aura.barMode == true then
         -- Bar mode: hide icon grid, show bar container
         frame.Auras.num = 0; frame.Auras.numTotal = 0
         frame.Auras.numBuffs = 0; frame.Auras.numDebuffs = 0
-        frame.Auras:Hide()
+        frame.Auras:SetShown(false)
         local bars = self:EnsureAuraBarsContainer(frame)
         bars:ClearAllPoints()
         bars:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, yOff)
-        bars:SetShown(aurasEnabled)
+        bars:SetShown(aura.enabled ~= false)
         self:RefreshAuraBarsForFrame(frame, unitKey)
     else
         -- Icon mode
@@ -1637,7 +1667,7 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
         frame.Auras.size = iconSize
         frame.Auras.spacing = spacing
         frame.Auras.needFullUpdate = true
-        frame.Auras:SetShown(aurasEnabled)
+        frame.Auras:SetShown(aura.enabled ~= false)
         frame.Auras:ClearAllPoints()
         frame.Auras:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, yOff)
         frame.Auras:SetHeight(iconSize)
@@ -1792,6 +1822,7 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
         local showIcon = cfg.showIcon ~= false
         local iconPos  = cfg.iconPosition or "outside"
         local iconSide = cfg.iconSide or "left"
+        frame.Castbar.Icon:SetDrawLayer("OVERLAY")
         frame.Castbar.Icon:SetSize(iconSize, iconSize)
         frame.Castbar.Icon:SetShown(showIcon)
         frame.Castbar.Icon:ClearAllPoints()
@@ -1827,8 +1858,14 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
     end
     if not enabled then
         frame.Castbar:Hide()
-    elseif frame.Castbar.ForceUpdate then
-        frame.Castbar:ForceUpdate()
+    else
+        local unit = frame.unit
+        local isCasting = unit and (UnitCastingInfo(unit) or UnitChannelInfo(unit))
+        if isCasting and frame.Castbar.ForceUpdate then
+            frame.Castbar:ForceUpdate()
+        else
+            frame.Castbar:Hide()
+        end
     end
 end
 
@@ -1980,13 +2017,18 @@ function UnitFrames:ApplyUnitFrameSize(frame, settings, unitKey)
         frame.Health:ClearAllPoints()
         frame.Power:ClearAllPoints()
 
+        UFDebug(string.format("ApplyUnitFrameSize: key=%s size=%dx%d powerH=%d detached=%s showPower=%s",
+            tostring(unitKey), width, height, powerHeight, tostring(detached), tostring(settings.showPower)))
         if powerHeight > 0 then
             -- Power is on — clear the force-hide guard and re-enable if oUF disabled it.
             frame.Power._forceHide = nil
+            frame.Power._ownerFrame = frame
+            frame.Power._detached = detached
             frame.Power:SetAlpha(1)
             if frame.Power.border then frame.Power.border:SetAlpha(1) end
             frame.Power:Show()
             if detached then
+                frame.Power._designedHeight = powerHeight  -- stored for runtime collapse/restore
                 frame.Power:SetWidth(Clamp(settings.powerWidth or width, 40, 600))
                 frame.Power:SetHeight(powerHeight)
                 -- If the power bar has been freely placed by its mover, an absolute
@@ -2006,17 +2048,35 @@ function UnitFrames:ApplyUnitFrameSize(frame, settings, unitKey)
                 end
                 frame.Health:SetAllPoints(frame)
             else
+                frame.Power._designedHeight = powerHeight  -- stored for runtime collapse/restore
                 frame.Power:SetHeight(powerHeight)
                 frame.Power:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
                 frame.Power:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
                 frame.Health:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
                 frame.Health:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
-                frame.Health:SetPoint("BOTTOM", frame.Power, "TOP", 0, 1)
+                -- Offset 0 (not 1): when power height collapses to 0, health fills the
+                -- entire frame with no residual 1px gap showing as a black hairline.
+                frame.Health:SetPoint("BOTTOM", frame.Power, "TOP", 0, 0)
+            end
+
+            -- For healer-only group member frames, pre-apply role-based collapse
+            -- immediately so the power bar never flashes visible during the spawn →
+            -- RefreshAllFrames window. frame.unit may be nil (fresh spawn before oUF
+            -- assigns it) or a tainted secret string — both safe for this call.
+            if unitKey == "partyMember" or unitKey == "raidMember" then
+                local healerOnly = (unitKey == "partyMember" and self:GetGroupSettings("party").healerOnlyPower ~= false)
+                    or (unitKey == "raidMember" and self:GetGroupSettings("raid").healerOnlyPower ~= false)
+                if healerOnly then
+                    frame.Power._roleCollapsed = nil  -- force fresh evaluation
+                    self:UpdatePowerBarForRole(frame.Power, unitKey, frame.unit)
+                end
             end
         else
             -- Power is off — set the force-hide flag so the OnShow hook keeps it hidden
             -- even when oUF's Enable() or any oUF event calls power:Show().
             frame.Power._forceHide = true
+            frame.Power._ownerFrame = frame
+            frame.Power._detached = false
             frame.Power:SetAlpha(0)
             if frame.Power.border then frame.Power.border:SetAlpha(0) end
             frame.Power:Hide()
@@ -2196,6 +2256,20 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
                 self:ApplyTextPositions(child, memberUnitKey)
                 self:ApplyRoleIconSettings(child, memberUnitKey)
                 self:ApplyInfoBarSettings(child, memberUnitKey)
+                -- Re-evaluate healer-only power bar visibility immediately so layout
+                -- changes take effect without waiting for the next power event.
+                if child.Power then
+                    -- child.unit / GetAttribute("unit") on secure-header children is a
+                    -- tainted "secret" string — safe to PASS to WoW APIs but NOT to
+                    -- format into strings. Log only the safe memberUnitKey.
+                    local childUnit = child:GetAttribute("unit") or child.unit
+                    UFDebug(string.format("ApplyHeaderSettings: UpdatePowerBarForRole child key=%s",
+                        tostring(memberUnitKey)))
+                    -- Clear the role-collapse cache so that ApplyUnitFrameSize having just
+                    -- restored SetHeight(designedHeight) doesn't cause an early return here.
+                    child.Power._roleCollapsed = nil
+                    self:UpdatePowerBarForRole(child.Power, memberUnitKey, childUnit)
+                end
             end
         end
     end
@@ -3457,29 +3531,37 @@ function UnitFrames:StyleFrame(frame)
     -- minimum, not the maximum. Capturing it as 'max' caused SetMinMaxValues(0, min=0)
     -- which left the bar permanently empty. We name the 4th param _min and take max 5th.
     power.PostUpdate = function(powerBar, unit2, cur, _min, max)
+        local effShow = UnitFrames:GetEffectiveShowPower(capturedUnitKey)
         -- If power bar is configured off, prevent oUF re-showing it during update events.
-        if not UnitFrames:GetEffectiveShowPower(capturedUnitKey) then
+        if not effShow then
+            powerBar:SetHeight(0)  -- collapse so health fills the full frame
             powerBar:Hide()
             if powerBar.border then powerBar.border:Hide() end
             return
         end
+        -- Check role restriction first (cached — usually a no-op).
+        -- For collapsed bars the heavy work below is skipped entirely.
+        UnitFrames:UpdatePowerBarForRole(powerBar, capturedUnitKey, unit2)
+        if powerBar._roleCollapsed then return end
         UnitFrames:ApplySmoothBarValue(powerBar, cur, max)
         local col = UnitFrames:ResolvePowerColor(capturedUnitKey, unit2)
         powerBar:SetStatusBarColor(col[1], col[2], col[3], 1)
-        UnitFrames:UpdatePowerBarForRole(powerBar, capturedUnitKey, unit2)
     end
     -- PostUpdateColor fires from oUF's UpdateColor path (e.g. power type changes,
     -- zone transitions). When all colorXxx flags are false oUF skips SetStatusBarColor
     -- entirely, so we must force our resolved color here to avoid a black bar.
     power.PostUpdateColor = function(powerBar, unit2, _color, _r, _g, _b)
-        if not UnitFrames:GetEffectiveShowPower(capturedUnitKey) then
+        local effShow = UnitFrames:GetEffectiveShowPower(capturedUnitKey)
+        if not effShow then
+            powerBar:SetHeight(0)  -- collapse so health fills the full frame
             powerBar:Hide()
             if powerBar.border then powerBar.border:Hide() end
             return
         end
+        UnitFrames:UpdatePowerBarForRole(powerBar, capturedUnitKey, unit2)
+        if powerBar._roleCollapsed then return end
         local col = UnitFrames:ResolvePowerColor(capturedUnitKey, unit2)
         powerBar:SetStatusBarColor(col[1], col[2], col[3], 1)
-        UnitFrames:UpdatePowerBarForRole(powerBar, capturedUnitKey, unit2)
     end
     frame.Power = power
 
@@ -3504,8 +3586,8 @@ function UnitFrames:StyleFrame(frame)
                 UFDebug("ClassPower.PostUpdate: skipped (inside ApplyClassBarSettings)")
                 return
             end
-            UFDebug(string.format("ClassPower.PostUpdate: unit=%s hasMaxChanged=%s",
-                tostring(unit2), tostring(hasMaxChanged)))
+            UFDebug(string.format("ClassPower.PostUpdate: hasMaxChanged=%s",
+                tostring(hasMaxChanged)))
             -- Re-run the full layout when the class resource maximum changes
             -- (e.g. spec swap from 5 to 6 segments or vice-versa).
             if hasMaxChanged then
@@ -3568,7 +3650,7 @@ function UnitFrames:StyleFrame(frame)
         local cbTime = castbar:CreateFontString(nil, "OVERLAY")
         cbTime:SetPoint("RIGHT", castbar, "RIGHT", -3, 0)
         cbTime:SetJustifyH("RIGHT"); castbar.Time = cbTime
-        local cbIcon = castbar:CreateTexture(nil, "ARTWORK")
+        local cbIcon = castbar:CreateTexture(nil, "OVERLAY")
         cbIcon:SetSize(12, 12)
         cbIcon:SetPoint("RIGHT", castbar, "LEFT", -2, 0)
         cbIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92); castbar.Icon = cbIcon
@@ -4081,7 +4163,9 @@ function UnitFrames:BuildDebugReport()
             for i = 1, select("#", h:GetChildren()) do
                 local c = select(i, h:GetChildren())
                 if c and c.Health then
-                    local cu = c.unit and tostring(c.unit) or "(none)"
+                    -- c.unit is set by SecureGroupHeaderTemplate (a secret string).
+                    -- GetAttribute("unit") returns the same value as a safe plain string.
+                    local cu = c:GetAttribute("unit") or "(none)"
                     local cs = c.IsShown and c:IsShown() or false
                     local cw = c.GetWidth and math.floor(c:GetWidth() + 0.5) or 0
                     local ch = c.GetHeight and math.floor(c:GetHeight() + 0.5) or 0
@@ -4181,6 +4265,26 @@ function UnitFrames:OnMouseoverChanged()
 end
 
 function UnitFrames:OnEnable()
+    -- Migration: old default was nil (no value stored) or false for healerOnlyPower.
+    -- New semantics: nil means ON by default; false means explicitly OFF. If savedvars has
+    -- an explicit false from before the default was changed to healer-only-ON, clear it
+    -- so the correct default (healer-only power bar) takes effect for all existing profiles.
+    -- Guarded by a one-time migration flag so this doesn't clobber future explicit choices.
+    do
+        local db = self:GetDB()
+        if not (db._migrated and db._migrated.healerOnlyPower) then
+            db._migrated = db._migrated or {}
+            if db.groups then
+                for _, gk in ipairs({"party", "raid"}) do
+                    if type(db.groups[gk]) == "table" and db.groups[gk].healerOnlyPower == false then
+                        db.groups[gk].healerOnlyPower = nil
+                    end
+                end
+            end
+            db._migrated.healerOnlyPower = true
+        end
+    end
+
     if not self:SpawnFrames() then
         T:Print("UnitFrames: oUF is unavailable. Ensure Libraries/oUF/oUF.xml is loaded.")
         return
