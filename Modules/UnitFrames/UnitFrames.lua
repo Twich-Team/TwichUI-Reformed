@@ -1075,11 +1075,14 @@ function UnitFrames:UpdateRoleIcon(frame, unitKey)
     end
 
     local unit = ResolveFrameUnit(frame)
-    if not unit or not UnitExists(unit) then
+    local role = ""
+    if unit and UnitExists(unit) then
+        role = (UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)) or ""
+    elseif frame and frame._isTestPreview then
+        role = frame._testRole or ""
+    else
         icon:Hide(); return
     end
-
-    local role = (UnitGroupRolesAssigned and UnitGroupRolesAssigned(unit)) or ""
 
     local filter = cfg.filter or "all"
     local displayRole = role -- role to use for the atlas lookup
@@ -1309,8 +1312,15 @@ function UnitFrames:ApplyInfoBarSettings(frame, unitKey)
             self:ApplyFontObject(fs, Clamp(tc.fontSize or 9, 6, 20), barStyle.fontName, barStyle)
 
             -- Color
+            local classToken = nil
             if tc.useClassColor and frame.unit then
-                local _, classToken = UnitClass(frame.unit)
+                local _, resolvedClassToken = UnitClass(frame.unit)
+                classToken = resolvedClassToken
+            elseif tc.useClassColor and frame and frame._testMockClass then
+                classToken = frame._testMockClass
+            end
+
+            if tc.useClassColor and classToken then
                 if classToken and _G.RAID_CLASS_COLORS and _G.RAID_CLASS_COLORS[classToken] then
                     local c = _G.RAID_CLASS_COLORS[classToken]
                     fs:SetTextColor(c.r, c.g, c.b, 1)
@@ -1427,7 +1437,7 @@ end
 
 function UnitFrames:ApplyFrameColors(frame, unitKey)
     local resolvedUnit = frame and (frame.unit or nil)
-    local palette = self:GetPalette(unitKey, resolvedUnit)
+    local palette = self:GetPalette(unitKey, resolvedUnit, frame and frame._testMockClass or nil)
 
     local backdrop = EnsureBackdrop(frame)
     backdrop:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
@@ -1810,7 +1820,7 @@ end
 function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     if not frame.AuraBars then return end
     local unit = frame.unit
-    if not unit then return end
+    if not unit and not frame._isTestPreview then return end
     local aura       = self:GetAuraConfigFor(unitKey)
     local maxBars    = math_max(1, math_min(math.floor(tonumber(aura.maxIcons) or 8), MAX_AURA_BARS))
     local barH       = Clamp(aura.barHeight or 14, 8, 30)
@@ -1820,12 +1830,14 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     local container  = frame.AuraBars
     local frameWidth = math_max(40, frame:GetWidth())
     local text       = self:GetTextConfigFor(unitKey)
-    local palette    = self:GetPalette(unitKey, unit)
+    local palette    = self:GetPalette(unitKey, unit, frame and frame._testMockClass or nil)
     local showTime   = aura.showTime ~= false
     local showStacks = aura.showStacks ~= false
 
     local auraList   = {}
-    if filter == "HELPFUL" then
+    if frame._isTestPreview then
+        auraList = self:GetPreviewAuraListForFrame(frame, unitKey)
+    elseif filter == "HELPFUL" then
         CollectAuraData(auraList, unit, "HELPFUL", maxBars, onlyMine, filter)
     elseif filter == "HARMFUL" or filter == "DISPELLABLE" or filter == "DISPELLABLE_OR_BOSS" then
         CollectAuraData(auraList, unit, "HARMFUL", maxBars, onlyMine, filter)
@@ -2186,7 +2198,9 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
             frame.Auras:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, yOff)
             frame.Auras:SetHeight(iconSize)
             frame.Auras:SetWidth((iconSize * maxIcons) + (spacing * math_max(0, maxIcons - 1)))
-            if frame.Auras.ForceUpdate then
+            if frame._isTestPreview then
+                self:RefreshPreviewAuraIcons(frame, unitKey)
+            elseif frame.Auras.ForceUpdate then
                 local resolvedUnit = frame.unit
                 if resolvedUnit then
                     frame.Auras:ForceUpdate()
@@ -2664,8 +2678,9 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     -- code interferes with that mechanism and can cause frames to stay hidden even when
     -- the unit exists.  Only apply explicit show/hide for standalone (non-header) frames.
     if not frame.isHeaderChild then
+        frame._forceHideFrame = db.testMode == true and not frame._isTestPreview
         local shouldShow = settings.enabled ~= false
-        if db.testMode == true then
+        if frame._forceHideFrame then
             shouldShow = false
         end
         frame:SetShown(shouldShow)
@@ -2688,6 +2703,7 @@ end
 function UnitFrames:ApplyHeaderSettings(header, groupKey)
     local settings = self:GetGroupSettings(groupKey)
     local layout = self:GetLayoutSettings(groupKey)
+    local testMode = self:GetDB().testMode == true
 
     local enabled = settings.enabled ~= false
     UFDebug(string.format("ApplyHeaderSettings: key=%s enabled=%s layout=(%s,%s,%.0f,%.0f)",
@@ -2721,7 +2737,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
         -- Register a macro-conditional visibility driver so SecureGroupHeaderTemplate
         -- will automatically show/hide and SPAWN CHILDREN when the player is in a group.
         -- Without this call the header stays 0x0/hidden and no child frames are ever created.
-        if enabled then
+        if enabled and not testMode then
             header:SetVisibility('party')
         else
             header:SetVisibility('custom hide')
@@ -2732,7 +2748,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
         header:SetAttribute("showSolo", settings.showSolo == true)
         header:SetAttribute("groupBy", settings.groupBy or "GROUP")
         header:SetAttribute("groupingOrder", settings.groupingOrder or "1,2,3,4,5,6,7,8")
-        if enabled then
+        if enabled and not testMode then
             header:SetVisibility('raid')
         else
             header:SetVisibility('custom hide')
@@ -2742,7 +2758,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
         header:SetAttribute("showParty", false)
         header:SetAttribute("showSolo", settings.showSolo == true)
         header:SetAttribute("groupFilter", settings.groupFilter or "MAINTANK,MAINASSIST")
-        if enabled then
+        if enabled and not testMode then
             header:SetVisibility('raid')
         else
             header:SetVisibility('custom hide')
@@ -2808,9 +2824,10 @@ function UnitFrames:ApplyBossLayout()
         tonumber(layout.y) or 0
     )
 
+    local showBossFrames = settings.enabled ~= false and self:GetDB().testMode ~= true
     self.bossAnchor:SetScale(Clamp(self:GetDB().scale or 1, 0.6, 1.6))
     self.bossAnchor:SetAlpha(Clamp(self:GetDB().frameAlpha or 1, 0.15, 1))
-    self.bossAnchor:SetShown(settings.enabled ~= false)
+    self.bossAnchor:SetShown(showBossFrames)
 
     local yOffset = tonumber(settings.yOffset) or -8
     for index = 1, 5 do
@@ -2822,7 +2839,7 @@ function UnitFrames:ApplyBossLayout()
             else
                 frame:SetPoint("TOP", self.frames["boss" .. (index - 1)], "BOTTOM", 0, yOffset)
             end
-            frame:SetShown(settings.enabled ~= false)
+            frame:SetShown(showBossFrames)
         end
     end
 end
@@ -3563,77 +3580,370 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     end)
 end
 
+local PREVIEW_NAMES = {
+    "Aeloria", "Bromm", "Cyrene", "Dathor", "Elyndra", "Fenrik", "Galen", "Hestia", "Ilya", "Jorren",
+    "Kaelis", "Lyra", "Marek", "Nyssa", "Orin", "Perrin", "Quilla", "Riven", "Sylas", "Tarin",
+}
+
+local PREVIEW_CAST_ICONS = {
+    136243, 135963, 135734, 136208, 237561,
+}
+
+local function GetPreviewIndexFromLabel(label)
+    return tonumber(type(label) == "string" and label:match("(%d+)$")) or 1
+end
+
+local function GetPreviewRoleForUnitKey(unitKey, index)
+    if unitKey == "tankMember" then
+        return "TANK"
+    end
+    if unitKey == "partyMember" then
+        local partyRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
+        return partyRoles[index] or "DAMAGER"
+    end
+    if unitKey == "raidMember" then
+        local raidRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "HEALER" }
+        return raidRoles[((index - 1) % #raidRoles) + 1]
+    end
+    if unitKey == "boss" or (type(unitKey) == "string" and unitKey:match("^boss")) then
+        return "TANK"
+    end
+    if unitKey == "player" then
+        local assigned = UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") or ""
+        if assigned == nil or assigned == "" or assigned == "NONE" then
+            return "DAMAGER"
+        end
+        return assigned
+    end
+    return "DAMAGER"
+end
+
+local function BuildPreviewUnitState(unitKey, label, mockClass)
+    local index = GetPreviewIndexFromLabel(label)
+    local role = GetPreviewRoleForUnitKey(unitKey, index)
+    local healthMax = 1000000 + (index * 125000)
+    local healthCur = math_max(1, math.floor(healthMax * (0.42 + ((index % 4) * 0.12))))
+    local powerMax = 100
+    local powerCur = math_max(1, math.floor(powerMax * (0.25 + ((index % 5) * 0.13))))
+    local castDuration = 2.6 + ((index % 3) * 0.4)
+    local castProgress = castDuration * 0.62
+    local name = label or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
+
+    if unitKey == "player" then
+        name = UnitName("player") or "Player"
+    elseif unitKey == "target" then
+        name = "Training Dummy"
+    elseif unitKey == "targettarget" then
+        name = "Off Target"
+    elseif unitKey == "focus" then
+        name = "Priority Add"
+    elseif unitKey == "pet" then
+        name = "Companion"
+    elseif unitKey == "boss" or (type(unitKey) == "string" and unitKey:match("^boss")) then
+        name = label or ("Boss " .. tostring(index))
+        healthMax = 3800000 + (index * 250000)
+        healthCur = math_max(1, math.floor(healthMax * (0.68 - ((index - 1) * 0.08))))
+    end
+
+    return {
+        index = index,
+        name = name,
+        role = role,
+        classToken = mockClass,
+        healthCur = healthCur,
+        healthMax = healthMax,
+        powerCur = powerCur,
+        powerMax = powerMax,
+        level = 80,
+        castName = (role == "HEALER" and "Flash Heal") or (role == "TANK" and "Shield Slam") or "Chaos Bolt",
+        castIcon = PREVIEW_CAST_ICONS[((index - 1) % #PREVIEW_CAST_ICONS) + 1],
+        castDuration = castDuration,
+        castProgress = castProgress,
+        classPowerMax = unitKey == "player" and 5 or nil,
+        classPowerValue = unitKey == "player" and 3 or nil,
+        infoTexts = {
+            role,
+            string.format("%d%%", math.floor((healthCur / healthMax) * 100 + 0.5)),
+            "Burst Window",
+        },
+    }
+end
+
+local function FormatPreviewNumber(value)
+    local numeric = tonumber(value) or 0
+    if BreakUpLargeNumbers then
+        return BreakUpLargeNumbers(math.floor(numeric + 0.5))
+    end
+    return tostring(math.floor(numeric + 0.5))
+end
+
+local function BuildPreviewTagText(tag, state)
+    if not state then return "" end
+    local text = tostring(tag or "")
+    local hpPercent = string.format("%d%%",
+        math.floor(((state.healthCur or 0) / math_max(1, state.healthMax or 1)) * 100 + 0.5))
+    local ppPercent = string.format("%d%%",
+        math.floor(((state.powerCur or 0) / math_max(1, state.powerMax or 1)) * 100 + 0.5))
+
+    text = text:gsub("%[name%((%d+)%)%]", function(length)
+        return string.sub(state.name or "", 1, tonumber(length) or 0)
+    end)
+    text = text:gsub("%[name%]", state.name or "")
+    text = text:gsub("%[curhp%]", FormatPreviewNumber(state.healthCur))
+    text = text:gsub("%[curpp%]", FormatPreviewNumber(state.powerCur))
+    text = text:gsub("%[missinghp%]", FormatPreviewNumber((state.healthMax or 0) - (state.healthCur or 0)))
+    text = text:gsub("%[missingpp%]", FormatPreviewNumber((state.powerMax or 0) - (state.powerCur or 0)))
+    text = text:gsub("%[perhp.-%]", hpPercent)
+    text = text:gsub("%[perpp.-%]", ppPercent)
+    text = text:gsub("%[level%]", tostring(state.level or 80))
+    text = text:gsub("%[classification%]", "")
+    text = text:gsub("%s+", " ")
+    return text:gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function BuildPreviewAuraList(state)
+    local now = GetTime()
+    return {
+        {
+            name = "Arcane Intellect",
+            icon = 135932,
+            applications = 1,
+            duration = 3600,
+            expirationTime = now + 3200,
+            isHarmfulAura = false,
+            isPlayerAura = true,
+        },
+        {
+            name = "Power Word: Shield",
+            icon = 135940,
+            applications = 1,
+            duration = 15,
+            expirationTime = now + 9.4,
+            isHarmfulAura = false,
+            isPlayerAura = true,
+        },
+        {
+            name = "Weakened Soul",
+            icon = 136214,
+            applications = 1,
+            duration = 12,
+            expirationTime = now + 6.8,
+            isHarmfulAura = true,
+            dispelName = "Magic",
+            isPlayerAura = false,
+        },
+        {
+            name = "Shadow Vulnerability",
+            icon = 136207,
+            applications = math_max(1, (state and state.index or 1) % 4),
+            duration = 18,
+            expirationTime = now + 12.1,
+            isHarmfulAura = true,
+            isPlayerAura = true,
+            isBossAura = true,
+        },
+    }
+end
+
+function UnitFrames:GetPreviewAuraListForFrame(frame, unitKey)
+    local aura = self:GetAuraConfigFor(unitKey)
+    local maxIcons = math_max(1, math.floor(tonumber(aura.maxIcons) or 8))
+    local filter = aura.filter or "ALL"
+    local onlyMine = aura.onlyMine == true
+    local source = frame and frame._testAuraList or BuildPreviewAuraList(frame and frame._testState)
+    local filtered = {}
+    for _, data in ipairs(source) do
+        if data and ((not onlyMine) or data.isPlayerAura == true) and AuraMatchesDisplayMode(filter, data) then
+            if filter == "HELPFUL" and data.isHarmfulAura ~= true then
+                filtered[#filtered + 1] = data
+            elseif (filter == "HARMFUL" or filter == "DISPELLABLE" or filter == "DISPELLABLE_OR_BOSS") and data.isHarmfulAura == true then
+                filtered[#filtered + 1] = data
+            elseif filter == "ALL" then
+                filtered[#filtered + 1] = data
+            end
+        end
+        if #filtered >= maxIcons then
+            break
+        end
+    end
+    return filtered
+end
+
+function UnitFrames:RefreshPreviewAuraIcons(frame, unitKey)
+    if not frame or not frame._isTestPreview or not frame.Auras then return end
+    local aura = self:GetAuraConfigFor(unitKey)
+    local element = frame.Auras
+    local list = self:GetPreviewAuraListForFrame(frame, unitKey)
+    local iconSize = Clamp(aura.iconSize or 18, 10, 40)
+    local spacing = Clamp(aura.spacing or 2, 0, 8)
+    local textStyle = self:GetTextConfigFor(unitKey)
+
+    element._previewIcons = element._previewIcons or {}
+
+    for index = 1, math_max(#list, #element._previewIcons) do
+        local auraData = list[index]
+        local button = element._previewIcons[index]
+        if auraData then
+            if not button then
+                button = CreateFrame("Frame", nil, element, "BackdropTemplate")
+                button:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+                button.icon = button:CreateTexture(nil, "ARTWORK")
+                button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+                button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+                button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                button.count = button:CreateFontString(nil, "OVERLAY")
+                button.count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+                button.time = button:CreateFontString(nil, "OVERLAY")
+                button.time:SetPoint("TOP", button, "BOTTOM", 0, -1)
+                button:SetScript("OnUpdate", function(self)
+                    if self._expiry and self._duration and self.time then
+                        local remaining = math_max(0, self._expiry - GetTime())
+                        self.time:SetText(UnitFrames:FormatAuraRemainingTime(remaining))
+                        self.time:SetShown(remaining > 0)
+                    end
+                end)
+                element._previewIcons[index] = button
+            end
+
+            button:SetSize(iconSize, iconSize)
+            button:ClearAllPoints()
+            button:SetPoint("BOTTOMLEFT", element, "BOTTOMLEFT", (index - 1) * (iconSize + spacing), 0)
+            button:SetBackdropColor(0.04, 0.05, 0.07, 0.95)
+            button:SetBackdropBorderColor(0.16, 0.18, 0.24, 0.85)
+            button.icon:SetTexture(auraData.icon)
+            button._duration = auraData.duration
+            button._expiry = auraData.expirationTime
+            self:ApplyFontObject(button.count, Clamp(iconSize * 0.48, 6, 16), textStyle.fontName, textStyle)
+            self:ApplyFontObject(button.time, Clamp(iconSize * 0.44, 6, 16), textStyle.fontName, textStyle)
+            button.count:SetText((aura.showStacks ~= false and auraData.applications and auraData.applications > 1)
+                and tostring(auraData.applications) or "")
+            button.count:SetShown(aura.showStacks ~= false and auraData.applications and auraData.applications > 1)
+            button.time:SetShown(aura.showTime ~= false and (auraData.duration or 0) > 0)
+            button:Show()
+        elseif button then
+            button:Hide()
+        end
+    end
+
+    element:SetWidth((iconSize * math_max(1, #list)) + (spacing * math_max(0, #list - 1)))
+    element:SetHeight(iconSize + ((aura.showTime ~= false and #list > 0) and 10 or 0))
+end
+
+function UnitFrames:ApplyPreviewFrameData(frame, unitKey, label, mockClass)
+    if not frame then return end
+
+    local state = BuildPreviewUnitState(unitKey, label, mockClass)
+    frame._testState = state
+    frame._testRole = state.role
+    frame._testMockClass = mockClass
+    frame._testAuraList = BuildPreviewAuraList(state)
+
+    self:ApplySingleFrameSettings(frame, unitKey)
+
+    if frame.Health then
+        self:ApplySmoothBarValue(frame.Health, state.healthCur, state.healthMax)
+    end
+    if frame.Power then
+        self:ApplySmoothBarValue(frame.Power, state.powerCur, state.powerMax)
+    end
+
+    local textCfg = self:GetTextConfigFor(unitKey)
+    if frame.Name then
+        frame.Name:SetText(BuildPreviewTagText(BuildNameTag(textCfg.nameFormat, textCfg.customNameTag), state))
+    end
+    if frame.HealthValue then
+        frame.HealthValue:SetText(BuildPreviewTagText(BuildHealthTag(textCfg.healthFormat, textCfg.customHealthTag),
+            state))
+    end
+    if frame.PowerValue then
+        frame.PowerValue:SetText(BuildPreviewTagText(BuildPowerTag(textCfg.powerFormat, textCfg.customPowerTag), state))
+    end
+
+    if frame.ClassPower and state.classPowerMax then
+        local cfg = self:GetDB().classBar or {}
+        local container = frame.ClassPower.container
+        local spacing = Clamp(cfg.spacing or 2, 0, 40)
+        local maxBars = math_max(1, math_min(state.classPowerMax or 0, #frame.ClassPower))
+        local width = container and container:GetWidth() or frame:GetWidth()
+        local height = container and container:GetHeight() or 10
+        local barWidth = math_max(4, (width - spacing * math_max(0, maxBars - 1)) / maxBars)
+        for i = 1, #frame.ClassPower do
+            local bar = frame.ClassPower[i]
+            if bar then
+                bar:ClearAllPoints()
+                if i <= maxBars then
+                    bar:SetSize(barWidth, height)
+                    if i == 1 then
+                        bar:SetPoint("LEFT", container, "LEFT", 0, 0)
+                    else
+                        bar:SetPoint("LEFT", frame.ClassPower[i - 1], "RIGHT", spacing, 0)
+                    end
+                    bar:SetShown(true)
+                    bar:SetMinMaxValues(0, 1)
+                    bar:SetValue(i <= (state.classPowerValue or 0) and 1 or 0.15)
+                else
+                    bar:Hide()
+                end
+            end
+        end
+    end
+
+    if frame.Castbar then
+        local castCfg = (self:GetDB().castbars and self:GetDB().castbars[ResolveCastbarScopeByUnitKey(unitKey)]) or {}
+        if castCfg.enabled == false then
+            frame.Castbar:Hide()
+        else
+            frame.Castbar:Show()
+            self:ApplyCastbarValue(frame.Castbar, state.castProgress, state.castDuration)
+            if frame.Castbar.Text then frame.Castbar.Text:SetText(state.castName or "Casting") end
+            if frame.Castbar.Time then
+                frame.Castbar.Time:SetText(string.format("%.1f",
+                    (state.castDuration or 0) - (state.castProgress or 0)))
+            end
+            if frame.Castbar.Icon then frame.Castbar.Icon:SetTexture(state.castIcon or 136243) end
+        end
+    end
+
+    self:UpdateRoleIcon(frame, unitKey)
+
+    if frame.TwichInfoBar and frame.TwichInfoBar.infoTexts then
+        local cfg = self:GetInfoBarConfig(unitKey)
+        for i = 1, 3 do
+            local fs = frame.TwichInfoBar.infoTexts[i]
+            local tc = cfg.texts[i]
+            if fs and tc and fs:IsShown() then
+                if tc.tag and tc.tag ~= "" then
+                    fs:SetText(BuildPreviewTagText(tc.tag, state))
+                else
+                    fs:SetText(state.infoTexts and state.infoTexts[i] or "")
+                end
+            end
+        end
+    end
+
+    local auraCfg = self:GetAuraConfigFor(unitKey)
+    if auraCfg.enabled ~= false then
+        if auraCfg.barMode == true then
+            self:RefreshAuraBarsForFrame(frame, unitKey)
+        else
+            self:RefreshPreviewAuraIcons(frame, unitKey)
+        end
+    end
+end
+
 function UnitFrames:CreatePreviewFrame(parent, width, height, label, scopeOrUnitKey, mockClass)
-    local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    frame:SetSize(width, height)
-    frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-    local palette = self:GetPalette(scopeOrUnitKey or "singles", nil, mockClass)
-    frame:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
-    frame:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
-
-    local hp = CreateFrame("StatusBar", nil, frame)
-    hp:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
-    hp:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
-    hp:SetHeight(math_max(8, height - 12))
-    hp:SetStatusBarTexture(GetThemeTexture())
-    hp:SetStatusBarColor(palette.health[1], palette.health[2], palette.health[3], 1)
-    hp:SetMinMaxValues(0, 100); hp:SetValue(70)
-
-    local pw = CreateFrame("StatusBar", nil, frame)
-    pw:SetPoint("TOPLEFT", hp, "BOTTOMLEFT", 0, -1)
-    pw:SetPoint("TOPRIGHT", hp, "BOTTOMRIGHT", 0, -1)
-    pw:SetHeight(8)
-    pw:SetStatusBarTexture(GetThemeTexture())
-    pw:SetStatusBarColor(palette.power[1], palette.power[2], palette.power[3], 1)
-    pw:SetMinMaxValues(0, 100); pw:SetValue(45)
-
-    local text = self:GetTextConfigFor(scopeOrUnitKey or "player")
-    local nameFS = hp:CreateFontString(nil, "OVERLAY")
-    nameFS:SetPoint("LEFT", hp, "LEFT", 4, 0)
-    nameFS:SetPoint("RIGHT", hp, "RIGHT", -56, 0)
-    nameFS:SetJustifyH("LEFT")
-    self:ApplyFontObject(nameFS, Clamp(text.nameFontSize or 10, 6, 28), text.fontName, text)
-    nameFS:SetText(label)
-
-    local healthFS = hp:CreateFontString(nil, "OVERLAY")
-    healthFS:SetPoint("RIGHT", hp, "RIGHT", -4, 0)
-    healthFS:SetJustifyH("RIGHT")
-    self:ApplyFontObject(healthFS, Clamp(text.healthFontSize or 9, 6, 28), text.fontName, text)
-    healthFS:SetText("100%")
-
-    frame.HealthBar  = hp
-    frame.PowerBar   = pw
-    frame.Label      = nameFS
-    frame.HealthText = healthFS
-    frame._scopeKey  = scopeOrUnitKey
-    frame._mockClass = mockClass
+    local frame = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    frame._isTestPreview = true
+    frame._testMockClass = mockClass
+    self:StyleFrame(frame)
+    self:ApplyPreviewFrameData(frame, scopeOrUnitKey, label, mockClass)
     return frame
 end
 
 function UnitFrames:UpdatePreviewFrame(frame, width, height, label, scopeOrUnitKey, mockClass)
     if not frame then return end
-    local mockC = (mockClass ~= nil) and mockClass or frame._mockClass
-    local palette = self:GetPalette(scopeOrUnitKey or frame._scopeKey or "singles", nil, mockC)
-    local text = self:GetTextConfigFor(scopeOrUnitKey or frame._scopeKey or "player")
     frame:SetSize(width, height)
-    frame:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
-    frame:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
-    if frame.HealthBar then
-        frame.HealthBar:SetHeight(math_max(8, height - 12))
-        frame.HealthBar:SetStatusBarTexture(GetThemeTexture())
-        frame.HealthBar:SetStatusBarColor(palette.health[1], palette.health[2], palette.health[3], 1)
-    end
-    if frame.PowerBar then
-        frame.PowerBar:SetStatusBarTexture(GetThemeTexture())
-        frame.PowerBar:SetStatusBarColor(palette.power[1], palette.power[2], palette.power[3], 1)
-    end
-    if frame.Label then
-        self:ApplyFontObject(frame.Label, Clamp(text.nameFontSize or 10, 6, 28), text.fontName, text)
-        frame.Label:SetText(label or "Preview")
-    end
-    if frame.HealthText then
-        self:ApplyFontObject(frame.HealthText, Clamp(text.healthFontSize or 9, 6, 28), text.fontName, text)
-    end
+    self:ApplyPreviewFrameData(frame, scopeOrUnitKey, label, mockClass or frame._testMockClass)
 end
 
 function UnitFrames:BuildOrRefreshSinglePreviews()
@@ -3946,8 +4256,29 @@ function UnitFrames:RefreshPreviewVisibility()
 end
 
 function UnitFrames:ApplyTestModeToSingles()
-    -- Test mode visuals are handled via dedicated preview frames so live oUF
-    -- visibility logic cannot hide or taint inactive units.
+    local db = self:GetDB()
+    if not self._testModeHiddenRoot then
+        self._testModeHiddenRoot = CreateFrame("Frame", nil, UIParent)
+        self._testModeHiddenRoot:Hide()
+    end
+
+    local hiddenRoot = self._testModeHiddenRoot
+    local useHiddenParent = db.testMode == true
+
+    local function ApplyHiddenParent(frame)
+        if not frame then return end
+        frame._testModeOriginalParent = frame._testModeOriginalParent or frame:GetParent() or UIParent
+        local targetParent = useHiddenParent and hiddenRoot or frame._testModeOriginalParent
+        if frame:GetParent() ~= targetParent then
+            frame:SetParent(targetParent)
+        end
+        if useHiddenParent then
+            frame:Hide()
+        end
+    end
+
+    ApplyHiddenParent(self.frames and self.frames.player)
+    ApplyHiddenParent(self.frames and self.frames.castbar)
 end
 
 function UnitFrames:RefreshAllFrames()
@@ -4004,6 +4335,11 @@ function UnitFrames:StyleFrame(frame)
 
     frame:SetAttribute("useparent-unit", true)
     frame:RegisterForClicks("AnyUp")
+    frame:HookScript("OnShow", function(self)
+        if self._forceHideFrame then
+            self:Hide()
+        end
+    end)
 
     local health = CreateFrame("StatusBar", nil, frame)
     health:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
@@ -4295,9 +4631,16 @@ function UnitFrames:CreateCastbarFrame()
     frame.timeText = frame:CreateFontString(nil, "OVERLAY")
     frame.timeText:SetPoint("RIGHT", frame, "RIGHT", -6, 0)
 
+    frame:HookScript("OnShow", function(self)
+        if self._forceHide then
+            self:Hide()
+        end
+    end)
+
     self:ApplyFontObject(frame.spellText, 11)
     self:ApplyFontObject(frame.timeText, 10)
 
+    frame._testModeOriginalParent = frame:GetParent() or UIParent
     self.frames.castbar = frame
     self:RegisterLayoutFrame("castbar", frame)
     return frame
@@ -4359,10 +4702,17 @@ function UnitFrames:RefreshCastbarLayout()
 
     castbar:SetSize(Clamp(settings.width or 260, 120, 600), Clamp(settings.height or 20, 10, 60))
     if settings.enabled == false then
+        castbar._forceHide = true
+        castbar:Hide()
+    elseif db.testMode == true then
+        castbar._forceHide = true
         castbar:Hide()
     elseif not self._castbarState then
+        castbar._forceHide = nil
         -- Only show if a cast is actually in progress; hide on initial load / layout refresh.
         castbar:Hide()
+    else
+        castbar._forceHide = nil
     end
     castbar:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
     castbar:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
@@ -4516,6 +4866,7 @@ end
 function UnitFrames:SpawnSingleFrame(oUF, unit, key)
     local frame = oUF:Spawn(unit, "TwichUIUF_" .. key)
     frame.key = key
+    frame._testModeOriginalParent = frame:GetParent() or UIParent
     self.frames[key] = frame
     self:RegisterLayoutFrame(key, frame)
     return frame
