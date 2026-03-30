@@ -283,7 +283,7 @@ local function BuildMythicPlusToolsTab()
                     type = "execute",
                     name = "Start Timer Preview",
                     desc =
-                    "Show a live-style Mythic+ timer preview with milestone bars, forces, deaths, and boss checkpoints.",
+                    "Show a live-style Mythic+ timer preview with milestone bars, forces, deaths, and configured checkpoints.",
                     order = 4,
                     handler = MPTOptions,
                     func = "StartMythicPlusTimerPreview",
@@ -326,8 +326,9 @@ local function BuildMythicPlusToolsTab()
                 },
                 bossCheckpoints = {
                     type = "toggle",
-                    name = "Show Boss Checkpoints",
-                    desc = "Display boss checkpoint lines with their completion times underneath the timer bars.",
+                    name = "Show Checkpoints",
+                    desc =
+                    "Display configured boss and custom checkpoint rows with target percentages underneath the timer bars.",
                     order = 8,
                     width = 1.75,
                     handler = MPTOptions,

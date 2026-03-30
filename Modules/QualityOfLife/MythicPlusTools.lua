@@ -1388,7 +1388,7 @@ function MPT:GetDefaultDungeonCheckpoints(mapID)
     self.dungeonCheckpointDefaults[mapID] = {}
     for _, checkpoint in ipairs(defaults) do
         self.dungeonCheckpointDefaults[mapID][#self.dungeonCheckpointDefaults[mapID] + 1] = CloneCheckpointEntry(
-        checkpoint)
+            checkpoint)
     end
 
     return defaults
@@ -1409,7 +1409,7 @@ function MPT:NormalizeDungeonCheckpointList(checkpoints, mapID)
             local kind = rawEntry.kind == "boss" and "boss" or "custom"
             local bossIndex = kind == "boss" and tonumber(rawEntry.bossIndex) or nil
             local fallbackName = kind == "boss" and bossNameByIndex[bossIndex or index] or
-            format("Custom Checkpoint %d", index)
+                format("Custom Checkpoint %d", index)
             normalized[#normalized + 1] = {
                 id = NormalizeCheckpointID(rawEntry.id, kind, bossIndex or index),
                 kind = kind,
@@ -3302,29 +3302,31 @@ function MPT:UpdateMythicPlusTimerForceMarkers(row)
         local marker = row.Markers[index]
         if not marker then
             marker = CreateFrame("Frame", nil, row.barBackdrop)
-            marker:SetSize(8, barHeight + 10)
+            marker:SetSize(10, barHeight + 12)
+            marker:SetFrameLevel((row.barBackdrop:GetFrameLevel() or row:GetFrameLevel()) + 6)
 
             marker.Line = marker:CreateTexture(nil, "OVERLAY")
             marker.Line:SetPoint("TOP", marker, "TOP", 0, 0)
             marker.Line:SetPoint("BOTTOM", marker, "BOTTOM", 0, 0)
-            marker.Line:SetWidth(2)
+            marker.Line:SetWidth(3)
 
             marker.Dot = marker:CreateTexture(nil, "OVERLAY")
             marker.Dot:SetPoint("TOP", marker.Line, "TOP", 0, 0)
-            marker.Dot:SetSize(6, 6)
+            marker.Dot:SetSize(8, 8)
 
             row.Markers[index] = marker
         end
 
         local percent = ClampNumber(markerState.percent, 0, 100, 0)
         local offsetX = floor(availableWidth * (percent / 100))
-        local color = markerState.completed and { 0.34, 0.92, 0.62, 1 } or
+        local color = markerState.failedTarget and { 0.94, 0.34, 0.34, 1 } or
+            markerState.completed and { 0.34, 0.92, 0.62, 1 } or
             (markerState.kind == "custom" and { 0.42, 0.82, 0.98, 1 } or { 0.96, 0.78, 0.24, 1 })
 
-        marker:SetHeight(barHeight + 10)
+        marker:SetHeight(barHeight + 12)
         marker:ClearAllPoints()
         marker:SetPoint("CENTER", row.barBackdrop, "LEFT", 1 + offsetX, 0)
-        marker.Line:SetColorTexture(color[1], color[2], color[3], 0.95)
+        marker.Line:SetColorTexture(color[1], color[2], color[3], 1)
         marker.Dot:SetColorTexture(color[1], color[2], color[3], 1)
         marker:Show()
     end
@@ -3332,6 +3334,15 @@ function MPT:UpdateMythicPlusTimerForceMarkers(row)
     for index = #markerData + 1, #row.Markers do
         row.Markers[index]:Hide()
     end
+end
+
+local function FormatCheckpointPercentText(percent)
+    local resolvedPercent = tonumber(percent) or 0
+    if abs(resolvedPercent - floor(resolvedPercent + 0.5)) < 0.01 then
+        return string.format("%d%%", floor(resolvedPercent + 0.5))
+    end
+
+    return string.format("%.1f%%", resolvedPercent)
 end
 
 function MPT:CreateMythicPlusTimerMilestoneRow(parent)
@@ -3440,12 +3451,16 @@ function MPT:PlayMythicPlusTimerBossAnimation(completedIndex)
     local row = resolvedIndex and frame.CheckpointRows and frame.CheckpointRows[resolvedIndex]
     if row then
         PlayAnimationGroup(EnsureAlphaPulse(row.Name, "BossPulseAnimation", 0.28, 0.07, 0.34))
+        PlayAnimationGroup(EnsureAlphaPulse(row.Percent, "BossPulseAnimation", 0.28, 0.07, 0.34))
         PlayAnimationGroup(EnsureAlphaPulse(row.Time, "BossPulseAnimation", 0.28, 0.07, 0.34))
         PlayAnimationGroup(EnsureTranslationPulse(row.Name, "BossSlideAnimation", 10, 0, 0.11, 0.24))
+        PlayAnimationGroup(EnsureTranslationPulse(row.Percent, "BossSlideAnimation", -6, 0, 0.11, 0.24))
         PlayAnimationGroup(EnsureTranslationPulse(row.Time, "BossSlideAnimation", -10, 0, 0.11, 0.24))
         PlayAnimationGroup(EnsureFontColorBloom(row.Name, "BossColorBloom", flashColor, 0.22))
+        PlayAnimationGroup(EnsureFontColorBloom(row.Percent, "BossColorBloom", flashColor, 0.22))
         PlayAnimationGroup(EnsureFontColorBloom(row.Time, "BossColorBloom", flashColor, 0.22))
         row.Name:SetTextColor(completedColor[1], completedColor[2], completedColor[3], completedColor[4])
+        row.Percent:SetTextColor(completedColor[1], completedColor[2], completedColor[3], completedColor[4])
         row.Time:SetTextColor(completedColor[1], completedColor[2], completedColor[3], completedColor[4])
     end
 
@@ -3474,34 +3489,6 @@ function MPT:PlayMythicPlusTimerUpgradeAnimation(segmentKey)
     end
 
     PlayAnimationGroup(EnsureAlphaPulse(frame.KeyText, "UpgradePulseAnimation", 0.35, 0.08, 0.28))
-end
-
-function MPT:HandleMythicPlusTimerStateAnimations(state)
-    if not state or self.preview.mythicPlusTimer then
-        return
-    end
-
-    self.mythicPlusTimerState = self.mythicPlusTimerState or {}
-
-    local previousCheckpointCount = tonumber(self.mythicPlusTimerState.lastCheckpointCount) or 0
-    local previousUpgradeTier = tonumber(self.mythicPlusTimerState.lastUpgradeTier)
-
-    if tonumber(state.completedCheckpointCount) and state.completedCheckpointCount > previousCheckpointCount then
-        self:PlayMythicPlusTimerBossAnimation(state.completedCheckpointCount)
-    end
-
-    if previousUpgradeTier and tonumber(state.currentUpgradeTier) and state.currentUpgradeTier ~= previousUpgradeTier then
-        local segmentKeyByTier = {
-            [3] = "plusThree",
-            [2] = "plusTwo",
-            [1] = "plusOne",
-            [0] = "plusOne",
-        }
-        self:PlayMythicPlusTimerUpgradeAnimation(segmentKeyByTier[state.currentUpgradeTier] or "plusOne")
-    end
-
-    self.mythicPlusTimerState.lastCheckpointCount = tonumber(state.completedCheckpointCount) or 0
-    self.mythicPlusTimerState.lastUpgradeTier = tonumber(state.currentUpgradeTier) or 0
 end
 
 function MPT:EnsureMythicPlusTimerFrame()
@@ -3554,6 +3541,9 @@ function MPT:EnsureMythicPlusTimerFrame()
         row.Name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.Name:SetJustifyH("LEFT")
         row.Name:SetPoint("LEFT", row, "LEFT", 0, 0)
+
+        row.Percent = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.Percent:SetJustifyH("RIGHT")
 
         row.Time = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.Time:SetJustifyH("RIGHT")
@@ -3608,11 +3598,15 @@ function MPT:BuildMythicPlusTimerPreviewState()
     for index, checkpoint in ipairs(configuredCheckpoints) do
         local completed = (tonumber(checkpoint.percent) or 0) <= completedForcesPercent
         previewCheckpointRows[#previewCheckpointRows + 1] = {
+            id = checkpoint.id,
             name = tostring(checkpoint.name or ("Checkpoint " .. index)),
-            time = completed and (previewTimes[#previewCheckpointRows + 1] or "[18:42]") or "Pending",
+            time = checkpoint.kind == "boss" and
+                (completed and (previewTimes[#previewCheckpointRows + 1] or "[18:42]") or "Pending") or
+                "",
             completed = completed,
             percent = tonumber(checkpoint.percent) or 0,
             kind = checkpoint.kind,
+            notifyEnabled = checkpoint.notifyEnabled ~= false,
         }
         previewForceMarkers[#previewForceMarkers + 1] = {
             name = tostring(checkpoint.name or ("Checkpoint " .. index)),
@@ -3624,11 +3618,11 @@ function MPT:BuildMythicPlusTimerPreviewState()
 
     if #previewCheckpointRows == 0 then
         previewCheckpointRows = {
-            { name = "E.D.N.A.",            time = "[04:26]", completed = true,  percent = 25,  kind = "boss" },
-            { name = "Skarmorak",           time = "[09:41]", completed = true,  percent = 52,  kind = "boss" },
-            { name = "South Hall Clear",    time = "[14:18]", completed = true,  percent = 74,  kind = "custom" },
-            { name = "Master Machinists",   time = "Pending", completed = false, percent = 88,  kind = "boss" },
-            { name = "Void Speaker Eirich", time = "Pending", completed = false, percent = 100, kind = "boss" },
+            { id = "boss_1",   name = "E.D.N.A.",            time = "[04:26]", completed = true,  percent = 25,  kind = "boss",   notifyEnabled = true },
+            { id = "boss_2",   name = "Skarmorak",           time = "[09:41]", completed = true,  percent = 52,  kind = "boss",   notifyEnabled = true },
+            { id = "custom_1", name = "South Hall Clear",    time = "",        completed = true,  percent = 74,  kind = "custom", notifyEnabled = true },
+            { id = "boss_3",   name = "Master Machinists",   time = "Pending", completed = false, percent = 88,  kind = "boss",   notifyEnabled = true },
+            { id = "boss_4",   name = "Void Speaker Eirich", time = "Pending", completed = false, percent = 100, kind = "boss",   notifyEnabled = true },
         }
         previewForceMarkers = {
             { name = "E.D.N.A.",            percent = 25,  completed = true,  kind = "boss" },
@@ -3818,16 +3812,20 @@ function MPT:BuildActiveMythicPlusTimerState()
             else
                 local key = format("%d:%s", index, tostring(info.description or "Boss"))
                 if info.completed and self.mythicPlusTimerState.bossCheckpoints[key] == nil then
-                    self.mythicPlusTimerState.bossCheckpoints[key] = max(0, elapsed - (tonumber(info.elapsed) or 0))
+                    self.mythicPlusTimerState.bossCheckpoints[key] = {
+                        time = max(0, elapsed - (tonumber(info.elapsed) or 0)),
+                    }
                 end
                 if info.completed then
                     completedCheckpointCount = completedCheckpointCount + 1
                 end
 
                 bossCheckpoints[#bossCheckpoints + 1] = {
+                    key = key,
                     name = tostring(info.description or ("Boss " .. index)),
                     time = info.completed and
-                        ("[" .. FormatClock(self.mythicPlusTimerState.bossCheckpoints[key] or 0) .. "]") or "Pending",
+                        ("[" .. FormatClock((type(self.mythicPlusTimerState.bossCheckpoints[key]) == "table" and
+                            self.mythicPlusTimerState.bossCheckpoints[key].time) or 0) .. "]") or "Pending",
                     completed = info.completed == true,
                 }
             end
@@ -3848,33 +3846,35 @@ function MPT:BuildActiveMythicPlusTimerState()
 
         for _, checkpoint in ipairs(configuredCheckpoints) do
             local rowState = {
+                id = checkpoint.id,
                 name = tostring(checkpoint.name or "Checkpoint"),
-                time = "Pending",
+                time = checkpoint.kind == "boss" and "Pending" or "",
                 completed = false,
                 percent = tonumber(checkpoint.percent) or 0,
                 kind = checkpoint.kind,
+                notifyEnabled = checkpoint.notifyEnabled ~= false,
+                failedTarget = false,
             }
 
             if checkpoint.kind == "boss" then
                 bossIndex = bossIndex + 1
                 local bossState = bossCheckpoints[bossIndex]
                 if bossState then
+                    local storedBossState = type(self.mythicPlusTimerState.bossCheckpoints[bossState.key]) == "table" and
+                        self.mythicPlusTimerState.bossCheckpoints[bossState.key] or nil
+                    if storedBossState and storedBossState.forcePercent == nil then
+                        storedBossState.forcePercent = progressPercent
+                    end
                     rowState.time = bossState.time
                     rowState.completed = bossState.completed == true
+                    rowState.failedTarget = rowState.completed and storedBossState and
+                        (tonumber(storedBossState.forcePercent) or 0) < rowState.percent
                 elseif totalCount > 0 and progressPercent >= rowState.percent then
-                    rowState.completed = true
-                    rowState.time = "[" .. FormatClock(elapsed) .. "]"
+                    rowState.time = "Pending"
                 end
             else
-                local checkpointID = tostring(checkpoint.id or ("custom_" .. tostring(#checkpoints + 1)))
                 if totalCount > 0 and progressPercent >= rowState.percent then
-                    local recordedTime = self.mythicPlusTimerState.customCheckpoints[checkpointID]
-                    if not recordedTime then
-                        recordedTime = elapsed
-                        self.mythicPlusTimerState.customCheckpoints[checkpointID] = recordedTime
-                    end
                     rowState.completed = true
-                    rowState.time = "[" .. FormatClock(recordedTime) .. "]"
                 end
             end
 
@@ -3888,6 +3888,7 @@ function MPT:BuildActiveMythicPlusTimerState()
                 percent = rowState.percent,
                 completed = rowState.completed,
                 kind = rowState.kind,
+                failedTarget = rowState.failedTarget,
             }
         end
     end
@@ -3961,10 +3962,18 @@ function MPT:BuildMythicPlusTimerNotification(kind, state, checkpoint)
     elseif kind == "checkpoint" then
         local checkpointName = checkpoint and checkpoint.name or "Boss Checkpoint"
         local checkpointTime = checkpoint and checkpoint.time or "Pending"
+        local checkpointPercent = checkpoint and checkpoint.percent and FormatCheckpointPercentText(checkpoint.percent) or
+        nil
+        local detail
+        if checkpoint and checkpoint.kind == "custom" then
+            detail = format("Checkpoint reached at %s forces in %s.", tostring(checkpointPercent or "--"), mapName)
+        else
+            detail = format("Checkpoint completed at %s in %s.", tostring(checkpointTime), mapName)
+        end
         return {
             status = "MYTHIC+ TIMER",
             title = tostring(checkpointName),
-            detail = format("Checkpoint completed at %s in %s.", tostring(checkpointTime), mapName),
+            detail = detail,
             icon = 236686,
             color = { 0.34, 0.92, 0.62, 1 },
         }
@@ -4016,8 +4025,13 @@ function MPT:HandleMythicPlusTimerNotifications(state)
         plusTwoExpired = state.plusTwoExpired == true,
         plusOneExpired = state.plusOneExpired == true,
         forcesCompleted = state.forcesCompleted == true,
-        completedCheckpointCount = tonumber(state.completedCheckpointCount) or 0,
+        checkpointStates = {},
     }
+
+    for _, checkpoint in ipairs(state.checkpoints or {}) do
+        current.checkpointStates[tostring(checkpoint.id or checkpoint.name or "checkpoint")] = checkpoint.completed ==
+        true
+    end
 
     if previous then
         local db = self:GetDB()
@@ -4033,11 +4047,14 @@ function MPT:HandleMythicPlusTimerNotifications(state)
         if db.mythicPlusTimerNotifyForcesComplete ~= false and current.forcesCompleted and not previous.forcesCompleted then
             self:SendMythicPlusTimerNotification("forces", state)
         end
-        if db.mythicPlusTimerNotifyCheckpointComplete ~= false and
-            current.completedCheckpointCount > (tonumber(previous.completedCheckpointCount) or 0) then
-            local checkpoint = state.checkpoints and state.checkpoints[current.completedCheckpointCount] or nil
-            if checkpoint and checkpoint.completed then
-                self:SendMythicPlusTimerNotification("checkpoint", state, checkpoint)
+        if db.mythicPlusTimerNotifyCheckpointComplete ~= false then
+            for _, checkpoint in ipairs(state.checkpoints or {}) do
+                local checkpointKey = tostring(checkpoint.id or checkpoint.name or "checkpoint")
+                local wasCompleted = previous.checkpointStates and previous.checkpointStates[checkpointKey] == true
+                if checkpoint.completed and not wasCompleted and checkpoint.notifyEnabled ~= false then
+                    self:SendMythicPlusTimerNotification("checkpoint", state, checkpoint)
+                    break
+                end
             end
         end
     end
@@ -4045,158 +4062,54 @@ function MPT:HandleMythicPlusTimerNotifications(state)
     self.mythicPlusTimerState.lastNotificationState = current
 end
 
-function MPT:LayoutMythicPlusTimerFrame(frame, checkpointCount)
-    if not frame then
+function MPT:HandleMythicPlusTimerStateAnimations(state)
+    if not state or self.preview.mythicPlusTimer then
         return
     end
 
-    local appearance = self:GetMythicPlusTimerAppearance()
-    local alignRight = appearance.timerLayout == "right"
+    self.mythicPlusTimerState = self.mythicPlusTimerState or {}
 
-    if frame.ScrollChild and frame.ContentScroll then
-        frame.ScrollChild:SetWidth(max(1, frame.ContentScroll:GetWidth() or 1))
-    end
+    local previousUpgradeTier = tonumber(self.mythicPlusTimerState.lastUpgradeTier)
+    local previousCheckpointStates = self.mythicPlusTimerState.lastCheckpointStates or {}
+    local newlyCompletedCheckpointIndex = nil
 
-    local outline = appearance.timerOutline
-    local yOffset = -8
-
-    local function anchorFontString(fontString, height)
-        fontString:ClearAllPoints()
-        fontString:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
-        fontString:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
-        fontString:SetJustifyH(alignRight and "RIGHT" or "LEFT")
-        yOffset = yOffset - height
-    end
-
-    anchorFontString(frame.KeyText, appearance.timerFontSize + 8)
-    anchorFontString(frame.AffixText, appearance.timerFontSize + 4)
-    yOffset = yOffset - 4
-    anchorFontString(frame.ElapsedText, appearance.timerFontSize + 6)
-    anchorFontString(frame.DeathText, appearance.timerFontSize + 4)
-    yOffset = yOffset - 6
-
-    frame.BarsHeader:ClearAllPoints()
-    frame.BarsHeader:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
-    frame.BarsHeader:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
-    frame.BarsHeader:SetJustifyH("LEFT")
-    yOffset = yOffset - (appearance.timerFontSize + 6)
-
-    local milestoneRowHeight = max(26, appearance.timerBarHeight + 12)
-    frame.MilestoneRow:ClearAllPoints()
-    frame.MilestoneRow:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
-    frame.MilestoneRow:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
-    frame.MilestoneRow:SetHeight(milestoneRowHeight)
-    yOffset = yOffset - (milestoneRowHeight + appearance.timerRowGap)
-
-    local forcesRow = frame.ForcesRow
-    local rowHeight = max(20, appearance.timerBarHeight + 10)
-    forcesRow:ClearAllPoints()
-    forcesRow:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
-    forcesRow:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
-    forcesRow:SetHeight(rowHeight)
-    forcesRow.barBackdrop:SetHeight(appearance.timerBarHeight + 2)
-    forcesRow.barBackdrop:ClearAllPoints()
-    forcesRow.barBackdrop:SetPoint("LEFT", forcesRow, "LEFT", 0, 0)
-    forcesRow.barBackdrop:SetPoint("RIGHT", forcesRow, "RIGHT", 0, 0)
-    forcesRow.barBackdrop:SetPoint("CENTER", forcesRow, "CENTER", 0, 0)
-    forcesRow.label:ClearAllPoints()
-    forcesRow.label:SetJustifyH("LEFT")
-    forcesRow.label:SetPoint("LEFT", forcesRow.content, "LEFT", 8, 7)
-    forcesRow.value:ClearAllPoints()
-    forcesRow.value:SetJustifyH("RIGHT")
-    forcesRow.value:SetPoint("RIGHT", forcesRow.content, "RIGHT", -8, 0)
-    forcesRow.detail:ClearAllPoints()
-    forcesRow.detail:SetJustifyH("LEFT")
-    forcesRow.detail:SetPoint("LEFT", forcesRow.content, "LEFT", 8, -7)
-    forcesRow.detail:SetPoint("RIGHT", forcesRow.content, "RIGHT", -50, -7)
-    yOffset = yOffset - (rowHeight + appearance.timerRowGap)
-
-    local availableWidth = max(120, (frame.ScrollChild:GetWidth() or 280) - 16)
-    local xOffset = 0
-    for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
-        local segment = frame.MilestoneRow.Segments[key]
-        local fraction = segment.widthFraction or 0
-        local segmentWidth = key == "plusThree" and max(24, availableWidth - xOffset) or
-            max(24, floor(availableWidth * fraction))
-        segment:ClearAllPoints()
-        segment:SetPoint("TOPLEFT", frame.MilestoneRow, "TOPLEFT", xOffset, 0)
-        segment:SetWidth(segmentWidth)
-        segment:SetHeight(milestoneRowHeight)
-        segment.backdrop:SetAllPoints(segment)
-        segment.Label:ClearAllPoints()
-        segment.Label:SetPoint("TOPLEFT", segment.content, "TOPLEFT", 6, -4)
-        segment.Value:ClearAllPoints()
-        segment.Value:SetPoint("CENTER", segment.content, "CENTER", 0, -4)
-        xOffset = xOffset + segmentWidth + (key ~= "plusThree" and 2 or 0)
-    end
-
-    yOffset = yOffset - 2
-    frame.CheckpointHeader:ClearAllPoints()
-    frame.CheckpointHeader:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
-    frame.CheckpointHeader:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
-    frame.CheckpointHeader:SetJustifyH("LEFT")
-    yOffset = yOffset - (appearance.timerFontSize + 6)
-
-    for index, row in ipairs(frame.CheckpointRows) do
-        if index <= checkpointCount then
-            row:Show()
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
-            row:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
-            row.Name:ClearAllPoints()
-            row.Time:ClearAllPoints()
-            row.Name:SetJustifyH("LEFT")
-            row.Name:SetPoint("LEFT", row, "LEFT", 0, 0)
-            row.Time:SetJustifyH("RIGHT")
-            row.Time:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-            yOffset = yOffset - 18
-        else
-            row:Hide()
+    for index, checkpoint in ipairs(state.checkpoints or {}) do
+        local checkpointKey = tostring(checkpoint.id or checkpoint.name or index)
+        if checkpoint.completed and previousCheckpointStates[checkpointKey] ~= true then
+            newlyCompletedCheckpointIndex = index
+            break
         end
     end
 
-    frame.ScrollChild:SetHeight(max(1, abs(yOffset) + 12))
-    self:UpdateFrameScrollState(frame)
-
-    ApplyFontString(frame.Title, appearance.timerFontPath, appearance.timerFontSize + 2, outline,
-        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(frame.KeyText, appearance.timerFontPath, appearance.timerFontSize + 4, outline,
-        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(frame.AffixText, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline,
-        appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1)
-    ApplyFontString(frame.ElapsedText, appearance.timerFontPath, appearance.timerFontSize + 2, outline,
-        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(frame.DeathText, appearance.timerFontPath, appearance.timerFontSize, outline, 0.96, 0.36, 0.36, 1)
-    ApplyFontString(frame.BarsHeader, appearance.timerFontPath, appearance.timerFontSize, outline,
-        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(frame.CheckpointHeader, appearance.timerFontPath, appearance.timerFontSize, outline,
-        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-
-    ApplyFontString(forcesRow.label, appearance.timerFontPath, appearance.timerFontSize, outline,
-        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(forcesRow.value, appearance.timerFontPath, appearance.timerFontSize, outline,
-        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-    ApplyFontString(forcesRow.detail, appearance.timerFontPath, max(10, appearance.timerFontSize - 2), outline,
-        appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1)
-
-    for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
-        local segment = frame.MilestoneRow.Segments[key]
-        ApplyFontString(segment.Label, appearance.timerFontPath, max(9, appearance.timerFontSize - 2), outline,
-            appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
-        ApplyFontString(segment.Value, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, 1, 1, 1,
-            1)
+    if newlyCompletedCheckpointIndex then
+        self:PlayMythicPlusTimerBossAnimation(newlyCompletedCheckpointIndex)
     end
 
-    for _, row in ipairs(frame.CheckpointRows) do
-        local nameColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or
-            { appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1 }
-        local timeColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or
-            { appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1 }
-        ApplyFontString(row.Name, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, nameColor[1],
-            nameColor[2], nameColor[3], nameColor[4])
-        ApplyFontString(row.Time, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, timeColor[1],
-            timeColor[2], timeColor[3], timeColor[4])
+    if previousUpgradeTier and tonumber(state.currentUpgradeTier) and state.currentUpgradeTier ~= previousUpgradeTier then
+        local segmentKeyByTier = {
+            [3] = "plusThree",
+            [2] = "plusTwo",
+            [1] = "plusOne",
+            [0] = "plusOne",
+        }
+        self:PlayMythicPlusTimerUpgradeAnimation(segmentKeyByTier[state.currentUpgradeTier] or "plusOne")
     end
+
+    self.mythicPlusTimerState.lastCheckpointCount = tonumber(state.completedCheckpointCount) or 0
+    self.mythicPlusTimerState.lastUpgradeTier = tonumber(state.currentUpgradeTier) or 0
+    self.mythicPlusTimerState.lastCheckpointStates = {}
+    for index, checkpoint in ipairs(state.checkpoints or {}) do
+        local checkpointKey = tostring(checkpoint.id or checkpoint.name or index)
+        self.mythicPlusTimerState.lastCheckpointStates[checkpointKey] = checkpoint.completed == true
+    end
+end
+
+function MPT:HandleMythicPlusTimerStateAnimations_LegacyPlaceholder()
+end
+
+-- The modern handler above replaces the old count-based version.
+do
+    local _ = MPT.HandleMythicPlusTimerStateAnimations_LegacyPlaceholder
 end
 
 function MPT:RefreshMythicPlusTimerFrame()
@@ -4314,13 +4227,15 @@ function MPT:RefreshMythicPlusTimerFrame()
     frame.CheckpointHeader:SetShown(showBossCheckpoints)
     SetTooltipData(frame.CheckpointHeader, "Checkpoints", {
         "Configured boss and custom checkpoints for the current run.",
-        "Completed checkpoints show the recorded completion time.",
+        "Completed checkpoints show the configured percent and any boss completion time.",
     })
 
     for _, row in ipairs(frame.CheckpointRows) do
         row.Name:SetText("")
+        row.Percent:SetText("")
         row.Time:SetText("")
         row.IsCompleted = false
+        row.FailedTarget = false
         row.tooltipTitle = nil
         row.tooltipLines = nil
     end
@@ -4330,13 +4245,21 @@ function MPT:RefreshMythicPlusTimerFrame()
         local row = frame.CheckpointRows[index]
         if row and showBossCheckpoints then
             row.Name:SetText(rowState.name or "")
-            row.Time:SetText(rowState.time or "")
+            row.Percent:SetText(FormatCheckpointPercentText(rowState.percent))
+            row.Time:SetText(rowState.kind == "boss" and (rowState.time or "Pending") or "")
             row.IsCompleted = rowState.completed == true
-            row.tooltipTitle = tostring(rowState.name or "Boss")
+            row.FailedTarget = rowState.failedTarget == true
+            row.tooltipTitle = tostring(rowState.name or "Checkpoint")
             row.tooltipLines = {
-                row.IsCompleted and ("Defeated at " .. tostring(rowState.time or "unknown time") .. ".") or
-                "Not defeated yet.",
+                "Target forces: " .. FormatCheckpointPercentText(rowState.percent),
+                rowState.kind == "boss" and
+                (row.IsCompleted and ("Boss defeated at " .. tostring(rowState.time or "unknown time") .. ".") or "Boss not defeated yet.") or
+                (row.IsCompleted and "Custom checkpoint completed." or "Custom checkpoint not reached yet."),
             }
+            if row.FailedTarget then
+                row.tooltipLines[#row.tooltipLines + 1] =
+                "Boss was defeated before the configured forces target was reached."
+            end
             visibleCheckpointCount = visibleCheckpointCount + 1
         end
     end
@@ -4345,6 +4268,170 @@ function MPT:RefreshMythicPlusTimerFrame()
     self:UpdateMythicPlusTimerForceMarkers(frame.ForcesRow)
     self:HandleMythicPlusTimerNotifications(state)
     self:HandleMythicPlusTimerStateAnimations(state)
+end
+
+function MPT:LayoutMythicPlusTimerFrame(frame, checkpointCount)
+    if not frame then
+        return
+    end
+
+    local appearance = self:GetMythicPlusTimerAppearance()
+    local alignRight = appearance.timerLayout == "right"
+
+    if frame.ScrollChild and frame.ContentScroll then
+        frame.ScrollChild:SetWidth(max(1, frame.ContentScroll:GetWidth() or 1))
+    end
+
+    local outline = appearance.timerOutline
+    local yOffset = -8
+
+    local function anchorFontString(fontString, height)
+        fontString:ClearAllPoints()
+        fontString:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+        fontString:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+        fontString:SetJustifyH(alignRight and "RIGHT" or "LEFT")
+        yOffset = yOffset - height
+    end
+
+    anchorFontString(frame.KeyText, appearance.timerFontSize + 8)
+    anchorFontString(frame.AffixText, appearance.timerFontSize + 4)
+    yOffset = yOffset - 4
+    anchorFontString(frame.ElapsedText, appearance.timerFontSize + 6)
+    anchorFontString(frame.DeathText, appearance.timerFontSize + 4)
+    yOffset = yOffset - 6
+
+    frame.BarsHeader:ClearAllPoints()
+    frame.BarsHeader:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+    frame.BarsHeader:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+    frame.BarsHeader:SetJustifyH("LEFT")
+    yOffset = yOffset - (appearance.timerFontSize + 6)
+
+    local milestoneRowHeight = max(26, appearance.timerBarHeight + 12)
+    frame.MilestoneRow:ClearAllPoints()
+    frame.MilestoneRow:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+    frame.MilestoneRow:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+    frame.MilestoneRow:SetHeight(milestoneRowHeight)
+    yOffset = yOffset - (milestoneRowHeight + appearance.timerRowGap)
+
+    local forcesRow = frame.ForcesRow
+    local rowHeight = max(20, appearance.timerBarHeight + 10)
+    forcesRow:ClearAllPoints()
+    forcesRow:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+    forcesRow:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+    forcesRow:SetHeight(rowHeight)
+    forcesRow.barBackdrop:SetHeight(appearance.timerBarHeight + 2)
+    forcesRow.barBackdrop:ClearAllPoints()
+    forcesRow.barBackdrop:SetPoint("LEFT", forcesRow, "LEFT", 0, 0)
+    forcesRow.barBackdrop:SetPoint("RIGHT", forcesRow, "RIGHT", 0, 0)
+    forcesRow.barBackdrop:SetPoint("CENTER", forcesRow, "CENTER", 0, 0)
+    forcesRow.label:ClearAllPoints()
+    forcesRow.label:SetJustifyH("LEFT")
+    forcesRow.label:SetPoint("LEFT", forcesRow.content, "LEFT", 8, 7)
+    forcesRow.value:ClearAllPoints()
+    forcesRow.value:SetJustifyH("RIGHT")
+    forcesRow.value:SetPoint("RIGHT", forcesRow.content, "RIGHT", -8, 0)
+    forcesRow.detail:ClearAllPoints()
+    forcesRow.detail:SetJustifyH("LEFT")
+    forcesRow.detail:SetPoint("LEFT", forcesRow.content, "LEFT", 8, -7)
+    forcesRow.detail:SetPoint("RIGHT", forcesRow.content, "RIGHT", -50, -7)
+    yOffset = yOffset - (rowHeight + appearance.timerRowGap)
+
+    local availableWidth = max(120, (frame.ScrollChild:GetWidth() or 280) - 16)
+    local xOffset = 0
+    for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
+        local segment = frame.MilestoneRow.Segments[key]
+        local fraction = segment.widthFraction or 0
+        local segmentWidth = key == "plusThree" and max(24, availableWidth - xOffset) or
+            max(24, floor(availableWidth * fraction))
+        segment:ClearAllPoints()
+        segment:SetPoint("TOPLEFT", frame.MilestoneRow, "TOPLEFT", xOffset, 0)
+        segment:SetWidth(segmentWidth)
+        segment:SetHeight(milestoneRowHeight)
+        segment.backdrop:SetAllPoints(segment)
+        segment.Label:ClearAllPoints()
+        segment.Label:SetPoint("TOPLEFT", segment.content, "TOPLEFT", 6, -4)
+        segment.Value:ClearAllPoints()
+        segment.Value:SetPoint("CENTER", segment.content, "CENTER", 0, -4)
+        xOffset = xOffset + segmentWidth + (key ~= "plusThree" and 2 or 0)
+    end
+
+    yOffset = yOffset - 2
+    frame.CheckpointHeader:ClearAllPoints()
+    frame.CheckpointHeader:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+    frame.CheckpointHeader:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+    frame.CheckpointHeader:SetJustifyH("LEFT")
+    yOffset = yOffset - (appearance.timerFontSize + 6)
+
+    for index, row in ipairs(frame.CheckpointRows) do
+        if index <= checkpointCount then
+            row:Show()
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", 8, yOffset)
+            row:SetPoint("TOPRIGHT", frame.ScrollChild, "TOPRIGHT", -8, yOffset)
+            row.Name:ClearAllPoints()
+            row.Percent:ClearAllPoints()
+            row.Time:ClearAllPoints()
+            row.Name:SetJustifyH("LEFT")
+            row.Name:SetPoint("LEFT", row, "LEFT", 0, 0)
+            row.Name:SetPoint("RIGHT", row.Percent, "LEFT", -10, 0)
+            row.Percent:SetJustifyH("RIGHT")
+            row.Percent:SetPoint("RIGHT", row.Time, "LEFT", -12, 0)
+            row.Percent:SetWidth(54)
+            row.Time:SetJustifyH("RIGHT")
+            row.Time:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+            row.Time:SetWidth(74)
+            yOffset = yOffset - 18
+        else
+            row:Hide()
+        end
+    end
+
+    frame.ScrollChild:SetHeight(max(1, abs(yOffset) + 12))
+    self:UpdateFrameScrollState(frame)
+
+    ApplyFontString(frame.Title, appearance.timerFontPath, appearance.timerFontSize + 2, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.KeyText, appearance.timerFontPath, appearance.timerFontSize + 4, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.AffixText, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline,
+        appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1)
+    ApplyFontString(frame.ElapsedText, appearance.timerFontPath, appearance.timerFontSize + 2, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.DeathText, appearance.timerFontPath, appearance.timerFontSize, outline, 0.96, 0.36, 0.36, 1)
+    ApplyFontString(frame.BarsHeader, appearance.timerFontPath, appearance.timerFontSize, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(frame.CheckpointHeader, appearance.timerFontPath, appearance.timerFontSize, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+
+    ApplyFontString(forcesRow.label, appearance.timerFontPath, appearance.timerFontSize, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(forcesRow.value, appearance.timerFontPath, appearance.timerFontSize, outline,
+        appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+    ApplyFontString(forcesRow.detail, appearance.timerFontPath, max(10, appearance.timerFontSize - 2), outline,
+        appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1)
+
+    for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
+        local segment = frame.MilestoneRow.Segments[key]
+        ApplyFontString(segment.Label, appearance.timerFontPath, max(9, appearance.timerFontSize - 2), outline,
+            appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1)
+        ApplyFontString(segment.Value, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, 1, 1, 1,
+            1)
+    end
+
+    for _, row in ipairs(frame.CheckpointRows) do
+        local nameColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or
+            { appearance.timerFontColor[1], appearance.timerFontColor[2], appearance.timerFontColor[3], 1 }
+        local percentColor = row.FailedTarget and { 0.94, 0.34, 0.34, 1 } or
+            row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or { 0.96, 0.78, 0.24, 1 }
+        local timeColor = row.IsCompleted and { 0.34, 0.92, 0.62, 1 } or
+            { appearance.timerMutedTextColor[1], appearance.timerMutedTextColor[2], appearance.timerMutedTextColor[3], 1 }
+        ApplyFontString(row.Name, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, nameColor[1],
+            nameColor[2], nameColor[3], nameColor[4])
+        ApplyFontString(row.Percent, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline,
+            percentColor[1], percentColor[2], percentColor[3], percentColor[4])
+        ApplyFontString(row.Time, appearance.timerFontPath, max(10, appearance.timerFontSize - 1), outline, timeColor[1],
+            timeColor[2], timeColor[3], timeColor[4])
+    end
 end
 
 function MPT:TestMythicPlusTimerNotification(kind)

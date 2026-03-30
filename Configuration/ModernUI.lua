@@ -2342,6 +2342,9 @@ local function CreateMythicPlusTimerPreviewShell(parent, width, height, runtime)
         row.Name:SetJustifyH("LEFT")
         row.Name:SetPoint("LEFT", row, "LEFT", 0, 0)
 
+        row.Percent = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.Percent:SetJustifyH("RIGHT")
+
         row.Time = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.Time:SetJustifyH("RIGHT")
         row.Time:SetPoint("RIGHT", row, "RIGHT", 0, 0)
@@ -2422,8 +2425,10 @@ local function PopulateMythicPlusTimerPreviewShell(shell, runtime)
 
     for _, row in ipairs(shell.CheckpointRows) do
         row.Name:SetText("")
+        row.Percent:SetText("")
         row.Time:SetText("")
         row.IsCompleted = false
+        row.FailedTarget = false
     end
 
     local visibleCheckpointCount = 0
@@ -2431,13 +2436,20 @@ local function PopulateMythicPlusTimerPreviewShell(shell, runtime)
         local row = shell.CheckpointRows[index]
         if row and showBossCheckpoints then
             row.Name:SetText(rowState.name or "")
-            row.Time:SetText(rowState.time or "")
+            row.Percent:SetText(runtime.FormatCheckpointPercentText and
+                runtime.FormatCheckpointPercentText(rowState.percent) or
+                string.format("%s%%", tostring(rowState.percent or 0):gsub("%.0$", "")))
+            row.Time:SetText(rowState.kind == "boss" and (rowState.time or "Pending") or "")
             row.IsCompleted = rowState.completed == true
+            row.FailedTarget = rowState.failedTarget == true
             visibleCheckpointCount = visibleCheckpointCount + 1
         end
     end
 
     runtime:LayoutMythicPlusTimerFrame(shell, showBossCheckpoints and visibleCheckpointCount or 0)
+    if runtime.UpdateMythicPlusTimerForceMarkers then
+        runtime:UpdateMythicPlusTimerForceMarkers(shell.ForcesRow)
+    end
 end
 
 local function CreateTrackerPreviewShell(parent, width, height)

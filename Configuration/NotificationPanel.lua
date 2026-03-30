@@ -510,7 +510,7 @@ local function BuildNotificationPanelConfiguration()
 
                 checkpointGroup = W.IGroup(40, "Checkpoint Alerts", {
                     desc = W.Description(0,
-                        "Notify when a boss checkpoint is completed on the Mythic+ timer."),
+                        "Notify when a configured checkpoint is completed on the Mythic+ timer."),
                     enable = {
                         type = "toggle",
                         name = "Enable",
@@ -537,7 +537,7 @@ local function BuildNotificationPanelConfiguration()
                         type = "select",
                         dialogControl = "LSM30_Sound",
                         name = "Sound",
-                        desc = "Sound to play when a boss checkpoint is completed. Set to None to disable.",
+                        desc = "Sound to play when a configured checkpoint is completed. Set to None to disable.",
                         order = 3,
                         width = 2,
                         values = GetSoundValuesWithNone,
