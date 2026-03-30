@@ -261,8 +261,17 @@ local PLAYER_CASTBAR_DEFAULTS = {
     iconSide = "left",        -- "left" | "right"
     showSpellText = true,
     showTimeText = true,
+    fontName = nil,
     spellFontSize = 11,
     timeFontSize = 10,
+    spellPoint = "LEFT",
+    spellRelativePoint = "LEFT",
+    spellOffsetX = 6,
+    spellOffsetY = 0,
+    timePoint = "RIGHT",
+    timeRelativePoint = "RIGHT",
+    timeOffsetX = -6,
+    timeOffsetY = 0,
     useCustomColor = false,
 }
 
@@ -657,6 +666,61 @@ local function BuildLayoutGroup(order, name, layoutKey, defaults, opts)
         y = BuildRange(4, "Y Offset", "Vertical position offset.", ExtendPath(layoutPath, "y"), defaults.y or 0, -1600,
             1600, 1, {
                 disabled = opts.disabled,
+            }),
+    })
+end
+
+local function GetDefaultCastbarSpellOffsetX()
+    local castbar = (Options:GetDB() or {}).castbar or {}
+    local showIcon = castbar.showIcon
+    if showIcon == nil then
+        showIcon = PLAYER_CASTBAR_DEFAULTS.showIcon
+    end
+
+    local iconPosition = castbar.iconPosition or PLAYER_CASTBAR_DEFAULTS.iconPosition
+    local iconSide = castbar.iconSide or PLAYER_CASTBAR_DEFAULTS.iconSide
+    local iconSize = tonumber(castbar.iconSize) or PLAYER_CASTBAR_DEFAULTS.iconSize or PLAYER_CASTBAR_DEFAULTS.height or 20
+    iconSize = math.max(12, math.min(50, iconSize))
+
+    if showIcon ~= false and iconPosition == "inside" and iconSide ~= "right" then
+        return iconSize + 8
+    end
+
+    return PLAYER_CASTBAR_DEFAULTS.spellOffsetX or 6
+end
+
+local function BuildCastbarTextLayoutGroup(order, name, basePath, prefix, defaults, opts)
+    opts = opts or {}
+    local title = prefix == "spell" and "Spell" or "Time"
+    local pointField = prefix .. "Point"
+    local relativePointField = prefix .. "RelativePoint"
+    local xField = prefix .. "OffsetX"
+    local yField = prefix .. "OffsetY"
+    local defaultX = defaults[xField]
+    if prefix == "spell" then
+        defaultX = GetDefaultCastbarSpellOffsetX
+    end
+
+    return Widgets.IGroup(order, name, {
+        point = BuildSelect(1, title .. " Anchor", title .. " text anchor point.", ExtendPath(basePath, pointField),
+            defaults[pointField], POINT_VALUES, {
+                disabled = opts.disabled,
+                refreshConfig = true,
+            }),
+        relativePoint = BuildSelect(2, title .. " Relative", "Relative point on the castbar frame.",
+            ExtendPath(basePath, relativePointField), defaults[relativePointField], POINT_VALUES, {
+                disabled = opts.disabled,
+                refreshConfig = true,
+            }),
+        offsetX = BuildRange(3, title .. " X", title .. " text horizontal offset.", ExtendPath(basePath, xField),
+            defaultX, -240, 240, 1, {
+                disabled = opts.disabled,
+                refreshConfig = true,
+            }),
+        offsetY = BuildRange(4, title .. " Y", title .. " text vertical offset.", ExtendPath(basePath, yField),
+            defaults[yField], -120, 120, 1, {
+                disabled = opts.disabled,
+                refreshConfig = true,
             }),
     })
 end
@@ -2305,38 +2369,54 @@ local function BuildCastbarTab()
                     { "castbar", "showSpellText" }, PLAYER_CASTBAR_DEFAULTS.showSpellText),
                 showTimeText = BuildToggle(7, "Show Time", "Show time text on the standalone castbar.",
                     { "castbar", "showTimeText" }, PLAYER_CASTBAR_DEFAULTS.showTimeText),
-                spellFontSize = BuildRange(8, "Spell Size", "Standalone castbar spell font size.",
+                fontName = BuildFontSelect(8, "Font", "Standalone castbar font override.",
+                    { "castbar", "fontName" }, "Use player frame font", {
+                        refreshConfig = true,
+                    }),
+                spellFontSize = BuildRange(9, "Spell Size", "Standalone castbar spell font size.",
                     { "castbar", "spellFontSize" }, PLAYER_CASTBAR_DEFAULTS.spellFontSize, 6, 24, 1, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue({ "castbar", "showSpellText" }, PLAYER_CASTBAR_DEFAULTS.showSpellText) ~=
                                 true
                         end),
+                        refreshConfig = true,
                     }),
-                timeFontSize = BuildRange(9, "Time Size", "Standalone castbar time font size.",
+                timeFontSize = BuildRange(10, "Time Size", "Standalone castbar time font size.",
                     { "castbar", "timeFontSize" }, PLAYER_CASTBAR_DEFAULTS.timeFontSize, 6, 24, 1, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue({ "castbar", "showTimeText" }, PLAYER_CASTBAR_DEFAULTS.showTimeText) ~=
                                 true
                         end),
+                        refreshConfig = true,
                     }),
-                texture = BuildTextureSelect(10, "Texture", "Optional texture override for the standalone castbar.",
+                texture = BuildTextureSelect(11, "Texture", "Optional texture override for the standalone castbar.",
                     { "castbar", "texture" }, "Use Unit Frames texture"),
-                useCustomColor = BuildToggle(11, "Custom Color", "Use a dedicated player castbar color.",
+                useCustomColor = BuildToggle(12, "Custom Color", "Use a dedicated player castbar color.",
                     { "castbar", "useCustomColor" }, PLAYER_CASTBAR_DEFAULTS.useCustomColor, {
                         refreshConfig = true,
                     }),
-                color = BuildColor(12, "Castbar Color", "Dedicated player castbar color.", { "castbar", "color" },
+                color = BuildColor(13, "Castbar Color", "Dedicated player castbar color.", { "castbar", "color" },
                     COLOR_DEFAULTS.cast, true, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue({ "castbar", "useCustomColor" }, PLAYER_CASTBAR_DEFAULTS.useCustomColor) ~=
                                 true
                         end),
                     }),
-                masqueEnabled = BuildToggle(15, "Masque Skinning",
+                masqueEnabled = BuildToggle(14, "Masque Skinning",
                     "Enable Masque skinning for the castbar icon button. Requires the Masque addon to be installed. Disabled by default.",
                     { "castbar", "masqueEnabled" }, false, { refreshConfig = true }),
             }),
-            layout = BuildLayoutGroup(2, "Layout", "castbar", SINGLE_LAYOUT_DEFAULTS.castbar, {
+            textSpell = BuildCastbarTextLayoutGroup(3, "Spell Text", { "castbar" }, "spell", PLAYER_CASTBAR_DEFAULTS, {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue({ "castbar", "showSpellText" }, PLAYER_CASTBAR_DEFAULTS.showSpellText) ~= true
+                end),
+            }),
+            textTime = BuildCastbarTextLayoutGroup(4, "Time Text", { "castbar" }, "time", PLAYER_CASTBAR_DEFAULTS, {
+                disabled = ModuleDisabled(function()
+                    return GetPathValue({ "castbar", "showTimeText" }, PLAYER_CASTBAR_DEFAULTS.showTimeText) ~= true
+                end),
+            }),
+            layout = BuildLayoutGroup(5, "Layout", "castbar", SINGLE_LAYOUT_DEFAULTS.castbar, {
                 disabled = ModuleDisabled(),
             }),
         },

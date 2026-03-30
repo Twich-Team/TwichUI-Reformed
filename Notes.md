@@ -65,8 +65,8 @@
 
 ## Bugs for tomorrow
 
-- There is an empty bar attached to the bottom of target of target that i dont know what it is.
-- The aura bars do not count down debuffs on target that player caused, they show but no timer and no callapsing bar.
+- I have aura bars enabled for target. The aura bars do not count down debuffs on target that player caused while in dungeons, they show but no timer and no callapsing bar as it times out.
 - I need to be able to style buffs differently from debuffs on aura bars.
 - Dungeon role indicator is not appearing
-- Need in combat and resting indicators (use AI to make an icon)
+
+- Need in combat and resting indicators (use AI to make icons)

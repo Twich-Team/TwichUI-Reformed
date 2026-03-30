@@ -171,6 +171,8 @@ local function CopyColor(color, fallback)
     }
 end
 
+local ApplyStandaloneCastbarTextAnchors
+
 local ROLE_ATLAS = {
     TANK    = "roleicon-tank",
     HEALER  = "roleicon-healer",
@@ -3025,6 +3027,18 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             return
         end
 
+        if layoutKey == "castbar" then
+            local db = UnitFrames:GetDB()
+            db.castbar = db.castbar or {}
+            if absW and absW > 20 then
+                db.castbar.width = math.floor(absW + 0.5)
+            end
+            if absH and absH > 12 then
+                db.castbar.height = math.floor(absH + 0.5)
+            end
+            return
+        end
+
         local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
         if absW and absW > 20 then
             unitSettings.width = math.floor(absW + 0.5)
@@ -3168,6 +3182,7 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         local castSettings = db.castbar or {}
         local layout = self:GetLayoutSettings("castbar")
         local palette = self:GetPalette("singles")
+        local text = self:GetTextConfigFor("player")
         local castPreview = preview.castbar
         castPreview:ClearAllPoints()
         castPreview:SetPoint(
@@ -3191,8 +3206,17 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         castPreview.timeText:SetText("1.4")
         castPreview.spellText:SetShown(castSettings.showSpellText ~= false)
         castPreview.timeText:SetShown(castSettings.showTimeText ~= false)
-        self:ApplyFontObject(castPreview.spellText, Clamp(castSettings.spellFontSize or 11, 6, 24))
-        self:ApplyFontObject(castPreview.timeText, Clamp(castSettings.timeFontSize or 10, 6, 24))
+        local castbarTextStyle = {
+            fontName = castSettings.fontName or text.fontName,
+            outlineMode = text.outlineMode,
+            shadowEnabled = text.shadowEnabled,
+            shadowOffsetX = text.shadowOffsetX,
+            shadowOffsetY = text.shadowOffsetY,
+        }
+        self:ApplyFontObject(castPreview.spellText, Clamp(castSettings.spellFontSize or 11, 6, 24),
+            castbarTextStyle.fontName, castbarTextStyle)
+        self:ApplyFontObject(castPreview.timeText, Clamp(castSettings.timeFontSize or 10, 6, 24),
+            castbarTextStyle.fontName, castbarTextStyle)
         do
             local iconSize = Clamp(castSettings.iconSize or castSettings.height or 20, 12, 50)
             local showIcon = castSettings.showIcon ~= false
@@ -3217,20 +3241,8 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
                     end
                 end
             end
-            -- Reposition spell text to match icon layout (mirrors RefreshCastbarLayout).
-            castPreview.spellText:ClearAllPoints()
-            if showIcon and iconPos == "inside" then
-                if iconSide == "right" then
-                    castPreview.spellText:SetPoint("LEFT", castPreview, "LEFT", 6, 0)
-                    castPreview.spellText:SetPoint("RIGHT", castPreview, "RIGHT", -(iconSize + 8), 0)
-                else
-                    castPreview.spellText:SetPoint("LEFT", castPreview, "LEFT", iconSize + 8, 0)
-                    castPreview.spellText:SetPoint("RIGHT", castPreview, "RIGHT", -6, 0)
-                end
-            else
-                castPreview.spellText:SetPoint("LEFT", castPreview, "LEFT", 6, 0)
-            end
         end
+        ApplyStandaloneCastbarTextAnchors(castPreview, castSettings)
         castPreview:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
         castPreview:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
     end
@@ -3767,6 +3779,45 @@ function UnitFrames:CreateCastbarFrame()
     return frame
 end
 
+ApplyStandaloneCastbarTextAnchors = function(castbar, settings)
+    if not castbar then
+        return
+    end
+
+    settings = settings or {}
+    local showIcon = settings.showIcon ~= false
+    local iconPosition = settings.iconPosition or "outside"
+    local iconSide = settings.iconSide or "left"
+    local iconSize = Clamp(settings.iconSize or settings.height or 20, 12, 50)
+
+    local defaultSpellOffsetX = 6
+    if showIcon and iconPosition == "inside" and iconSide ~= "right" then
+        defaultSpellOffsetX = iconSize + 8
+    end
+
+    if castbar.spellText then
+        castbar.spellText:ClearAllPoints()
+        castbar.spellText:SetPoint(
+            settings.spellPoint or "LEFT",
+            castbar,
+            settings.spellRelativePoint or settings.spellPoint or "LEFT",
+            settings.spellOffsetX ~= nil and tonumber(settings.spellOffsetX) or defaultSpellOffsetX,
+            settings.spellOffsetY ~= nil and tonumber(settings.spellOffsetY) or 0
+        )
+    end
+
+    if castbar.timeText then
+        castbar.timeText:ClearAllPoints()
+        castbar.timeText:SetPoint(
+            settings.timePoint or "RIGHT",
+            castbar,
+            settings.timeRelativePoint or settings.timePoint or "RIGHT",
+            settings.timeOffsetX ~= nil and tonumber(settings.timeOffsetX) or -6,
+            settings.timeOffsetY ~= nil and tonumber(settings.timeOffsetY) or 0
+        )
+    end
+end
+
 function UnitFrames:RefreshCastbarLayout()
     local castbar = self:CreateCastbarFrame()
     local db = self:GetDB()
@@ -3825,26 +3876,7 @@ function UnitFrames:RefreshCastbarLayout()
         end
     end
 
-    -- Adjust spellText start point to avoid overlapping an inside icon.
-    castbar.spellText:ClearAllPoints()
-    local iconPos  = settings.iconPosition or "outside"
-    local iconSide = settings.iconSide or "left"
-    if showIcon and iconPos == "inside" then
-        if iconSide == "right" then
-            -- icon on right inside — keep spell text on the left as normal
-            castbar.spellText:SetPoint("LEFT", castbar, "LEFT", 6, 0)
-            castbar.spellText:SetPoint("RIGHT", castbar, "RIGHT", -(iconSize + 8), 0)
-        else
-            -- icon on left inside — push spell text right of icon
-            castbar.spellText:SetPoint("LEFT", castbar, "LEFT", iconSize + 8, 0)
-            castbar.spellText:SetPoint("RIGHT", castbar, "RIGHT", -6, 0)
-        end
-    else
-        castbar.spellText:SetPoint("LEFT", castbar, "LEFT", 6, 0)
-    end
-
-    castbar.timeText:ClearAllPoints()
-    castbar.timeText:SetPoint("RIGHT", castbar, "RIGHT", -6, 0)
+    ApplyStandaloneCastbarTextAnchors(castbar, settings)
 end
 
 function UnitFrames:RefreshCastbarStyle()
@@ -3853,6 +3885,13 @@ function UnitFrames:RefreshCastbarStyle()
     local settings = db.castbar or {}
     local palette = self:GetPalette("player", "player")
     local text = self:GetTextConfigFor("player")
+    local castbarTextStyle = {
+        fontName = settings.fontName or text.fontName,
+        outlineMode = text.outlineMode,
+        shadowEnabled = text.shadowEnabled,
+        shadowOffsetX = text.shadowOffsetX,
+        shadowOffsetY = text.shadowOffsetY,
+    }
     local texName = (settings.texture and settings.texture ~= "") and settings.texture
         or ((db.texture and db.texture ~= "") and db.texture or nil)
     castbar:SetStatusBarTexture(texName and GetLSMTexture(texName) or GetThemeTexture())
@@ -3867,8 +3906,10 @@ function UnitFrames:RefreshCastbarStyle()
     castbar:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
     castbar.spellText:SetShown(settings.showSpellText ~= false)
     castbar.timeText:SetShown(settings.showTimeText ~= false)
-    self:ApplyFontObject(castbar.spellText, Clamp(settings.spellFontSize or 11, 6, 24), text.fontName, text)
-    self:ApplyFontObject(castbar.timeText, Clamp(settings.timeFontSize or 10, 6, 24), text.fontName, text)
+    self:ApplyFontObject(castbar.spellText, Clamp(settings.spellFontSize or 11, 6, 24), castbarTextStyle.fontName,
+        castbarTextStyle)
+    self:ApplyFontObject(castbar.timeText, Clamp(settings.timeFontSize or 10, 6, 24), castbarTextStyle.fontName,
+        castbarTextStyle)
 end
 
 function UnitFrames:UpdateCastbarElapsed()
