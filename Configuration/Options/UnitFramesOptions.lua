@@ -1030,7 +1030,8 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
         buffBarColor = BuildColor(6, "Fill Color", "Optional fill color override used only for buff bars.",
             ExtendPath(basePath, "buffBarColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
                 disabled = function()
-                    return BarModeDisabled()() or GetPathValue(ExtendPath(basePath, "buffUseThemeAccentFill"), false) == true
+                    return BarModeDisabled()() or
+                    GetPathValue(ExtendPath(basePath, "buffUseThemeAccentFill"), false) == true
                 end,
             }),
         buffBarBackground = BuildColor(7, "Background", "Optional background color override used only for buff bars.",
@@ -1076,7 +1077,8 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
         debuffBarColor = BuildColor(6, "Fill Color", "Optional fill color override used only for debuff bars.",
             ExtendPath(basePath, "debuffBarColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
                 disabled = function()
-                    return BarModeDisabled()() or GetPathValue(ExtendPath(basePath, "debuffUseThemeAccentFill"), false) == true
+                    return BarModeDisabled()() or
+                    GetPathValue(ExtendPath(basePath, "debuffUseThemeAccentFill"), false) == true
                 end,
             }),
         debuffBarBackground = BuildColor(7, "Background", "Optional background color override used only for debuff bars.",
@@ -2593,8 +2595,10 @@ local function BuildCastbarTab()
                 color = BuildColor(14, "Castbar Color", "Dedicated player castbar color.", { "castbar", "color" },
                     COLOR_DEFAULTS.cast, true, {
                         disabled = ModuleDisabled(function()
-                            return GetPathValue({ "castbar", "useCustomColor" }, PLAYER_CASTBAR_DEFAULTS.useCustomColor) ~= true
-                                or GetPathValue({ "castbar", "useThemeAccentFill" }, PLAYER_CASTBAR_DEFAULTS.useThemeAccentFill) == true
+                            return GetPathValue({ "castbar", "useCustomColor" }, PLAYER_CASTBAR_DEFAULTS.useCustomColor) ~=
+                                true
+                                or GetPathValue({ "castbar", "useThemeAccentFill" },
+                                    PLAYER_CASTBAR_DEFAULTS.useThemeAccentFill) == true
                         end),
                     }),
                 masqueEnabled = BuildToggle(15, "Masque Skinning",
