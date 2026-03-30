@@ -239,6 +239,7 @@ local GROUP_DEFAULTS = {
         enabled = true,
         width = 180,
         height = 36,
+        growthDirection = "DOWN",
         point = "TOP",
         xOffset = 0,
         rowSpacing = 6,
@@ -266,6 +267,7 @@ local GROUP_DEFAULTS = {
         enabled = true,
         width = 180,
         height = 32,
+        growthDirection = "DOWN",
         point = "TOP",
         xOffset = 0,
         yOffset = -6,
@@ -2057,14 +2059,28 @@ local function BuildGroupTab(groupKey, label)
     local textPath = { "text", "scopes", groupKey }
     local auraPath = { "auras", "scopes", groupKey }
     local disabled = ModuleDisabled()
+    local usesGrowthDirection = groupKey == "party" or groupKey == "tank"
+    local growthPath = usesGrowthDirection and ExtendPath(basePath, "growthDirection") or ExtendPath(basePath, "point")
+    local growthDefault = usesGrowthDirection and (defaults.growthDirection or "DOWN") or (defaults.point or "TOP")
+    local growthName = usesGrowthDirection and "Growth Direction" or "Growth Point"
+    local growthDesc = usesGrowthDirection
+        and "Primary direction new party or tank members grow from the anchor."
+        or "Header growth direction."
+    local growthValues = usesGrowthDirection and GROW_DIR_VALUES or POINT_VALUES
     local rowSpacingPath = (groupKey == "party" or groupKey == "raid") and ExtendPath(basePath, "rowSpacing")
         or ExtendPath(basePath, "yOffset")
-    local rowSpacingDefault = (groupKey == "party" or groupKey == "raid") and (defaults.rowSpacing or math.abs(defaults.yOffset or -6))
+    local rowSpacingDefault = (groupKey == "party" or groupKey == "raid") and
+        (defaults.rowSpacing or math.abs(defaults.yOffset or -6))
         or (defaults.yOffset or -6)
-    local rowSpacingName = (groupKey == "party" or groupKey == "raid") and "Row Spacing" or "Y Spacing"
-    local rowSpacingDesc = (groupKey == "party" or groupKey == "raid")
+    local rowSpacingName = usesGrowthDirection and "Vertical Spacing"
+        or ((groupKey == "party" or groupKey == "raid") and "Row Spacing" or "Y Spacing")
+    local rowSpacingDesc = usesGrowthDirection and "Gap between members when growing up or down."
+        or ((groupKey == "party" or groupKey == "raid")
         and "Vertical spacing between party or raid rows."
-        or "Vertical spacing between members."
+        or "Vertical spacing between members.")
+    local xSpacingDesc = usesGrowthDirection
+        and "Gap between members when growing left or right."
+        or "Horizontal spacing between members."
     local frameTab = {
         type = "group",
         name = "Frame",
@@ -2084,11 +2100,11 @@ local function BuildGroupTab(groupKey, label)
                     14, 120, 1, {
                         disabled = disabled,
                     }),
-                point = BuildSelect(4, "Growth Point", "Header growth direction.", ExtendPath(basePath, "point"),
-                    defaults.point or "TOP", POINT_VALUES, {
+                point = BuildSelect(4, growthName, growthDesc, growthPath, growthDefault, growthValues, {
                         disabled = disabled,
+                        refreshConfig = true,
                     }),
-                xOffset = BuildRange(5, "X Spacing", "Horizontal spacing between members.",
+                xOffset = BuildRange(5, "X Spacing", xSpacingDesc,
                     ExtendPath(basePath, "xOffset"), defaults.xOffset or 0, -120, 120, 1, {
                         disabled = disabled,
                     }),
@@ -2159,7 +2175,8 @@ local function BuildGroupTab(groupKey, label)
                     disabled = disabled,
                     width = "full",
                 }),
-            groupFilter = BuildInput(3, "Group Filter", "Optional secure header group filter string applied in addition to the role filter.",
+            groupFilter = BuildInput(3, "Group Filter",
+                "Optional secure header group filter string applied in addition to the role filter.",
                 ExtendPath(basePath, "groupFilter"), defaults.groupFilter, {
                     disabled = disabled,
                     width = "full",
@@ -2230,7 +2247,8 @@ local function BuildGroupTab(groupKey, label)
             auras            = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
             watchers         = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
             colors           = colorsTab,
-            roleIcon         = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"), groupKey == "party" or groupKey == "tank"),
+            roleIcon         = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"),
+                groupKey == "party" or groupKey == "tank"),
             combatIndicator  = BuildStateIndicatorGroup(7, "Combat Indicator",
                 ExtendPath(basePath, "combatIndicator"), "combatIndicator"),
             restingIndicator = BuildStateIndicatorGroup(8, "Resting Indicator",

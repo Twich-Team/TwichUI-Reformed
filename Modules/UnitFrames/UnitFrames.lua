@@ -393,6 +393,126 @@ local function NormalizeHeaderFilterValue(value)
     return trimmed
 end
 
+local VALID_GROWTH_DIRECTIONS = {
+    UP = true,
+    DOWN = true,
+    LEFT = true,
+    RIGHT = true,
+}
+
+local VALID_HEADER_POINTS = {
+    TOP = true,
+    BOTTOM = true,
+    LEFT = true,
+    RIGHT = true,
+}
+
+local function NormalizeGrowthDirection(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    local trimmed = value:match("^%s*(.-)%s*$")
+    local upper = trimmed and trimmed:upper() or nil
+    if upper and VALID_GROWTH_DIRECTIONS[upper] then
+        return upper
+    end
+
+    return nil
+end
+
+local function NormalizeHeaderPointValue(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    local trimmed = value:match("^%s*(.-)%s*$")
+    local upper = trimmed and trimmed:upper() or nil
+    if upper and VALID_HEADER_POINTS[upper] then
+        return upper
+    end
+
+    return nil
+end
+
+local function DeriveGrowthDirectionFromPoint(point, fallback)
+    local normalized = NormalizeHeaderPointValue(point)
+    if normalized == "BOTTOM" then
+        return "UP"
+    elseif normalized == "TOP" then
+        return "DOWN"
+    elseif normalized == "RIGHT" then
+        return "LEFT"
+    elseif normalized == "LEFT" then
+        return "RIGHT"
+    end
+
+    if type(point) == "string" then
+        local upper = point:upper()
+        if upper:find("BOTTOM", 1, true) then
+            return "UP"
+        elseif upper:find("TOP", 1, true) then
+            return "DOWN"
+        elseif upper:find("RIGHT", 1, true) then
+            return "LEFT"
+        elseif upper:find("LEFT", 1, true) then
+            return "RIGHT"
+        end
+    end
+
+    return NormalizeGrowthDirection(fallback) or "DOWN"
+end
+
+local function ResolveGroupGrowthDirection(settings, fallback)
+    if type(settings) == "table" then
+        local direction = NormalizeGrowthDirection(settings.growthDirection)
+        if direction then
+            return direction
+        end
+
+        return DeriveGrowthDirectionFromPoint(settings.point, fallback)
+    end
+
+    return NormalizeGrowthDirection(fallback) or "DOWN"
+end
+
+local function IsHorizontalGrowthDirection(direction)
+    return direction == "LEFT" or direction == "RIGHT"
+end
+
+local function ResolveHeaderPoint(settings, fallback)
+    local direction = ResolveGroupGrowthDirection(settings, DeriveGrowthDirectionFromPoint(fallback, "DOWN"))
+
+    if direction == "UP" then
+        return "BOTTOM"
+    elseif direction == "LEFT" then
+        return "RIGHT"
+    elseif direction == "RIGHT" then
+        return "LEFT"
+    end
+
+    return "TOP"
+end
+
+local function ResolveHeaderColumnAnchorPoint(settings, growthDirection, fallback)
+    local columnAnchor = NormalizeHeaderPointValue(settings and settings.columnAnchorPoint)
+        or NormalizeHeaderPointValue(fallback)
+
+    if IsHorizontalGrowthDirection(growthDirection) then
+        if columnAnchor == "TOP" or columnAnchor == "BOTTOM" then
+            return columnAnchor
+        end
+
+        return "TOP"
+    end
+
+    if columnAnchor == "LEFT" or columnAnchor == "RIGHT" then
+        return columnAnchor
+    end
+
+    return "LEFT"
+end
+
 local function ResolveGroupRowSpacing(settings, fallback)
     if type(settings) == "table" and settings.rowSpacing ~= nil then
         return math_abs(tonumber(settings.rowSpacing) or fallback or 6)
@@ -405,17 +525,120 @@ local function ResolveGroupRowSpacing(settings, fallback)
     return math_abs(fallback or 6)
 end
 
-local function ResolveHeaderYOffset(settings, fallback)
-    if type(settings) == "table" and settings.rowSpacing ~= nil then
-        local spacing = ResolveGroupRowSpacing(settings, fallback)
-        local point = tostring(settings.point or "TOP")
-        if point:find("BOTTOM") then
-            return spacing
-        end
+local function ResolveHeaderXOffset(settings, growthDirection, fallback)
+    local direction = growthDirection or ResolveGroupGrowthDirection(settings, "DOWN")
+    if not IsHorizontalGrowthDirection(direction) then
+        return 0
+    end
+
+    local spacing = math_abs(tonumber(settings and settings.xOffset) or fallback or 0)
+    if direction == "LEFT" then
         return -spacing
     end
 
-    return tonumber(settings and settings.yOffset) or fallback or -6
+    return spacing
+end
+
+local function ResolveHeaderYOffset(settings, fallback, growthDirection)
+    local direction = growthDirection or ResolveGroupGrowthDirection(settings, "DOWN")
+    if IsHorizontalGrowthDirection(direction) then
+        return 0
+    end
+
+    local spacing = ResolveGroupRowSpacing(settings, fallback)
+    if direction == "UP" then
+        return spacing
+    end
+
+    return -spacing
+end
+
+local function GetDirectionalStep(direction, width, height, spacing)
+    local gap = math_max(0, tonumber(spacing) or 0)
+
+    if direction == "UP" then
+        return 0, -(height + gap)
+    elseif direction == "DOWN" then
+        return 0, height + gap
+    elseif direction == "LEFT" then
+        return -(width + gap), 0
+    end
+
+    return width + gap, 0
+end
+
+local function BuildGroupGeometry(settings, width, height, rows, cols, rowSpacingFallback, columnSpacingFallback,
+                                  defaultGrowthDirection, defaultColumnAnchorPoint)
+    local growthDirection = ResolveGroupGrowthDirection(settings, defaultGrowthDirection or "DOWN")
+    local columnAnchorPoint = ResolveHeaderColumnAnchorPoint(settings, growthDirection, defaultColumnAnchorPoint)
+    local secondaryDirection = DeriveGrowthDirectionFromPoint(columnAnchorPoint,
+        IsHorizontalGrowthDirection(growthDirection) and "DOWN" or "RIGHT")
+    local primarySpacing = IsHorizontalGrowthDirection(growthDirection)
+        and math_abs(tonumber(settings and settings.xOffset) or 0)
+        or ResolveGroupRowSpacing(settings, rowSpacingFallback or 6)
+    local secondarySpacing = math_max(0, tonumber(settings and settings.columnSpacing) or columnSpacingFallback or 6)
+    local primaryDx, primaryDy = GetDirectionalStep(growthDirection, width, height, primarySpacing)
+    local secondaryDx, secondaryDy = GetDirectionalStep(secondaryDirection, width, height, secondarySpacing)
+    local geometry = {
+        rows = math_max(1, tonumber(rows) or 1),
+        cols = math_max(1, tonumber(cols) or 1),
+        growthDirection = growthDirection,
+        columnAnchorPoint = columnAnchorPoint,
+        primaryDx = primaryDx,
+        primaryDy = primaryDy,
+        secondaryDx = secondaryDx,
+        secondaryDy = secondaryDy,
+        minX = 0,
+        maxX = 0,
+        minY = 0,
+        maxY = 0,
+        width = width,
+        height = height,
+    }
+
+    for index = 1, geometry.rows * geometry.cols do
+        local primaryIndex = (index - 1) % geometry.rows
+        local secondaryIndex = math.floor((index - 1) / geometry.rows)
+        local x = (secondaryIndex * geometry.secondaryDx) + (primaryIndex * geometry.primaryDx)
+        local y = (secondaryIndex * geometry.secondaryDy) + (primaryIndex * geometry.primaryDy)
+
+        if x < geometry.minX then geometry.minX = x end
+        if x > geometry.maxX then geometry.maxX = x end
+        if y < geometry.minY then geometry.minY = y end
+        if y > geometry.maxY then geometry.maxY = y end
+    end
+
+    geometry.width = (geometry.maxX - geometry.minX) + width
+    geometry.height = (geometry.maxY - geometry.minY) + height
+
+    return geometry
+end
+
+local function GetGroupGeometryOffset(geometry, index)
+    local primaryIndex = (index - 1) % geometry.rows
+    local secondaryIndex = math.floor((index - 1) / geometry.rows)
+    local x = (secondaryIndex * geometry.secondaryDx) + (primaryIndex * geometry.primaryDx) - geometry.minX
+    local y = (secondaryIndex * geometry.secondaryDy) + (primaryIndex * geometry.primaryDy) - geometry.minY
+    return x, y
+end
+
+local function ResolveGroupCountCaps(groupKey)
+    if groupKey == "party" then
+        return 5, 5
+    elseif groupKey == "tank" then
+        return 8, 4
+    elseif groupKey == "raid" then
+        return 8, 8
+    end
+
+    return 8, 8
+end
+
+local function ResolveGroupHeaderCounts(groupKey, settings, defaultRows, defaultCols)
+    local maxRows, maxCols = ResolveGroupCountCaps(groupKey)
+    local rows = math_max(1, math_min(maxRows, tonumber(settings and settings.unitsPerColumn) or defaultRows or 1))
+    local cols = math_max(1, math_min(maxCols, tonumber(settings and settings.maxColumns) or defaultCols or 1))
+    return rows, cols
 end
 
 local function CopyColor(color, fallback)
@@ -3074,11 +3297,29 @@ function UnitFrames:ApplyHighlightSettings(frame)
     local threatWidth = Clamp(highlights.threatWidth or 3, 1, 16)
     local enemyTargetWidth = Clamp(highlights.enemyTargetWidth or 2, 1, 16)
 
+    local function IsReasonableHighlightSize(targetFrame)
+        if not targetFrame or type(targetFrame.GetWidth) ~= "function" or type(targetFrame.GetHeight) ~= "function" then
+            return false
+        end
+
+        local width = tonumber(targetFrame:GetWidth()) or 0
+        local height = tonumber(targetFrame:GetHeight()) or 0
+        if width <= 0 or height <= 0 then
+            return false
+        end
+
+        return width < 8192 and height < 8192
+    end
+
     local function ApplyBorderFrame(borderFrame, width)
         if not borderFrame then return end
         borderFrame:ClearAllPoints()
         borderFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", -width, width)
         borderFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", width, -width)
+        if not IsReasonableHighlightSize(frame) then
+            borderFrame:Hide()
+            return
+        end
         borderFrame:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = width })
     end
 
@@ -3343,6 +3584,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
     local settings = self:GetGroupSettings(groupKey)
     local layout = self:GetLayoutSettings(groupKey)
     local testMode = self:GetDB().testMode == true
+    local growthDirection = ResolveGroupGrowthDirection(settings, "DOWN")
 
     local enabled = settings.enabled ~= false
     UFDebug(string.format("ApplyHeaderSettings: key=%s enabled=%s layout=(%s,%s,%.0f,%.0f)",
@@ -3359,13 +3601,18 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
         tonumber(layout.y) or 0
     )
 
-    header:SetAttribute("point", settings.point or "TOP")
-    header:SetAttribute("xOffset", tonumber(settings.xOffset) or 0)
-    header:SetAttribute("yOffset", ResolveHeaderYOffset(settings, -6))
-    header:SetAttribute("unitsPerColumn", math_max(1, tonumber(settings.unitsPerColumn) or 5))
-    header:SetAttribute("maxColumns", math_max(1, tonumber(settings.maxColumns) or 1))
+    header:SetAttribute("point", ResolveHeaderPoint(settings, settings.point or "TOP"))
+    header:SetAttribute("xOffset", ResolveHeaderXOffset(settings, growthDirection, 0))
+    header:SetAttribute("yOffset", ResolveHeaderYOffset(settings, -6, growthDirection))
+    local defaultUnitsPerColumn = (groupKey == "tank" and 2) or 5
+    local defaultMaxColumns = (groupKey == "raid" and 4) or 1
+    local unitsPerColumn, maxColumns = ResolveGroupHeaderCounts(groupKey, settings, defaultUnitsPerColumn,
+        defaultMaxColumns)
+    header:SetAttribute("unitsPerColumn", unitsPerColumn)
+    header:SetAttribute("maxColumns", maxColumns)
     header:SetAttribute("columnSpacing", tonumber(settings.columnSpacing) or 8)
-    header:SetAttribute("columnAnchorPoint", settings.columnAnchorPoint or "LEFT")
+    header:SetAttribute("columnAnchorPoint",
+        ResolveHeaderColumnAnchorPoint(settings, growthDirection, settings.columnAnchorPoint or "LEFT"))
 
     if groupKey == "party" then
         header:SetAttribute("showParty", enabled)
@@ -4012,7 +4259,9 @@ function UnitFrames:UpdateMovers()
 
     local function PlaceMover(mover, point, relPoint, x, y, w, h, enabled)
         if not mover then return end
-        mover:SetSize(math_max(20, w), math_max(10, h))
+        local moverWidth = Clamp(w or 20, 20, 4096)
+        local moverHeight = Clamp(h or 10, 10, 4096)
+        mover:SetSize(moverWidth, moverHeight)
         mover:ClearAllPoints()
         mover:SetPoint(point, UIParent, relPoint, x, y)
         mover:SetShown(showMovers and enabled ~= false)
@@ -4132,20 +4381,17 @@ function UnitFrames:UpdateMovers()
             local layout = self:GetLayoutSettings(key)
             local w = Clamp(gs.width or entry.defaultW, 70, 500)
             local rowH = Clamp(gs.height or entry.defaultH, 14, 120)
-            local yOff = ResolveGroupRowSpacing(gs, 6)
-            local rows = math_max(1, tonumber(gs.unitsPerColumn) or entry.defaultRows)
+            local rows, cols = ResolveGroupHeaderCounts(key, gs, entry.defaultRows, 1)
             -- Use the configured maxColumns for ALL group types (not just raid) so
             -- horizontally-arranged party/tank layouts get an accurate mover size.
-            local cols = math_max(1, tonumber(gs.maxColumns) or 1)
-            local colSpacing = (cols > 1) and (tonumber(gs.columnSpacing) or 8) or 0
-            local mw = (w + colSpacing) * cols - colSpacing
-            local mh = rowH * rows + yOff * math_max(0, rows - 1)
-            UFDebug(string.format("UpdateMovers: %s mover  rows=%d cols=%d mw=%d mh=%d enabled=%s",
-                key, rows, cols, mw, mh, tostring(gs.enabled ~= false)))
+            local geometry = BuildGroupGeometry(gs, w, rowH, rows, cols, 6, 8, "DOWN", gs.columnAnchorPoint or "LEFT")
+            UFDebug(string.format("UpdateMovers: %s mover dir=%s rows=%d cols=%d mw=%d mh=%d enabled=%s",
+                key, tostring(geometry.growthDirection), rows, cols, geometry.width, geometry.height,
+                tostring(gs.enabled ~= false)))
             PlaceMover(mover,
                 layout.point or "CENTER", layout.relativePoint or layout.point or "CENTER",
                 tonumber(layout.x) or 0, tonumber(layout.y) or 0,
-                mw, mh, gs.enabled ~= false)
+                geometry.width, geometry.height, gs.enabled ~= false)
         end
     end
 
@@ -4808,14 +5054,15 @@ function UnitFrames:BuildPreviewGroups()
         local layout = self:GetLayoutSettings("party")
         local width = Clamp(settings.width or 180, 80, 500)
         local height = Clamp(settings.height or 36, 14, 120)
-        local rowSpacing = ResolveGroupRowSpacing(settings, 6)
-        local colSpacing = tonumber(settings.columnSpacing) or 6
-        local unitsPerColumn = math_max(1, tonumber(settings.unitsPerColumn) or 5)
-        local maxColumns = math_max(1, tonumber(settings.maxColumns) or 1)
+        local totalMembers = 5
+        local unitsPerColumn, maxColumns = ResolveGroupHeaderCounts("party", settings, 5, 1)
+        unitsPerColumn = math_min(totalMembers, unitsPerColumn)
+        maxColumns = math_max(1, math_min(maxColumns, math.ceil(totalMembers / unitsPerColumn)))
+        local geometry = BuildGroupGeometry(settings, width, height, unitsPerColumn, maxColumns, 6, 6, "DOWN",
+            settings.columnAnchorPoint or "LEFT")
         PositionContainer(party, layout)
-        party:SetSize((width + colSpacing) * maxColumns - colSpacing,
-            height * unitsPerColumn + rowSpacing * math_max(0, unitsPerColumn - 1))
-        for index = 1, 5 do
+        party:SetSize(geometry.width, geometry.height)
+        for index = 1, totalMembers do
             local partyMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
             if not party.rows[index] then
                 party.rows[index] = self:CreatePreviewFrame(party, width, height, "Party " .. index, "partyMember",
@@ -4825,12 +5072,10 @@ function UnitFrames:BuildPreviewGroups()
                     partyMockClass)
             end
             local row = party.rows[index]
-            local column = math.floor((index - 1) / unitsPerColumn)
-            local rowIndex = (index - 1) % unitsPerColumn
+            local x, y = GetGroupGeometryOffset(geometry, index)
             row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", party, "TOPLEFT", column * (width + colSpacing),
-                -(rowIndex * (height + rowSpacing)))
-            row:SetShown(column < maxColumns)
+            row:SetPoint("TOPLEFT", party, "TOPLEFT", x, -y)
+            row:SetShown(index <= (unitsPerColumn * maxColumns))
         end
     end
 
@@ -4840,14 +5085,15 @@ function UnitFrames:BuildPreviewGroups()
         local layout = self:GetLayoutSettings("raid")
         local width = Clamp(settings.width or 120, 70, 300)
         local height = Clamp(settings.height or 30, 14, 80)
-        local rowSpacing = ResolveGroupRowSpacing(settings, 6)
-        local colSpacing = tonumber(settings.columnSpacing) or 6
-        local unitsPerColumn = math_max(1, tonumber(settings.unitsPerColumn) or 5)
-        local maxColumns = math_max(1, tonumber(settings.maxColumns) or 4)
+        local totalMembers = 20
+        local unitsPerColumn, maxColumns = ResolveGroupHeaderCounts("raid", settings, 5, 4)
+        unitsPerColumn = math_min(totalMembers, unitsPerColumn)
+        maxColumns = math_max(1, math_min(maxColumns, math.ceil(totalMembers / unitsPerColumn)))
+        local geometry = BuildGroupGeometry(settings, width, height, unitsPerColumn, maxColumns, 6, 6, "DOWN",
+            settings.columnAnchorPoint or "LEFT")
         PositionContainer(raid, layout)
-        raid:SetSize((width + colSpacing) * maxColumns - colSpacing,
-            height * unitsPerColumn + rowSpacing * math_max(0, unitsPerColumn - 1))
-        for index = 1, 20 do
+        raid:SetSize(geometry.width, geometry.height)
+        for index = 1, totalMembers do
             local raidMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
             if not raid.rows[index] then
                 raid.rows[index] = self:CreatePreviewFrame(raid, width, height, "Raid " .. index, "raidMember",
@@ -4856,12 +5102,10 @@ function UnitFrames:BuildPreviewGroups()
                 self:UpdatePreviewFrame(raid.rows[index], width, height, "Raid " .. index, "raidMember", raidMockClass)
             end
             local row = raid.rows[index]
-            local column = math.floor((index - 1) / unitsPerColumn)
-            local rowIndex = (index - 1) % unitsPerColumn
+            local x, y = GetGroupGeometryOffset(geometry, index)
             row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", raid, "TOPLEFT", column * (width + colSpacing),
-                -(rowIndex * (height + rowSpacing)))
-            row:SetShown(column < maxColumns)
+            row:SetPoint("TOPLEFT", raid, "TOPLEFT", x, -y)
+            row:SetShown(index <= (unitsPerColumn * maxColumns))
         end
     end
 
@@ -4871,11 +5115,16 @@ function UnitFrames:BuildPreviewGroups()
         local layout = self:GetLayoutSettings("tank")
         local width = Clamp(settings.width or 180, 80, 400)
         local height = Clamp(settings.height or 32, 14, 80)
-        local yOffset = tonumber(settings.yOffset) or -6
+        local totalMembers = 2
+        local unitsPerColumn, maxColumns = ResolveGroupHeaderCounts("tank", settings, 2, 1)
+        unitsPerColumn = math_min(totalMembers, unitsPerColumn)
+        maxColumns = math_max(1, math_min(maxColumns, math.ceil(totalMembers / unitsPerColumn)))
+        local geometry = BuildGroupGeometry(settings, width, height, unitsPerColumn, maxColumns, 6, 6, "DOWN",
+            settings.columnAnchorPoint or "LEFT")
         PositionContainer(tank, layout)
-        tank:SetSize(width, (height + math_abs(yOffset)) * 2)
+        tank:SetSize(geometry.width, geometry.height)
         local tankClasses = { "WARRIOR", "PALADIN" }
-        for index = 1, 2 do
+        for index = 1, totalMembers do
             local tankMockClass = tankClasses[index] or "WARRIOR"
             if not tank.rows[index] then
                 tank.rows[index] = self:CreatePreviewFrame(tank, width, height, "Tank " .. index, "tankMember",
@@ -4884,13 +5133,10 @@ function UnitFrames:BuildPreviewGroups()
                 self:UpdatePreviewFrame(tank.rows[index], width, height, "Tank " .. index, "tankMember", tankMockClass)
             end
             local row = tank.rows[index]
+            local x, y = GetGroupGeometryOffset(geometry, index)
             row:ClearAllPoints()
-            if index == 1 then
-                row:SetPoint("TOP", tank, "TOP", 0, 0)
-            else
-                row:SetPoint("TOP", tank.rows[index - 1], "BOTTOM", 0, yOffset)
-            end
-            row:SetShown(true)
+            row:SetPoint("TOPLEFT", tank, "TOPLEFT", x, -y)
+            row:SetShown(index <= (unitsPerColumn * maxColumns))
         end
     end
 end
@@ -5941,6 +6187,17 @@ function UnitFrames:OnEnable()
                 end
             end
             db._migrated.groupRowSpacing = true
+        end
+
+        if not db._migrated.partyTankGrowthDirection then
+            db.groups = db.groups or {}
+            for _, gk in ipairs({ "party", "tank" }) do
+                db.groups[gk] = db.groups[gk] or {}
+                if NormalizeGrowthDirection(db.groups[gk].growthDirection) == nil then
+                    db.groups[gk].growthDirection = ResolveGroupGrowthDirection(db.groups[gk], "DOWN")
+                end
+            end
+            db._migrated.partyTankGrowthDirection = true
         end
 
         if not db._migrated.partyRoleIconFilterDefault then
