@@ -218,6 +218,22 @@ function UnitFrames:ShouldUseAuraTimerFill(durationObject, expirationTime, durat
     return expirationTime and expirationTime > 0 and duration and duration > 0
 end
 
+function UnitFrames:ShouldKeepGenericHelpfulAura(unit, data, timing, onlyMine)
+    if onlyMine ~= true then
+        return true
+    end
+
+    if not data or not timing then
+        return false
+    end
+
+    if (tonumber(timing.applications) or 0) > 1 then
+        return true
+    end
+
+    return self:ShouldUseAuraTimerFill(timing.durationObject, timing.expirationTime, timing.duration)
+end
+
 function UnitFrames:UpdateAuraRemainingText(fs, durationObject, expirationTime, duration)
     if not fs then return false end
 
@@ -2496,7 +2512,9 @@ local function CollectAuraData(list, unit, auraFilter, maxCount, onlyMine, filte
             d.durationObject = timing.durationObject
             d.isPlayerAura   = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
             d.isHarmfulAura  = auraFilter:find("HARMFUL") ~= nil
-            if (not onlyMine or d.isPlayerAura) and AuraMatchesDisplayMode(filterMode, d) then
+            if (not onlyMine or d.isPlayerAura)
+                and AuraMatchesDisplayMode(filterMode, d)
+                and (auraFilter ~= "HELPFUL" or UnitFrames:ShouldKeepGenericHelpfulAura(unit, d, timing, onlyMine)) then
                 list[#list + 1] = d
                 if #list >= maxCount then return end
             end
@@ -2852,7 +2870,20 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
     frame.Auras.twichFilterMode = filter
     frame.Auras.FilterAura      = function(element, _, data)
         if element.onlyShowPlayer and data.isPlayerAura ~= true then return false end
-        return AuraMatchesDisplayMode(element.twichFilterMode, data)
+        if not AuraMatchesDisplayMode(element.twichFilterMode, data) then
+            return false
+        end
+
+        if data and data.isHarmfulAura ~= true and element.onlyShowPlayer then
+            local owner = element.__owner or element:GetParent()
+            local unit = ResolveFrameUnit(owner)
+            local timing = UnitFrames:ResolveAuraTiming(unit, data, "icons")
+            if not UnitFrames:ShouldKeepGenericHelpfulAura(unit, data, timing, true) then
+                return false
+            end
+        end
+
+        return true
     end
 
     frame.Auras._forceHide      = (not aurasEnabled) or aura.barMode == true

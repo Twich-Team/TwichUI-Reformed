@@ -169,32 +169,6 @@ local function ScanBySpellIds(unit, lookup, onlyMine)
     return result
 end
 
-local function ShouldKeepGenericHelpfulAura(unit, data, timing, onlyMine)
-    if onlyMine ~= true then
-        return true
-    end
-
-    local isPlayerUnit = false
-    if unit and _G.UnitIsUnit then
-        local okIsPlayer, result = pcall(_G.UnitIsUnit, unit, "player")
-        isPlayerUnit = okIsPlayer and result == true
-    end
-
-    if not isPlayerUnit then
-        return true
-    end
-
-    if not data or not timing then
-        return false
-    end
-
-    if (tonumber(timing.applications) or 0) > 1 then
-        return true
-    end
-
-    return UnitFrames:ShouldUseAuraTimerFill(timing.durationObject, timing.expirationTime, timing.duration)
-end
-
 -- Scan unit auras matching a generic filter (HELPFUL / HARMFUL / DISPELLABLE / etc).
 local function ScanByFilter(unit, source, onlyMine)
     if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then return {} end
@@ -215,7 +189,7 @@ local function ScanByFilter(unit, source, onlyMine)
                 local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, f, data)
                 if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
                     local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
-                    if source ~= "HELPFUL" or ShouldKeepGenericHelpfulAura(unit, data, timing, onlyMine) then
+                    if source ~= "HELPFUL" or UnitFrames:ShouldKeepGenericHelpfulAura(unit, data, timing, onlyMine) then
                         result[#result + 1] = {
                             icon           = data.icon,
                             duration       = timing.duration,
