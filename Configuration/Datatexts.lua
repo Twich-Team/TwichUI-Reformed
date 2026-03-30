@@ -1038,7 +1038,7 @@ local function BuildFriendsConfiguration()
                 countWoWOnly = {
                     type = "toggle",
                     name = "Count WoW Clients Only",
-                    desc = "Only count friends who are currently online in World of Warcraft in the datatext total.",
+                    desc = "Only count friends whose active client is currently World of Warcraft in the datatext total.",
                     order = 1,
                     handler = Options,
                     get = "GetFriendsCountWoWOnly",

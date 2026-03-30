@@ -673,6 +673,8 @@ function UI:_RenderStep(n)
     local stepDef = STEP_DEFS[n]
     local stepId = stepDef and stepDef.id or nil
 
+    SetupWizardModule:SetLayoutPreviewUnitFramesEnabled(stepId == "layout")
+
     -- Build the step content on first visit, then just refresh dynamic pieces
     local sf = self.stepFrames[n]
     if not self.stepBuilt[n] then
@@ -838,6 +840,7 @@ local function ResolvePresetSwatchColor(preset, key)
 end
 
 function UI:_Close()
+    SetupWizardModule:SetLayoutPreviewUnitFramesEnabled(false)
     if self.frame then self.frame:Hide() end
     if self.backdrop then self.backdrop:Hide() end
 end
@@ -1131,6 +1134,12 @@ function UI:_BuildLayoutContent(sf)
         C.muted[3])
     sub:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -5)
 
+    local previewNote = NewText(sf,
+        "Unit frame test mode is active on this step so party and raid placements are visible while you compare layouts.",
+        11, C.gold[1], C.gold[2], C.gold[3])
+    previewNote:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -7)
+    previewNote:SetWidth(W - PAD * 2 - 2)
+
     local layouts       = SetupWizardModule:GetAvailableLayouts()
     local availW        = W - 2 - PAD * 2
     local cols          = math.min(2, #layouts)
@@ -1146,7 +1155,7 @@ function UI:_BuildLayoutContent(sf)
         card:SetSize(cardW, CARD_H_LYT)
         card:SetPoint("TOPLEFT", sf, "TOPLEFT",
             x + col * (cardW + CARD_GAP),
-            y - 54 - row * (CARD_H_LYT + CARD_GAP))
+            y - 82 - row * (CARD_H_LYT + CARD_GAP))
 
         local nameText = NewText(card, layout.name, 15, C.text[1], C.text[2], C.text[3])
         nameText:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)

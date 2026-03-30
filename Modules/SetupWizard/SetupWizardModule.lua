@@ -24,6 +24,8 @@ local ReloadUI              = _G.ReloadUI
 local CopyTable             = _G.CopyTable
 local SetCVar               = _G.SetCVar
 local UnitFullName          = _G.UnitFullName
+local math_abs              = _G.math.abs
+local math_min              = _G.math.min
 local wipe                  = _G.wipe
 
 --- Increment to re-show the wizard for all users (e.g. when a new setup step is added).
@@ -182,6 +184,143 @@ function SetupWizardModule:RegisterLayoutFrame(key, frame, persistFn)
     self.layoutFrames[key] = { frame = frame, persist = persistFn }
 end
 
+local function CloneValue(value)
+    if type(value) ~= "table" then
+        return value
+    end
+    if type(CopyTable) == "function" then
+        return CopyTable(value)
+    end
+
+    local copy = {}
+    for key, innerValue in pairs(value) do
+        copy[key] = CloneValue(innerValue)
+    end
+    return copy
+end
+
+local function ScaleNumericValue(value, scale)
+    local numeric = tonumber(value)
+    if not numeric or not scale or math_abs(scale - 1) < 0.0001 then
+        return value
+    end
+    return numeric * scale
+end
+
+local function ScalePixelConfig(config, xKeys, yKeys, uniformKeys, scales)
+    if type(config) ~= "table" then
+        return
+    end
+
+    for _, key in ipairs(xKeys or {}) do
+        if config[key] ~= nil then
+            config[key] = ScaleNumericValue(config[key], scales.width)
+        end
+    end
+
+    for _, key in ipairs(yKeys or {}) do
+        if config[key] ~= nil then
+            config[key] = ScaleNumericValue(config[key], scales.height)
+        end
+    end
+
+    for _, key in ipairs(uniformKeys or {}) do
+        if config[key] ~= nil then
+            config[key] = ScaleNumericValue(config[key], scales.uniform)
+        end
+    end
+end
+
+function SetupWizardModule:GetActiveLayoutScales()
+    local layoutData = self._activeLayoutData
+    local referenceResolution = layoutData and layoutData.referenceResolution
+    local refW = type(referenceResolution) == "table" and tonumber(referenceResolution.w) or nil
+    local refH = type(referenceResolution) == "table" and tonumber(referenceResolution.h) or nil
+    if not refW or not refH or refW <= 0 or refH <= 0 then
+        return nil
+    end
+
+    local sw, sh = GetScreenWidth(), GetScreenHeight()
+    return {
+        width = sw / refW,
+        height = sh / refH,
+        uniform = math_min(sw / refW, sh / refH),
+    }
+end
+
+function SetupWizardModule:PrepareConfigSnapshotSection(sectionKey, sectionVal)
+    if type(sectionVal) ~= "table" then
+        return sectionVal
+    end
+
+    local prepared = CloneValue(sectionVal)
+    if sectionKey ~= "unitFrames" then
+        return prepared
+    end
+
+    local scales = self:GetActiveLayoutScales()
+    if not scales then
+        return prepared
+    end
+
+    local layout = prepared.layout
+    if type(layout) == "table" then
+        for _, layoutEntry in pairs(layout) do
+            ScalePixelConfig(layoutEntry, { "x" }, { "y" }, nil, scales)
+        end
+    end
+
+    local units = prepared.units
+    if type(units) == "table" then
+        for _, unitConfig in pairs(units) do
+            if type(unitConfig) == "table" then
+                ScalePixelConfig(unitConfig,
+                    { "powerWidth" },
+                    { "powerHeight", "powerOffsetY" },
+                    { "width", "height" },
+                    scales)
+                ScalePixelConfig(unitConfig,
+                    { "powerOffsetX" },
+                    { "powerOffsetY" },
+                    nil,
+                    scales)
+                ScalePixelConfig(unitConfig.classBar, { "xOffset" }, { "yOffset" }, { "width", "height", "spacing" },
+                    scales)
+                ScalePixelConfig(unitConfig.combatIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
+                ScalePixelConfig(unitConfig.restingIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
+            end
+        end
+    end
+
+    local groups = prepared.groups
+    if type(groups) == "table" then
+        for _, groupConfig in pairs(groups) do
+            if type(groupConfig) == "table" then
+                ScalePixelConfig(groupConfig,
+                    { "xOffset" },
+                    { "yOffset" },
+                    { "width", "height", "rowSpacing", "columnSpacing" },
+                    scales)
+                ScalePixelConfig(groupConfig.roleIcon, { "insetX" }, { "insetY" }, { "size" }, scales)
+                ScalePixelConfig(groupConfig.combatIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
+                ScalePixelConfig(groupConfig.restingIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
+            end
+        end
+    end
+
+    ScalePixelConfig(prepared.castbar, nil, nil, { "width", "height", "iconSize" }, scales)
+
+    local castbars = prepared.castbars
+    if type(castbars) == "table" then
+        for _, castbarConfig in pairs(castbars) do
+            ScalePixelConfig(castbarConfig, { "xOffset" }, { "yOffset" }, { "width", "height", "iconSize" },
+                scales)
+        end
+    end
+
+    return prepared
+end
+
 --- Restores all configuration sections from a previously captured DB snapshot.
 --- Each top-level key in `snapshot` replaces the corresponding sub-section in
 --- the profile configuration DB. "setupWizard" is always skipped so wizard
@@ -196,7 +335,7 @@ function SetupWizardModule:RestoreConfigSnapshot(snapshot)
     local applyOptions = self._layoutApplyOptions
     for sectionKey, sectionVal in pairs(snapshot) do
         if sectionKey ~= "setupWizard" and not (sectionKey == "chatEnhancement" and applyOptions and applyOptions.applyChat == false) then
-            config[sectionKey] = sectionVal
+            config[sectionKey] = self:PrepareConfigSnapshotSection(sectionKey, sectionVal)
         end
     end
     T:SendMessage("TWICH_CONFIG_RESTORED")
@@ -273,7 +412,11 @@ function SetupWizardModule:ApplyLayoutData(layoutData)
     for key, fd in pairs(layoutData.frames) do
         local entry = self.layoutFrames[key]
         local frame = entry and entry.frame
-        if frame and frame.SetPoint then
+        local unitFrameKey = type(key) == "string" and key:match("^UF_(.+)$") or nil
+        local skipZeroCapture = unitFrameKey == "party" or unitFrameKey == "raid" or unitFrameKey == "tank"
+        local hasCapturedPosition = (tonumber(fd.x) or 0) ~= 0 or (tonumber(fd.y) or 0) ~= 0 or
+            (tonumber(fd.w) or 0) > 0 or (tonumber(fd.h) or 0) > 0
+        if frame and frame.SetPoint and not (skipZeroCapture and not hasCapturedPosition) then
             local absX = (fd.x or 0) * sw
             local absY = (fd.y or 0) * sh
             local absW = fd.w and fd.w * sw
@@ -367,6 +510,7 @@ function SetupWizardModule:ApplyLayout(layoutId, options)
     local layout = self:GetLayout(layoutId)
     if not layout then return end
     self._layoutApplyOptions = options
+    self._activeLayoutData = layout
     -- 1. Apply the config snapshot: replaces chatEnhancement, datatext, etc.
     if type(layout.apply) == "function" then
         layout.apply()
@@ -381,6 +525,76 @@ function SetupWizardModule:ApplyLayout(layoutId, options)
     if datatextModule and type(datatextModule.RefreshStandalonePanels) == "function" then
         pcall(datatextModule.RefreshStandalonePanels, datatextModule)
     end
+
+    local unitFramesModule = T:GetModule("UnitFrames", true)
+    if unitFramesModule and type(unitFramesModule.RefreshAllFrames) == "function" then
+        pcall(unitFramesModule.RefreshAllFrames, unitFramesModule)
+    end
+
+    self._activeLayoutData = nil
+end
+
+function SetupWizardModule:SetLayoutPreviewUnitFramesEnabled(enabled)
+    local unitFramesModule = T:GetModule("UnitFrames", true)
+    if not unitFramesModule then
+        self._layoutPreviewUnitFramesState = nil
+        return
+    end
+
+    if enabled == true then
+        if self._layoutPreviewUnitFramesState then
+            if type(unitFramesModule.SetTestMode) == "function" then
+                pcall(unitFramesModule.SetTestMode, unitFramesModule, true)
+            end
+            return
+        end
+
+        local wasEnabled = unitFramesModule.IsEnabled and unitFramesModule:IsEnabled() or false
+        local unitFrameDB = type(unitFramesModule.GetDB) == "function" and unitFramesModule:GetDB() or nil
+
+        self._layoutPreviewUnitFramesState = {
+            wasEnabled = wasEnabled,
+            testMode = unitFrameDB and unitFrameDB.testMode == true or false,
+        }
+
+        if not wasEnabled and type(unitFramesModule.Enable) == "function" then
+            pcall(unitFramesModule.Enable, unitFramesModule)
+        end
+
+        if type(unitFramesModule.SetTestMode) == "function" then
+            pcall(unitFramesModule.SetTestMode, unitFramesModule, true)
+        elseif unitFrameDB then
+            unitFrameDB.testMode = true
+            if type(unitFramesModule.RefreshAllFrames) == "function" then
+                pcall(unitFramesModule.RefreshAllFrames, unitFramesModule)
+            end
+        end
+        return
+    end
+
+    local previousState = self._layoutPreviewUnitFramesState
+    if not previousState then
+        return
+    end
+
+    if type(unitFramesModule.SetTestMode) == "function" then
+        pcall(unitFramesModule.SetTestMode, unitFramesModule, previousState.testMode == true)
+    else
+        local unitFrameDB = type(unitFramesModule.GetDB) == "function" and unitFramesModule:GetDB() or nil
+        if unitFrameDB then
+            unitFrameDB.testMode = previousState.testMode == true
+            if type(unitFramesModule.RefreshAllFrames) == "function" then
+                pcall(unitFramesModule.RefreshAllFrames, unitFramesModule)
+            end
+        end
+    end
+
+    if not previousState.wasEnabled and unitFramesModule.IsEnabled and unitFramesModule:IsEnabled() and
+        type(unitFramesModule.Disable) == "function" then
+        pcall(unitFramesModule.Disable, unitFramesModule)
+    end
+
+    self._layoutPreviewUnitFramesState = nil
 end
 
 --- Applies a theme preset to ThemeModule and broadcasts TWICH_THEME_CHANGED.

@@ -33,6 +33,7 @@ local unpack = table.unpack or _G.unpack
 local AuraUtil = _G.AuraUtil
 local C_ChallengeMode = _G.C_ChallengeMode
 local C_Container = _G.C_Container
+local C_AddOns = _G.C_AddOns
 local C_MythicPlus = _G.C_MythicPlus
 local C_PartyInfo = _G.C_PartyInfo
 local C_NamePlate = _G.C_NamePlate
@@ -55,6 +56,8 @@ local GetWorldElapsedTime = _G.GetWorldElapsedTime
 local InCombatLockdown = _G.InCombatLockdown
 local IsInGroup = _G.IsInGroup
 local IsInInstance = _G.IsInInstance
+local IsAddOnLoaded = _G.IsAddOnLoaded
+local LoadAddOn = _G.LoadAddOn or _G.LoadAddon
 local NotifyInspect = _G.NotifyInspect
 local PlaySoundFile = _G.PlaySoundFile
 local RunMacroText = _G.RunMacroText
@@ -1225,6 +1228,13 @@ local function SortCheckpointList(checkpoints)
 end
 
 local function GetEncounterJournalFunctions()
+    local isLoaded = (type(C_AddOns) == "table" and type(C_AddOns.IsAddOnLoaded) == "function" and
+            C_AddOns.IsAddOnLoaded("Blizzard_EncounterJournal")) or
+        (type(IsAddOnLoaded) == "function" and IsAddOnLoaded("Blizzard_EncounterJournal"))
+    if not isLoaded and type(LoadAddOn) == "function" then
+        pcall(LoadAddOn, "Blizzard_EncounterJournal")
+    end
+
     if type(_G.EJ_SelectTier) ~= "function" or type(_G.EJ_GetCurrentTier) ~= "function" or
         type(_G.EJ_GetNumTiers) ~= "function" or type(_G.EJ_GetInstanceByIndex) ~= "function" or
         type(_G.EJ_SelectInstance) ~= "function" or type(_G.EJ_GetEncounterInfoByIndex) ~= "function" then
@@ -1239,6 +1249,20 @@ local function GetEncounterJournalFunctions()
         selectInstance = _G.EJ_SelectInstance,
         getEncounterInfoByIndex = _G.EJ_GetEncounterInfoByIndex,
     }
+end
+
+local function SafeEncounterJournalSelectTier(ej, tierIndex)
+    if not ej or type(ej.selectTier) ~= "function" then
+        return false
+    end
+
+    local numericTier = tonumber(tierIndex)
+    if not numericTier or numericTier <= 0 then
+        return false
+    end
+
+    local ok = pcall(ej.selectTier, numericTier)
+    return ok == true
 end
 
 local function NormalizeDungeonSearchKey(name)
@@ -1262,7 +1286,9 @@ local function FindBestEncounterJournalInstance(mapName)
     local exactMatch, partialMatch
     local previousTier = ej.getCurrentTier()
     for tierIndex = 1, ej.getNumTiers() do
-        ej.selectTier(tierIndex)
+        if not SafeEncounterJournalSelectTier(ej, tierIndex) then
+            break
+        end
         local instanceIndex = 1
         while true do
             local instanceID, instanceName = ej.getInstanceByIndex(instanceIndex, true)
@@ -1287,7 +1313,7 @@ local function FindBestEncounterJournalInstance(mapName)
     end
 
     if previousTier then
-        ej.selectTier(previousTier)
+        SafeEncounterJournalSelectTier(ej, previousTier)
     end
 
     return exactMatch or partialMatch
@@ -1349,20 +1375,23 @@ function MPT:GetDefaultDungeonCheckpoints(mapID)
     local ej = GetEncounterJournalFunctions()
     if instanceInfo and ej then
         local previousTier = ej.getCurrentTier()
-        ej.selectTier(instanceInfo.tier)
-        ej.selectInstance(instanceInfo.id)
-        local encounterIndex = 1
-        while true do
-            local name = ej.getEncounterInfoByIndex(encounterIndex)
-            if not name then
-                break
-            end
+        if SafeEncounterJournalSelectTier(ej, instanceInfo.tier) then
+            local selectedOk = pcall(ej.selectInstance, instanceInfo.id)
+            if selectedOk then
+                local encounterIndex = 1
+                while true do
+                    local name = ej.getEncounterInfoByIndex(encounterIndex)
+                    if not name then
+                        break
+                    end
 
-            bossNames[#bossNames + 1] = NormalizeCheckpointName(name, format("Boss %d", encounterIndex))
-            encounterIndex = encounterIndex + 1
+                    bossNames[#bossNames + 1] = NormalizeCheckpointName(name, format("Boss %d", encounterIndex))
+                    encounterIndex = encounterIndex + 1
+                end
+            end
         end
         if previousTier then
-            ej.selectTier(previousTier)
+            SafeEncounterJournalSelectTier(ej, previousTier)
         end
     end
 

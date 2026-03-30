@@ -66,6 +66,7 @@ local STARTER_BUILD_CONFIG_ID = _G.Constants and _G.Constants.TraitConsts and
 local UPDATE_FAST = 1
 local UPDATE_SLOW = 5
 local FRIENDS_REFRESH_REQUEST_INTERVAL = 15
+local BNET_CLIENT_WOW = _G.BNET_CLIENT_WOW or "WoW"
 local SPEC_ICON_FORMAT = "|T%s:%d:%d:0:0:64:64:4:60:4:60|t"
 local SYSTEM_MEMORY_LIVE_INTERVAL = 3
 local SYSTEM_MEMORY_FRAME_WIDTH = 500
@@ -1205,14 +1206,24 @@ local function GetOnlineFriendSummary()
         wowOnline = wowTotal
     end
 
-    local bnetTotal, bnetOnline = 0, 0
-    if type(_G.BNGetNumFriends) == "function" then
-        bnetTotal, bnetOnline = _G.BNGetNumFriends()
-        bnetTotal = bnetTotal or 0
-        bnetOnline = bnetOnline or 0
+    local bnetTotal, bnetOnline, bnetWowOnline = 0, 0, 0
+    if not (C_BattleNet and type(C_BattleNet.GetFriendAccountInfo) == "function" and type(_G.BNGetNumFriends) == "function") then
+        return wowOnline, wowTotal, bnetOnline, bnetTotal, bnetWowOnline
     end
 
-    return wowOnline, wowTotal, bnetOnline, bnetTotal
+    bnetTotal, bnetOnline = _G.BNGetNumFriends()
+    bnetTotal = bnetTotal or 0
+    bnetOnline = bnetOnline or 0
+
+    for index = 1, bnetTotal do
+        local accountInfo = C_BattleNet.GetFriendAccountInfo(index)
+        local gameInfo = accountInfo and accountInfo.gameAccountInfo or nil
+        if gameInfo and gameInfo.isOnline and gameInfo.clientProgram == BNET_CLIENT_WOW then
+            bnetWowOnline = bnetWowOnline + 1
+        end
+    end
+
+    return wowOnline, wowTotal, bnetOnline, bnetTotal, bnetWowOnline
 end
 
 local function RefreshFriendsDatatext()
@@ -1251,10 +1262,10 @@ local function RequestUpdatedWowFriends(scheduleRefresh)
 end
 
 local function SetFriendsPanelText(panel)
-    local wowOnline, _, bnetOnline = GetOnlineFriendSummary()
+    local wowOnline, _, bnetOnline, _, bnetWowOnline = GetOnlineFriendSummary()
     local friendsDB = GetDatatextDB("friends")
     local countWoWOnly = friendsDB.countWoWOnly == true
-    local totalOnline = wowOnline + (countWoWOnly and 0 or bnetOnline)
+    local totalOnline = wowOnline + (countWoWOnly and bnetWowOnline or bnetOnline)
     local text = totalOnline > 0 and format("Friends %d", totalOnline) or "Friends"
     if totalOnline > 0 then
         SetPanelText(panel, text, "friends", 0.4, 0.86, 0.52, 1)

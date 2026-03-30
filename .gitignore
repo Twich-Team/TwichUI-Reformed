@@ -13,3 +13,4 @@
 Libraries/*
 !Libraries/!load.xml
 AddOnReferences/
+!Libraries/oUF
