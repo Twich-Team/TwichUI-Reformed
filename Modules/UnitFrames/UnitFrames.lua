@@ -1038,9 +1038,8 @@ local function ResolveBossGeometry(settings, width, height, frameCount)
     return BuildGroupGeometry(settings, width, height, rows, cols, 8, 8, "DOWN", "LEFT")
 end
 
-local function GetBossFrameOffset(geometry, index, activeCount)
-    local count = math_max(1, math_min(activeCount or MAX_BOSS_FRAMES, geometry.rows * geometry.cols))
-    local resolvedIndex = math_max(1, math_min(index, count))
+local function GetBossFrameOffset(geometry, index)
+    local resolvedIndex = math_max(1, math_min(index, geometry.rows * geometry.cols))
     return GetGroupGeometryOffset(geometry, resolvedIndex)
 end
 
@@ -4194,7 +4193,7 @@ function UnitFrames:ApplyBossLayout()
     local width = Clamp(bossUnit.width or 220, 120, 500)
     local height = Clamp(bossUnit.height or 36, 16, 120)
     local activeCount = CountActiveBossUnits()
-    local geometry = ResolveBossGeometry(settings, width, height, activeCount > 0 and activeCount or MAX_BOSS_FRAMES)
+    local geometry = ResolveBossGeometry(settings, width, height, activeCount > 0 and activeCount or 1)
 
     self.bossAnchor:ClearAllPoints()
     self.bossAnchor:SetPoint(
@@ -4209,15 +4208,18 @@ function UnitFrames:ApplyBossLayout()
     local showBossFrames = settings.enabled ~= false and self:GetDB().testMode ~= true
     self.bossAnchor:SetScale(Clamp(self:GetDB().scale or 1, 0.6, 1.6))
     self.bossAnchor:SetAlpha(Clamp(self:GetDB().frameAlpha or 1, 0.15, 1))
-    self.bossAnchor:SetShown(showBossFrames)
+    self.bossAnchor:SetShown(showBossFrames and activeCount > 0)
 
     for index = 1, MAX_BOSS_FRAMES do
         local frame = self.frames["boss" .. index]
         if frame then
-            frame:ClearAllPoints()
-            local x, y = GetBossFrameOffset(geometry, index, activeCount)
-            frame:SetPoint("TOPLEFT", self.bossAnchor, "TOPLEFT", x, -y)
-            frame:SetShown(showBossFrames)
+            local shouldShow = showBossFrames and index <= activeCount
+            if shouldShow then
+                frame:ClearAllPoints()
+                local x, y = GetBossFrameOffset(geometry, index)
+                frame:SetPoint("TOPLEFT", self.bossAnchor, "TOPLEFT", x, -y)
+            end
+            frame:SetShown(shouldShow)
         end
     end
 end
@@ -5523,7 +5525,7 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
             end
 
             preview[key]:ClearAllPoints()
-            local x, y = GetBossFrameOffset(geometry, index, MAX_BOSS_FRAMES)
+            local x, y = GetBossFrameOffset(geometry, index)
             preview[key]:SetPoint("TOPLEFT", preview.bossAnchor, "TOPLEFT", x, -y)
             preview[key]:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
             preview[key]:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
