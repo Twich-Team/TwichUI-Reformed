@@ -4330,11 +4330,47 @@ function UnitFrames:ApplyTestModeToSingles()
     ApplyHiddenParent(self.frames and self.frames.castbar)
 end
 
+function UnitFrames:ApplyBlizzardPlayerCastbarVisibility()
+    local blizzardCastbar = _G.PlayerCastingBarFrame or _G.CastingBarFrame
+    if not blizzardCastbar then
+        return
+    end
+
+    local db = self.GetDB and self:GetDB() or nil
+    local isEnabled = not db or db.enabled ~= false
+
+    if isEnabled then
+        if blizzardCastbar.IgnoreFramePositionManager ~= true then
+            blizzardCastbar.IgnoreFramePositionManager = true
+        end
+        if not blizzardCastbar._twichUIOriginalParent then
+            blizzardCastbar._twichUIOriginalParent = blizzardCastbar:GetParent() or UIParent
+        end
+        if not blizzardCastbar._twichUIOnShowHooked then
+            blizzardCastbar:HookScript("OnShow", function(frame)
+                if frame._twichUISuppressCastbar == true then
+                    frame:Hide()
+                end
+            end)
+            blizzardCastbar._twichUIOnShowHooked = true
+        end
+        blizzardCastbar._twichUISuppressCastbar = true
+        if blizzardCastbar.UnregisterAllEvents then
+            blizzardCastbar:UnregisterAllEvents()
+        end
+        blizzardCastbar:Hide()
+    else
+        blizzardCastbar._twichUISuppressCastbar = nil
+    end
+end
+
 function UnitFrames:RefreshAllFrames()
     if InCombatLockdown() then
         self._queuedRefresh = true
         return
     end
+
+    self:ApplyBlizzardPlayerCastbarVisibility()
 
     for unitKey, frame in pairs(self.frames) do
         if unitKey ~= "castbar" then
@@ -5287,6 +5323,8 @@ function UnitFrames:OnEnable()
         return
     end
 
+    self:ApplyBlizzardPlayerCastbarVisibility()
+
     self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
     self:RegisterMessage("TWICH_CONFIG_RESTORED", "OnConfigRestored")
 
@@ -5408,6 +5446,8 @@ function UnitFrames:OnDisable()
             mover:Hide()
         end
     end
+
+    self:ApplyBlizzardPlayerCastbarVisibility()
 
     self:StopCastbar()
 end
