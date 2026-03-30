@@ -148,7 +148,8 @@ function UnitFrames:ResolveAuraTiming(unit, auraData, contextKey)
                     unit,
                     auraData,
                     "duration-object-fallback",
-                    string.format("numericDuration=%s numericExpiration=%s", tostring(timing.duration), tostring(timing.expirationTime))
+                    string.format("numericDuration=%s numericExpiration=%s", tostring(timing.duration),
+                        tostring(timing.expirationTime))
                 )
             end
         elseif (timing.duration <= 0 or timing.expirationTime <= 0) and auraData.duration ~= nil then
@@ -1561,38 +1562,38 @@ function UnitFrames:GetAuraConfigFor(unitKey)
     local scoped = db.auras.scopes[scope]
 
     local merged = {
-        enabled       = scoped.enabled,
-        maxIcons      = scoped.maxIcons,
-        iconSize      = scoped.iconSize,
-        spacing       = scoped.spacing,
-        yOffset       = scoped.yOffset,
-        filter        = scoped.filter,
-        onlyMine      = scoped.onlyMine,
-        barMode       = scoped.barMode,
-        barHeight     = scoped.barHeight,
-        barTexture    = scoped.barTexture,
-        barFontSize   = scoped.barFontSize,
-        barFontName   = scoped.barFontName,
-        showTime      = scoped.showTime,
-        showStacks    = scoped.showStacks,
-        barColor      = scoped.barColor,
-        barBackground = scoped.barBackground,
-        barBorderColor = scoped.barBorderColor,
-        barTextColor   = scoped.barTextColor,
-        buffBarTexture = scoped.buffBarTexture,
-        buffBarFontSize = scoped.buffBarFontSize,
-        buffBarFontName = scoped.buffBarFontName,
-        buffBarColor = scoped.buffBarColor,
-        buffBarBackground = scoped.buffBarBackground,
-        buffBarBorderColor = scoped.buffBarBorderColor,
-        buffBarTextColor = scoped.buffBarTextColor,
-        debuffBarTexture = scoped.debuffBarTexture,
-        debuffBarFontSize = scoped.debuffBarFontSize,
-        debuffBarFontName = scoped.debuffBarFontName,
-        debuffBarColor = scoped.debuffBarColor,
-        debuffBarBackground = scoped.debuffBarBackground,
+        enabled              = scoped.enabled,
+        maxIcons             = scoped.maxIcons,
+        iconSize             = scoped.iconSize,
+        spacing              = scoped.spacing,
+        yOffset              = scoped.yOffset,
+        filter               = scoped.filter,
+        onlyMine             = scoped.onlyMine,
+        barMode              = scoped.barMode,
+        barHeight            = scoped.barHeight,
+        barTexture           = scoped.barTexture,
+        barFontSize          = scoped.barFontSize,
+        barFontName          = scoped.barFontName,
+        showTime             = scoped.showTime,
+        showStacks           = scoped.showStacks,
+        barColor             = scoped.barColor,
+        barBackground        = scoped.barBackground,
+        barBorderColor       = scoped.barBorderColor,
+        barTextColor         = scoped.barTextColor,
+        buffBarTexture       = scoped.buffBarTexture,
+        buffBarFontSize      = scoped.buffBarFontSize,
+        buffBarFontName      = scoped.buffBarFontName,
+        buffBarColor         = scoped.buffBarColor,
+        buffBarBackground    = scoped.buffBarBackground,
+        buffBarBorderColor   = scoped.buffBarBorderColor,
+        buffBarTextColor     = scoped.buffBarTextColor,
+        debuffBarTexture     = scoped.debuffBarTexture,
+        debuffBarFontSize    = scoped.debuffBarFontSize,
+        debuffBarFontName    = scoped.debuffBarFontName,
+        debuffBarColor       = scoped.debuffBarColor,
+        debuffBarBackground  = scoped.debuffBarBackground,
         debuffBarBorderColor = scoped.debuffBarBorderColor,
-        debuffBarTextColor = scoped.debuffBarTextColor,
+        debuffBarTextColor   = scoped.debuffBarTextColor,
     }
     if merged.enabled == nil then merged.enabled = true end
     if merged.maxIcons == nil then merged.maxIcons = 8 end
@@ -1663,7 +1664,8 @@ function UnitFrames:GetAuraBarAppearance(aura, data, palette, text)
     local texture = (textureName and textureName ~= "") and GetLSMTexture(textureName) or GetThemeTexture()
 
     local fillColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarColor", "barColor"), nil)
-    local backgroundColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarBackground", "barBackground"), nil)
+    local backgroundColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarBackground", "barBackground"),
+        nil)
     local borderColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarBorderColor", "barBorderColor"), nil)
     local textColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarTextColor", "barTextColor"), nil)
     local fontSize = GetAuraBarStyleValue(aura, isHarmfulAura, "BarFontSize", "barFontSize")
@@ -1826,7 +1828,8 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
                 local timerDirection = StatusBarTimerDirection and StatusBarTimerDirection.RemainingTime or nil
                 local okTimer = false
                 if timerDirection ~= nil and StatusBarInterpolation and StatusBarInterpolation.Immediate then
-                    okTimer = pcall(bar.SetTimerDuration, bar, data.durationObject, StatusBarInterpolation.Immediate, timerDirection)
+                    okTimer = pcall(bar.SetTimerDuration, bar, data.durationObject, StatusBarInterpolation.Immediate,
+                        timerDirection)
                 else
                     okTimer = pcall(bar.SetTimerDuration, bar, data.durationObject)
                 end
@@ -1922,7 +1925,8 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             end
             bar:Show(); shown = shown + 1
         else
-            bar._duration = nil; bar._expiry = nil; bar._durationObject = nil; bar._usesDurationObjectFill = false; bar._hasTimer = nil; bar:Hide()
+            bar._duration = nil; bar._expiry = nil; bar._durationObject = nil; bar._usesDurationObjectFill = false; bar._hasTimer = nil; bar
+                :Hide()
         end
     end
     container:SetWidth(frameWidth)
@@ -2089,7 +2093,7 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
         return AuraMatchesDisplayMode(element.twichFilterMode, data)
     end
 
-    frame.Auras._forceHide = (not aurasEnabled) or aura.barMode == true
+    frame.Auras._forceHide      = (not aurasEnabled) or aura.barMode == true
 
     if aura.barMode == true then
         -- Bar mode: hide icon grid, show bar container
@@ -4682,12 +4686,13 @@ function UnitFrames:BuildDebugReport()
                     local memberKey = (k == "party" and "partyMember") or (k == "raid" and "raidMember") or
                         (k == "tank" and "tankMember") or nil
                     local roleState = memberKey and GetDebugRoleIconState(c, memberKey) or nil
-                    tinsert(lines, string.format("    child%d: unit=%-8s %dx%d shown=%s roleIcon:%s/%s role=%s filter=%s",
-                        i, cu, cw, ch, tostring(cs),
-                        roleState and tostring(roleState.enabled) or "n/a",
-                        roleState and (roleState.shown and "shown" or "hidden") or "n/a",
-                        roleState and roleState.role or "n/a",
-                        roleState and roleState.filter or "n/a"))
+                    tinsert(lines,
+                        string.format("    child%d: unit=%-8s %dx%d shown=%s roleIcon:%s/%s role=%s filter=%s",
+                            i, cu, cw, ch, tostring(cs),
+                            roleState and tostring(roleState.enabled) or "n/a",
+                            roleState and (roleState.shown and "shown" or "hidden") or "n/a",
+                            roleState and roleState.role or "n/a",
+                            roleState and roleState.filter or "n/a"))
                 end
             end
         end

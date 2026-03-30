@@ -34,9 +34,31 @@ local math_floor     = math.floor
 local format         = string.format
 local Clamp          = _G.Clamp or function(v, lo, hi) return math.max(lo, math.min(hi, v)) end
 
-local MAX_INDICATORS = 6    -- indicator slots per frame
-local MAX_ICONS      = 12   -- icon slots per indicator
-local TIMER_RATE     = 0.1  -- icon timer update frequency (seconds)
+local MAX_INDICATORS = 6   -- indicator slots per frame
+local MAX_ICONS      = 12  -- icon slots per indicator
+local TIMER_RATE     = 0.1 -- icon timer update frequency (seconds)
+
+local function GetAuraWatcherTextStyle(frame, cfg, prefix)
+    local unitKey = frame and frame._awState and frame._awState.unitKey or "player"
+    local base = UnitFrames.GetTextConfigFor and UnitFrames:GetTextConfigFor(unitKey) or nil
+    local textStyle = {
+        fontName = cfg[prefix .. "FontName"],
+        outlineMode = cfg[prefix .. "OutlineMode"],
+        shadowEnabled = cfg[prefix .. "ShadowEnabled"],
+        shadowColor = cfg[prefix .. "ShadowColor"],
+        shadowOffsetX = cfg[prefix .. "ShadowOffsetX"],
+        shadowOffsetY = cfg[prefix .. "ShadowOffsetY"],
+    }
+
+    if textStyle.fontName == nil and base then textStyle.fontName = base.fontName end
+    if textStyle.outlineMode == nil then textStyle.outlineMode = (base and base.outlineMode) or "OUTLINE" end
+    if textStyle.shadowEnabled == nil then textStyle.shadowEnabled = base and base.shadowEnabled == true or false end
+    if textStyle.shadowColor == nil then textStyle.shadowColor = (base and base.shadowColor) or { 0, 0, 0, 0.85 } end
+    if textStyle.shadowOffsetX == nil then textStyle.shadowOffsetX = (base and base.shadowOffsetX) or 1 end
+    if textStyle.shadowOffsetY == nil then textStyle.shadowOffsetY = (base and base.shadowOffsetY) or -1 end
+
+    return textStyle
+end
 
 -- ============================================================
 -- DB helpers
@@ -91,6 +113,19 @@ end
 -- Aura scanning
 -- ============================================================
 
+local function ResolveIsPlayerAura(unit, auraInstanceID, filter, data)
+    if data and data.isPlayerAura == true then
+        return true
+    end
+
+    if not unit or not auraInstanceID or not C_UnitAuras or type(C_UnitAuras.IsAuraFilteredOutByInstanceID) ~= "function" then
+        return false
+    end
+
+    local playerFilter = filter .. "|PLAYER"
+    return not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, auraInstanceID, playerFilter)
+end
+
 -- Scan unit auras matching a spell-ID lookup table.
 local function ScanBySpellIds(unit, lookup, onlyMine)
     if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then return {} end
@@ -105,7 +140,8 @@ local function ScanBySpellIds(unit, lookup, onlyMine)
                 _ok_cfg, _cfg = pcall(function() return lookup[data.spellId] end)
             end
             if data and _ok_cfg and _cfg then
-                if not onlyMine or data.isPlayerAura then
+                local isPlayerAura = ResolveIsPlayerAura(unit, data.auraInstanceID, filter, data)
+                if not onlyMine or isPlayerAura then
                     local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
                     result[#result + 1] = {
                         icon           = data.icon,
@@ -134,12 +170,11 @@ local function ScanByFilter(unit, source, onlyMine)
         filters = { "HELPFUL", "HARMFUL" }
     end
     for _, f in ipairs(filters) do
-        local playerFilter = f .. "|PLAYER"
         local slots = { C_UnitAuras.GetAuraSlots(unit, f) }
         for i = 2, #slots do
             local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
             if data then
-                local passPlayer = not onlyMine or data.isPlayerAura
+                local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, f, data)
                 if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
                     local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
                     result[#result + 1] = {
@@ -293,22 +328,24 @@ local GROW_STEP = {
 }
 
 local function UpdateIconIndicator(frame, idx, cfg, auras)
-    local container  = EnsureIconContainer(frame, idx)
-    local size       = Clamp(cfg.iconSize or 18, 8, 40)
-    local spacing    = Clamp(cfg.spacing or 2, 0, 12)
-    local maxCount   = Clamp(cfg.maxCount or 5, 1, MAX_ICONS)
-    local shown      = math_min(#auras, maxCount)
-    local step       = size + spacing
-    local growFn     = GROW_STEP[cfg.growDirection or "RIGHT"] or GROW_STEP.RIGHT
-    local showDur    = cfg.showDuration ~= false
-    local durFont    = Clamp(cfg.durationFontSize or 7, 5, 14)
-    local showCount  = cfg.showCount ~= false
-    local countFont  = Clamp(cfg.countFontSize or 9, 5, 16)
-    local durAnchor  = cfg.durAnchor or "TOPLEFT"
-    local cntAnchor  = cfg.countAnchor or "BOTTOMRIGHT"
+    local container      = EnsureIconContainer(frame, idx)
+    local size           = Clamp(cfg.iconSize or 18, 8, 40)
+    local spacing        = Clamp(cfg.spacing or 2, 0, 12)
+    local maxCount       = Clamp(cfg.maxCount or 5, 1, MAX_ICONS)
+    local shown          = math_min(#auras, maxCount)
+    local step           = size + spacing
+    local growFn         = GROW_STEP[cfg.growDirection or "RIGHT"] or GROW_STEP.RIGHT
+    local showDur        = cfg.showDuration ~= false
+    local durFont        = Clamp(cfg.durationFontSize or 7, 5, 14)
+    local showCount      = cfg.showCount ~= false
+    local countFont      = Clamp(cfg.countFontSize or 9, 5, 16)
+    local durTextStyle   = GetAuraWatcherTextStyle(frame, cfg, "duration")
+    local countTextStyle = GetAuraWatcherTextStyle(frame, cfg, "count")
+    local durAnchor      = cfg.durAnchor or "TOPLEFT"
+    local cntAnchor      = cfg.countAnchor or "BOTTOMRIGHT"
 
     -- Small inset offsets so text sits just inside the icon border
-    local ANCHOR_OFS = {
+    local ANCHOR_OFS     = {
         TOPLEFT = { 1, -1 },
         TOP = { 0, -1 },
         TOPRIGHT = { -1, -1 },
@@ -344,14 +381,14 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
         local daOfs = ANCHOR_OFS[durAnchor] or { 0, 0 }
         slot.dur:ClearAllPoints()
         slot.dur:SetPoint(durAnchor, slot, durAnchor, daOfs[1], daOfs[2])
-        slot.dur:SetFont(_G.STANDARD_TEXT_FONT, durFont, "OUTLINE")
+        UnitFrames:ApplyFontObject(slot.dur, durFont, durTextStyle.fontName, durTextStyle)
         UpdateDurationText(slot.dur, data.expirationTime, data.duration, data.durationObject)
         slot.dur:SetShown(showDur)
 
         local caOfs = ANCHOR_OFS[cntAnchor] or { 0, 0 }
         slot.count:ClearAllPoints()
         slot.count:SetPoint(cntAnchor, slot, cntAnchor, caOfs[1], caOfs[2])
-        slot.count:SetFont(_G.STANDARD_TEXT_FONT, countFont, "OUTLINE")
+        UnitFrames:ApplyFontObject(slot.count, countFont, countTextStyle.fontName, countTextStyle)
         slot.count:SetText(n > 1 and tostring(n) or "")
         slot.count:SetShown(showCount and n > 1)
 
@@ -537,7 +574,7 @@ local function UpdateColorOverlayIndicator(frame, idx, cfg, isActive)
     local overlay = EnsureColorOverlay(frame, idx)
     if isActive then
         local c = type(cfg.overlayColor) == "table" and cfg.overlayColor or { 0.10, 0.72, 0.74 }
-        local alpha = tonumber(cfg.overlayAlpha) or 0.25
+        local alpha = tonumber(c[4]) or tonumber(cfg.overlayAlpha) or 0.25
         overlay:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
         overlay:SetBackdropColor(c[1], c[2], c[3], alpha)
         overlay:Show()

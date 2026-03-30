@@ -680,7 +680,7 @@ local function GetDefaultCastbarSpellOffsetX()
     local iconPosition = castbar.iconPosition or PLAYER_CASTBAR_DEFAULTS.iconPosition
     local iconSide = castbar.iconSide or PLAYER_CASTBAR_DEFAULTS.iconSide
     local iconSize = tonumber(castbar.iconSize) or PLAYER_CASTBAR_DEFAULTS.iconSize or PLAYER_CASTBAR_DEFAULTS.height or
-    20
+        20
     iconSize = math.max(12, math.min(50, iconSize))
 
     if showIcon ~= false and iconPosition == "inside" and iconSide ~= "right" then
@@ -908,7 +908,8 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             ExtendPath(basePath, "barFontName"), "Use Unit Frames Font", {
                 disabled = BarModeDisabled(),
             }),
-        barFontSize = BuildRange(3, "Font Size", "Default font size for bar labels and time text. Leave at 0 for auto-size.",
+        barFontSize = BuildRange(3, "Font Size",
+            "Default font size for bar labels and time text. Leave at 0 for auto-size.",
             ExtendPath(basePath, "barFontSize"), auraDefault("barFontSize", 0), 0, 20, 1, {
                 disabled = BarModeDisabled(),
             }),
@@ -941,7 +942,8 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             ExtendPath(basePath, "buffBarFontName"), "Use Shared Font", {
                 disabled = BarModeDisabled(),
             }),
-        buffBarFontSize = BuildRange(3, "Font Size", "Optional buff bar font size override. Leave at 0 for shared sizing.",
+        buffBarFontSize = BuildRange(3, "Font Size",
+            "Optional buff bar font size override. Leave at 0 for shared sizing.",
             ExtendPath(basePath, "buffBarFontSize"), auraDefault("buffBarFontSize", 0), 0, 20, 1, {
                 disabled = BarModeDisabled(),
             }),
@@ -973,7 +975,8 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             ExtendPath(basePath, "debuffBarFontName"), "Use Shared Font", {
                 disabled = BarModeDisabled(),
             }),
-        debuffBarFontSize = BuildRange(3, "Font Size", "Optional debuff bar font size override. Leave at 0 for shared sizing.",
+        debuffBarFontSize = BuildRange(3, "Font Size",
+            "Optional debuff bar font size override. Leave at 0 for shared sizing.",
             ExtendPath(basePath, "debuffBarFontSize"), auraDefault("debuffBarFontSize", 0), 0, 20, 1, {
                 disabled = BarModeDisabled(),
             }),

@@ -35,6 +35,7 @@ local CreateFrame       = _G.CreateFrame
 local UIParent          = _G.UIParent
 local GameTooltip       = _G.GameTooltip
 local GetTime           = _G.GetTime
+local GetCursorPosition = _G.GetCursorPosition
 local math_floor        = math.floor
 local tostring          = tostring
 local ipairs            = ipairs
@@ -70,6 +71,16 @@ local C                 = {
 local SECTION_FONT_SIZE = 11
 local LABEL_FONT_SIZE   = 12
 local BODY_FONT_SIZE    = 13
+local FONT_DEFAULT_KEY  = "__default"
+
+local OUTLINE_ITEMS     = {
+    { key = "NONE",                   label = "None" },
+    { key = "OUTLINE",                label = "Outline" },
+    { key = "THICKOUTLINE",           label = "Thick" },
+    { key = "MONOCHROME",             label = "Mono" },
+    { key = "MONOCHROMEOUTLINE",      label = "Mono Outline" },
+    { key = "MONOCHROMETHICKOUTLINE", label = "Mono Thick" },
+}
 
 -- Anchor point labels (for 3×3 grid)
 local ANCHOR_KEYS       = { "TOPLEFT", "TOP", "TOPRIGHT", "LEFT", "CENTER", "RIGHT", "BOTTOMLEFT", "BOTTOM",
@@ -110,23 +121,23 @@ local FRAME_KEY_ORDER   = {
 local designer          = {} -- namespace for public methods on UnitFrames:AW*
 
 -- Persistent UI refs
-local root               -- root Frame
-local catalogScroll      -- ScrollFrame for catalogue
-local catalogChild       -- content child of catalogScroll
+local root                   -- root Frame
+local catalogScroll          -- ScrollFrame for catalogue
+local catalogChild           -- content child of catalogScroll
 local slotCards         = {} -- [1..6] = card Frame
-local detailPanel        -- Frame that shows slot detail
-local headerFrameLabel   -- FontString showing current frame type
+local detailPanel            -- Frame that shows slot detail
+local headerFrameLabel       -- FontString showing current frame type
 
 -- Runtime state
 local activeFrameKey    = "partyMember" -- which unit-frame type is being edited
-local heldEntry         = nil       -- catalog/generic entry currently "picked up"
-local selectedSlot      = 0         -- 1-6, currently selected indicator slot
-local tilePool          = {}        -- reused catalog tile frames
-local sectionLabels     = {}        -- FontString section labels (tracked for cleanup)
-local previewHost       = nil       -- mock frame for live preview
-local previewSidePanel  = nil       -- right-side panel hosting the preview
-local activeDragCatcher = nil       -- global drag-release catcher frame
-local selectedLayer     = 1         -- 1=primary, 2+=extraLayers[n-1]
+local heldEntry         = nil           -- catalog/generic entry currently "picked up"
+local selectedSlot      = 0             -- 1-6, currently selected indicator slot
+local tilePool          = {}            -- reused catalog tile frames
+local sectionLabels     = {}            -- FontString section labels (tracked for cleanup)
+local previewHost       = nil           -- mock frame for live preview
+local previewSidePanel  = nil           -- right-side panel hosting the preview
+local activeDragCatcher = nil           -- global drag-release catcher frame
+local selectedLayer     = 1             -- 1=primary, 2+=extraLayers[n-1]
 
 -- ============================================================
 -- Live-update flush — pushes config changes to all active frames
@@ -183,6 +194,25 @@ local function Font(size, flags)
     local path = (LSM and LSM.Fetch and LSM:Fetch("font", "Expressway"))
         or "Fonts\\ARIALN.TTF"
     return path, size or 12, flags or ""
+end
+
+local function GetFontDropdownItems()
+    local items = {
+        { key = FONT_DEFAULT_KEY, label = "Use Theme Font" },
+    }
+    local names = {}
+    local LSM = T.Libs and T.Libs.LSM
+    local hash = LSM and LSM.HashTable and LSM:HashTable("font") or nil
+    if type(hash) == "table" then
+        for name in pairs(hash) do
+            names[#names + 1] = name
+        end
+        table.sort(names)
+        for _, name in ipairs(names) do
+            items[#items + 1] = { key = name, label = name }
+        end
+    end
+    return items
 end
 
 --- Always use a unicode-capable font for glyph symbols (×  ✓  ✕  ⟳).
@@ -1228,6 +1258,32 @@ end
 local function DetailSlider(parent, label, value, minV, maxV, step, x, y, w, onChange)
     local W = w or 120
     local STEP = step or 1
+    local span = maxV - minV
+
+    local function SnapValue(v)
+        v = math.max(minV, math.min(maxV, v))
+        if STEP >= 0.001 then
+            v = math.floor(((v - minV) / STEP) + 0.5) * STEP + minV
+            v = math.max(minV, math.min(maxV, v))
+        end
+        return v
+    end
+
+    local function SetValueFromCursor(slider)
+        if not slider or not slider.GetLeft or not slider.GetWidth then return end
+        local left = slider:GetLeft()
+        local width = slider:GetWidth()
+        if not left or not width or width <= 0 or span <= 0 then return end
+
+        local cursorX = GetCursorPosition and GetCursorPosition() or nil
+        if not cursorX then return end
+        local scale = slider:GetEffectiveScale() or 1
+        cursorX = cursorX / scale
+
+        local ratio = (cursorX - left) / width
+        ratio = math.max(0, math.min(1, ratio))
+        slider:SetValue(SnapValue(minV + ratio * span))
+    end
 
     if label and label ~= "" then
         local lfs = PushDetail(parent:CreateFontString(nil, "OVERLAY"))
@@ -1241,16 +1297,36 @@ local function DetailSlider(parent, label, value, minV, maxV, step, x, y, w, onC
     local s = PushDetail(CreateFrame("Slider", nil, parent, "BackdropTemplate"))
     s:SetSize(W - 34, 14)
     s:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y - 16)
+    s:SetOrientation("HORIZONTAL")
     s:SetMinMaxValues(minV, maxV)
     s:SetValueStep(STEP)
-    s:SetValue(value)
+    s:SetValue(SnapValue(value))
     s:SetObeyStepOnDrag(true)
+    s:EnableMouse(true)
     Backdrop(s, C.panel, C.border, 1, 1)
 
     local thumb = s:CreateTexture(nil, "ARTWORK")
     thumb:SetSize(6, 12)
     thumb:SetColorTexture(C.teal[1], C.teal[2], C.teal[3], 1)
     s:SetThumbTexture(thumb)
+    s.thumb = thumb
+
+    s:SetScript("OnMouseDown", function(self2, button)
+        if button ~= "LeftButton" then return end
+        self2._draggingTrack = true
+        SetValueFromCursor(self2)
+        self2:SetScript("OnUpdate", function(self3)
+            SetValueFromCursor(self3)
+        end)
+    end)
+    s:SetScript("OnMouseUp", function(self2)
+        self2._draggingTrack = nil
+        self2:SetScript("OnUpdate", nil)
+    end)
+    s:SetScript("OnHide", function(self2)
+        self2._draggingTrack = nil
+        self2:SetScript("OnUpdate", nil)
+    end)
 
     -- Numeric EditBox (right of slider, always editable)
     local eb = PushDetail(CreateFrame("EditBox", nil, parent, "BackdropTemplate"))
@@ -1268,12 +1344,7 @@ local function DetailSlider(parent, label, value, minV, maxV, step, x, y, w, onC
     local function CommitEdit()
         local v = tonumber(eb:GetText())
         if v then
-            v = math.max(minV, math.min(maxV, v))
-            -- Snap to step
-            if STEP >= 0.001 then
-                v = math.floor(v / STEP + 0.5) * STEP
-            end
-            s:SetValue(v)
+            s:SetValue(SnapValue(v))
         end
         eb:SetText(FormatSliderVal(s:GetValue(), STEP))
         eb:ClearFocus()
@@ -1364,8 +1435,8 @@ RefreshDetailPanel = function()
     ClearDetail()
 
     local inds    = GetIndicators(activeFrameKey)
-    local slotCfg = inds[selectedSlot]  -- full slot cfg (owns source/spells/extraLayers)
-    local cfg     = GetLayerCfg()       -- current layer's visual settings
+    local slotCfg = inds[selectedSlot] -- full slot cfg (owns source/spells/extraLayers)
+    local cfg     = GetLayerCfg()      -- current layer's visual settings
 
     if selectedSlot == 0 or not slotCfg then
         detailPanel:SetHeight(80)
@@ -1382,7 +1453,7 @@ RefreshDetailPanel = function()
     -- Clamp selectedLayer in case layers were removed externally
     local extraCount = slotCfg.extraLayers and #slotCfg.extraLayers or 0
     if selectedLayer > 1 + extraCount then selectedLayer = 1 end
-    cfg = GetLayerCfg() -- re-fetch after clamp
+    cfg = GetLayerCfg() or slotCfg or {} -- re-fetch after clamp
 
     -- Title
     local layerSuffix = selectedLayer > 1 and ("  ·  Layer " .. selectedLayer) or ""
@@ -1432,7 +1503,7 @@ RefreshDetailPanel = function()
     -- ── Layer tabs ──────────────────────────────────────────────────────────
     local LAYER_TAB_H = 22
     local LAYER_TAB_W = 110
-    local tabRowY     = -PAD - 20 - 6 - nameExtraH  -- just below title / label
+    local tabRowY     = -PAD - 20 - 6 - nameExtraH -- just below title / label
     local tabX        = PAD
     local typeLabels  = { icons = "Icon Cluster", border = "Border", overlay = "Overlay" }
 
@@ -1581,7 +1652,7 @@ RefreshDetailPanel = function()
     -- always render behind any child Frame objects placed inside the group.
     local function OpenGroup(label, y)
         local BOX_W       = SEP_W + 8 -- 4 px padding on each side
-        local TOP_Y       = y + 4 -- 4 px above the SectionHeader band
+        local TOP_Y       = y + 4     -- 4 px above the SectionHeader band
         local grp         = { _topY = y }
         local br, bg2, bb = C.border[1], C.border[2], C.border[3]
         -- Fill
@@ -1644,7 +1715,9 @@ RefreshDetailPanel = function()
 
     --- Render a row of colour swatches + a "..." custom-colour button.
     --- onChange(r,g,b,a) is called when a colour is committed.
-    local function DetailColorRow(px, py, currentColor, onChange)
+    local function DetailColorRow(px, py, currentColor, onChange, opts)
+        opts = opts or {}
+        local hasAlpha = opts.hasAlpha == true
         local swX = px
         for _, sw in ipairs(SWATCH_PRESETS) do
             local swBtn = PushDetail(CreateFrame("Button", nil, detailPanel, "BackdropTemplate"))
@@ -1669,7 +1742,8 @@ RefreshDetailPanel = function()
                     sel and 1 or capSw[1], sel and 1 or capSw[2], sel and 1 or capSw[3], 1)
             end)
             swBtn:SetScript("OnClick", function()
-                if onChange then onChange(capSw[1], capSw[2], capSw[3], 1) end
+                local alpha = hasAlpha and ((currentColor and currentColor[4]) or 1) or 1
+                if onChange then onChange(capSw[1], capSw[2], capSw[3], alpha) end
             end)
             swX = swX + 22
         end
@@ -1688,7 +1762,8 @@ RefreshDetailPanel = function()
         custBtn:SetScript("OnEnter", function(s2)
             GameTooltip:SetOwner(s2, "ANCHOR_RIGHT")
             GameTooltip:SetText("Custom Color", 1, 1, 1)
-            GameTooltip:AddLine("Opens the color picker to choose any color.", 0.8, 0.8, 0.8, true)
+            GameTooltip:AddLine(hasAlpha and "Opens the color picker to choose any color and alpha."
+                or "Opens the color picker to choose any color.", 0.8, 0.8, 0.8, true)
             GameTooltip:Show()
             s2:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 1)
         end)
@@ -1699,24 +1774,40 @@ RefreshDetailPanel = function()
         custBtn:SetScript("OnClick", function(s2)
             local cur                 = currentColor or { 1, 1, 1, 1 }
             local prevR, prevG, prevB = cur[1], cur[2], cur[3]
+            local prevA               = cur[4] or 1
             local cpf                 = _G.ColorPickerFrame
             if not cpf then return end
 
             local function applyColor()
                 local r, g, b = cpf:GetColorRGB()
-                if onChange then onChange(r, g, b, 1) end
+                local a = prevA
+                if hasAlpha then
+                    if cpf.GetColorAlpha then
+                        local okAlpha, pickedAlpha = pcall(cpf.GetColorAlpha, cpf)
+                        if okAlpha and type(pickedAlpha) == "number" then
+                            a = pickedAlpha
+                        elseif _G.OpacitySliderFrame and _G.OpacitySliderFrame.GetValue then
+                            a = 1 - _G.OpacitySliderFrame:GetValue()
+                        end
+                    elseif _G.OpacitySliderFrame and _G.OpacitySliderFrame.GetValue then
+                        a = 1 - _G.OpacitySliderFrame:GetValue()
+                    end
+                end
+                if onChange then onChange(r, g, b, a) end
             end
 
             local function cancelColor(prev)
-                local fallback = prev or { r = prevR, g = prevG, b = prevB }
-                if onChange then onChange(fallback.r, fallback.g, fallback.b, 1) end
+                local fallback = prev or { r = prevR, g = prevG, b = prevB, a = prevA, opacity = 1 - prevA }
+                local alpha = hasAlpha and (fallback.a or (fallback.opacity and (1 - fallback.opacity)) or prevA) or 1
+                if onChange then onChange(fallback.r, fallback.g, fallback.b, alpha) end
             end
 
             local info = {
                 r = prevR,
                 g = prevG,
                 b = prevB,
-                hasOpacity = false,
+                hasOpacity = hasAlpha,
+                opacity = hasAlpha and (1 - prevA) or nil,
                 func = applyColor,
                 swatchFunc = applyColor,
                 opacityFunc = applyColor,
@@ -1841,6 +1932,50 @@ RefreshDetailPanel = function()
             end)
         row = row - 36
 
+        DetailLabel(detailPanel, "Font", col1X, row)
+        local durFontDD = DetailDropdown(detailPanel, GetFontDropdownItems(), cfg.durationFontName or FONT_DEFAULT_KEY,
+            col1X, row - 14, 172, function(k)
+                EnsureLayerWritable().durationFontName = (k ~= FONT_DEFAULT_KEY) and k or nil
+                DeferredFlush()
+            end)
+        AddTooltip(durFontDD, "Duration Font", "Choose the font used for duration text on watcher icons.")
+        DetailLabel(detailPanel, "Outline", col1X + 188, row)
+        local durOutlineDD = DetailDropdown(detailPanel, OUTLINE_ITEMS, cfg.durationOutlineMode or "OUTLINE",
+            col1X + 188, row - 14, 108, function(k)
+                EnsureLayerWritable().durationOutlineMode = k
+                DeferredFlush()
+            end)
+        AddTooltip(durOutlineDD, "Duration Outline", "Choose the outline mode for duration text.")
+        row = row - 36
+
+        local cbDurShadow = DetailCheckbox(detailPanel, "Enable Shadow", cfg.durationShadowEnabled == true, col1X,
+            row - 6,
+            function(v)
+                EnsureLayerWritable().durationShadowEnabled = v
+                DeferredFlush()
+            end)
+        AddTooltip(cbDurShadow, "Duration Shadow", "Enable a text shadow for duration text.")
+        row = row - 30
+
+        DetailLabel(detailPanel, "Shadow Color", col1X, row)
+        DetailColorRow(col1X, row - 16, cfg.durationShadowColor or { 0, 0, 0, 0.85 }, function(r, g, b, a)
+            EnsureLayerWritable().durationShadowColor = { r, g, b, a or 1 }
+            DeferredFlush()
+        end)
+        row = row - 42
+
+        DetailSlider(detailPanel, "Shadow X", cfg.durationShadowOffsetX or 1, -8, 8, 1,
+            col1X, row, 130, function(v)
+                EnsureLayerWritable().durationShadowOffsetX = v
+                DeferredFlush()
+            end)
+        DetailSlider(detailPanel, "Shadow Y", cfg.durationShadowOffsetY or -1, -8, 8, 1,
+            col1X + 148, row, 120, function(v)
+                EnsureLayerWritable().durationShadowOffsetY = v
+                DeferredFlush()
+            end)
+        row = row - 40
+
         DetailLabel(detailPanel, "Position", col1X, row)
         AddTooltip(
             DetailAnchorGrid(detailPanel, cfg.durAnchor or "TOPLEFT", col1X, row - 16, function(key)
@@ -1866,6 +2001,49 @@ RefreshDetailPanel = function()
                 DeferredFlush()
             end)
         row = row - 36
+
+        DetailLabel(detailPanel, "Font", col1X, row)
+        local countFontDD = DetailDropdown(detailPanel, GetFontDropdownItems(), cfg.countFontName or FONT_DEFAULT_KEY,
+            col1X, row - 14, 172, function(k)
+                EnsureLayerWritable().countFontName = (k ~= FONT_DEFAULT_KEY) and k or nil
+                DeferredFlush()
+            end)
+        AddTooltip(countFontDD, "Stack Font", "Choose the font used for stack text on watcher icons.")
+        DetailLabel(detailPanel, "Outline", col1X + 188, row)
+        local countOutlineDD = DetailDropdown(detailPanel, OUTLINE_ITEMS, cfg.countOutlineMode or "OUTLINE",
+            col1X + 188, row - 14, 108, function(k)
+                EnsureLayerWritable().countOutlineMode = k
+                DeferredFlush()
+            end)
+        AddTooltip(countOutlineDD, "Stack Outline", "Choose the outline mode for stack text.")
+        row = row - 36
+
+        local cbCountShadow = DetailCheckbox(detailPanel, "Enable Shadow", cfg.countShadowEnabled == true, col1X, row - 6,
+            function(v)
+                EnsureLayerWritable().countShadowEnabled = v
+                DeferredFlush()
+            end)
+        AddTooltip(cbCountShadow, "Stack Shadow", "Enable a text shadow for stack text.")
+        row = row - 30
+
+        DetailLabel(detailPanel, "Shadow Color", col1X, row)
+        DetailColorRow(col1X, row - 16, cfg.countShadowColor or { 0, 0, 0, 0.85 }, function(r, g, b, a)
+            EnsureLayerWritable().countShadowColor = { r, g, b, a or 1 }
+            DeferredFlush()
+        end)
+        row = row - 42
+
+        DetailSlider(detailPanel, "Shadow X", cfg.countShadowOffsetX or 1, -8, 8, 1,
+            col1X, row, 130, function(v)
+                EnsureLayerWritable().countShadowOffsetX = v
+                DeferredFlush()
+            end)
+        DetailSlider(detailPanel, "Shadow Y", cfg.countShadowOffsetY or -1, -8, 8, 1,
+            col1X + 148, row, 120, function(v)
+                EnsureLayerWritable().countShadowOffsetY = v
+                DeferredFlush()
+            end)
+        row = row - 40
 
         DetailLabel(detailPanel, "Position", col1X, row)
         AddTooltip(
@@ -1952,16 +2130,24 @@ RefreshDetailPanel = function()
         -- Overlay Color
         DetailLabel(detailPanel, "Overlay Color", col1X, row)
         DetailColorRow(col1X, row - 16, cfg.overlayColor, function(r, g, b, a)
-            EnsureLayerWritable().overlayColor = { r, g, b, a or 1 }
+            local layer = EnsureLayerWritable()
+            layer.overlayColor = { r, g, b, a or 1 }
+            layer.overlayAlpha = a or 1
             DeferredFlush()
             RefreshDetailPanel()
-        end)
+        end, { hasAlpha = true })
         row = row - 44
 
         -- Overlay Opacity
-        DetailSlider(detailPanel, "Overlay Opacity", cfg.overlayAlpha or 0.35, 0.0, 0.8, 0.05,
+        DetailSlider(detailPanel, "Overlay Opacity %",
+            ((cfg.overlayColor and cfg.overlayColor[4]) or cfg.overlayAlpha or 0.35) * 100, 0, 100, 1,
             col1X, row, 200, function(v)
-                EnsureLayerWritable().overlayAlpha = v
+                local alpha = (tonumber(v) or 0) / 100
+                local layer = EnsureLayerWritable()
+                layer.overlayAlpha = alpha
+                local color = type(layer.overlayColor) == "table" and layer.overlayColor or { 0.10, 0.72, 0.74, alpha }
+                color[4] = alpha
+                layer.overlayColor = color
                 DeferredFlush()
             end)
         row = row - 40
