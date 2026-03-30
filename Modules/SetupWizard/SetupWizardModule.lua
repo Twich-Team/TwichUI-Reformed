@@ -19,13 +19,15 @@ local C_AddOns              = _G.C_AddOns
 local GetScreenWidth        = _G.GetScreenWidth
 local GetScreenHeight       = _G.GetScreenHeight
 local GetPhysicalScreenSize = _G.GetPhysicalScreenSize
+local GetRealmName          = _G.GetRealmName
 local ReloadUI              = _G.ReloadUI
 local CopyTable             = _G.CopyTable
 local SetCVar               = _G.SetCVar
+local UnitFullName          = _G.UnitFullName
 local wipe                  = _G.wipe
 
 --- Increment to re-show the wizard for all users (e.g. when a new setup step is added).
-local WIZARD_VERSION        = 1
+local WIZARD_VERSION        = 2
 
 ---@class SetupWizardModule : AceModule, AceEvent-3.0
 local SetupWizardModule     = T:NewModule("SetupWizard", "AceEvent-3.0")
@@ -51,6 +53,67 @@ function SetupWizardModule:GetDB()
     return sv.wizardState
 end
 
+function SetupWizardModule:GetCharacterKey()
+    local name, realm = type(UnitFullName) == "function" and UnitFullName("player") or nil, nil
+    if type(name) == "table" then
+        name, realm = name[1], name[2]
+    else
+        realm = type(UnitFullName) == "function" and select(2, UnitFullName("player")) or nil
+    end
+
+    if type(name) ~= "string" or name == "" then
+        return "account"
+    end
+
+    if type(realm) ~= "string" or realm == "" then
+        realm = type(GetRealmName) == "function" and GetRealmName() or "Realm"
+    end
+
+    realm = tostring(realm):gsub("%s+", "")
+    return string.format("%s-%s", tostring(name), realm ~= "" and realm or "Realm")
+end
+
+function SetupWizardModule:GetRequiredWizardVersion()
+    local db = self:GetDB()
+    local forcedVersion = tonumber(db.forcedVersion) or 0
+    return math.max(WIZARD_VERSION, forcedVersion)
+end
+
+function SetupWizardModule:GetCharacterState(createIfMissing)
+    local db = self:GetDB()
+    if type(db.characters) ~= "table" then
+        db.characters = {}
+    end
+
+    local characterKey = self:GetCharacterKey()
+    if createIfMissing ~= false and type(db.characters[characterKey]) ~= "table" then
+        db.characters[characterKey] = {}
+    end
+
+    return db.characters[characterKey], characterKey
+end
+
+function SetupWizardModule:GetPendingWizardState()
+    local characterState = self:GetCharacterState(false)
+    return characterState and characterState.pendingState or nil
+end
+
+function SetupWizardModule:SetPendingWizardState(state)
+    local characterState = self:GetCharacterState(true)
+    if type(state) == "table" then
+        characterState.pendingState = type(CopyTable) == "function" and CopyTable(state) or state
+    else
+        characterState.pendingState = nil
+    end
+end
+
+function SetupWizardModule:ClearPendingWizardState()
+    local characterState = self:GetCharacterState(false)
+    if characterState then
+        characterState.pendingState = nil
+    end
+end
+
 -- ─── Version / trigger ─────────────────────────────────────────────────────
 
 --- Returns true if the wizard should be shown (never completed, or a new version is available).
@@ -58,21 +121,26 @@ function SetupWizardModule:ShouldShow()
     -- In-session guard: if we already completed the wizard this session, never re-show
     -- regardless of DB state (guards against any edge-case DB timing issues).
     if self._completedThisSession then return false end
-    local db = self:GetDB()
-    return (db.completedVersion or 0) < WIZARD_VERSION
+    local characterState = self:GetCharacterState(true)
+    return (characterState.completedVersion or 0) < self:GetRequiredWizardVersion()
 end
 
 --- Marks the wizard as completed for the current WIZARD_VERSION.
 function SetupWizardModule:MarkComplete()
     self._completedThisSession = true
-    self:GetDB().completedVersion = WIZARD_VERSION
+    local characterState = self:GetCharacterState(true)
+    characterState.completedVersion = self:GetRequiredWizardVersion()
+    characterState.completedAt = _G.time and _G.time() or nil
+    self:ClearPendingWizardState()
 end
 
 --- Resets completion so the wizard will appear again on next login.
 --- Useful for testing or for the config panel's "Re-run Wizard" button.
 function SetupWizardModule:Reset()
     self._completedThisSession = false
-    self:GetDB().completedVersion = 0
+    local db = self:GetDB()
+    db.completedVersion = 0
+    db.characters = {}
 end
 
 --- Wipes the entire TwichUI saved-variable table and reloads the UI.
@@ -224,7 +292,13 @@ function SetupWizardModule:ApplyLayoutData(layoutData)
                 if key == "ChatFrame1" and scaleMode == nil then
                     scaleMode = "height"
                 end
-                if scaleMode == "height" then
+                if key == "ChatFrame1" and scaleMode == "height" then
+                    local widthScale = sw / refW
+                    local heightScale = sh / refH
+                    local s = math.min(widthScale, heightScale)
+                    absW = fd.w * refW * s
+                    absH = fd.h * refH * s
+                elseif scaleMode == "height" then
                     local s = sh / refH
                     absW = fd.w * refW * s
                     absH = fd.h * refH * s
@@ -392,6 +466,7 @@ function SetupWizardModule:DetectElvUIConflicts()
         available = false,
         chatEnabled = false,
         datatextEnabled = false,
+        unitFramesEnabled = false,
     }
     if not self:IsElvUIActive() then
         return result
@@ -418,7 +493,89 @@ function SetupWizardModule:DetectElvUIConflicts()
     result.available = true
     result.chatEnabled = chatEnabled
     result.datatextEnabled = datatextEnabled
+    result.unitFramesEnabled = type(private) == "table" and type(private.unitframe) == "table" and
+        private.unitframe.enable ~= false or false
     return result
+end
+
+function SetupWizardModule:GetUnitFrameWizardChoices()
+    local CM = T:GetModule("Configuration", true)
+    local options = CM and CM.Options or nil
+    local unitFrameOptions = options and options.UnitFrames or nil
+
+    local result = {
+        useTwichUnitFrames = true,
+        showPlayerInParty = true,
+        showPartyCastbars = true,
+    }
+
+    if not (unitFrameOptions and type(unitFrameOptions.GetDB) == "function") then
+        return result
+    end
+
+    local db = unitFrameOptions:GetDB()
+    local partySettings = type(db.groups) == "table" and type(db.groups.party) == "table" and db.groups.party or {}
+    local partyCastbar = type(db.castbars) == "table" and type(db.castbars.party) == "table" and db.castbars.party or {}
+
+    result.useTwichUnitFrames = db.enabled ~= false
+    result.showPlayerInParty = partySettings.showPlayer ~= false
+    result.showPartyCastbars = partyCastbar.enabled ~= false
+    return result
+end
+
+function SetupWizardModule:ApplyUnitFrameWizardChoices(choices)
+    local selected = choices or {}
+    local useTwichUnitFrames = selected.useTwichUnitFrames ~= false
+    local showPlayerInParty = selected.showPlayerInParty ~= false
+    local showPartyCastbars = selected.showPartyCastbars ~= false
+    local conflicts = self:DetectElvUIConflicts()
+
+    local CM = T:GetModule("Configuration", true)
+    local options = CM and CM.Options or nil
+    local unitFrameOptions = options and options.UnitFrames or nil
+    if unitFrameOptions and type(unitFrameOptions.GetDB) == "function" then
+        local db = unitFrameOptions:GetDB()
+        db.enabled = useTwichUnitFrames
+        db.groups = db.groups or {}
+        db.groups.party = db.groups.party or {}
+        db.groups.party.showPlayer = showPlayerInParty
+        db.castbars = db.castbars or {}
+        db.castbars.party = db.castbars.party or {}
+        db.castbars.party.enabled = showPartyCastbars
+
+        local unitFramesModule = T:GetModule("UnitFrames", true)
+        if unitFramesModule then
+            if useTwichUnitFrames then
+                if unitFramesModule.IsEnabled and not unitFramesModule:IsEnabled() and type(unitFramesModule.Enable) == "function" then
+                    pcall(unitFramesModule.Enable, unitFramesModule)
+                elseif type(unitFramesModule.RefreshAllFrames) == "function" then
+                    pcall(unitFramesModule.RefreshAllFrames, unitFramesModule)
+                end
+            elseif unitFramesModule.IsEnabled and unitFramesModule:IsEnabled() and type(unitFramesModule.Disable) == "function" then
+                pcall(unitFramesModule.Disable, unitFramesModule)
+            end
+        end
+    end
+
+    local E = _G.ElvUI and _G.ElvUI[1]
+    if E and type(E.private) == "table" then
+        E.private.unitframe = E.private.unitframe or {}
+        if useTwichUnitFrames then
+            E.private.unitframe.enable = false
+        elseif conflicts.available then
+            E.private.unitframe.enable = true
+        end
+    end
+
+    local wizardDB = self:GetDB()
+    wizardDB.unitFrameChoice = {
+        useTwichUnitFrames = useTwichUnitFrames,
+        showPlayerInParty = showPlayerInParty,
+        showPartyCastbars = showPartyCastbars,
+        appliedAt = _G.time and _G.time() or nil,
+    }
+
+    return useTwichUnitFrames and conflicts.available and conflicts.unitFramesEnabled == true
 end
 
 --- Applies wizard ownership choices between TwichUI and ElvUI for overlapping features.

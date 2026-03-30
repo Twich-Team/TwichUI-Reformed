@@ -1,4 +1,4 @@
----@diagnostic disable: undefined-field
+---@diagnostic disable: undefined-field, inject-field
 --[[
     TwichUI Setup Wizard — Developer Layout Capture Tool
 
@@ -32,7 +32,21 @@ local SetupWizardModule = T:GetModule("SetupWizard")
 
 local GetScreenWidth    = _G.GetScreenWidth
 local GetScreenHeight   = _G.GetScreenHeight
+local CopyTable         = _G.CopyTable
 local date              = _G.date
+
+local function SanitizeCapturedConfigSection(sectionKey, sectionValue)
+    if type(sectionValue) ~= "table" then
+        return sectionValue
+    end
+
+    local sanitized = type(CopyTable) == "function" and CopyTable(sectionValue) or sectionValue
+    if sectionKey == "chatEnhancement" then
+        sanitized.persistedChatHistory = nil
+    end
+
+    return sanitized
+end
 
 -- ─── Capture ────────────────────────────────────────────────────────────────
 
@@ -236,7 +250,7 @@ function SetupWizardModule:CaptureLayoutFrames(layoutId, layoutName)
 
     local hasSnapshot = false
     for _, k in ipairs(sectionKeys) do
-        local sv = SerializeValue(config[k], "            ", {})
+        local sv = SerializeValue(SanitizeCapturedConfigSection(k, config[k]), "            ", {})
         if sv and sv ~= "{}" then
             if not hasSnapshot then
                 add('        T:GetModule("SetupWizard"):RestoreConfigSnapshot({')

@@ -7,6 +7,7 @@
 - Fixed an issue that caused Battle.Net tells to appear in the whisper color
 - Fixed an issue that caused the accent on the chat edit box to not change to the channel color
 - Fixed an issue where dragging the configuration UI might cause it to snap around
+- Fixed an issue where the durability datatext would color the entire text the color that corresponds with the durability level
 
 #### New
 
@@ -20,6 +21,7 @@
 - Added a button to access the debugger from the configuration interface
 - Added logic to attempt to smartly place the newly opened Debugger or Error Log frames around the configuration UI
 - Added chat history persistence across reloads
+- Added a minions checkpoint system to the mythic plus tracker
 
 #### Other
 

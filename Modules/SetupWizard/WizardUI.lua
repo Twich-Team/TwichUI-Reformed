@@ -25,6 +25,7 @@ local T                  = unpack(TwichRx)
 local SetupWizardModule  = T:GetModule("SetupWizard")
 
 local CreateFrame        = _G.CreateFrame
+local C_UI               = _G.C_UI or {}
 local GetCVar            = _G.GetCVar
 local UnitClass          = _G.UnitClass
 local RAID_CLASS_COLORS  = _G.RAID_CLASS_COLORS
@@ -60,6 +61,7 @@ local STEP_DEFS          = {
     { id = "welcome", title = "Welcome" },
     { id = "ui",      title = "UI & Chat" },
     { id = "layout",  title = "Layout" },
+    { id = "unitframes", title = "Unit Frames" },
     { id = "theme",   title = "Theme" },
     { id = "fonts",   title = "Font Sizes" },
     { id = "elvui",   title = "ElvUI" },
@@ -88,6 +90,9 @@ UI.datatextFontSize      = 11
 UI.elvuiConflictInfo     = { available = false, chatEnabled = false, datatextEnabled = false }
 UI.useTwichChat          = true
 UI.useTwichDatatext      = true
+UI.useTwichUnitFrames    = true
+UI.showPlayerInParty     = true
+UI.showPartyCastbars     = true
 
 -- Per-step frames and build-state
 UI.stepFrames            = {}
@@ -548,8 +553,53 @@ end
 
 -- ─── Navigation ─────────────────────────────────────────────────────────────
 
+local function GetFirstLayoutId()
+    local layouts = SetupWizardModule:GetAvailableLayouts() or {}
+    return layouts[1] and layouts[1].id or "signature"
+end
+
+function UI:_GetPendingWizardStateSnapshot(targetStep)
+    return {
+        resumeStep = targetStep,
+        selectedLayout = self.selectedLayout,
+        selectedTheme = self.selectedTheme,
+        selectedUIScalePreset = self.selectedUIScalePreset,
+        selectedUIScaleValue = self.selectedUIScaleValue,
+        skipUIScale = self.skipUIScale == true,
+        applyChatSetup = self.applyChatSetup ~= false,
+        chatFontSize = self.chatFontSize,
+        chatHeaderFontSize = self.chatHeaderFontSize,
+        datatextFontSize = self.datatextFontSize,
+        useTwichChat = self.useTwichChat ~= false,
+        useTwichDatatext = self.useTwichDatatext ~= false,
+        useTwichUnitFrames = self.useTwichUnitFrames ~= false,
+        showPlayerInParty = self.showPlayerInParty ~= false,
+        showPartyCastbars = self.showPartyCastbars ~= false,
+    }
+end
+
+function UI:_NeedsUnitFrameConflictReload()
+    return self.useTwichUnitFrames ~= false and self.elvuiConflictInfo and self.elvuiConflictInfo.available and
+        self.elvuiConflictInfo.unitFramesEnabled == true
+end
+
 function UI:_GoNext()
     if self.currentStep < #STEP_DEFS then
+        local currentStepDef = STEP_DEFS[self.currentStep]
+        if currentStepDef and currentStepDef.id == "unitframes" and self:_NeedsUnitFrameConflictReload() then
+            SetupWizardModule:ApplyUnitFrameWizardChoices({
+                useTwichUnitFrames = self.useTwichUnitFrames,
+                showPlayerInParty = self.showPlayerInParty,
+                showPartyCastbars = self.showPartyCastbars,
+            })
+            SetupWizardModule:SetPendingWizardState(self:_GetPendingWizardStateSnapshot(self.currentStep + 1))
+            self:_Close()
+            if type(C_UI.Reload) == "function" then
+                C_UI.Reload()
+            end
+            return
+        end
+
         local targetStep = self.currentStep + 1
         while targetStep <= #STEP_DEFS do
             local stepDef = STEP_DEFS[targetStep]
@@ -572,6 +622,11 @@ function UI:_GoNext()
             applyChat = self.applyChatSetup ~= false,
         })
         SetupWizardModule:ApplyThemePreset(self.selectedTheme)
+        SetupWizardModule:ApplyUnitFrameWizardChoices({
+            useTwichUnitFrames = self.useTwichUnitFrames,
+            showPlayerInParty = self.showPlayerInParty,
+            showPartyCastbars = self.showPartyCastbars,
+        })
         SetupWizardModule:ApplyElvUIConflictChoices({
             useTwichChat = self.useTwichChat,
             useTwichDatatext = self.useTwichDatatext,
@@ -615,36 +670,41 @@ function UI:_RenderStep(n)
     self:_UpdateStepIndicator()
     self:_UpdateNavButtons()
 
+    local stepDef = STEP_DEFS[n]
+    local stepId = stepDef and stepDef.id or nil
+
     -- Build the step content on first visit, then just refresh dynamic pieces
     local sf = self.stepFrames[n]
     if not self.stepBuilt[n] then
-        if n == 5 and self._SyncFontSizeStateFromConfig then
+        if stepId == "fonts" and self._SyncFontSizeStateFromConfig then
             self:_SyncFontSizeStateFromConfig(true)
         end
         self.stepBuilt[n] = true
         local builders = {
-            [1] = UI._BuildWelcomeContent,
-            [2] = UI._BuildUIScaleContent,
-            [3] = UI._BuildLayoutContent,
-            [4] = UI._BuildThemeContent,
-            [5] = UI._BuildFontSizeContent,
-            [6] = UI._BuildElvUIContent,
-            [7] = UI._BuildFinishContent,
+            welcome = UI._BuildWelcomeContent,
+            ui = UI._BuildUIScaleContent,
+            layout = UI._BuildLayoutContent,
+            unitframes = UI._BuildUnitFramesContent,
+            theme = UI._BuildThemeContent,
+            fonts = UI._BuildFontSizeContent,
+            elvui = UI._BuildElvUIContent,
+            finish = UI._BuildFinishContent,
         }
-        if builders[n] then builders[n](self, sf) end
+        if stepId and builders[stepId] then builders[stepId](self, sf) end
     else
         -- Refresh live-selection state without a full rebuild
-        if n == 2 and self._RefreshUIScaleSummary then self:_RefreshUIScaleSummary() end
-        if n == 3 then self:_RefreshLayoutCards() end
-        if n == 4 then self:_RefreshThemeCards() end
-        if n == 5 then
+        if stepId == "ui" and self._RefreshUIScaleSummary then self:_RefreshUIScaleSummary() end
+        if stepId == "layout" then self:_RefreshLayoutCards() end
+        if stepId == "unitframes" and self._RefreshUnitFrameSummary then self:_RefreshUnitFrameSummary() end
+        if stepId == "theme" then self:_RefreshThemeCards() end
+        if stepId == "fonts" then
             if self._SyncFontSizeStateFromConfig then
                 self:_SyncFontSizeStateFromConfig(true)
             end
             self:_RefreshFontSizeSliders()
         end
-        if n == 6 and self._RefreshElvUIConflictSummary then self:_RefreshElvUIConflictSummary() end
-        if n == 7 then self:_RefreshFinishSummary() end
+        if stepId == "elvui" and self._RefreshElvUIConflictSummary then self:_RefreshElvUIConflictSummary() end
+        if stepId == "finish" then self:_RefreshFinishSummary() end
     end
 
     sf:Show()
@@ -682,7 +742,7 @@ function UI:Show()
     self.frame:Show()
     self.frame:SetAlpha(0)
     self.currentStep    = 1
-    self.selectedLayout = "standard"
+    self.selectedLayout = GetFirstLayoutId()
     self.selectedTheme  = "twich_default"
     local useUiScale    = tonumber(GetCVar and GetCVar("useUiScale") or "0") == 1
     local cvarScale     = tonumber(GetCVar and GetCVar("uiScale") or "0")
@@ -703,13 +763,54 @@ function UI:Show()
     self.elvuiConflictInfo = SetupWizardModule:DetectElvUIConflicts()
     self.useTwichChat      = true
     self.useTwichDatatext  = true
+    self.useTwichUnitFrames = true
+    self.showPlayerInParty = true
+    self.showPartyCastbars = true
     self.uiScaleRefs       = {}
+
+    local unitFrameChoices = SetupWizardModule:GetUnitFrameWizardChoices()
+    self.useTwichUnitFrames = unitFrameChoices.useTwichUnitFrames ~= false
+    self.showPlayerInParty = unitFrameChoices.showPlayerInParty ~= false
+    self.showPartyCastbars = unitFrameChoices.showPartyCastbars ~= false
+
+    local pendingState = SetupWizardModule:GetPendingWizardState()
+    if type(pendingState) == "table" then
+        self.currentStep = math.max(1, math.min(#STEP_DEFS, tonumber(pendingState.resumeStep) or 1))
+        self.selectedLayout = pendingState.selectedLayout or self.selectedLayout
+        self.selectedTheme = pendingState.selectedTheme or self.selectedTheme
+        self.selectedUIScalePreset = pendingState.selectedUIScalePreset or self.selectedUIScalePreset
+        self.selectedUIScaleValue = tonumber(pendingState.selectedUIScaleValue) or self.selectedUIScaleValue
+        self.skipUIScale = pendingState.skipUIScale == true
+        if pendingState.applyChatSetup ~= nil then
+            self.applyChatSetup = pendingState.applyChatSetup == true
+        end
+        self.chatFontSize = tonumber(pendingState.chatFontSize) or self.chatFontSize
+        self.chatHeaderFontSize = tonumber(pendingState.chatHeaderFontSize) or self.chatHeaderFontSize
+        self.datatextFontSize = tonumber(pendingState.datatextFontSize) or self.datatextFontSize
+        if pendingState.useTwichChat ~= nil then
+            self.useTwichChat = pendingState.useTwichChat == true
+        end
+        if pendingState.useTwichDatatext ~= nil then
+            self.useTwichDatatext = pendingState.useTwichDatatext == true
+        end
+        if pendingState.useTwichUnitFrames ~= nil then
+            self.useTwichUnitFrames = pendingState.useTwichUnitFrames == true
+        end
+        if pendingState.showPlayerInParty ~= nil then
+            self.showPlayerInParty = pendingState.showPlayerInParty == true
+        end
+        if pendingState.showPartyCastbars ~= nil then
+            self.showPartyCastbars = pendingState.showPartyCastbars == true
+        end
+    end
+
     -- Clear prior build state so steps rebuild with fresh data
     self.stepBuilt         = {}
     self.layoutCardRefs    = {}
     self.themeCardRefs     = {}
+    self.unitFrameRefs     = {}
     self.finishRefs        = {}
-    self:_RenderStep(1)
+    self:_RenderStep(self.currentStep)
 
     -- Fade in — OnFinished locks the base alpha so the frame stays visible
     -- after the animation ends (WoW reverts to base alpha on completion otherwise).
@@ -1179,7 +1280,137 @@ function UI:_RefreshLayoutCards()
     end
 end
 
--- ─── Step 4 — Theme ──────────────────────────────────────────────────────────
+-- ─── Step 4 — Unit Frames ───────────────────────────────────────────────────
+
+function UI:_RefreshUnitFrameSummary()
+    local refs = self.unitFrameRefs
+    if not refs then return end
+
+    local info = self.elvuiConflictInfo or { available = false, unitFramesEnabled = false }
+    local ownerText = self.useTwichUnitFrames ~= false and "TwichUI" or "ElvUI"
+
+    if refs.infoText then
+        if info.available then
+            local availability = info.unitFramesEnabled and "ElvUI unit frames are currently enabled." or
+                "ElvUI is installed, but its unit frames are already disabled."
+            local reloadText = self:_NeedsUnitFrameConflictReload() and
+                "Choosing TwichUI will reload once here, then resume the wizard on the next step." or
+                "No extra reload is needed for your current choice."
+            refs.infoText:SetText(string.format("%s\nOwner: %s\n%s", availability, ownerText, reloadText))
+        else
+            refs.infoText:SetText("ElvUI unit frames were not detected. TwichUI unit frames will be configured here.")
+        end
+    end
+
+    if refs.partyPlayer then
+        refs.partyPlayer:SetAlpha((self.useTwichUnitFrames ~= false) and 1 or 0.45)
+        refs.partyPlayer:EnableMouse(self.useTwichUnitFrames ~= false)
+    end
+    if refs.partyCastbars then
+        refs.partyCastbars:SetAlpha((self.useTwichUnitFrames ~= false) and 1 or 0.45)
+        refs.partyCastbars:EnableMouse(self.useTwichUnitFrames ~= false)
+    end
+end
+
+function UI:_BuildUnitFramesContent(sf)
+    local x, y = PAD, -PAD
+    local info = self.elvuiConflictInfo or { available = false, unitFramesEnabled = false }
+
+    local heading = NewText(sf, "Unit Frames", 20)
+    heading:SetPoint("TOPLEFT", sf, "TOPLEFT", x, y)
+
+    local sub = NewText(sf,
+        "Choose who owns unit frames after your layout is applied, then set a couple of party-frame defaults.",
+        12, C.muted[1], C.muted[2], C.muted[3])
+    sub:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -5)
+    sub:SetWidth(W - PAD * 2 - 2)
+
+    local infoText = NewText(sf, "", 12, C.text[1], C.text[2], C.text[3])
+    infoText:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -18)
+    infoText:SetWidth(W - PAD * 2 - 2)
+
+    local ownerCard = CreateFrame("Frame", nil, sf, "BackdropTemplate")
+    ownerCard:SetSize(W - PAD * 2, 92)
+    ownerCard:SetPoint("TOPLEFT", infoText, "BOTTOMLEFT", 0, -16)
+    Backdrop(ownerCard, C.bg, C.border, 0.5, 0.6)
+
+    local ownerTitle = NewText(ownerCard, "Unit Frame Owner", 11, C.gold[1], C.gold[2], C.gold[3])
+    ownerTitle:SetPoint("TOPLEFT", ownerCard, "TOPLEFT", 10, -8)
+
+    local twichBtn, twichLabel = NewButton(ownerCard, "TwichUI", 140, 30)
+    twichBtn:SetPoint("TOPLEFT", ownerTitle, "BOTTOMLEFT", 0, -12)
+    local elvBtn, elvLabel = NewButton(ownerCard, "ElvUI", 120, 30)
+    elvBtn:SetPoint("LEFT", twichBtn, "RIGHT", 12, 0)
+
+    local function RefreshOwnerButtons()
+        local useTwich = self.useTwichUnitFrames ~= false
+        if useTwich then
+            twichBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
+            twichBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
+            elvBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
+            elvBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+        else
+            elvBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
+            elvBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
+            twichBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
+            twichBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+        end
+        twichLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
+        elvLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
+        self:_RefreshUnitFrameSummary()
+    end
+
+    twichBtn:SetScript("OnClick", function()
+        self.useTwichUnitFrames = true
+        RefreshOwnerButtons()
+    end)
+    elvBtn:SetScript("OnClick", function()
+        self.useTwichUnitFrames = false
+        RefreshOwnerButtons()
+    end)
+
+    if not info.available then
+        elvBtn:Disable()
+        elvBtn:SetAlpha(0.45)
+        self.useTwichUnitFrames = true
+    end
+
+    local optionsCard = CreateFrame("Frame", nil, sf, "BackdropTemplate")
+    optionsCard:SetSize(W - PAD * 2, 104)
+    optionsCard:SetPoint("TOPLEFT", ownerCard, "BOTTOMLEFT", 0, -10)
+    Backdrop(optionsCard, C.bg, C.border, 0.5, 0.6)
+
+    local optionsTitle = NewText(optionsCard, "Party Defaults", 11, C.gold[1], C.gold[2], C.gold[3])
+    optionsTitle:SetPoint("TOPLEFT", optionsCard, "TOPLEFT", 10, -8)
+
+    local partyPlayer = NewTwichCheckbox(optionsCard, "Show yourself in party frames", self.showPlayerInParty ~= false)
+    partyPlayer:SetPoint("TOPLEFT", optionsTitle, "BOTTOMLEFT", 0, -14)
+    partyPlayer:SetOnValueChanged(function(_, isChecked)
+        self.showPlayerInParty = isChecked == true
+    end)
+
+    local partyCastbars = NewTwichCheckbox(optionsCard, "Show party member cast bars", self.showPartyCastbars ~= false)
+    partyCastbars:SetPoint("TOPLEFT", partyPlayer, "BOTTOMLEFT", 0, -10)
+    partyCastbars:SetOnValueChanged(function(_, isChecked)
+        self.showPartyCastbars = isChecked == true
+    end)
+
+    local note = NewText(optionsCard,
+        "These defaults apply to TwichUI unit frames. If you pick ElvUI here, the toggles are stored but stay inactive until you switch back.",
+        11, C.muted[1], C.muted[2], C.muted[3])
+    note:SetPoint("TOPLEFT", partyCastbars, "BOTTOMLEFT", 0, -8)
+    note:SetWidth(W - PAD * 2 - 26)
+
+    self.unitFrameRefs = {
+        infoText = infoText,
+        partyPlayer = partyPlayer,
+        partyCastbars = partyCastbars,
+    }
+
+    RefreshOwnerButtons()
+end
+
+-- ─── Step 5 — Theme ──────────────────────────────────────────────────────────
 
 local CARD_H_THM = 96
 
@@ -1618,8 +1849,11 @@ function UI:_BuildFinishContent(sf)
     local integrationLabel = NewText(sf, "", 12, C.text[1], C.text[2], C.text[3])
     integrationLabel:SetPoint("TOPLEFT", chatLabel, "BOTTOMLEFT", 0, -8)
 
+    local unitFrameLabel = NewText(sf, "", 12, C.text[1], C.text[2], C.text[3])
+    unitFrameLabel:SetPoint("TOPLEFT", integrationLabel, "BOTTOMLEFT", 0, -8)
+
     local resLabel = NewText(sf, "", 12, C.text[1], C.text[2], C.text[3])
-    resLabel:SetPoint("TOPLEFT", integrationLabel, "BOTTOMLEFT", 0, -8)
+    resLabel:SetPoint("TOPLEFT", unitFrameLabel, "BOTTOMLEFT", 0, -8)
 
     local note = NewText(sf,
         "Your layout and theme have been applied.\n" ..
@@ -1634,6 +1868,7 @@ function UI:_BuildFinishContent(sf)
         uiScaleLabel = uiScaleLabel,
         chatLabel = chatLabel,
         integrationLabel = integrationLabel,
+        unitFrameLabel = unitFrameLabel,
         resLabel = resLabel,
     }
     self:_RefreshFinishSummary()
@@ -1668,6 +1903,12 @@ function UI:_RefreshFinishSummary()
             self.useTwichDatatext and "TwichUI" or "ElvUI"))
     else
         refs.integrationLabel:SetText("|cff787c88ElvUI   |rNot detected")
+    end
+    if refs.unitFrameLabel then
+        refs.unitFrameLabel:SetText(string.format("|cff787c88Frames  |r%s  |  Party Self: %s  |  Party Casts: %s",
+            self.useTwichUnitFrames and "TwichUI" or "ElvUI",
+            self.showPlayerInParty and "On" or "Off",
+            self.showPartyCastbars and "On" or "Off"))
     end
     refs.resLabel:SetText(string.format("|cff787c88Screen  |r%dx%d", sw, sh))
 end
