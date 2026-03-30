@@ -290,6 +290,7 @@ local PLAYER_CASTBAR_DEFAULTS = {
     timeOffsetX = -6,
     timeOffsetY = 0,
     useCustomColor = false,
+    useThemeAccentFill = false,
     useCustomBackground = false,
 }
 
@@ -967,29 +968,34 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             ExtendPath(basePath, "barTexture"), "Use Theme Texture", {
                 disabled = BarModeDisabled(),
             }),
-        barFontName = BuildFontSelect(2, "Font", "Default font used for aura bar labels and timers.",
+        barBackgroundTexture = BuildTextureSelect(2, "Background Texture",
+            "Default background texture used behind aura bars. Uses the theme texture when set to default.",
+            ExtendPath(basePath, "barBackgroundTexture"), "Use Theme Texture", {
+                disabled = BarModeDisabled(),
+            }),
+        barFontName = BuildFontSelect(3, "Font", "Default font used for aura bar labels and timers.",
             ExtendPath(basePath, "barFontName"), "Use Unit Frames Font", {
                 disabled = BarModeDisabled(),
             }),
-        barFontSize = BuildRange(3, "Font Size",
+        barFontSize = BuildRange(4, "Font Size",
             "Default font size for bar labels and time text. Leave at 0 for auto-size.",
             ExtendPath(basePath, "barFontSize"), auraDefault("barFontSize", 0), 0, 20, 1, {
                 disabled = BarModeDisabled(),
             }),
-        barColor = BuildColor(4, "Fill Color",
+        barColor = BuildColor(5, "Fill Color",
             "Default aura bar fill color (timed auras). Overrides the palette cast color.",
             ExtendPath(basePath, "barColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
                 disabled = BarModeDisabled(),
             }),
-        barBackground = BuildColor(5, "Background", "Default aura bar background color override.",
+        barBackground = BuildColor(6, "Background", "Default aura bar background color override.",
             ExtendPath(basePath, "barBackground"), { 0.04, 0.05, 0.07, 0.95 }, true, {
                 disabled = BarModeDisabled(),
             }),
-        barBorderColor = BuildColor(6, "Border", "Default aura bar border color override.",
+        barBorderColor = BuildColor(7, "Border", "Default aura bar border color override.",
             ExtendPath(basePath, "barBorderColor"), { 0.16, 0.18, 0.24, 0.85 }, true, {
                 disabled = BarModeDisabled(),
             }),
-        barTextColor = BuildColor(7, "Text Color", "Default text color for bar labels, stacks, and timers.",
+        barTextColor = BuildColor(8, "Text Color", "Default text color for bar labels, stacks, and timers.",
             ExtendPath(basePath, "barTextColor"), { 1, 1, 1, 1 }, true, {
                 disabled = BarModeDisabled(),
             }),
@@ -1001,28 +1007,41 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             ExtendPath(basePath, "buffBarTexture"), "Use Shared Texture", {
                 disabled = BarModeDisabled(),
             }),
-        buffBarFontName = BuildFontSelect(2, "Font", "Optional font override used only for buff bars.",
+        buffBarBackgroundTexture = BuildTextureSelect(2, "Background Texture",
+            "Optional background texture override used only for buff bars.",
+            ExtendPath(basePath, "buffBarBackgroundTexture"), "Use Shared Background Texture", {
+                disabled = BarModeDisabled(),
+            }),
+        buffBarFontName = BuildFontSelect(3, "Font", "Optional font override used only for buff bars.",
             ExtendPath(basePath, "buffBarFontName"), "Use Shared Font", {
                 disabled = BarModeDisabled(),
             }),
-        buffBarFontSize = BuildRange(3, "Font Size",
+        buffBarFontSize = BuildRange(4, "Font Size",
             "Optional buff bar font size override. Leave at 0 for shared sizing.",
             ExtendPath(basePath, "buffBarFontSize"), auraDefault("buffBarFontSize", 0), 0, 20, 1, {
                 disabled = BarModeDisabled(),
             }),
-        buffBarColor = BuildColor(4, "Fill Color", "Optional fill color override used only for buff bars.",
-            ExtendPath(basePath, "buffBarColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
+        buffUseThemeAccentFill = BuildToggle(5, "Theme Accent Fill",
+            "Use the global theme accent color as the buff bar fill.",
+            ExtendPath(basePath, "buffUseThemeAccentFill"), false, {
                 disabled = BarModeDisabled(),
+                refreshConfig = true,
             }),
-        buffBarBackground = BuildColor(5, "Background", "Optional background color override used only for buff bars.",
+        buffBarColor = BuildColor(6, "Fill Color", "Optional fill color override used only for buff bars.",
+            ExtendPath(basePath, "buffBarColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
+                disabled = function()
+                    return BarModeDisabled()() or GetPathValue(ExtendPath(basePath, "buffUseThemeAccentFill"), false) == true
+                end,
+            }),
+        buffBarBackground = BuildColor(7, "Background", "Optional background color override used only for buff bars.",
             ExtendPath(basePath, "buffBarBackground"), { 0.04, 0.05, 0.07, 0.95 }, true, {
                 disabled = BarModeDisabled(),
             }),
-        buffBarBorderColor = BuildColor(6, "Border", "Optional border color override used only for buff bars.",
+        buffBarBorderColor = BuildColor(8, "Border", "Optional border color override used only for buff bars.",
             ExtendPath(basePath, "buffBarBorderColor"), { 0.16, 0.18, 0.24, 0.85 }, true, {
                 disabled = BarModeDisabled(),
             }),
-        buffBarTextColor = BuildColor(7, "Text Color", "Optional text color override used only for buff bars.",
+        buffBarTextColor = BuildColor(9, "Text Color", "Optional text color override used only for buff bars.",
             ExtendPath(basePath, "buffBarTextColor"), { 1, 1, 1, 1 }, true, {
                 disabled = BarModeDisabled(),
             }),
@@ -1034,28 +1053,41 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
             ExtendPath(basePath, "debuffBarTexture"), "Use Shared Texture", {
                 disabled = BarModeDisabled(),
             }),
-        debuffBarFontName = BuildFontSelect(2, "Font", "Optional font override used only for debuff bars.",
+        debuffBarBackgroundTexture = BuildTextureSelect(2, "Background Texture",
+            "Optional background texture override used only for debuff bars.",
+            ExtendPath(basePath, "debuffBarBackgroundTexture"), "Use Shared Background Texture", {
+                disabled = BarModeDisabled(),
+            }),
+        debuffBarFontName = BuildFontSelect(3, "Font", "Optional font override used only for debuff bars.",
             ExtendPath(basePath, "debuffBarFontName"), "Use Shared Font", {
                 disabled = BarModeDisabled(),
             }),
-        debuffBarFontSize = BuildRange(3, "Font Size",
+        debuffBarFontSize = BuildRange(4, "Font Size",
             "Optional debuff bar font size override. Leave at 0 for shared sizing.",
             ExtendPath(basePath, "debuffBarFontSize"), auraDefault("debuffBarFontSize", 0), 0, 20, 1, {
                 disabled = BarModeDisabled(),
             }),
-        debuffBarColor = BuildColor(4, "Fill Color", "Optional fill color override used only for debuff bars.",
-            ExtendPath(basePath, "debuffBarColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
+        debuffUseThemeAccentFill = BuildToggle(5, "Theme Accent Fill",
+            "Use the global theme accent color as the debuff bar fill.",
+            ExtendPath(basePath, "debuffUseThemeAccentFill"), false, {
                 disabled = BarModeDisabled(),
+                refreshConfig = true,
             }),
-        debuffBarBackground = BuildColor(5, "Background", "Optional background color override used only for debuff bars.",
+        debuffBarColor = BuildColor(6, "Fill Color", "Optional fill color override used only for debuff bars.",
+            ExtendPath(basePath, "debuffBarColor"), { 0.15, 0.47, 0.87, 0.85 }, true, {
+                disabled = function()
+                    return BarModeDisabled()() or GetPathValue(ExtendPath(basePath, "debuffUseThemeAccentFill"), false) == true
+                end,
+            }),
+        debuffBarBackground = BuildColor(7, "Background", "Optional background color override used only for debuff bars.",
             ExtendPath(basePath, "debuffBarBackground"), { 0.04, 0.05, 0.07, 0.95 }, true, {
                 disabled = BarModeDisabled(),
             }),
-        debuffBarBorderColor = BuildColor(6, "Border", "Optional border color override used only for debuff bars.",
+        debuffBarBorderColor = BuildColor(8, "Border", "Optional border color override used only for debuff bars.",
             ExtendPath(basePath, "debuffBarBorderColor"), { 0.16, 0.18, 0.24, 0.85 }, true, {
                 disabled = BarModeDisabled(),
             }),
-        debuffBarTextColor = BuildColor(7, "Text Color", "Optional text color override used only for debuff bars.",
+        debuffBarTextColor = BuildColor(9, "Text Color", "Optional text color override used only for debuff bars.",
             ExtendPath(basePath, "debuffBarTextColor"), { 1, 1, 1, 1 }, true, {
                 disabled = BarModeDisabled(),
             }),
@@ -2553,14 +2585,19 @@ local function BuildCastbarTab()
                     { "castbar", "useCustomColor" }, PLAYER_CASTBAR_DEFAULTS.useCustomColor, {
                         refreshConfig = true,
                     }),
-                color = BuildColor(13, "Castbar Color", "Dedicated player castbar color.", { "castbar", "color" },
+                useThemeAccentFill = BuildToggle(13, "Theme Accent Fill",
+                    "Use the global theme accent color as the player castbar fill.",
+                    { "castbar", "useThemeAccentFill" }, PLAYER_CASTBAR_DEFAULTS.useThemeAccentFill, {
+                        refreshConfig = true,
+                    }),
+                color = BuildColor(14, "Castbar Color", "Dedicated player castbar color.", { "castbar", "color" },
                     COLOR_DEFAULTS.cast, true, {
                         disabled = ModuleDisabled(function()
-                            return GetPathValue({ "castbar", "useCustomColor" }, PLAYER_CASTBAR_DEFAULTS.useCustomColor) ~=
-                                true
+                            return GetPathValue({ "castbar", "useCustomColor" }, PLAYER_CASTBAR_DEFAULTS.useCustomColor) ~= true
+                                or GetPathValue({ "castbar", "useThemeAccentFill" }, PLAYER_CASTBAR_DEFAULTS.useThemeAccentFill) == true
                         end),
                     }),
-                masqueEnabled = BuildToggle(14, "Masque Skinning",
+                masqueEnabled = BuildToggle(15, "Masque Skinning",
                     "Enable Masque skinning for the castbar icon button. Requires the Masque addon to be installed. Disabled by default.",
                     { "castbar", "masqueEnabled" }, false, { refreshConfig = true }),
             }),

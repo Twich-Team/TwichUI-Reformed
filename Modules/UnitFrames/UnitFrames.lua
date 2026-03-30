@@ -1633,6 +1633,7 @@ function UnitFrames:GetAuraConfigFor(unitKey)
         barMode              = scoped.barMode,
         barHeight            = scoped.barHeight,
         barTexture           = scoped.barTexture,
+        barBackgroundTexture = scoped.barBackgroundTexture,
         barFontSize          = scoped.barFontSize,
         barFontName          = scoped.barFontName,
         showTime             = scoped.showTime,
@@ -1642,16 +1643,20 @@ function UnitFrames:GetAuraConfigFor(unitKey)
         barBorderColor       = scoped.barBorderColor,
         barTextColor         = scoped.barTextColor,
         buffBarTexture       = scoped.buffBarTexture,
+        buffBarBackgroundTexture = scoped.buffBarBackgroundTexture,
         buffBarFontSize      = scoped.buffBarFontSize,
         buffBarFontName      = scoped.buffBarFontName,
         buffBarColor         = scoped.buffBarColor,
+        buffUseThemeAccentFill = scoped.buffUseThemeAccentFill,
         buffBarBackground    = scoped.buffBarBackground,
         buffBarBorderColor   = scoped.buffBarBorderColor,
         buffBarTextColor     = scoped.buffBarTextColor,
         debuffBarTexture     = scoped.debuffBarTexture,
+        debuffBarBackgroundTexture = scoped.debuffBarBackgroundTexture,
         debuffBarFontSize    = scoped.debuffBarFontSize,
         debuffBarFontName    = scoped.debuffBarFontName,
         debuffBarColor       = scoped.debuffBarColor,
+        debuffUseThemeAccentFill = scoped.debuffUseThemeAccentFill,
         debuffBarBackground  = scoped.debuffBarBackground,
         debuffBarBorderColor = scoped.debuffBarBorderColor,
         debuffBarTextColor   = scoped.debuffBarTextColor,
@@ -1666,6 +1671,7 @@ function UnitFrames:GetAuraConfigFor(unitKey)
     if merged.barMode == nil then merged.barMode = false end
     if merged.barHeight == nil then merged.barHeight = 14 end
     if merged.barTexture == nil then merged.barTexture = nil end   -- nil = theme default
+    if merged.barBackgroundTexture == nil then merged.barBackgroundTexture = nil end
     if merged.barFontSize == nil then merged.barFontSize = nil end -- nil = auto (barH - 4)
     if merged.barFontName == nil then merged.barFontName = nil end -- nil = text fontName
     if merged.showTime == nil then merged.showTime = true end
@@ -1675,16 +1681,24 @@ function UnitFrames:GetAuraConfigFor(unitKey)
     if merged.barBorderColor == nil then merged.barBorderColor = nil end
     if merged.barTextColor == nil then merged.barTextColor = nil end
     if merged.buffBarTexture == nil then merged.buffBarTexture = nil end
+    if merged.buffBarBackgroundTexture == nil then merged.buffBarBackgroundTexture = nil end
     if merged.buffBarFontSize == nil then merged.buffBarFontSize = nil end
     if merged.buffBarFontName == nil then merged.buffBarFontName = nil end
     if merged.buffBarColor == nil then merged.buffBarColor = nil end
+    if merged.buffUseThemeAccentFill == nil then
+        merged.buffUseThemeAccentFill = scoped.buffUseThemeAccentBackground == true
+    end
     if merged.buffBarBackground == nil then merged.buffBarBackground = nil end
     if merged.buffBarBorderColor == nil then merged.buffBarBorderColor = nil end
     if merged.buffBarTextColor == nil then merged.buffBarTextColor = nil end
     if merged.debuffBarTexture == nil then merged.debuffBarTexture = nil end
+    if merged.debuffBarBackgroundTexture == nil then merged.debuffBarBackgroundTexture = nil end
     if merged.debuffBarFontSize == nil then merged.debuffBarFontSize = nil end
     if merged.debuffBarFontName == nil then merged.debuffBarFontName = nil end
     if merged.debuffBarColor == nil then merged.debuffBarColor = nil end
+    if merged.debuffUseThemeAccentFill == nil then
+        merged.debuffUseThemeAccentFill = scoped.debuffUseThemeAccentBackground == true
+    end
     if merged.debuffBarBackground == nil then merged.debuffBarBackground = nil end
     if merged.debuffBarBorderColor == nil then merged.debuffBarBorderColor = nil end
     if merged.debuffBarTextColor == nil then merged.debuffBarTextColor = nil end
@@ -1723,8 +1737,16 @@ function UnitFrames:GetAuraBarAppearance(aura, data, palette, text)
     local isHarmfulAura = data and data.isHarmfulAura == true
     local textureName = GetAuraBarStyleValue(aura, isHarmfulAura, "BarTexture", "barTexture")
     local texture = (textureName and textureName ~= "") and GetLSMTexture(textureName) or GetThemeTexture()
+    local backgroundTextureName = GetAuraBarStyleValue(aura, isHarmfulAura, "BarBackgroundTexture",
+        "barBackgroundTexture")
+    local backgroundTexture = (backgroundTextureName and backgroundTextureName ~= "")
+        and GetLSMTexture(backgroundTextureName) or GetThemeTexture()
+    local useThemeAccentFill = GetAuraBarStyleValue(aura, isHarmfulAura, "UseThemeAccentFill",
+        "useThemeAccentFill") == true
 
-    local fillColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarColor", "barColor"), nil)
+    local fillColor = useThemeAccentFill
+        and GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })
+        or NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarColor", "barColor"), nil)
     local backgroundColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarBackground", "barBackground"),
         nil)
     local borderColor = NormalizeColor(GetAuraBarStyleValue(aura, isHarmfulAura, "BarBorderColor", "barBorderColor"), nil)
@@ -1739,6 +1761,8 @@ function UnitFrames:GetAuraBarAppearance(aura, data, palette, text)
     return {
         textureName = textureName,
         texture = texture,
+        backgroundTextureName = backgroundTextureName,
+        backgroundTexture = backgroundTexture,
         fillColor = fillColor,
         backgroundColor = backgroundColor,
         borderColor = borderColor,
@@ -1760,13 +1784,21 @@ function UnitFrames:EnsureAuraBarsContainer(frame)
         bar:SetBackdropColor(0.04, 0.05, 0.07, 0.95)
         bar:SetBackdropBorderColor(0.16, 0.18, 0.24, 0.85)
         bar:SetMinMaxValues(0, 1); bar:SetValue(1)
+        local bg = bar:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints(bar)
+        bg:SetTexture(GetThemeTexture())
+        bg:SetVertexColor(0.04, 0.05, 0.07, 0.95)
+        bar.bg = bg
         local icon = bar:CreateTexture(nil, "OVERLAY")
         icon:SetTexCoord(0.08, 0.92, 0.08, 0.92); bar.icon = icon
         local label = bar:CreateFontString(nil, "OVERLAY")
+        label:SetFont(_G.STANDARD_TEXT_FONT, 11, "OUTLINE")
         label:SetJustifyH("LEFT"); label:SetWordWrap(false); bar.label = label
         local timeText = bar:CreateFontString(nil, "OVERLAY")
+        timeText:SetFont(_G.STANDARD_TEXT_FONT, 11, "OUTLINE")
         timeText:SetJustifyH("RIGHT"); bar.timeText = timeText
         local stackText = bar:CreateFontString(nil, "OVERLAY")
+        stackText:SetFont(_G.STANDARD_TEXT_FONT, 11, "OUTLINE")
         stackText:SetJustifyH("CENTER"); bar.stackText = stackText
         bar:SetScript("OnUpdate", function(self2, _)
             local remaining = UnitFrames:GetAuraRemainingTime(nil, self2._expiry, self2._duration)
@@ -1856,6 +1888,7 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
         if data then
             local appearance = self:GetAuraBarAppearance(aura, data, palette, text)
             local texture = appearance.texture
+            local backgroundTexture = appearance.backgroundTexture
             local barColor = appearance.fillColor
             local bgColor = appearance.backgroundColor
             local borderColor = appearance.borderColor
@@ -1870,8 +1903,15 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
                 bar:SetPoint("TOP", container.bars[i - 1], "BOTTOM", 0, -spacing)
             end
             bar:SetStatusBarTexture(texture)
-            -- Apply backdrop background override if set
-            if bgColor then
+            if bar.bg then
+                bar.bg:SetTexture(backgroundTexture or GetThemeTexture())
+                if bgColor then
+                    bar.bg:SetVertexColor(bgColor[1] or 0, bgColor[2] or 0, bgColor[3] or 0, bgColor[4] or 0.95)
+                else
+                    bar.bg:SetVertexColor(0.04, 0.05, 0.07, 0.95)
+                end
+                bar:SetBackdropColor(0, 0, 0, 0)
+            elseif bgColor then
                 bar:SetBackdropColor(bgColor[1] or 0, bgColor[2] or 0, bgColor[3] or 0, bgColor[4] or 0.95)
             else
                 bar:SetBackdropColor(0.04, 0.05, 0.07, 0.95)
@@ -1932,14 +1972,12 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
                 bar.icon:SetTexture(data.icon); bar.icon:SetSize(barH - 2, barH - 2)
                 bar.icon:ClearAllPoints(); bar.icon:SetPoint("LEFT", bar, "LEFT", 1, 0)
             end
-            -- Stacks text (shown left of time, right-aligned block)
-            -- Reserve space for stacks and time on the right side
             local stackStr = (showStacks and data.applications and data.applications > 1)
-                and tostring(data.applications) or nil
+                and string.format(" (x%d)", data.applications) or ""
+            local labelText = string.format("%s%s", data.name or "", stackStr)
             local iconOffset = barH + 2
             local rightReserve = 0
             if showTime then rightReserve = rightReserve + 30 end
-            if showStacks then rightReserve = rightReserve + 20 end
             if bar.label then
                 self:ApplyFontObject(bar.label, barFontSz, barFontNm, text)
                 if textColor then
@@ -1950,25 +1988,10 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
                 bar.label:ClearAllPoints()
                 bar.label:SetPoint("LEFT", bar, "LEFT", iconOffset, 0)
                 bar.label:SetPoint("RIGHT", bar, "RIGHT", -(rightReserve + 4), 0)
-                bar.label:SetText(data.name or "")
+                bar.label:SetText(labelText)
             end
             if bar.stackText then
-                self:ApplyFontObject(bar.stackText, barFontSz, barFontNm, text)
-                if textColor then
-                    bar.stackText:SetTextColor(textColor[1] or 1, textColor[2] or 1, textColor[3] or 1,
-                        textColor[4] or 1)
-                else
-                    bar.stackText:SetTextColor(1, 1, 1, 1)
-                end
-                bar.stackText:ClearAllPoints()
-                if showStacks then
-                    local stackRight = showTime and -34 or -4
-                    bar.stackText:SetPoint("RIGHT", bar, "RIGHT", stackRight, 0)
-                    bar.stackText:SetText(stackStr or "")
-                    bar.stackText:SetShown(stackStr ~= nil)
-                else
-                    bar.stackText:SetText(""); bar.stackText:Hide()
-                end
+                bar.stackText:Hide()
             end
             if bar.timeText then
                 self:ApplyFontObject(bar.timeText, barFontSz, barFontNm, text)
@@ -4032,7 +4055,10 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         )
         castPreview:SetSize(Clamp(castSettings.width or 260, 120, 600), Clamp(castSettings.height or 20, 10, 60))
         castPreview:SetStatusBarTexture(texName and GetLSMTexture(texName) or GetThemeTexture())
-        if castSettings.useCustomColor == true and type(castSettings.color) == "table" then
+        if castSettings.useThemeAccentFill == true then
+            local accent = GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })
+            castPreview:SetStatusBarColor(accent[1] or 1, accent[2] or 1, accent[3] or 1, accent[4] or 1)
+        elseif castSettings.useCustomColor == true and type(castSettings.color) == "table" then
             castPreview:SetStatusBarColor(castSettings.color[1] or 1, castSettings.color[2] or 1,
                 castSettings.color[3] or 1, castSettings.color[4] or 1)
         else
@@ -4793,7 +4819,10 @@ function UnitFrames:RefreshCastbarStyle()
         or ((db.texture and db.texture ~= "") and db.texture or nil)
     castbar:SetStatusBarTexture(texName and GetLSMTexture(texName) or GetThemeTexture())
     castbar.smoothing = self:GetCastbarSmoothingMethod()
-    if settings.useCustomColor == true and type(settings.color) == "table" then
+    if settings.useThemeAccentFill == true then
+        local accent = GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })
+        castbar:SetStatusBarColor(accent[1] or 1, accent[2] or 1, accent[3] or 1, accent[4] or 1)
+    elseif settings.useCustomColor == true and type(settings.color) == "table" then
         castbar:SetStatusBarColor(settings.color[1] or 1, settings.color[2] or 1, settings.color[3] or 1,
             settings.color[4] or 1)
     else

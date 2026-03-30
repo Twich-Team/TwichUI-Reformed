@@ -61,9 +61,10 @@ MediaModule.Sounds = {
 }
 
 MediaModule.Textures = {
-    { name = "TwichUI-Bright", extension = "tga" },
-    { name = "TwichUI-Shade",  extension = "tga" },
-    { name = "TwichUI-Smooth", extension = "tga" },
+    { name = "TwichUI-Bright",      extension = "tga" },
+    { name = "TwichUI-Shade",       extension = "tga" },
+    { name = "TwichUI-Smooth",      extension = "tga" },
+    { name = "TwichUI-AngledLines", extension = "tga" }
 }
 
 function MediaModule:OnInitialize()
