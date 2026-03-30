@@ -63,8 +63,11 @@ local DEFAULTS = {
     mythicPlusTimerNotifyPlusTwoExpired = true,
     mythicPlusTimerNotifyPlusOneExpired = true,
     mythicPlusTimerNotifyForcesComplete = true,
+    mythicPlusTimerNotifyCheckpointComplete = true,
     mythicPlusTimerNotificationSound = DEFAULT_SOUND,
     mythicPlusTimerNotificationDisplayTime = DEFAULT_NOTIFICATION_DISPLAY_TIME,
+    mythicPlusCheckpointNotificationSound = DEFAULT_SOUND,
+    mythicPlusCheckpointNotificationDisplayTime = DEFAULT_NOTIFICATION_DISPLAY_TIME,
 }
 
 local VALID_FRAME_VISIBILITY_MODES = {
@@ -169,6 +172,58 @@ end
 
 local function GetModule()
     return _G.TwichUIMythicPlusToolsRuntime
+end
+
+local function RefreshCheckpointConfiguration(resetScroll)
+    if ConfigurationModule and ConfigurationModule.Refresh then
+        ConfigurationModule:Refresh()
+        if resetScroll then
+            local ui = ConfigurationModule.StandaloneUI
+            if ui and ui.RequestRenderCurrentPage then
+                ui:RequestRenderCurrentPage(true)
+            end
+        end
+    end
+end
+
+local function FocusCheckpointConfigurationView()
+    local ui = ConfigurationModule and ConfigurationModule.StandaloneUI
+    if not (ui and ui.currentPageId == "mythicPlusTools") then
+        return
+    end
+
+    if ui.InvalidateTabSelection then
+        ui:InvalidateTabSelection({ "Mythic+ Tools", "mythicPlusTimer", "minionCheckpoints", "checkpoints" })
+    end
+
+    ui.selectedTabs = ui.selectedTabs or {}
+    ui.selectedTabs["Mythic+ Tools"] = "mythicPlusTimer"
+    ui.selectedTabs["Mythic+ Tools.mythicPlusTimer"] = "minionCheckpoints"
+    ui.currentPath = { "Mythic+ Tools", "mythicPlusTimer", "minionCheckpoints", "checkpoints" }
+end
+
+local function ResolveLegacySelectedMapID(module, value)
+    if type(value) == "number" and value > 0 then
+        return value
+    end
+
+    if type(value) == "string" then
+        local numericValue = tonumber(value)
+        if numericValue and numericValue > 0 then
+            return numericValue
+        end
+
+        local searchValue = string.lower(value)
+        if module and module.GetSeasonalDungeonEntries then
+            for _, entry in ipairs(module:GetSeasonalDungeonEntries()) do
+                if string.lower(tostring(entry.name or "")) == searchValue then
+                    return entry.mapID
+                end
+            end
+        end
+    end
+
+    return nil
 end
 
 function Options:RefreshModuleAppearance()
@@ -802,6 +857,89 @@ function Options:SetMythicPlusTimerShowBossCheckpoints(info, value)
     end
 end
 
+function Options:GetSeasonalDungeonValues()
+    local module = GetModule()
+    if module and module.GetSeasonalDungeonChoices then
+        return module:GetSeasonalDungeonChoices()
+    end
+
+    return { [0] = "No dungeons available" }
+end
+
+function Options:GetSelectedCheckpointMapID()
+    local module = GetModule()
+    if module and module.GetSelectedCheckpointMapID then
+        local mapID = module:GetSelectedCheckpointMapID()
+        local resolvedMapID = ResolveLegacySelectedMapID(module, mapID)
+        if resolvedMapID and resolvedMapID ~= mapID and module.SetSelectedCheckpointMapID then
+            module:SetSelectedCheckpointMapID(resolvedMapID)
+            return resolvedMapID
+        end
+
+        return mapID
+    end
+
+    return 0
+end
+
+function Options:SetSelectedCheckpointMapID(info, value)
+    local module = GetModule()
+    if module and module.SetSelectedCheckpointMapID then
+        module:SetSelectedCheckpointMapID(tonumber(value) or 0)
+    end
+
+    FocusCheckpointConfigurationView()
+    RefreshCheckpointConfiguration(true)
+end
+
+function Options:GetSelectedDungeonCheckpoints()
+    local module = GetModule()
+    if module and module.GetConfiguredDungeonCheckpoints then
+        return module:GetConfiguredDungeonCheckpoints(self:GetSelectedCheckpointMapID())
+    end
+
+    return {}
+end
+
+function Options:AddSelectedDungeonCheckpoint()
+    local module = GetModule()
+    if module and module.AddCustomDungeonCheckpoint then
+        module:AddCustomDungeonCheckpoint(self:GetSelectedCheckpointMapID())
+    end
+
+    FocusCheckpointConfigurationView()
+    RefreshCheckpointConfiguration()
+end
+
+function Options:ResetSelectedDungeonCheckpoints()
+    local module = GetModule()
+    if module and module.ResetDungeonCheckpoints then
+        module:ResetDungeonCheckpoints(self:GetSelectedCheckpointMapID())
+    end
+
+    FocusCheckpointConfigurationView()
+    RefreshCheckpointConfiguration()
+end
+
+function Options:UpdateSelectedDungeonCheckpoint(checkpointID, updates)
+    local module = GetModule()
+    if module and module.UpdateDungeonCheckpoint then
+        module:UpdateDungeonCheckpoint(self:GetSelectedCheckpointMapID(), checkpointID, updates)
+    end
+
+    RefreshCheckpointConfiguration()
+end
+
+function Options:RemoveSelectedDungeonCheckpoint(checkpointID)
+    local module = GetModule()
+    if module and module.RemoveDungeonCheckpoint then
+        module:RemoveDungeonCheckpoint(self:GetSelectedCheckpointMapID(), checkpointID)
+    end
+
+    FocusCheckpointConfigurationView()
+    RefreshCheckpointConfiguration()
+end
+
 function Options:GetMythicPlusTimerNotifyPlusThreeExpired()
     local value = self:GetDB().mythicPlusTimerNotifyPlusThreeExpired
     if value == nil then
@@ -854,6 +992,19 @@ function Options:SetMythicPlusTimerNotifyForcesComplete(info, value)
     self:GetDB().mythicPlusTimerNotifyForcesComplete = NormalizeBoolean(value)
 end
 
+function Options:GetMythicPlusTimerNotifyCheckpointComplete()
+    local value = self:GetDB().mythicPlusTimerNotifyCheckpointComplete
+    if value == nil then
+        return DEFAULTS.mythicPlusTimerNotifyCheckpointComplete
+    end
+
+    return value == true
+end
+
+function Options:SetMythicPlusTimerNotifyCheckpointComplete(info, value)
+    self:GetDB().mythicPlusTimerNotifyCheckpointComplete = NormalizeBoolean(value)
+end
+
 function Options:GetMythicPlusTimerNotificationSound()
     local db = self:GetDB()
     if db.mythicPlusTimerNotificationSound == nil then
@@ -874,6 +1025,29 @@ end
 function Options:SetMythicPlusTimerNotificationDisplayTime(info, value)
     self:GetDB().mythicPlusTimerNotificationDisplayTime = tonumber(value) or
         DEFAULTS.mythicPlusTimerNotificationDisplayTime
+end
+
+function Options:GetMythicPlusCheckpointNotificationSound()
+    local db = self:GetDB()
+    if db.mythicPlusCheckpointNotificationSound == nil then
+        return DEFAULTS.mythicPlusCheckpointNotificationSound
+    end
+
+    return db.mythicPlusCheckpointNotificationSound
+end
+
+function Options:SetMythicPlusCheckpointNotificationSound(info, value)
+    self:GetDB().mythicPlusCheckpointNotificationSound = NormalizeSound(value)
+end
+
+function Options:GetMythicPlusCheckpointNotificationDisplayTime()
+    return self:GetDB().mythicPlusCheckpointNotificationDisplayTime or
+        DEFAULTS.mythicPlusCheckpointNotificationDisplayTime
+end
+
+function Options:SetMythicPlusCheckpointNotificationDisplayTime(info, value)
+    self:GetDB().mythicPlusCheckpointNotificationDisplayTime = tonumber(value) or
+        DEFAULTS.mythicPlusCheckpointNotificationDisplayTime
 end
 
 function Options:GetInterruptTrackerLocked()
@@ -951,6 +1125,13 @@ function Options:TestMythicPlusTimerNotification(kind)
     local module = GetModule()
     if module and module.TestMythicPlusTimerNotification then
         module:TestMythicPlusTimerNotification(kind)
+    end
+end
+
+function Options:TestMythicPlusCheckpointNotification()
+    local module = GetModule()
+    if module and module.TestMythicPlusTimerNotification then
+        module:TestMythicPlusTimerNotification("checkpoint")
     end
 end
 

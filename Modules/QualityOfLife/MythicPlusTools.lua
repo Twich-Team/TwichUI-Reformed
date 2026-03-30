@@ -1161,6 +1161,459 @@ local function GetMythicPlusMapName(mapID)
     return "Mythic+"
 end
 
+local function NormalizeCheckpointName(value, fallback)
+    if type(value) == "string" then
+        value = value:match("^%s*(.-)%s*$")
+        if value and value ~= "" then
+            return value
+        end
+    end
+
+    return fallback or "Checkpoint"
+end
+
+local function BuildDefaultBossCheckpointID(bossIndex)
+    return "boss_" .. tostring(tonumber(bossIndex) or 0)
+end
+
+local function NormalizeCheckpointID(rawID, fallbackPrefix, fallbackIndex)
+    local value = type(rawID) == "string" and rawID:match("^%s*(.-)%s*$") or nil
+    if value and value ~= "" then
+        return value
+    end
+
+    return tostring(fallbackPrefix or "checkpoint") .. "_" .. tostring(tonumber(fallbackIndex) or 0)
+end
+
+local function CloneCheckpointEntry(entry)
+    if type(entry) ~= "table" then
+        return nil
+    end
+
+    return {
+        id = entry.id,
+        kind = entry.kind,
+        bossIndex = entry.bossIndex,
+        name = entry.name,
+        percent = entry.percent,
+        notifyEnabled = entry.notifyEnabled,
+    }
+end
+
+local function SortCheckpointList(checkpoints)
+    tsort(checkpoints, function(left, right)
+        local leftPercent = tonumber(left and left.percent) or 0
+        local rightPercent = tonumber(right and right.percent) or 0
+        if leftPercent ~= rightPercent then
+            return leftPercent < rightPercent
+        end
+
+        local leftBoss = left and left.kind == "boss"
+        local rightBoss = right and right.kind == "boss"
+        if leftBoss ~= rightBoss then
+            return leftBoss
+        end
+
+        local leftBossIndex = tonumber(left and left.bossIndex) or 0
+        local rightBossIndex = tonumber(right and right.bossIndex) or 0
+        if leftBossIndex ~= rightBossIndex then
+            return leftBossIndex < rightBossIndex
+        end
+
+        return tostring(left and left.name or "") < tostring(right and right.name or "")
+    end)
+end
+
+local function GetEncounterJournalFunctions()
+    if type(_G.EJ_SelectTier) ~= "function" or type(_G.EJ_GetCurrentTier) ~= "function" or
+        type(_G.EJ_GetNumTiers) ~= "function" or type(_G.EJ_GetInstanceByIndex) ~= "function" or
+        type(_G.EJ_SelectInstance) ~= "function" or type(_G.EJ_GetEncounterInfoByIndex) ~= "function" then
+        return nil
+    end
+
+    return {
+        selectTier = _G.EJ_SelectTier,
+        getCurrentTier = _G.EJ_GetCurrentTier,
+        getNumTiers = _G.EJ_GetNumTiers,
+        getInstanceByIndex = _G.EJ_GetInstanceByIndex,
+        selectInstance = _G.EJ_SelectInstance,
+        getEncounterInfoByIndex = _G.EJ_GetEncounterInfoByIndex,
+    }
+end
+
+local function NormalizeDungeonSearchKey(name)
+    local value = type(name) == "string" and string.lower(name) or ""
+    value = value:gsub("['`%-]", "")
+    value = value:gsub("[^%w]", "")
+    return value
+end
+
+local function FindBestEncounterJournalInstance(mapName)
+    local ej = GetEncounterJournalFunctions()
+    if not ej then
+        return nil
+    end
+
+    local searchKey = NormalizeDungeonSearchKey(mapName)
+    if searchKey == "" then
+        return nil
+    end
+
+    local exactMatch, partialMatch
+    local previousTier = ej.getCurrentTier()
+    for tierIndex = 1, ej.getNumTiers() do
+        ej.selectTier(tierIndex)
+        local instanceIndex = 1
+        while true do
+            local instanceID, instanceName = ej.getInstanceByIndex(instanceIndex, true)
+            if not instanceID then
+                break
+            end
+
+            local instanceKey = NormalizeDungeonSearchKey(instanceName)
+            if instanceKey == searchKey then
+                exactMatch = { tier = tierIndex, id = instanceID, name = instanceName }
+                break
+            elseif instanceKey ~= "" and (instanceKey:find(searchKey, 1, true) or searchKey:find(instanceKey, 1, true)) then
+                partialMatch = partialMatch or { tier = tierIndex, id = instanceID, name = instanceName }
+            end
+
+            instanceIndex = instanceIndex + 1
+        end
+
+        if exactMatch then
+            break
+        end
+    end
+
+    if previousTier then
+        ej.selectTier(previousTier)
+    end
+
+    return exactMatch or partialMatch
+end
+
+function MPT:GetSeasonalDungeonEntries()
+    local entries = {}
+    if not (C_ChallengeMode and type(C_ChallengeMode.GetMapTable) == "function") then
+        return entries
+    end
+
+    for _, mapID in ipairs(C_ChallengeMode.GetMapTable() or {}) do
+        if type(mapID) == "number" and mapID > 0 then
+            entries[#entries + 1] = {
+                mapID = mapID,
+                name = GetMythicPlusMapName(mapID),
+            }
+        end
+    end
+
+    tsort(entries, function(left, right)
+        local leftName = string.lower(tostring(left and left.name or ""))
+        local rightName = string.lower(tostring(right and right.name or ""))
+        if leftName == rightName then
+            return (left and left.mapID or 0) < (right and right.mapID or 0)
+        end
+
+        return leftName < rightName
+    end)
+
+    return entries
+end
+
+function MPT:GetSeasonalDungeonChoices()
+    local values = {}
+    for _, entry in ipairs(self:GetSeasonalDungeonEntries()) do
+        values[entry.mapID] = entry.name
+    end
+    return values
+end
+
+function MPT:GetDefaultDungeonCheckpoints(mapID)
+    self.dungeonCheckpointDefaults = self.dungeonCheckpointDefaults or {}
+    mapID = tonumber(mapID)
+    if not mapID or mapID <= 0 then
+        return {}
+    end
+
+    if self.dungeonCheckpointDefaults[mapID] then
+        local cached = {}
+        for _, checkpoint in ipairs(self.dungeonCheckpointDefaults[mapID]) do
+            cached[#cached + 1] = CloneCheckpointEntry(checkpoint)
+        end
+        return cached
+    end
+
+    local bossNames = {}
+    local instanceInfo = FindBestEncounterJournalInstance(GetMythicPlusMapName(mapID))
+    local ej = GetEncounterJournalFunctions()
+    if instanceInfo and ej then
+        local previousTier = ej.getCurrentTier()
+        ej.selectTier(instanceInfo.tier)
+        ej.selectInstance(instanceInfo.id)
+        local encounterIndex = 1
+        while true do
+            local name = ej.getEncounterInfoByIndex(encounterIndex)
+            if not name then
+                break
+            end
+
+            bossNames[#bossNames + 1] = NormalizeCheckpointName(name, format("Boss %d", encounterIndex))
+            encounterIndex = encounterIndex + 1
+        end
+        if previousTier then
+            ej.selectTier(previousTier)
+        end
+    end
+
+    if #bossNames == 0 then
+        for bossIndex = 1, 4 do
+            bossNames[#bossNames + 1] = format("Boss %d", bossIndex)
+        end
+    end
+
+    local defaults = {}
+    for bossIndex, bossName in ipairs(bossNames) do
+        local percent = bossIndex == #bossNames and 100 or floor(((bossIndex / #bossNames) * 100) + 0.5)
+        defaults[#defaults + 1] = {
+            id = BuildDefaultBossCheckpointID(bossIndex),
+            kind = "boss",
+            bossIndex = bossIndex,
+            name = bossName,
+            percent = percent,
+            notifyEnabled = true,
+        }
+    end
+
+    self.dungeonCheckpointDefaults[mapID] = {}
+    for _, checkpoint in ipairs(defaults) do
+        self.dungeonCheckpointDefaults[mapID][#self.dungeonCheckpointDefaults[mapID] + 1] = CloneCheckpointEntry(
+        checkpoint)
+    end
+
+    return defaults
+end
+
+function MPT:NormalizeDungeonCheckpointList(checkpoints, mapID)
+    local normalized = {}
+    local bossFallbacks = self:GetDefaultDungeonCheckpoints(mapID)
+    local bossNameByIndex = {}
+    for _, entry in ipairs(bossFallbacks) do
+        if entry.bossIndex then
+            bossNameByIndex[entry.bossIndex] = entry.name
+        end
+    end
+
+    for index, rawEntry in ipairs(type(checkpoints) == "table" and checkpoints or {}) do
+        if type(rawEntry) == "table" then
+            local kind = rawEntry.kind == "boss" and "boss" or "custom"
+            local bossIndex = kind == "boss" and tonumber(rawEntry.bossIndex) or nil
+            local fallbackName = kind == "boss" and bossNameByIndex[bossIndex or index] or
+            format("Custom Checkpoint %d", index)
+            normalized[#normalized + 1] = {
+                id = NormalizeCheckpointID(rawEntry.id, kind, bossIndex or index),
+                kind = kind,
+                bossIndex = bossIndex,
+                name = NormalizeCheckpointName(rawEntry.name, fallbackName),
+                percent = ClampNumber(rawEntry.percent, 0, 100, kind == "boss" and 100 or 50),
+                notifyEnabled = rawEntry.notifyEnabled ~= false,
+            }
+        end
+    end
+
+    if #normalized == 0 then
+        normalized = self:GetDefaultDungeonCheckpoints(mapID)
+    end
+
+    SortCheckpointList(normalized)
+    return normalized
+end
+
+function MPT:GetCheckpointConfigDB()
+    local db = self:GetDB()
+    if type(db.mythicPlusTimerMinionCheckpoints) ~= "table" then
+        db.mythicPlusTimerMinionCheckpoints = {}
+    end
+
+    local checkpointDB = db.mythicPlusTimerMinionCheckpoints
+    if type(checkpointDB.dungeons) ~= "table" then
+        checkpointDB.dungeons = {}
+    end
+
+    if type(checkpointDB.selectedMapID) == "string" then
+        local numericValue = tonumber(checkpointDB.selectedMapID)
+        if numericValue and numericValue > 0 then
+            checkpointDB.selectedMapID = numericValue
+        else
+            local selectedSearchKey = NormalizeDungeonSearchKey(checkpointDB.selectedMapID)
+            for _, entry in ipairs(self:GetSeasonalDungeonEntries()) do
+                if NormalizeDungeonSearchKey(entry.name) == selectedSearchKey then
+                    checkpointDB.selectedMapID = entry.mapID
+                    break
+                end
+            end
+        end
+    end
+
+    if type(checkpointDB.selectedMapID) ~= "number" or checkpointDB.selectedMapID <= 0 then
+        local seasonal = self:GetSeasonalDungeonEntries()
+        checkpointDB.selectedMapID = seasonal[1] and seasonal[1].mapID or nil
+    end
+
+    return checkpointDB
+end
+
+function MPT:GetSelectedCheckpointMapID()
+    local checkpointDB = self:GetCheckpointConfigDB()
+    return tonumber(checkpointDB.selectedMapID)
+end
+
+function MPT:SetSelectedCheckpointMapID(mapID)
+    local checkpointDB = self:GetCheckpointConfigDB()
+    checkpointDB.selectedMapID = tonumber(mapID) or checkpointDB.selectedMapID
+end
+
+function MPT:GetDungeonCheckpointConfig(mapID, createIfMissing)
+    local checkpointDB = self:GetCheckpointConfigDB()
+    mapID = tonumber(mapID) or self:GetSelectedCheckpointMapID()
+    if not mapID or mapID <= 0 then
+        return nil
+    end
+
+    local mapKey = tostring(mapID)
+    local dungeonConfig = checkpointDB.dungeons[mapKey]
+    if type(dungeonConfig) ~= "table" then
+        local mapSearchKey = NormalizeDungeonSearchKey(GetMythicPlusMapName(mapID))
+        for legacyKey, legacyConfig in pairs(checkpointDB.dungeons) do
+            if legacyKey ~= mapKey and type(legacyConfig) == "table" then
+                local legacyNumeric = tonumber(legacyKey)
+                if legacyNumeric == mapID or NormalizeDungeonSearchKey(legacyKey) == mapSearchKey then
+                    dungeonConfig = legacyConfig
+                    checkpointDB.dungeons[mapKey] = legacyConfig
+                    checkpointDB.dungeons[legacyKey] = nil
+                    break
+                end
+            end
+        end
+    end
+
+    if type(dungeonConfig) ~= "table" and createIfMissing ~= false then
+        dungeonConfig = {
+            checkpoints = self:GetDefaultDungeonCheckpoints(mapID),
+        }
+        checkpointDB.dungeons[mapKey] = dungeonConfig
+    end
+
+    if type(dungeonConfig) ~= "table" then
+        return nil
+    end
+
+    dungeonConfig.checkpoints = self:NormalizeDungeonCheckpointList(dungeonConfig.checkpoints, mapID)
+    return dungeonConfig
+end
+
+function MPT:GetConfiguredDungeonCheckpoints(mapID)
+    local dungeonConfig = self:GetDungeonCheckpointConfig(mapID, true)
+    if not dungeonConfig then
+        return {}
+    end
+
+    local checkpoints = {}
+    for _, checkpoint in ipairs(dungeonConfig.checkpoints or {}) do
+        checkpoints[#checkpoints + 1] = CloneCheckpointEntry(checkpoint)
+    end
+    return checkpoints
+end
+
+function MPT:SetDungeonCheckpointConfig(mapID, checkpoints)
+    local dungeonConfig = self:GetDungeonCheckpointConfig(mapID, true)
+    if not dungeonConfig then
+        return
+    end
+
+    dungeonConfig.checkpoints = self:NormalizeDungeonCheckpointList(checkpoints, mapID)
+end
+
+function MPT:ResetDungeonCheckpoints(mapID)
+    mapID = tonumber(mapID) or self:GetSelectedCheckpointMapID()
+    if not mapID then
+        return
+    end
+
+    local checkpointDB = self:GetCheckpointConfigDB()
+    checkpointDB.dungeons[tostring(mapID)] = {
+        checkpoints = self:GetDefaultDungeonCheckpoints(mapID),
+    }
+end
+
+function MPT:AddCustomDungeonCheckpoint(mapID)
+    mapID = tonumber(mapID) or self:GetSelectedCheckpointMapID()
+    local checkpoints = self:GetConfiguredDungeonCheckpoints(mapID)
+    local customCount = 0
+    for _, checkpoint in ipairs(checkpoints) do
+        if checkpoint.kind == "custom" then
+            customCount = customCount + 1
+        end
+    end
+
+    checkpoints[#checkpoints + 1] = {
+        id = NormalizeCheckpointID(nil, "custom", customCount + 1),
+        kind = "custom",
+        name = format("Custom Checkpoint %d", customCount + 1),
+        percent = 50,
+        notifyEnabled = true,
+    }
+
+    self:SetDungeonCheckpointConfig(mapID, checkpoints)
+end
+
+function MPT:UpdateDungeonCheckpoint(mapID, checkpointID, updates)
+    mapID = tonumber(mapID) or self:GetSelectedCheckpointMapID()
+    local checkpoints = self:GetConfiguredDungeonCheckpoints(mapID)
+    for _, checkpoint in ipairs(checkpoints) do
+        if checkpoint.id == checkpointID then
+            if updates.name ~= nil then
+                checkpoint.name = NormalizeCheckpointName(updates.name, checkpoint.name)
+            end
+            if updates.percent ~= nil then
+                local fallbackPercent = checkpoint.kind == "boss" and 100 or checkpoint.percent
+                checkpoint.percent = ClampNumber(updates.percent, 0, 100, fallbackPercent)
+            end
+            if updates.notifyEnabled ~= nil then
+                checkpoint.notifyEnabled = updates.notifyEnabled == true
+            end
+            break
+        end
+    end
+
+    local bossCount = 0
+    for _, checkpoint in ipairs(checkpoints) do
+        if checkpoint.kind == "boss" then
+            bossCount = bossCount + 1
+        end
+    end
+    for _, checkpoint in ipairs(checkpoints) do
+        if checkpoint.kind == "boss" and tonumber(checkpoint.bossIndex) == bossCount then
+            checkpoint.percent = 100
+        end
+    end
+
+    self:SetDungeonCheckpointConfig(mapID, checkpoints)
+end
+
+function MPT:RemoveDungeonCheckpoint(mapID, checkpointID)
+    mapID = tonumber(mapID) or self:GetSelectedCheckpointMapID()
+    local checkpoints = self:GetConfiguredDungeonCheckpoints(mapID)
+    for index = #checkpoints, 1, -1 do
+        if checkpoints[index].id == checkpointID and checkpoints[index].kind == "custom" then
+            table.remove(checkpoints, index)
+            break
+        end
+    end
+
+    self:SetDungeonCheckpointConfig(mapID, checkpoints)
+end
+
 local function GetMythicPlusTimeLimits(timeLimit, hasChallengersPeril)
     local fullLimit = max(0, tonumber(timeLimit) or 0)
     if fullLimit <= 0 then
@@ -2546,9 +2999,13 @@ function MPT:ResetMythicPlusTimerTracking()
     self.mythicPlusTimerState.lastNotificationState = nil
     self.mythicPlusTimerState.lastKnownForceCount = nil
     self.mythicPlusTimerState.bossCheckpoints = self.mythicPlusTimerState.bossCheckpoints or {}
+    self.mythicPlusTimerState.customCheckpoints = self.mythicPlusTimerState.customCheckpoints or {}
 
     for key in pairs(self.mythicPlusTimerState.bossCheckpoints) do
         self.mythicPlusTimerState.bossCheckpoints[key] = nil
+    end
+    for key in pairs(self.mythicPlusTimerState.customCheckpoints) do
+        self.mythicPlusTimerState.customCheckpoints[key] = nil
     end
 end
 
@@ -2716,6 +3173,17 @@ function AttachTooltipHandlers(region)
     region.twichUITooltipBound = true
 end
 
+local function SetTooltipData(region, title, lines)
+    if not region then
+        return
+    end
+
+    ---@diagnostic disable-next-line: inject-field
+    region.tooltipTitle = title
+    ---@diagnostic disable-next-line: inject-field
+    region.tooltipLines = lines
+end
+
 function MPT:ApplyMythicPlusTimerStyle(frame)
     if not frame then
         return
@@ -2814,7 +3282,56 @@ function MPT:CreateMythicPlusTimerBarRow(parent)
     row.detail:SetJustifyH("LEFT")
     row.detail:SetJustifyV("MIDDLE")
 
+    row.Markers = {}
+    row.MarkerData = {}
+
     return row
+end
+
+function MPT:UpdateMythicPlusTimerForceMarkers(row)
+    if not (row and row.barBackdrop) then
+        return
+    end
+
+    row.Markers = row.Markers or {}
+    local markerData = type(row.MarkerData) == "table" and row.MarkerData or {}
+    local availableWidth = max(1, (row.barBackdrop:GetWidth() or 0) - 2)
+    local barHeight = max(1, row.barBackdrop:GetHeight() or 1)
+
+    for index, markerState in ipairs(markerData) do
+        local marker = row.Markers[index]
+        if not marker then
+            marker = CreateFrame("Frame", nil, row.barBackdrop)
+            marker:SetSize(8, barHeight + 10)
+
+            marker.Line = marker:CreateTexture(nil, "OVERLAY")
+            marker.Line:SetPoint("TOP", marker, "TOP", 0, 0)
+            marker.Line:SetPoint("BOTTOM", marker, "BOTTOM", 0, 0)
+            marker.Line:SetWidth(2)
+
+            marker.Dot = marker:CreateTexture(nil, "OVERLAY")
+            marker.Dot:SetPoint("TOP", marker.Line, "TOP", 0, 0)
+            marker.Dot:SetSize(6, 6)
+
+            row.Markers[index] = marker
+        end
+
+        local percent = ClampNumber(markerState.percent, 0, 100, 0)
+        local offsetX = floor(availableWidth * (percent / 100))
+        local color = markerState.completed and { 0.34, 0.92, 0.62, 1 } or
+            (markerState.kind == "custom" and { 0.42, 0.82, 0.98, 1 } or { 0.96, 0.78, 0.24, 1 })
+
+        marker:SetHeight(barHeight + 10)
+        marker:ClearAllPoints()
+        marker:SetPoint("CENTER", row.barBackdrop, "LEFT", 1 + offsetX, 0)
+        marker.Line:SetColorTexture(color[1], color[2], color[3], 0.95)
+        marker.Dot:SetColorTexture(color[1], color[2], color[3], 1)
+        marker:Show()
+    end
+
+    for index = #markerData + 1, #row.Markers do
+        row.Markers[index]:Hide()
+    end
 end
 
 function MPT:CreateMythicPlusTimerMilestoneRow(parent)
@@ -3026,7 +3543,7 @@ function MPT:EnsureMythicPlusTimerFrame()
 
     frame.CheckpointHeader = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     frame.CheckpointHeader:SetJustifyH("LEFT")
-    frame.CheckpointHeader:SetText("Bosses")
+    frame.CheckpointHeader:SetText("Checkpoints")
     AttachTooltipHandlers(frame.CheckpointHeader)
 
     frame.CheckpointRows = {}
@@ -3070,10 +3587,69 @@ end
 function MPT:BuildMythicPlusTimerPreviewState()
     local plusOneLimit, plusTwoLimit, plusThreeLimit = GetMythicPlusTimeLimits(33 * 60, false)
     local plusOneFraction, plusTwoFraction, plusThreeFraction = GetMythicPlusTimerBarFractions(33 * 60, false)
+    local mapID = self:GetSelectedCheckpointMapID()
+    local mapName = (type(mapID) == "number" and mapID > 0 and GetMythicPlusMapName(mapID)) or "The Stonevault"
+    local configuredCheckpoints = self:GetConfiguredDungeonCheckpoints(mapID)
+    local previewCheckpointRows = {}
+    local previewTimes = { "[04:26]", "[09:41]", "[14:18]", "Pending", "Pending", "Pending", "Pending", "Pending" }
+    local previewForceMarkers = {}
+    local completedForcesPercent = 94
+
+    if #configuredCheckpoints > 0 then
+        local lastCompletedPercent = 0
+        for index, checkpoint in ipairs(configuredCheckpoints) do
+            if index <= 2 then
+                lastCompletedPercent = max(lastCompletedPercent, tonumber(checkpoint.percent) or 0)
+            end
+        end
+        completedForcesPercent = ClampNumber(lastCompletedPercent > 0 and max(lastCompletedPercent, 35) or 94, 0, 100, 94)
+    end
+
+    for index, checkpoint in ipairs(configuredCheckpoints) do
+        local completed = (tonumber(checkpoint.percent) or 0) <= completedForcesPercent
+        previewCheckpointRows[#previewCheckpointRows + 1] = {
+            name = tostring(checkpoint.name or ("Checkpoint " .. index)),
+            time = completed and (previewTimes[#previewCheckpointRows + 1] or "[18:42]") or "Pending",
+            completed = completed,
+            percent = tonumber(checkpoint.percent) or 0,
+            kind = checkpoint.kind,
+        }
+        previewForceMarkers[#previewForceMarkers + 1] = {
+            name = tostring(checkpoint.name or ("Checkpoint " .. index)),
+            percent = tonumber(checkpoint.percent) or 0,
+            completed = completed,
+            kind = checkpoint.kind,
+        }
+    end
+
+    if #previewCheckpointRows == 0 then
+        previewCheckpointRows = {
+            { name = "E.D.N.A.",            time = "[04:26]", completed = true,  percent = 25,  kind = "boss" },
+            { name = "Skarmorak",           time = "[09:41]", completed = true,  percent = 52,  kind = "boss" },
+            { name = "South Hall Clear",    time = "[14:18]", completed = true,  percent = 74,  kind = "custom" },
+            { name = "Master Machinists",   time = "Pending", completed = false, percent = 88,  kind = "boss" },
+            { name = "Void Speaker Eirich", time = "Pending", completed = false, percent = 100, kind = "boss" },
+        }
+        previewForceMarkers = {
+            { name = "E.D.N.A.",            percent = 25,  completed = true,  kind = "boss" },
+            { name = "Skarmorak",           percent = 52,  completed = true,  kind = "boss" },
+            { name = "South Hall Clear",    percent = 74,  completed = true,  kind = "custom" },
+            { name = "Master Machinists",   percent = 88,  completed = false, kind = "boss" },
+            { name = "Void Speaker Eirich", percent = 100, completed = false, kind = "boss" },
+        }
+    end
+
+    local completedCheckpointCount = 0
+    for _, checkpoint in ipairs(previewCheckpointRows) do
+        if checkpoint.completed then
+            completedCheckpointCount = completedCheckpointCount + 1
+        end
+    end
+
     return {
         active = true,
-        mapName = "The Stonevault",
-        keyText = "+12 The Stonevault",
+        mapName = mapName,
+        keyText = "+12 " .. mapName,
         affixText = "Tyrannical • Challenger's Peril • Volcanic",
         elapsedText = "18:42 / 33:00",
         deathText = "Deaths 4  |  +20s",
@@ -3086,18 +3662,14 @@ function MPT:BuildMythicPlusTimerPreviewState()
         },
         forcesBar = {
             label = "Forces",
-            detail = "94 / 100 enemy forces",
-            value = "94.0%",
-            progress = 0.94,
+            detail = string.format("%d / 100 enemy forces", completedForcesPercent),
+            value = string.format("%.1f%%", completedForcesPercent),
+            progress = completedForcesPercent / 100,
             color = TIMER_FORCES_COLOR,
         },
-        checkpoints = {
-            { name = "E.D.N.A.",            time = "[04:26]", completed = true },
-            { name = "Skarmorak",           time = "[09:41]", completed = true },
-            { name = "Master Machinists",   time = "Pending", completed = false },
-            { name = "Void Speaker Eirich", time = "Pending", completed = false },
-        },
-        completedCheckpointCount = 2,
+        forceMarkers = previewForceMarkers,
+        checkpoints = previewCheckpointRows,
+        completedCheckpointCount = completedCheckpointCount,
         currentUpgradeTier = 3,
     }
 end
@@ -3135,6 +3707,7 @@ function MPT:BuildActiveMythicPlusTimerState()
         mapID = nil,
         level = nil,
         bossCheckpoints = {},
+        customCheckpoints = {},
         forcesCompletionTime = nil,
     }
 
@@ -3212,7 +3785,7 @@ function MPT:BuildActiveMythicPlusTimerState()
         },
     }
 
-    local checkpoints = {}
+    local bossCheckpoints = {}
     local completedCheckpointCount = 0
     local totalCount = 0
     local currentCount = 0
@@ -3251,13 +3824,71 @@ function MPT:BuildActiveMythicPlusTimerState()
                     completedCheckpointCount = completedCheckpointCount + 1
                 end
 
-                checkpoints[#checkpoints + 1] = {
+                bossCheckpoints[#bossCheckpoints + 1] = {
                     name = tostring(info.description or ("Boss " .. index)),
                     time = info.completed and
                         ("[" .. FormatClock(self.mythicPlusTimerState.bossCheckpoints[key] or 0) .. "]") or "Pending",
                     completed = info.completed == true,
                 }
             end
+        end
+    end
+
+    local configuredCheckpoints = self:GetConfiguredDungeonCheckpoints(mapID)
+    local forceMarkers = {}
+    local checkpoints = bossCheckpoints
+    local progressPercent = totalCount > 0 and ClampNumber((currentCount / totalCount) * 100, 0, 100, 0) or 0
+
+    self.mythicPlusTimerState.customCheckpoints = self.mythicPlusTimerState.customCheckpoints or {}
+
+    if #configuredCheckpoints > 0 then
+        checkpoints = {}
+        completedCheckpointCount = 0
+        local bossIndex = 0
+
+        for _, checkpoint in ipairs(configuredCheckpoints) do
+            local rowState = {
+                name = tostring(checkpoint.name or "Checkpoint"),
+                time = "Pending",
+                completed = false,
+                percent = tonumber(checkpoint.percent) or 0,
+                kind = checkpoint.kind,
+            }
+
+            if checkpoint.kind == "boss" then
+                bossIndex = bossIndex + 1
+                local bossState = bossCheckpoints[bossIndex]
+                if bossState then
+                    rowState.time = bossState.time
+                    rowState.completed = bossState.completed == true
+                elseif totalCount > 0 and progressPercent >= rowState.percent then
+                    rowState.completed = true
+                    rowState.time = "[" .. FormatClock(elapsed) .. "]"
+                end
+            else
+                local checkpointID = tostring(checkpoint.id or ("custom_" .. tostring(#checkpoints + 1)))
+                if totalCount > 0 and progressPercent >= rowState.percent then
+                    local recordedTime = self.mythicPlusTimerState.customCheckpoints[checkpointID]
+                    if not recordedTime then
+                        recordedTime = elapsed
+                        self.mythicPlusTimerState.customCheckpoints[checkpointID] = recordedTime
+                    end
+                    rowState.completed = true
+                    rowState.time = "[" .. FormatClock(recordedTime) .. "]"
+                end
+            end
+
+            if rowState.completed then
+                completedCheckpointCount = completedCheckpointCount + 1
+            end
+
+            checkpoints[#checkpoints + 1] = rowState
+            forceMarkers[#forceMarkers + 1] = {
+                name = rowState.name,
+                percent = rowState.percent,
+                completed = rowState.completed,
+                kind = rowState.kind,
+            }
         end
     end
 
@@ -3290,6 +3921,7 @@ function MPT:BuildActiveMythicPlusTimerState()
             segments = milestoneSegments,
         },
         forcesBar = forcesBar,
+        forceMarkers = forceMarkers,
         checkpoints = checkpoints,
         completedCheckpointCount = completedCheckpointCount,
         currentUpgradeTier = currentUpgradeTier,
@@ -3300,7 +3932,7 @@ function MPT:BuildActiveMythicPlusTimerState()
     }
 end
 
-function MPT:BuildMythicPlusTimerNotification(kind, state)
+function MPT:BuildMythicPlusTimerNotification(kind, state, checkpoint)
     local mapName = state and state.mapName or "the current key"
     if kind == "plusThree" then
         return {
@@ -3326,6 +3958,16 @@ function MPT:BuildMythicPlusTimerNotification(kind, state)
             icon = 236686,
             color = TIMER_PLUS_ONE_COLOR,
         }
+    elseif kind == "checkpoint" then
+        local checkpointName = checkpoint and checkpoint.name or "Boss Checkpoint"
+        local checkpointTime = checkpoint and checkpoint.time or "Pending"
+        return {
+            status = "MYTHIC+ TIMER",
+            title = tostring(checkpointName),
+            detail = format("Checkpoint completed at %s in %s.", tostring(checkpointTime), mapName),
+            icon = 236686,
+            color = { 0.34, 0.92, 0.62, 1 },
+        }
     end
 
     return {
@@ -3337,14 +3979,16 @@ function MPT:BuildMythicPlusTimerNotification(kind, state)
     }
 end
 
-function MPT:SendMythicPlusTimerNotification(kind, state)
-    local notification = self:BuildMythicPlusTimerNotification(kind, state)
+function MPT:SendMythicPlusTimerNotification(kind, state, checkpoint)
+    local notification = self:BuildMythicPlusTimerNotification(kind, state, checkpoint)
     ---@type TwichUI_MythicPlusAlertNotificationWidget
     local widget = CreateWidget(AceGUI, "TwichUI_MythicPlusAlertNotification")
     widget:SetAlert(notification.status, notification.title, notification.detail, notification.icon, notification.color)
 
     if NotificationModule and type(NotificationModule.TWICH_NOTIFICATION) == "function" then
-        local soundKey = self:GetDB().mythicPlusTimerNotificationSound
+        local db = self:GetDB()
+        local soundKey = kind == "checkpoint" and db.mythicPlusCheckpointNotificationSound or
+            db.mythicPlusTimerNotificationSound
         if soundKey == MUTED_SOUND_VALUE then
             soundKey = nil
         elseif soundKey == nil then
@@ -3353,7 +3997,9 @@ function MPT:SendMythicPlusTimerNotification(kind, state)
 
         NotificationModule:TWICH_NOTIFICATION("TWICH_NOTIFICATION", widget, {
             soundKey = soundKey,
-            displayDuration = self:GetDB().mythicPlusTimerNotificationDisplayTime or 8,
+            displayDuration = kind == "checkpoint" and
+                (db.mythicPlusCheckpointNotificationDisplayTime or 8) or
+                (db.mythicPlusTimerNotificationDisplayTime or 8),
         })
     end
 end
@@ -3370,6 +4016,7 @@ function MPT:HandleMythicPlusTimerNotifications(state)
         plusTwoExpired = state.plusTwoExpired == true,
         plusOneExpired = state.plusOneExpired == true,
         forcesCompleted = state.forcesCompleted == true,
+        completedCheckpointCount = tonumber(state.completedCheckpointCount) or 0,
     }
 
     if previous then
@@ -3385,6 +4032,13 @@ function MPT:HandleMythicPlusTimerNotifications(state)
         end
         if db.mythicPlusTimerNotifyForcesComplete ~= false and current.forcesCompleted and not previous.forcesCompleted then
             self:SendMythicPlusTimerNotification("forces", state)
+        end
+        if db.mythicPlusTimerNotifyCheckpointComplete ~= false and
+            current.completedCheckpointCount > (tonumber(previous.completedCheckpointCount) or 0) then
+            local checkpoint = state.checkpoints and state.checkpoints[current.completedCheckpointCount] or nil
+            if checkpoint and checkpoint.completed then
+                self:SendMythicPlusTimerNotification("checkpoint", state, checkpoint)
+            end
         end
     end
 
@@ -3566,31 +4220,26 @@ function MPT:RefreshMythicPlusTimerFrame()
     frame.AffixText:SetText(state.affixText or "")
     frame.ElapsedText:SetText(state.elapsedText or "")
     frame.DeathText:SetText(state.deathText or "")
-    frame.KeyText.tooltipTitle = "Keystone"
-    frame.KeyText.tooltipLines = {
+    SetTooltipData(frame.KeyText, "Keystone", {
         "Current keystone level and dungeon.",
         tostring(state.keyText or state.mapName or "Mythic+"),
-    }
-    frame.AffixText.tooltipTitle = "Affixes"
-    frame.AffixText.tooltipLines = {
+    })
+    SetTooltipData(frame.AffixText, "Affixes", {
         "Weekly affixes active for this run.",
         tostring(state.affixText or "Affixes unavailable"),
-    }
-    frame.ElapsedText.tooltipTitle = "Timer"
-    frame.ElapsedText.tooltipLines = {
+    })
+    SetTooltipData(frame.ElapsedText, "Timer", {
         "Elapsed run time versus the base dungeon timer.",
         tostring(state.elapsedText or ""),
-    }
-    frame.DeathText.tooltipTitle = "Deaths"
-    frame.DeathText.tooltipLines = {
+    })
+    SetTooltipData(frame.DeathText, "Deaths", {
         "Party deaths and the total time penalty added to the run.",
         tostring(state.deathText or ""),
-    }
-    frame.BarsHeader.tooltipTitle = "Milestones"
-    frame.BarsHeader.tooltipLines = {
+    })
+    SetTooltipData(frame.BarsHeader, "Milestones", {
         "Upgrade timer windows.",
         "These bars now start full and drain as each upgrade window expires.",
-    }
+    })
     frame.MilestoneRow.tooltipTitle = "Upgrade Timers"
     frame.MilestoneRow.tooltipLines = {
         "Track the remaining time for +3, +2, and +1 upgrade windows.",
@@ -3647,6 +4296,7 @@ function MPT:RefreshMythicPlusTimerFrame()
     frame.ForcesRow.label:SetText(state.forcesBar and state.forcesBar.label or "")
     frame.ForcesRow.value:SetText(state.forcesBar and state.forcesBar.value or "")
     frame.ForcesRow.detail:SetText(state.forcesBar and state.forcesBar.detail or "")
+    frame.ForcesRow.MarkerData = state.forceMarkers or {}
     frame.ForcesRow.tooltipTitle = "Enemy Forces"
     frame.ForcesRow.tooltipLines = {
         "Enemy forces required to complete the dungeon.",
@@ -3660,12 +4310,12 @@ function MPT:RefreshMythicPlusTimerFrame()
         ((state.forcesBar and state.forcesBar.color) or TIMER_FORCES_COLOR))
 
     local showBossCheckpoints = self:GetDB().mythicPlusTimerShowBossCheckpoints ~= false
+    frame.CheckpointHeader:SetText("Checkpoints")
     frame.CheckpointHeader:SetShown(showBossCheckpoints)
-    frame.CheckpointHeader.tooltipTitle = "Bosses"
-    frame.CheckpointHeader.tooltipLines = {
-        "Boss kill checkpoints for the current run.",
-        "Completed bosses show the recorded kill time.",
-    }
+    SetTooltipData(frame.CheckpointHeader, "Checkpoints", {
+        "Configured boss and custom checkpoints for the current run.",
+        "Completed checkpoints show the recorded completion time.",
+    })
 
     for _, row in ipairs(frame.CheckpointRows) do
         row.Name:SetText("")
@@ -3692,12 +4342,20 @@ function MPT:RefreshMythicPlusTimerFrame()
     end
 
     self:LayoutMythicPlusTimerFrame(frame, showBossCheckpoints and visibleCheckpointCount or 0)
+    self:UpdateMythicPlusTimerForceMarkers(frame.ForcesRow)
     self:HandleMythicPlusTimerNotifications(state)
     self:HandleMythicPlusTimerStateAnimations(state)
 end
 
 function MPT:TestMythicPlusTimerNotification(kind)
-    self:SendMythicPlusTimerNotification(kind or "plusThree", self:BuildMythicPlusTimerPreviewState())
+    local state = self:BuildMythicPlusTimerPreviewState()
+    if kind == "checkpoint" then
+        local checkpoint = state and state.checkpoints and state.checkpoints[1] or nil
+        self:SendMythicPlusTimerNotification("checkpoint", state, checkpoint)
+        return
+    end
+
+    self:SendMythicPlusTimerNotification(kind or "plusThree", state)
 end
 
 function MPT:DebugMythicPlusTimerBossAnimation()

@@ -875,10 +875,16 @@ end
 
 local function GetPreviewType(path)
     local key = JoinPath(path)
+    local rootKey = path and path[1] or nil
+    local secondaryKey = path and path[2] or nil
     if key:find("Quality of Life.choresTab", 1, true) == 1 then
         return "chores"
     end
-    if key:find("Quality of Life.mythicPlusToolsTab", 1, true) == 1 then
+    if (rootKey == "qualityOfLife" and secondaryKey == "mythicPlusToolsTab") or
+        rootKey == "mythicPlusToolsTab" or
+        key:find("Quality of Life.mythicPlusToolsTab", 1, true) == 1 or
+        key:find("Quality of Life.Mythic+ Tools", 1, true) == 1 or
+        key:find("Mythic+ Tools", 1, true) == 1 then
         return "mythic"
     end
     if key:find("Notification Panel", 1, true) == 1 then
@@ -889,6 +895,26 @@ local function GetPreviewType(path)
     end
 
     return nil
+end
+
+local function GetMythicPreviewVariant(path)
+    local key = JoinPath(path)
+    local rootKey = path and path[1] or nil
+    local secondaryKey = path and path[2] or nil
+    if not ((rootKey == "qualityOfLife" and secondaryKey == "mythicPlusToolsTab") or
+            rootKey == "mythicPlusToolsTab" or
+            key:find("Quality of Life.mythicPlusToolsTab", 1, true) == 1 or
+            key:find("Quality of Life.Mythic+ Tools", 1, true) == 1 or
+            key:find("Mythic+ Tools", 1, true) == 1) then
+        return nil
+    end
+
+    if secondaryKey == "interruptTracker" or (path and path[3] == "interruptTracker") or
+        key:find(".interruptTracker", 1, true) ~= nil then
+        return "interrupt"
+    end
+
+    return "timer"
 end
 
 local function GetTabSections(path, groups)
@@ -2100,6 +2126,7 @@ end
 function UI:RenderStickyPreview(path)
     local frame = self:EnsureFrame()
     local previewType = GetPreviewType(path or {})
+    local mythicVariant = previewType == "mythic" and GetMythicPreviewVariant(path or {}) or nil
 
     if self.previewRoot then
         self.previewRoot:Hide()
@@ -2117,8 +2144,10 @@ function UI:RenderStickyPreview(path)
             subtitle = "Pinned chores tracker styling stays visible while you tune the frame.",
         },
         mythic = {
-            title = "Interrupt Preview",
-            subtitle = "Live-styled tracker mock stays pinned while you adjust bars, fonts, and sounds.",
+            title = mythicVariant == "interrupt" and "Interrupt Preview" or "Timer Preview",
+            subtitle = mythicVariant == "interrupt" and
+                "Live-styled tracker mock stays pinned while you adjust bars, fonts, and sounds." or
+                "Pinned Mythic+ timer styling stays visible while you tune timer, bars, and checkpoint rows.",
         },
         notifications = {
             title = "Notification Preview",
@@ -2207,6 +2236,208 @@ local function GetMythicPreviewRuntime()
     end
 
     return runtime
+end
+
+local function ClampPreviewValue(value, minValue, maxValue, fallback)
+    value = tonumber(value)
+    if not value then
+        return fallback
+    end
+    if minValue ~= nil and value < minValue then
+        return minValue
+    end
+    if maxValue ~= nil and value > maxValue then
+        return maxValue
+    end
+    return value
+end
+
+local function SetPreviewBarColor(bar, color)
+    if not (bar and color) then
+        return
+    end
+
+    bar:SetStatusBarColor(color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 1)
+end
+
+local function CreateMythicPlusTimerPreviewShell(parent, width, height, runtime)
+    local frame = CreatePanel(parent, 0.03, 0.03, 0.05, 0.98, 0.2)
+    frame:SetSize(width, height)
+
+    frame.TitleBar = CreatePanel(frame, 0.02, 0.02, 0.03, 0.98, 0.35)
+    frame.TitleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+    frame.TitleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
+    frame.TitleBar:SetHeight(32)
+
+    frame.TitleAccent = frame.TitleBar:CreateTexture(nil, "ARTWORK")
+    frame.TitleAccent:SetPoint("TOPLEFT", frame.TitleBar, "TOPLEFT", 0, 0)
+    frame.TitleAccent:SetPoint("TOPRIGHT", frame.TitleBar, "TOPRIGHT", 0, 0)
+    frame.TitleAccent:SetHeight(2)
+    frame.TitleAccent:SetColorTexture(0.96, 0.78, 0.24, 0.95)
+
+    frame.TitleIcon = frame.TitleBar:CreateTexture(nil, "OVERLAY")
+    frame.TitleIcon:SetPoint("LEFT", frame.TitleBar, "LEFT", 10, 0)
+    frame.TitleIcon:SetSize(16, 16)
+    frame.TitleIcon:SetTexture(236686)
+    frame.TitleIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    frame.Title = frame.TitleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    frame.Title:SetPoint("LEFT", frame.TitleIcon, "RIGHT", 8, 0)
+    frame.Title:SetPoint("RIGHT", frame.TitleBar, "RIGHT", -10, 0)
+    frame.Title:SetJustifyH("LEFT")
+    frame.Title:SetText("Mythic+ Timer")
+
+    frame.ContentInset = CreatePanel(frame, 0.02, 0.02, 0.03, 0.98, 0.45)
+    frame.ContentInset:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -40)
+    frame.ContentInset:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
+
+    frame.ContentScroll = CreateFrame("ScrollFrame", nil, frame.ContentInset)
+    frame.ContentScroll:SetPoint("TOPLEFT", frame.ContentInset, "TOPLEFT", 3, -3)
+    frame.ContentScroll:SetPoint("BOTTOMRIGHT", frame.ContentInset, "BOTTOMRIGHT", -3, 3)
+
+    frame.ScrollChild = CreateFrame("Frame", nil, frame.ContentScroll)
+    frame.ScrollChild:SetPoint("TOPLEFT", frame.ContentScroll, "TOPLEFT", 0, 0)
+    frame.ScrollChild:SetPoint("TOPRIGHT", frame.ContentScroll, "TOPRIGHT", 0, 0)
+    frame.ScrollChild:SetHeight(1)
+    frame.ContentScroll:SetScrollChild(frame.ScrollChild)
+
+    frame.EmptyText = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.EmptyText:SetPoint("CENTER", frame.ContentInset, "CENTER", 0, 0)
+    frame.EmptyText:SetTextColor(0.75, 0.75, 0.75)
+    frame.EmptyText:SetJustifyH("CENTER")
+    frame.EmptyText:SetText("Mythic+ timer preview unavailable.")
+    frame.EmptyText:Hide()
+
+    frame.KeyText = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    frame.KeyText:SetJustifyH("LEFT")
+
+    frame.AffixText = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.AffixText:SetJustifyH("LEFT")
+
+    frame.ElapsedText = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.ElapsedText:SetJustifyH("LEFT")
+
+    frame.DeathText = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.DeathText:SetJustifyH("LEFT")
+
+    frame.BarsHeader = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.BarsHeader:SetJustifyH("LEFT")
+    frame.BarsHeader:SetText("Milestones")
+
+    frame.MilestoneRow = runtime and runtime.CreateMythicPlusTimerMilestoneRow and
+        runtime:CreateMythicPlusTimerMilestoneRow(frame.ScrollChild) or CreateFrame("Frame", nil, frame.ScrollChild)
+    frame.ForcesRow = runtime and runtime.CreateMythicPlusTimerBarRow and
+        runtime:CreateMythicPlusTimerBarRow(frame.ScrollChild) or CreateFrame("Frame", nil, frame.ScrollChild)
+
+    frame.CheckpointHeader = frame.ScrollChild:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.CheckpointHeader:SetJustifyH("LEFT")
+    frame.CheckpointHeader:SetText("Checkpoints")
+
+    frame.CheckpointRows = {}
+    for index = 1, 8 do
+        local row = CreateFrame("Frame", nil, frame.ScrollChild)
+        row:SetHeight(18)
+
+        row.Name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.Name:SetJustifyH("LEFT")
+        row.Name:SetPoint("LEFT", row, "LEFT", 0, 0)
+
+        row.Time = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.Time:SetJustifyH("RIGHT")
+        row.Time:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+
+        frame.CheckpointRows[index] = row
+    end
+
+    return frame
+end
+
+local function PopulateMythicPlusTimerPreviewShell(shell, runtime)
+    if not shell then
+        return
+    end
+
+    if not (runtime and runtime.GetMythicPlusTimerAppearance and runtime.BuildMythicPlusTimerPreviewState and
+            runtime.ApplyMythicPlusTimerStyle and runtime.LayoutMythicPlusTimerFrame) then
+        shell.EmptyText:SetShown(true)
+        return
+    end
+
+    local appearance = runtime:GetMythicPlusTimerAppearance()
+    local state = runtime:BuildMythicPlusTimerPreviewState()
+    if not (appearance and state and shell.MilestoneRow and shell.ForcesRow and shell.CheckpointRows) then
+        shell.EmptyText:SetShown(true)
+        return
+    end
+
+    shell.EmptyText:Hide()
+    runtime:ApplyMythicPlusTimerStyle(shell)
+
+    shell.Title:SetText("Mythic+ Timer")
+    shell.KeyText:SetText(state.keyText or state.mapName or "Mythic+")
+    shell.AffixText:SetText(state.affixText or "")
+    shell.ElapsedText:SetText(state.elapsedText or "")
+    shell.DeathText:SetText(state.deathText or "")
+
+    for _, key in ipairs({ "plusOne", "plusTwo", "plusThree" }) do
+        local segment = shell.MilestoneRow.Segments and shell.MilestoneRow.Segments[key]
+        if segment then
+            segment.widthFraction = 0
+            segment.Label:SetText("")
+            segment.Value:SetText("")
+            segment.bar:SetStatusBarTexture(appearance.timerBarTexture)
+            segment.bar:SetMinMaxValues(0, 1)
+            segment.bar:SetValue(0)
+        end
+    end
+
+    for _, segmentState in ipairs((state.milestoneBar and state.milestoneBar.segments) or {}) do
+        local segment = shell.MilestoneRow.Segments and shell.MilestoneRow.Segments[segmentState.key]
+        if segment then
+            segment.widthFraction = tonumber(segmentState.widthFraction) or 0
+            segment.Label:SetText(segmentState.label or "")
+            segment.Value:SetText(segmentState.value or "")
+            segment.bar:SetValue(1 - ClampPreviewValue(segmentState.progress, 0, 1, 0))
+            segment.barColor = appearance.timerBarColorMode == "custom" and appearance.timerBarColor or
+                (segmentState.color or { 0.96, 0.78, 0.24, 1 })
+            SetPreviewBarColor(segment.bar, segment.barColor)
+        end
+    end
+
+    shell.ForcesRow:Show()
+    shell.ForcesRow.label:SetText(state.forcesBar and state.forcesBar.label or "")
+    shell.ForcesRow.value:SetText(state.forcesBar and state.forcesBar.value or "")
+    shell.ForcesRow.detail:SetText(state.forcesBar and state.forcesBar.detail or "")
+    shell.ForcesRow.bar:SetStatusBarTexture(appearance.timerBarTexture)
+    shell.ForcesRow.bar:SetMinMaxValues(0, 1)
+    shell.ForcesRow.bar:SetValue(ClampPreviewValue(state.forcesBar and state.forcesBar.progress or 0, 0, 1, 0))
+    SetPreviewBarColor(shell.ForcesRow.bar,
+        appearance.timerBarColorMode == "custom" and appearance.timerBarColor or
+        ((state.forcesBar and state.forcesBar.color) or { 0.65, 0.42, 0.98, 1 }))
+    shell.ForcesRow.MarkerData = state.forceMarkers or {}
+
+    local showBossCheckpoints = runtime.GetDB and runtime:GetDB().mythicPlusTimerShowBossCheckpoints ~= false
+    shell.CheckpointHeader:SetText("Checkpoints")
+    shell.CheckpointHeader:SetShown(showBossCheckpoints)
+
+    for _, row in ipairs(shell.CheckpointRows) do
+        row.Name:SetText("")
+        row.Time:SetText("")
+        row.IsCompleted = false
+    end
+
+    local visibleCheckpointCount = 0
+    for index, rowState in ipairs(state.checkpoints or {}) do
+        local row = shell.CheckpointRows[index]
+        if row and showBossCheckpoints then
+            row.Name:SetText(rowState.name or "")
+            row.Time:SetText(rowState.time or "")
+            row.IsCompleted = rowState.completed == true
+            visibleCheckpointCount = visibleCheckpointCount + 1
+        end
+    end
+
+    runtime:LayoutMythicPlusTimerFrame(shell, showBossCheckpoints and visibleCheckpointCount or 0)
 end
 
 local function CreateTrackerPreviewShell(parent, width, height)
@@ -2840,6 +3071,7 @@ end
 function UI:RenderPreviewStrip(parent, y, path, width)
     local key = JoinPath(path)
     local preview = nil
+    local mythicVariant = GetMythicPreviewVariant(path)
 
     if key:find("Quality of Life.choresTab", 1, true) == 1 then
         preview = CreateFrame("Frame", nil, parent)
@@ -2864,7 +3096,43 @@ function UI:RenderPreviewStrip(parent, y, path, width)
         return y + preview:GetHeight() + ROW_SPACING
     end
 
-    if key:find("Quality of Life.mythicPlusToolsTab", 1, true) == 1 then
+    if mythicVariant == "timer" then
+        local runtime = GetMythicPreviewRuntime()
+        local scale = runtime and runtime.GetMythicPlusTimerScale and runtime:GetMythicPlusTimerScale() or 1
+        scale = ClampPreviewValue(scale, 0.7, 1.5, 1)
+
+        preview = CreateFrame("Frame", nil, parent)
+        preview:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
+
+        local shellWidth = math.min(math.max(220, width / scale), 360)
+        local shellHeight = 324
+        preview:SetSize(width, ceil(shellHeight * scale) + 12)
+
+        local shell = CreateMythicPlusTimerPreviewShell(preview, shellWidth, shellHeight, runtime)
+        shell:SetPoint("TOPLEFT", preview, "TOPLEFT", 0, 0)
+        PopulateMythicPlusTimerPreviewShell(shell, runtime)
+
+        preview.elapsed = 0
+        preview:SetScript("OnUpdate", function(selfPreview, elapsed)
+            selfPreview.elapsed = (selfPreview.elapsed or 0) + elapsed
+            if selfPreview.elapsed < 0.2 then
+                return
+            end
+
+            selfPreview.elapsed = 0
+            local previewRuntime = GetMythicPreviewRuntime() or runtime
+            local previewScale = previewRuntime and previewRuntime.GetMythicPlusTimerScale and
+                previewRuntime:GetMythicPlusTimerScale() or 1
+            previewScale = ClampPreviewValue(previewScale, 0.7, 1.5, 1)
+            local previewShellWidth = math.min(math.max(220, width / previewScale), 360)
+            shell:SetSize(previewShellWidth, shellHeight)
+            selfPreview:SetHeight(ceil(shellHeight * previewScale) + 12)
+            PopulateMythicPlusTimerPreviewShell(shell, previewRuntime)
+        end)
+        return y + preview:GetHeight() + ROW_SPACING
+    end
+
+    if mythicVariant == "interrupt" then
         local runtime = GetMythicPreviewRuntime()
         local appearance = runtime and runtime.GetTrackerAppearance and runtime:GetTrackerAppearance() or nil
         local metrics = runtime and runtime.GetTrackerMetrics and runtime:GetTrackerMetrics() or nil
@@ -3771,7 +4039,11 @@ function UI:RenderGroupBlock(parent, y, width, option, path, key, desiredPath)
     local bodyY = 0
     local childPath = ClonePath(path)
     childPath[#childPath + 1] = key
-    bodyY = self:RenderSection(content, bodyY, width - (horizontalInset * 2), option, childPath, desiredPath, true)
+    local remainingPath = nil
+    if desiredPath and desiredPath[1] == key and #desiredPath > 1 then
+        remainingPath = { unpackValues(desiredPath, 2) }
+    end
+    bodyY = self:RenderSection(content, bodyY, width - (horizontalInset * 2), option, childPath, remainingPath, true)
     content:SetHeight(math.max(1, bodyY))
     panel:SetHeight(bodyY + 44)
     return y + panel:GetHeight() + ROW_SPACING

@@ -37,6 +37,163 @@ local function GetSoundValues()
     return values
 end
 
+local function BuildCheckpointTabArgs()
+    local W = ConfigurationModule.Widgets
+    local checkpoints = MPTOptions:GetSelectedDungeonCheckpoints()
+    local bossCheckpointCount = 0
+    for _, checkpoint in ipairs(checkpoints) do
+        if checkpoint.kind == "boss" then
+            bossCheckpointCount = bossCheckpointCount + 1
+        end
+    end
+
+    local args = {}
+    if #checkpoints == 0 then
+        args.empty = {
+            type = "group",
+            name = "No Checkpoints",
+            order = 1,
+            args = {
+                desc = W.Description(1, "No checkpoint data is available for the selected dungeon yet."),
+            },
+        }
+        return args
+    end
+
+    for index, checkpoint in ipairs(checkpoints) do
+        local checkpointData = checkpoint
+        local isCustom = checkpointData.kind == "custom"
+        local isLastBoss = checkpointData.kind == "boss" and tonumber(checkpointData.bossIndex) == bossCheckpointCount
+        local title = isCustom and (checkpointData.name or ("Custom Checkpoint " .. index)) or
+            (checkpointData.name or ("Boss " .. index))
+
+        local groupArgs = {
+            summary = W.Description(1,
+                isCustom and "Custom minion checkpoint. It will stay sorted by target percent automatically." or
+                "Boss checkpoint. The target percent marks how much trash should be complete before the boss dies."),
+            percent = {
+                type = "range",
+                name = "Target Forces %",
+                desc = isLastBoss and "The final boss checkpoint is always 100%." or
+                    "Enemy-forces target for this checkpoint.",
+                order = 2,
+                min = 0,
+                max = 100,
+                step = 0.5,
+                width = 1.6,
+                disabled = function()
+                    return isLastBoss
+                end,
+                get = function()
+                    return tonumber(checkpointData.percent) or 0
+                end,
+                set = function(_, value)
+                    MPTOptions:UpdateSelectedDungeonCheckpoint(checkpointData.id, { percent = value })
+                end,
+            },
+            notify = {
+                type = "toggle",
+                name = "Send Notification",
+                desc = "Show a Mythic+ checkpoint notification when this checkpoint is reached.",
+                order = 3,
+                width = 1.5,
+                get = function()
+                    return checkpointData.notifyEnabled ~= false
+                end,
+                set = function(_, value)
+                    MPTOptions:UpdateSelectedDungeonCheckpoint(checkpointData.id, { notifyEnabled = value == true })
+                end,
+            },
+        }
+
+        if isCustom then
+            groupArgs.name = {
+                type = "input",
+                name = "Checkpoint Name",
+                desc = "Label shown for this custom checkpoint.",
+                order = 4,
+                width = 1.8,
+                get = function()
+                    return tostring(checkpointData.name or "")
+                end,
+                set = function(_, value)
+                    MPTOptions:UpdateSelectedDungeonCheckpoint(checkpointData.id, { name = value })
+                end,
+            }
+            groupArgs.remove = {
+                type = "execute",
+                name = "Remove",
+                desc = "Delete this custom checkpoint.",
+                order = 5,
+                func = function()
+                    MPTOptions:RemoveSelectedDungeonCheckpoint(checkpointData.id)
+                end,
+            }
+        else
+            groupArgs.bossInfo = W.Description(4,
+                isLastBoss and "Final boss checkpoints stay pinned to 100% enemy forces." or
+                "Boss checkpoint names come from the dungeon journal and stay aligned with the timer rows.")
+        end
+
+        args["checkpoint" .. index] = {
+            type = "group",
+            name = title,
+            order = index,
+            args = groupArgs,
+        }
+    end
+
+    return args
+end
+
+local function BuildMinionCheckpointArgs()
+    local W = ConfigurationModule.Widgets
+    return {
+        desc = W.Description(1,
+            "Choose a seasonal dungeon here, then use the checkpoint tabs below to tune boss targets and custom minion checkpoints."),
+        management = W.IGroup(2, "Dungeon", {
+            dungeon = {
+                type = "select",
+                name = "Dungeon",
+                desc = "Choose which seasonal dungeon you are editing.",
+                order = 1,
+                width = 1.9,
+                values = function()
+                    return MPTOptions:GetSeasonalDungeonValues()
+                end,
+                handler = MPTOptions,
+                get = "GetSelectedCheckpointMapID",
+                set = "SetSelectedCheckpointMapID",
+            },
+            addCustom = {
+                type = "execute",
+                name = "Add Custom Checkpoint",
+                desc = "Insert a custom minion checkpoint into the selected dungeon.",
+                order = 2,
+                handler = MPTOptions,
+                func = "AddSelectedDungeonCheckpoint",
+            },
+            reset = {
+                type = "execute",
+                name = "Reset Dungeon Checkpoints",
+                desc = "Restore the selected dungeon back to its default boss checkpoints.",
+                order = 3,
+                handler = MPTOptions,
+                func = "ResetSelectedDungeonCheckpoints",
+            },
+            preview = W.Description(4,
+                "These controls stay pinned above the checkpoint tabs so you can switch dungeons or add checkpoints without leaving the current checkpoint view."),
+        }),
+        checkpoints = {
+            type = "group",
+            name = "Checkpoints",
+            order = 3,
+            childGroups = "tab",
+            args = BuildCheckpointTabArgs(),
+        },
+    }
+end
+
 local function BuildConfiguration()
     local W = ConfigurationModule.Widgets
     local optionsTab = W.NewConfigurationSection(34, "Mythic+ Tools")
@@ -115,236 +272,252 @@ local function BuildConfiguration()
             type = "group",
             name = "Mythic+ Timer",
             order = 30,
+            childGroups = "tab",
             args = {
-                desc = W.Description(1,
-                    "Configure the in-house timer frame. By default it inherits the Shared Defaults section below, then applies any timer-specific overrides you set here."),
-                enable = {
-                    type = "toggle",
-                    name = "Enable Mythic+ Timer",
-                    desc = "Show the Mythic+ timer during active keys.",
+                configuration = {
+                    type = "group",
+                    name = "Configuration",
+                    order = 1,
+                    args = {
+                        desc = W.Description(1,
+                            "Configure the in-house timer frame. By default it inherits the Shared Defaults section below, then applies any timer-specific overrides you set here."),
+                        enable = {
+                            type = "toggle",
+                            name = "Enable Mythic+ Timer",
+                            desc = "Show the Mythic+ timer during active keys.",
+                            order = 2,
+                            width = 1.75,
+                            handler = MPTOptions,
+                            get = "GetMythicPlusTimerEnabled",
+                            set = "SetMythicPlusTimerEnabled",
+                        },
+                        locked = {
+                            type = "toggle",
+                            name = "Lock Timer Frame",
+                            desc = "Lock the timer in place. Disable to drag and resize it.",
+                            order = 3,
+                            width = 1.5,
+                            handler = MPTOptions,
+                            get = "GetMythicPlusTimerLocked",
+                            set = "SetMythicPlusTimerLocked",
+                        },
+                        frameStyle = {
+                            type = "select",
+                            name = "Timer Style",
+                            desc = "Choose whether the timer uses a framed shell or a transparent data-first layout.",
+                            order = 4,
+                            width = 1.6,
+                            values = {
+                                framed = "Framed",
+                                transparent = "Transparent",
+                            },
+                            handler = MPTOptions,
+                            get = "GetMythicPlusTimerStyle",
+                            set = "SetMythicPlusTimerStyle",
+                        },
+                        layout = {
+                            type = "select",
+                            name = "Screen Side Alignment",
+                            desc =
+                            "Choose whether the top timer text block aligns for a frame placed on the left or right side of the screen. Bar row ordering stays the same.",
+                            order = 5,
+                            width = 1.6,
+                            values = {
+                                left = "Left Side",
+                                right = "Right Side",
+                            },
+                            handler = MPTOptions,
+                            get = "GetMythicPlusTimerLayout",
+                            set = "SetMythicPlusTimerLayout",
+                        },
+                        showHeader = {
+                            type = "toggle",
+                            name = "Show Title Bar",
+                            desc = "Show the title/header bar in framed mode. Transparent mode always hides it.",
+                            order = 5.5,
+                            width = 1.5,
+                            disabled = function() return MPTOptions:GetMythicPlusTimerStyle() ~= "framed" end,
+                            handler = MPTOptions,
+                            get = "GetMythicPlusTimerShowHeader",
+                            set = "SetMythicPlusTimerShowHeader",
+                        },
+                        scale = {
+                            type = "range",
+                            name = "Timer Scale",
+                            desc = "Scale the timer frame without changing the shared tracker sizing defaults.",
+                            order = 6,
+                            min = 0.7,
+                            max = 1.5,
+                            step = 0.01,
+                            width = 1.6,
+                            handler = MPTOptions,
+                            get = "GetMythicPlusTimerScale",
+                            set = "SetMythicPlusTimerScale",
+                        },
+                        bossCheckpoints = {
+                            type = "toggle",
+                            name = "Show Boss Checkpoints",
+                            desc = "Display boss checkpoint lines with their completion times underneath the timer bars.",
+                            order = 7,
+                            width = 1.75,
+                            handler = MPTOptions,
+                            get = "GetMythicPlusTimerShowBossCheckpoints",
+                            set = "SetMythicPlusTimerShowBossCheckpoints",
+                        },
+                        reset = {
+                            type = "execute",
+                            name = "Reset Timer Position",
+                            desc = "Move the Mythic+ timer back to its default position.",
+                            order = 8,
+                            handler = MPTOptions,
+                            func = "ResetMythicPlusTimerPosition",
+                        },
+                        preview = {
+                            type = "execute",
+                            name = "Start Timer Preview",
+                            desc =
+                            "Show a live-style timer preview with milestone bars, forces, deaths, and boss checkpoints.",
+                            order = 9,
+                            handler = MPTOptions,
+                            func = "StartMythicPlusTimerPreview",
+                        },
+                        stopPreview = {
+                            type = "execute",
+                            name = "Stop Timer Preview",
+                            desc = "Hide the Mythic+ timer preview.",
+                            order = 10,
+                            handler = MPTOptions,
+                            func = "StopMythicPlusTimerPreview",
+                        },
+                        appearance = W.IGroup(20, "Timer Appearance Overrides", {
+                            font = {
+                                type = "select",
+                                dialogControl = "LSM30_Font",
+                                name = "Font",
+                                desc = "Font used by the timer frame. Defaults to Shared Defaults when unchanged.",
+                                order = 1,
+                                width = 2,
+                                values = GetFontValues,
+                                handler = MPTOptions,
+                                get = "GetMythicPlusTimerFont",
+                                set = "SetMythicPlusTimerFont",
+                            },
+                            fontSize = {
+                                type = "range",
+                                name = "Font Size",
+                                desc = "Base font size used by timer text and labels.",
+                                order = 2,
+                                min = 8,
+                                max = 28,
+                                step = 1,
+                                handler = MPTOptions,
+                                get = "GetMythicPlusTimerFontSize",
+                                set = "SetMythicPlusTimerFontSize",
+                            },
+                            fontOutline = {
+                                type = "select",
+                                name = "Font Outline",
+                                desc = "Outline style used by the timer text.",
+                                order = 3,
+                                values = {
+                                    default = "Default",
+                                    none = "None",
+                                    outline = "Outline",
+                                    thick = "Thick Outline",
+                                },
+                                handler = MPTOptions,
+                                get = "GetMythicPlusTimerFontOutline",
+                                set = "SetMythicPlusTimerFontOutline",
+                            },
+                            fontColor = {
+                                type = "color",
+                                name = "Font Color",
+                                desc = "Primary text color used by the timer. Secondary text is derived from this color.",
+                                order = 4,
+                                hasAlpha = false,
+                                handler = MPTOptions,
+                                get = "GetMythicPlusTimerFontColor",
+                                set = "SetMythicPlusTimerFontColor",
+                            },
+                            barTexture = {
+                                type = "select",
+                                dialogControl = "LSM30_Statusbar",
+                                name = "Bar Texture",
+                                desc = "Status bar texture used by the timer bars.",
+                                order = 5,
+                                width = 2,
+                                values = GetStatusBarValues,
+                                handler = MPTOptions,
+                                get = "GetMythicPlusTimerBarTexture",
+                                set = "SetMythicPlusTimerBarTexture",
+                            },
+                            barColorMode = {
+                                type = "select",
+                                name = "Bar Color Mode",
+                                desc = "Keep the built-in milestone colors or tint all timer bars with a custom color.",
+                                order = 6,
+                                width = 1.6,
+                                values = {
+                                    milestone = "Milestone Colors",
+                                    custom = "Custom Color",
+                                },
+                                handler = MPTOptions,
+                                get = "GetMythicPlusTimerBarColorMode",
+                                set = "SetMythicPlusTimerBarColorMode",
+                            },
+                            barColor = {
+                                type = "color",
+                                name = "Custom Bar Color",
+                                desc = "Color used for all timer bars when Bar Color Mode is set to Custom Color.",
+                                order = 7,
+                                hasAlpha = false,
+                                disabled = function() return MPTOptions:GetMythicPlusTimerBarColorMode() ~= "custom" end,
+                                handler = MPTOptions,
+                                get = "GetMythicPlusTimerBarColor",
+                                set = "SetMythicPlusTimerBarColor",
+                            },
+                            rowGap = {
+                                type = "range",
+                                name = "Row Gap",
+                                desc = "Vertical spacing between timer bars.",
+                                order = 8,
+                                min = 0,
+                                max = 30,
+                                step = 1,
+                                handler = MPTOptions,
+                                get = "GetMythicPlusTimerRowGap",
+                                set = "SetMythicPlusTimerRowGap",
+                            },
+                            barHeight = {
+                                type = "range",
+                                name = "Bar Height",
+                                desc = "Height of the timer progress bars.",
+                                order = 9,
+                                min = 10,
+                                max = 40,
+                                step = 1,
+                                handler = MPTOptions,
+                                get = "GetMythicPlusTimerBarHeight",
+                                set = "SetMythicPlusTimerBarHeight",
+                            },
+                            resetAppearance = {
+                                type = "execute",
+                                name = "Reset Timer Overrides",
+                                desc =
+                                "Clear the timer-specific overrides so it fully inherits the Shared Defaults again.",
+                                order = 10,
+                                handler = MPTOptions,
+                                func = "ResetMythicPlusTimerAppearance",
+                            },
+                        }),
+                    },
+                },
+                minionCheckpoints = {
+                    type = "group",
+                    name = "Minion Checkpoints",
                     order = 2,
-                    width = 1.75,
-                    handler = MPTOptions,
-                    get = "GetMythicPlusTimerEnabled",
-                    set = "SetMythicPlusTimerEnabled",
+                    args = BuildMinionCheckpointArgs(),
                 },
-                locked = {
-                    type = "toggle",
-                    name = "Lock Timer Frame",
-                    desc = "Lock the timer in place. Disable to drag and resize it.",
-                    order = 3,
-                    width = 1.5,
-                    handler = MPTOptions,
-                    get = "GetMythicPlusTimerLocked",
-                    set = "SetMythicPlusTimerLocked",
-                },
-                frameStyle = {
-                    type = "select",
-                    name = "Timer Style",
-                    desc = "Choose whether the timer uses a framed shell or a transparent data-first layout.",
-                    order = 4,
-                    width = 1.6,
-                    values = {
-                        framed = "Framed",
-                        transparent = "Transparent",
-                    },
-                    handler = MPTOptions,
-                    get = "GetMythicPlusTimerStyle",
-                    set = "SetMythicPlusTimerStyle",
-                },
-                layout = {
-                    type = "select",
-                    name = "Screen Side Alignment",
-                    desc =
-                    "Choose whether the top timer text block aligns for a frame placed on the left or right side of the screen. Bar row ordering stays the same.",
-                    order = 5,
-                    width = 1.6,
-                    values = {
-                        left = "Left Side",
-                        right = "Right Side",
-                    },
-                    handler = MPTOptions,
-                    get = "GetMythicPlusTimerLayout",
-                    set = "SetMythicPlusTimerLayout",
-                },
-                showHeader = {
-                    type = "toggle",
-                    name = "Show Title Bar",
-                    desc = "Show the title/header bar in framed mode. Transparent mode always hides it.",
-                    order = 5.5,
-                    width = 1.5,
-                    disabled = function() return MPTOptions:GetMythicPlusTimerStyle() ~= "framed" end,
-                    handler = MPTOptions,
-                    get = "GetMythicPlusTimerShowHeader",
-                    set = "SetMythicPlusTimerShowHeader",
-                },
-                scale = {
-                    type = "range",
-                    name = "Timer Scale",
-                    desc = "Scale the timer frame without changing the shared tracker sizing defaults.",
-                    order = 6,
-                    min = 0.7,
-                    max = 1.5,
-                    step = 0.01,
-                    width = 1.6,
-                    handler = MPTOptions,
-                    get = "GetMythicPlusTimerScale",
-                    set = "SetMythicPlusTimerScale",
-                },
-                bossCheckpoints = {
-                    type = "toggle",
-                    name = "Show Boss Checkpoints",
-                    desc = "Display boss checkpoint lines with their completion times underneath the timer bars.",
-                    order = 7,
-                    width = 1.75,
-                    handler = MPTOptions,
-                    get = "GetMythicPlusTimerShowBossCheckpoints",
-                    set = "SetMythicPlusTimerShowBossCheckpoints",
-                },
-                reset = {
-                    type = "execute",
-                    name = "Reset Timer Position",
-                    desc = "Move the Mythic+ timer back to its default position.",
-                    order = 8,
-                    handler = MPTOptions,
-                    func = "ResetMythicPlusTimerPosition",
-                },
-                preview = {
-                    type = "execute",
-                    name = "Start Timer Preview",
-                    desc = "Show a live-style timer preview with milestone bars, forces, deaths, and boss checkpoints.",
-                    order = 9,
-                    handler = MPTOptions,
-                    func = "StartMythicPlusTimerPreview",
-                },
-                stopPreview = {
-                    type = "execute",
-                    name = "Stop Timer Preview",
-                    desc = "Hide the Mythic+ timer preview.",
-                    order = 10,
-                    handler = MPTOptions,
-                    func = "StopMythicPlusTimerPreview",
-                },
-                appearance = W.IGroup(20, "Timer Appearance Overrides", {
-                    font = {
-                        type = "select",
-                        dialogControl = "LSM30_Font",
-                        name = "Font",
-                        desc = "Font used by the timer frame. Defaults to Shared Defaults when unchanged.",
-                        order = 1,
-                        width = 2,
-                        values = GetFontValues,
-                        handler = MPTOptions,
-                        get = "GetMythicPlusTimerFont",
-                        set = "SetMythicPlusTimerFont",
-                    },
-                    fontSize = {
-                        type = "range",
-                        name = "Font Size",
-                        desc = "Base font size used by timer text and labels.",
-                        order = 2,
-                        min = 8,
-                        max = 28,
-                        step = 1,
-                        handler = MPTOptions,
-                        get = "GetMythicPlusTimerFontSize",
-                        set = "SetMythicPlusTimerFontSize",
-                    },
-                    fontOutline = {
-                        type = "select",
-                        name = "Font Outline",
-                        desc = "Outline style used by the timer text.",
-                        order = 3,
-                        values = {
-                            default = "Default",
-                            none = "None",
-                            outline = "Outline",
-                            thick = "Thick Outline",
-                        },
-                        handler = MPTOptions,
-                        get = "GetMythicPlusTimerFontOutline",
-                        set = "SetMythicPlusTimerFontOutline",
-                    },
-                    fontColor = {
-                        type = "color",
-                        name = "Font Color",
-                        desc = "Primary text color used by the timer. Secondary text is derived from this color.",
-                        order = 4,
-                        hasAlpha = false,
-                        handler = MPTOptions,
-                        get = "GetMythicPlusTimerFontColor",
-                        set = "SetMythicPlusTimerFontColor",
-                    },
-                    barTexture = {
-                        type = "select",
-                        dialogControl = "LSM30_Statusbar",
-                        name = "Bar Texture",
-                        desc = "Status bar texture used by the timer bars.",
-                        order = 5,
-                        width = 2,
-                        values = GetStatusBarValues,
-                        handler = MPTOptions,
-                        get = "GetMythicPlusTimerBarTexture",
-                        set = "SetMythicPlusTimerBarTexture",
-                    },
-                    barColorMode = {
-                        type = "select",
-                        name = "Bar Color Mode",
-                        desc = "Keep the built-in milestone colors or tint all timer bars with a custom color.",
-                        order = 6,
-                        width = 1.6,
-                        values = {
-                            milestone = "Milestone Colors",
-                            custom = "Custom Color",
-                        },
-                        handler = MPTOptions,
-                        get = "GetMythicPlusTimerBarColorMode",
-                        set = "SetMythicPlusTimerBarColorMode",
-                    },
-                    barColor = {
-                        type = "color",
-                        name = "Custom Bar Color",
-                        desc = "Color used for all timer bars when Bar Color Mode is set to Custom Color.",
-                        order = 7,
-                        hasAlpha = false,
-                        disabled = function() return MPTOptions:GetMythicPlusTimerBarColorMode() ~= "custom" end,
-                        handler = MPTOptions,
-                        get = "GetMythicPlusTimerBarColor",
-                        set = "SetMythicPlusTimerBarColor",
-                    },
-                    rowGap = {
-                        type = "range",
-                        name = "Row Gap",
-                        desc = "Vertical spacing between timer bars.",
-                        order = 8,
-                        min = 0,
-                        max = 30,
-                        step = 1,
-                        handler = MPTOptions,
-                        get = "GetMythicPlusTimerRowGap",
-                        set = "SetMythicPlusTimerRowGap",
-                    },
-                    barHeight = {
-                        type = "range",
-                        name = "Bar Height",
-                        desc = "Height of the timer progress bars.",
-                        order = 9,
-                        min = 10,
-                        max = 40,
-                        step = 1,
-                        handler = MPTOptions,
-                        get = "GetMythicPlusTimerBarHeight",
-                        set = "SetMythicPlusTimerBarHeight",
-                    },
-                    resetAppearance = {
-                        type = "execute",
-                        name = "Reset Timer Overrides",
-                        desc = "Clear the timer-specific overrides so it fully inherits the Shared Defaults again.",
-                        order = 10,
-                        handler = MPTOptions,
-                        func = "ResetMythicPlusTimerAppearance",
-                    },
-                }),
             },
         },
         interruptTracker = {
