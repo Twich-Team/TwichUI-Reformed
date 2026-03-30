@@ -121,6 +121,23 @@ local ROLE_ICON_FILTER_VALUES = {
     tanks    = "Tanks Only",
 }
 
+local ROLE_ICON_TYPE_VALUES = {
+    standard = "Standard (Blizzard)",
+    twich = "Twich Icons",
+}
+
+local ROLE_ICON_PREVIEW_TEXTURE = "Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES"
+local ROLE_ICON_PREVIEW_TWICH = {
+    TANK = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Tank", width = 64, height = 74 },
+    HEALER = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Healer", width = 64, height = 68 },
+    DAMAGER = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_DPS", width = 64, height = 74 },
+}
+local ROLE_ICON_PREVIEW_STANDARD = {
+    TANK = { texture = ROLE_ICON_PREVIEW_TEXTURE, width = 19, height = 19, textureWidth = 64, textureHeight = 64, texCoord = { 0, 19 / 64, 22 / 64, 41 / 64 } },
+    HEALER = { texture = ROLE_ICON_PREVIEW_TEXTURE, width = 19, height = 19, textureWidth = 64, textureHeight = 64, texCoord = { 20 / 64, 39 / 64, 1 / 64, 20 / 64 } },
+    DAMAGER = { texture = ROLE_ICON_PREVIEW_TEXTURE, width = 19, height = 19, textureWidth = 64, textureHeight = 64, texCoord = { 20 / 64, 39 / 64, 22 / 64, 41 / 64 } },
+}
+
 -- Default tag/justify for info bar text slots (mirrors INFO_BAR_TEXT_DEFAULTS in the engine)
 local INFO_BAR_SLOT_DEFAULTS = {
     { tag = "[name]",     justify = "LEFT" },
@@ -536,6 +553,51 @@ local function BuildSelect(order, name, desc, path, defaultValue, values, opts)
             end
             SetPathValue(path, value, opts.refreshConfig)
         end,
+    }
+end
+
+local function BuildRoleIconPreviewMarkup(iconDef, targetHeight)
+    targetHeight = tonumber(targetHeight) or 22
+    if type(iconDef) ~= "table" or not iconDef.texture then
+        return ""
+    end
+
+    local sourceWidth = tonumber(iconDef.width) or targetHeight
+    local sourceHeight = tonumber(iconDef.height) or targetHeight
+    if sourceWidth <= 0 or sourceHeight <= 0 then
+        sourceWidth = targetHeight
+        sourceHeight = targetHeight
+    end
+
+    local scale = targetHeight / sourceHeight
+    local width = math.max(1, math.floor((sourceWidth * scale) + 0.5))
+    local height = math.max(1, math.floor((sourceHeight * scale) + 0.5))
+    local tex = iconDef.texCoord
+    if type(tex) == "table" and #tex >= 4 then
+        local textureWidth = tonumber(iconDef.textureWidth) or sourceWidth
+        local textureHeight = tonumber(iconDef.textureHeight) or sourceHeight
+        return string.format("|T%s:%d:%d:0:0:%d:%d:%d:%d:%d:%d|t", iconDef.texture, width, height,
+            textureWidth, textureHeight,
+            math.floor((tex[1] * textureWidth) + 0.5),
+            math.floor((tex[2] * textureWidth) + 0.5),
+            math.floor((tex[3] * textureHeight) + 0.5),
+            math.floor((tex[4] * textureHeight) + 0.5))
+    end
+    return string.format("|T%s:%d:%d:0:0|t", iconDef.texture, width, height)
+end
+
+local function BuildRoleIconTypeValues()
+    return {
+        standard = string.format("%s  %s %s %s",
+            ROLE_ICON_TYPE_VALUES.standard,
+            BuildRoleIconPreviewMarkup(ROLE_ICON_PREVIEW_STANDARD.TANK, 22),
+            BuildRoleIconPreviewMarkup(ROLE_ICON_PREVIEW_STANDARD.HEALER, 22),
+            BuildRoleIconPreviewMarkup(ROLE_ICON_PREVIEW_STANDARD.DAMAGER, 22)),
+        twich = string.format("%s  %s %s %s",
+            ROLE_ICON_TYPE_VALUES.twich,
+            BuildRoleIconPreviewMarkup(ROLE_ICON_PREVIEW_TWICH.TANK, 22),
+            BuildRoleIconPreviewMarkup(ROLE_ICON_PREVIEW_TWICH.HEALER, 22),
+            BuildRoleIconPreviewMarkup(ROLE_ICON_PREVIEW_TWICH.DAMAGER, 22)),
     }
 end
 
@@ -1470,17 +1532,21 @@ local function BuildRoleIconGroup(order, basePath, defaultEnabled)
         enabled = BuildToggle(1, "Show Role Icon",
             "Display the player's dungeon role icon (tank, healer, dps) directly on this frame.",
             ExtendPath(basePath, "enabled"), defaultEnabled, { disabled = disabled, refreshConfig = true }),
-        filter = BuildSelect(2, "Show For",
+        iconType = BuildSelect(2, "Icon Type",
+            "Choose which role icon art set to use on frames.",
+            ExtendPath(basePath, "iconType"), "standard", BuildRoleIconTypeValues,
+            { disabled = isRoleOff, refreshConfig = true, width = "full" }),
+        filter = BuildSelect(3, "Show For",
             "Which roles will have the icon displayed.",
             ExtendPath(basePath, "filter"), "all", ROLE_ICON_FILTER_VALUES, { disabled = isRoleOff }),
-        corner = BuildSelect(3, "Corner",
+        corner = BuildSelect(4, "Corner",
             "Which corner of the frame to place the icon in.",
             ExtendPath(basePath, "corner"), "TOPRIGHT", ROLE_ICON_CORNER_VALUES, { disabled = isRoleOff }),
-        size = BuildRange(4, "Size", "Role icon size in pixels.",
+        size = BuildRange(5, "Size", "Role icon size in pixels.",
             ExtendPath(basePath, "size"), 18, 8, 40, 1, { disabled = isRoleOff }),
-        insetX = BuildRange(5, "X Inset", "Horizontal inset from the corner edge.",
+        insetX = BuildRange(6, "X Inset", "Horizontal inset from the corner edge.",
             ExtendPath(basePath, "insetX"), 2, 0, 20, 1, { disabled = isRoleOff }),
-        insetY = BuildRange(6, "Y Inset", "Vertical inset from the corner edge.",
+        insetY = BuildRange(7, "Y Inset", "Vertical inset from the corner edge.",
             ExtendPath(basePath, "insetY"), 2, 0, 20, 1, { disabled = isRoleOff }),
     })
 end

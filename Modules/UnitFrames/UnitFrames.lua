@@ -461,6 +461,51 @@ local ROLE_TEX_COORDS = {
     DAMAGER = { 20 / 64, 39 / 64, 22 / 64, 41 / 64 },
 }
 
+local TWICH_ROLE_TEXTURES = {
+    TANK = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Tank", width = 64, height = 74 },
+    HEALER = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Healer", width = 64, height = 68 },
+    DAMAGER = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_DPS", width = 64, height = 74 },
+}
+
+local function GetRoleIconArt(iconType, role)
+    if iconType == "twich" then
+        return TWICH_ROLE_TEXTURES[role]
+    end
+
+    if ROLE_ATLAS[role] then
+        return {
+            atlas = ROLE_ATLAS[role],
+            width = 1,
+            height = 1,
+        }
+    end
+
+    if ROLE_TEX_COORDS[role] then
+        return {
+            texture = ROLE_ICON_TEXTURE,
+            texCoord = ROLE_TEX_COORDS[role],
+            width = 19,
+            height = 19,
+        }
+    end
+end
+
+local function GetScaledRoleIconSize(size, art)
+    local boundedSize = Clamp(size or 18, 8, 40)
+    if type(art) ~= "table" or art.atlas then
+        return boundedSize, boundedSize
+    end
+
+    local width = tonumber(art.width) or boundedSize
+    local height = tonumber(art.height) or boundedSize
+    if width <= 0 or height <= 0 then
+        return boundedSize, boundedSize
+    end
+
+    local scale = boundedSize / math_max(width, height)
+    return math_max(1, width * scale), math_max(1, height * scale)
+end
+
 local INFO_BAR_TEXT_DEFAULTS = {
     { tag = "[name]",     justify = "LEFT",   fontSize = 9, useClassColor = false },
     { tag = "[perhp<$%]", justify = "CENTER", fontSize = 9, useClassColor = false },
@@ -932,12 +977,13 @@ function UnitFrames:GetRoleIconConfig(unitKey)
     end
 
     return {
-        enabled = get("enabled", scope == "party"),
-        corner  = get("corner", "TOPRIGHT"),
-        size    = get("size", 18),
-        insetX  = get("insetX", 2),
-        insetY  = get("insetY", 2),
-        filter  = get("filter", "all"),
+        enabled  = get("enabled", scope == "party"),
+        corner   = get("corner", "TOPRIGHT"),
+        size     = get("size", 18),
+        insetX   = get("insetX", 2),
+        insetY   = get("insetY", 2),
+        filter   = get("filter", "all"),
+        iconType = get("iconType", "standard"),
     }
 end
 
@@ -1056,15 +1102,20 @@ function UnitFrames:UpdateRoleIcon(frame, unitKey)
     end
 
     if show then
-        local atlas = ROLE_ATLAS[displayRole]
-        if atlas then
-            icon:SetAtlas(atlas, false)
-            icon:SetSize(Clamp(cfg.size, 8, 40), Clamp(cfg.size, 8, 40))
+        local art = GetRoleIconArt(cfg.iconType, displayRole) or GetRoleIconArt("standard", displayRole)
+        if art and art.atlas then
+            icon:SetAtlas(art.atlas, false)
+            icon:SetTexCoord(0, 1, 0, 1)
+            icon:SetSize(GetScaledRoleIconSize(cfg.size, art))
             icon:Show()
-        elseif ROLE_TEX_COORDS[displayRole] then
-            icon:SetTexture(ROLE_ICON_TEXTURE)
-            icon:SetTexCoord(unpack(ROLE_TEX_COORDS[displayRole]))
-            icon:SetSize(Clamp(cfg.size, 8, 40), Clamp(cfg.size, 8, 40))
+        elseif art and art.texture then
+            icon:SetTexture(art.texture)
+            if art.texCoord then
+                icon:SetTexCoord(unpack(art.texCoord))
+            else
+                icon:SetTexCoord(0, 1, 0, 1)
+            end
+            icon:SetSize(GetScaledRoleIconSize(cfg.size, art))
             icon:Show()
         else
             icon:Hide()
