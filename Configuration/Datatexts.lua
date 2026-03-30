@@ -1246,7 +1246,8 @@ local function BuildCurrenciesConfiguration()
                     showMax = {
                         type = "toggle",
                         name = "Show Max Quantity",
-                        desc = "Append the maximum quantity when the currency has one.",
+                        desc =
+                        "Append the maximum quantity when the currency has one. Seasonal earned-cap currencies will show earned progress when it differs from your current spendable amount.",
                         order = 3,
                         get = function()
                             return Options:GetCustomCurrencyDatatextSetting(entry.id, "showMax", true)
@@ -1321,7 +1322,8 @@ local function BuildCurrenciesConfiguration()
                 showMax = {
                     type = "toggle",
                     name = "Show Max Quantity",
-                    desc = "Append the maximum quantity when the selected currency has one.",
+                    desc =
+                    "Append the maximum quantity when the selected currency has one. Seasonal earned-cap currencies will show earned progress when it differs from your current spendable amount.",
                     order = 3,
                     handler = Options,
                     get = "GetCurrenciesShowMax",
@@ -1567,8 +1569,9 @@ local function BuildStandaloneDatatextConfiguration()
                             [3] = "Three Slots",
                             [4] = "Four Slots",
                             [5] = "Five Slots",
+                            [6] = "Six Slots",
                         },
-                        sorting = { 1, 2, 3, 4, 5 },
+                        sorting = { 1, 2, 3, 4, 5, 6 },
                         get = function()
                             return GetPanelValue("segments", 3)
                         end,
@@ -1661,7 +1664,7 @@ local function BuildStandaloneDatatextConfiguration()
                 assignments = W.IGroup(30, "Assignments", {
                     slot1 = {
                         type = "select",
-                        name = "Left Slot",
+                        name = "Slot 1",
                         order = 1,
                         width = 1.5,
                         values = function()
@@ -1681,7 +1684,7 @@ local function BuildStandaloneDatatextConfiguration()
                     },
                     slot2 = {
                         type = "select",
-                        name = "Middle Slot",
+                        name = "Slot 2",
                         order = 2,
                         width = 1.5,
                         hidden = function()
@@ -1704,7 +1707,7 @@ local function BuildStandaloneDatatextConfiguration()
                     },
                     slot3 = {
                         type = "select",
-                        name = "Right Slot",
+                        name = "Slot 3",
                         order = 3,
                         width = 1.5,
                         hidden = function()
@@ -1727,7 +1730,7 @@ local function BuildStandaloneDatatextConfiguration()
                     },
                     slot4 = {
                         type = "select",
-                        name = "Fourth Slot",
+                        name = "Slot 4",
                         order = 4,
                         width = 1.5,
                         hidden = function()
@@ -1750,7 +1753,7 @@ local function BuildStandaloneDatatextConfiguration()
                     },
                     slot5 = {
                         type = "select",
-                        name = "Fifth Slot",
+                        name = "Slot 5",
                         order = 5,
                         width = 1.5,
                         hidden = function()
@@ -1768,6 +1771,29 @@ local function BuildStandaloneDatatextConfiguration()
                                 return
                             end
                             current.slot5 = value
+                            RefreshStandalone()
+                        end,
+                    },
+                    slot6 = {
+                        type = "select",
+                        name = "Slot 6",
+                        order = 6,
+                        width = 1.5,
+                        hidden = function()
+                            return GetPanelValue("segments", 3) < 6
+                        end,
+                        values = function()
+                            return Options:GetStandaloneDatatextChoices()
+                        end,
+                        get = function()
+                            return GetPanelValue("slot6", "NONE")
+                        end,
+                        set = function(_, value)
+                            local current = GetCurrentPanel()
+                            if not current then
+                                return
+                            end
+                            current.slot6 = value
                             RefreshStandalone()
                         end,
                     },

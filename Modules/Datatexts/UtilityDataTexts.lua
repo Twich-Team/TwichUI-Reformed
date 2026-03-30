@@ -65,11 +65,14 @@ local STARTER_BUILD_CONFIG_ID = _G.Constants and _G.Constants.TraitConsts and
 
 local UPDATE_FAST = 1
 local UPDATE_SLOW = 5
+local FRIENDS_REFRESH_REQUEST_INTERVAL = 15
 local SPEC_ICON_FORMAT = "|T%s:%d:%d:0:0:64:64:4:60:4:60|t"
 local SYSTEM_MEMORY_LIVE_INTERVAL = 3
 local SYSTEM_MEMORY_FRAME_WIDTH = 500
 local SYSTEM_MEMORY_FRAME_HEIGHT = 480
 local SYSTEM_MEMORY_ROW_HEIGHT = 20
+local friendsRequestRefreshToken = 0
+local lastFriendsRefreshRequestAt = 0
 local DURABILITY_SLOTS = {
     { id = 1,  label = _G.INVTYPE_HEAD },
     { id = 3,  label = _G.INVTYPE_SHOULDER },
@@ -1212,6 +1215,41 @@ local function GetOnlineFriendSummary()
     return wowOnline, wowTotal, bnetOnline, bnetTotal
 end
 
+local function RefreshFriendsDatatext()
+    if DataTextModule and type(DataTextModule.RefreshDataText) == "function" then
+        DataTextModule:RefreshDataText("TwichUI: Friends")
+    end
+end
+
+local function RequestUpdatedWowFriends(scheduleRefresh)
+    if not (C_FriendList and type(C_FriendList.ShowFriends) == "function") then
+        return false
+    end
+
+    local now = type(GetTime) == "function" and GetTime() or 0
+    if now > 0 and lastFriendsRefreshRequestAt > 0 and (now - lastFriendsRefreshRequestAt) < FRIENDS_REFRESH_REQUEST_INTERVAL then
+        return false
+    end
+
+    lastFriendsRefreshRequestAt = now
+    C_FriendList.ShowFriends()
+
+    if scheduleRefresh and C_Timer and type(C_Timer.After) == "function" then
+        friendsRequestRefreshToken = friendsRequestRefreshToken + 1
+        local refreshToken = friendsRequestRefreshToken
+        local function refreshIfCurrent()
+            if friendsRequestRefreshToken == refreshToken then
+                RefreshFriendsDatatext()
+            end
+        end
+
+        C_Timer.After(1, refreshIfCurrent)
+        C_Timer.After(3, refreshIfCurrent)
+    end
+
+    return true
+end
+
 local function SetFriendsPanelText(panel)
     local wowOnline, _, bnetOnline = GetOnlineFriendSummary()
     local friendsDB = GetDatatextDB("friends")
@@ -1369,6 +1407,24 @@ local function GetCurrencyInfoByID(currencyID)
     return info
 end
 
+local function GetCurrencyMovingCapProgress(info)
+    if type(info) ~= "table" then
+        return nil, nil
+    end
+
+    if info.useTotalEarnedForMaxQty ~= true then
+        return nil, nil
+    end
+
+    local maxQuantity = tonumber(info.maxQuantity)
+    local totalEarned = tonumber(info.totalEarned)
+    if not maxQuantity or maxQuantity <= 0 or totalEarned == nil or totalEarned < 0 then
+        return nil, nil
+    end
+
+    return totalEarned, maxQuantity
+end
+
 local function IsCurrencyAtWeeklyCap(info)
     if type(info) ~= "table" then
         return false
@@ -1387,13 +1443,48 @@ local function IsCurrencyAtWeeklyCap(info)
     return type(earnedThisWeek) == "number" and earnedThisWeek >= weeklyMax
 end
 
+local function IsCurrencyAtCollectionCap(info)
+    if IsCurrencyAtWeeklyCap(info) then
+        return true
+    end
+
+    local earnedQuantity, maxQuantity = GetCurrencyMovingCapProgress(info)
+    return type(earnedQuantity) == "number" and type(maxQuantity) == "number" and earnedQuantity >= maxQuantity
+end
+
 local function BuildCurrencyQuantityText(info, colorAtCap)
     local quantityText = BreakUpLargeNumbers and BreakUpLargeNumbers(info.quantity or 0) or tostring(info.quantity or 0)
-    if colorAtCap and IsCurrencyAtWeeklyCap(info) then
+    if colorAtCap and IsCurrencyAtCollectionCap(info) then
         return T.Tools.Text.Color(T.Tools.Colors.RED, quantityText)
     end
 
     return quantityText
+end
+
+local function BuildCurrencyMaxSuffix(info)
+    if type(info) ~= "table" then
+        return ""
+    end
+
+    local earnedQuantity, maxQuantity = GetCurrencyMovingCapProgress(info)
+    if type(earnedQuantity) == "number" and type(maxQuantity) == "number" then
+        local earnedText = BreakUpLargeNumbers and BreakUpLargeNumbers(earnedQuantity) or tostring(earnedQuantity)
+        local maxText = BreakUpLargeNumbers and BreakUpLargeNumbers(maxQuantity) or tostring(maxQuantity)
+        local spendableQuantity = tonumber(info.quantity) or 0
+        if spendableQuantity ~= earnedQuantity then
+            return T.Tools.Text.Color(T.Tools.Colors.GRAY, format(" (%s/%s)", earnedText, maxText))
+        end
+
+        return T.Tools.Text.Color(T.Tools.Colors.GRAY, format(" / %s", maxText))
+    end
+
+    if type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
+        return T.Tools.Text.Color(T.Tools.Colors.GRAY,
+            format(" / %s",
+                BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity)))
+    end
+
+    return ""
 end
 
 local function CurrencyDisplayText(currencyID, style, showMax)
@@ -1415,11 +1506,8 @@ local function CurrencyDisplayText(currencyID, style, showMax)
         text = format("%s %s %s", icon, AbbreviateName(name, 12), quantity)
     end
 
-    if showMax and type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
-        text = text ..
-            T.Tools.Text.Color(T.Tools.Colors.GRAY,
-                format(" / %s",
-                    BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity)))
+    if showMax then
+        text = text .. BuildCurrencyMaxSuffix(info)
     end
 
     return text, info
@@ -1477,11 +1565,8 @@ function CurrencyDT:SyncCustomDatatexts()
                         text = format("%s%s %s", icon, displayName, quantity)
                     end
 
-                    if settings.showMax ~= false and type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
-                        text = text .. T.Tools.Text.Color(T.Tools.Colors.GRAY,
-                            format(" / %s",
-                                BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or
-                                tostring(info.maxQuantity)))
+                    if settings.showMax ~= false then
+                        text = text .. BuildCurrencyMaxSuffix(info)
                     end
 
                     SetPanelText(panel, text, "currencies")
@@ -1572,9 +1657,8 @@ function CurrencyDT:OnEnter()
             shownCurrencyIDs[currencyID] = true
             local icon = info.iconFileID and T.Tools.Text.Icon(tostring(info.iconFileID)) or ""
             local rightText = BuildCurrencyQuantityText(info, true)
-            if db.showMax and type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
-                rightText = format("%s / %s", rightText,
-                    BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity))
+            if db.showMax then
+                rightText = rightText .. BuildCurrencyMaxSuffix(info)
             end
             tooltip:AddDoubleLine(format("%s %s", icon, info.name), rightText, 1, 1, 1, 1, 1, 1)
         end
@@ -1587,9 +1671,8 @@ function CurrencyDT:OnEnter()
             if info then
                 local icon = info.iconFileID and T.Tools.Text.Icon(tostring(info.iconFileID)) or ""
                 local rightText = BuildCurrencyQuantityText(info, true)
-                if settings.showMax ~= false and type(info.maxQuantity) == "number" and info.maxQuantity > 0 then
-                    rightText = format("%s / %s", rightText,
-                        BreakUpLargeNumbers and BreakUpLargeNumbers(info.maxQuantity) or tostring(info.maxQuantity))
+                if settings.showMax ~= false then
+                    rightText = rightText .. BuildCurrencyMaxSuffix(info)
                 end
                 tooltip:AddDoubleLine(format("%s %s", icon, info.name), rightText, 1, 1, 1, 1, 1, 1)
             end
@@ -2099,11 +2182,17 @@ end
 ---@class FriendsDataText : AceModule
 local FriendsDT = DataTextModule:NewModule("FriendsDataText")
 
-function FriendsDT:OnEvent(panel)
+function FriendsDT:OnEvent(panel, event)
     SetFriendsPanelText(panel)
+
+    if event == "PLAYER_ENTERING_WORLD" or event == "BN_CONNECTED" then
+        RequestUpdatedWowFriends(true)
+    end
 end
 
 function FriendsDT:OnEnter()
+    RequestUpdatedWowFriends(true)
+
     local tooltip = DataTextModule:GetElvUITooltip()
     if not tooltip then
         return

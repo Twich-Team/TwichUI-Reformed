@@ -14,7 +14,7 @@ local SOUNDKIT = _G.SOUNDKIT
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
 local UIParent = _G.UIParent
 
-local SLOT_COUNT = 5
+local SLOT_COUNT = 6
 local FRAME_INSET = 6
 local SLOT_GAP = 4
 local PANEL_BACKDROP = {
@@ -869,7 +869,7 @@ end
 --- The bar has no backdrop, glow, or drag handle -- visual styling is handled externally.
 --- @param parentFrame Frame The frame to parent the bar to.
 --- @param barID string A unique identifier for the bar.
---- @param maxSlots number? Maximum number of slots (1-5, default 3).
+--- @param maxSlots number? Maximum number of slots (1-6, default 3).
 function DataTextModule:EnsureEmbeddedDatatextBar(parentFrame, barID, maxSlots)
     self.embeddedPanels = self.embeddedPanels or {}
 

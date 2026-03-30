@@ -16,6 +16,7 @@ ConfigurationModule.Options.Datatext = Options
 local MAX_STANDALONE_PANELS = 8
 local MIN_STANDALONE_PANEL_WIDTH = 80
 local MAX_STANDALONE_PANEL_WIDTH = 4000
+local MAX_STANDALONE_PANEL_SLOTS = 6
 
 -- Static structural defaults — non-color properties that don't derive from the theme.
 -- Color-keyed properties are overridden at resolve-time by GetThemeBasedDefaults().
@@ -97,6 +98,7 @@ local function BuildDefaultStandalonePanel(panelID, orderIndex)
         slot3 = orderIndex == 1 and "TwichUI: Portals" or "NONE",
         slot4 = "NONE",
         slot5 = "NONE",
+        slot6 = "NONE",
     }
 end
 
@@ -113,7 +115,7 @@ local function NormalizeStandalonePanel(panel, panelID, orderIndex)
     panel.width = math.min(MAX_STANDALONE_PANEL_WIDTH,
         math.max(MIN_STANDALONE_PANEL_WIDTH, tonumber(panel.width) or defaults.width))
     panel.height = math.min(80, math.max(20, tonumber(panel.height) or defaults.height))
-    panel.segments = math.min(5, math.max(1, tonumber(panel.segments) or defaults.segments))
+    panel.segments = math.min(MAX_STANDALONE_PANEL_SLOTS, math.max(1, tonumber(panel.segments) or defaults.segments))
     panel.x = tonumber(panel.x) or defaults.x
     panel.y = tonumber(panel.y) or defaults.y
 end
