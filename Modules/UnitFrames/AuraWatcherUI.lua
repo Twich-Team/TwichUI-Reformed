@@ -1702,18 +1702,25 @@ RefreshDetailPanel = function()
             local cpf                 = _G.ColorPickerFrame
             if not cpf then return end
 
+            local function applyColor()
+                local r, g, b = cpf:GetColorRGB()
+                if onChange then onChange(r, g, b, 1) end
+            end
+
+            local function cancelColor(prev)
+                local fallback = prev or { r = prevR, g = prevG, b = prevB }
+                if onChange then onChange(fallback.r, fallback.g, fallback.b, 1) end
+            end
+
             local info = {
                 r = prevR,
                 g = prevG,
                 b = prevB,
                 hasOpacity = false,
-                func = function()
-                    local r, g, b = cpf:GetColorRGB()
-                    if onChange then onChange(r, g, b, 1) end
-                end,
-                cancelFunc = function(prev)
-                    if onChange then onChange(prev.r, prev.g, prev.b, 1) end
-                end,
+                func = applyColor,
+                swatchFunc = applyColor,
+                opacityFunc = applyColor,
+                cancelFunc = cancelColor,
             }
 
             if cpf.SetupColorPickerAndShow then
@@ -1920,7 +1927,7 @@ RefreshDetailPanel = function()
             c2Sec2:SetText("CHASE DOTS")
             c2Sec2:SetPoint("TOPLEFT", detailPanel, "TOPLEFT", col2X, chY)
 
-            DetailSlider(detailPanel, "Dot Count", cfg.chaseCount or 4, 1, 20, 1,
+            DetailSlider(detailPanel, "Dot Count", cfg.chaseCount or 4, 1, 12, 1,
                 col2X, chY - 18, 136, function(v)
                     EnsureLayerWritable().chaseCount = v
                     DeferredFlush()

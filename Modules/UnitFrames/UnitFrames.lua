@@ -161,6 +161,14 @@ local function Clamp(value, minimum, maximum)
     return numeric
 end
 
+local function ResolveFrameUnit(frame)
+    if type(frame) ~= "table" then
+        return nil
+    end
+
+    return frame:GetAttribute("unit") or frame.unit
+end
+
 local function CopyColor(color, fallback)
     local source = type(color) == "table" and color or fallback or { 1, 1, 1, 1 }
     return {
@@ -174,9 +182,17 @@ end
 local ApplyStandaloneCastbarTextAnchors
 
 local ROLE_ATLAS = {
-    TANK    = "roleicon-tank",
-    HEALER  = "roleicon-healer",
-    DAMAGER = "roleicon-dps",
+    TANK    = "UI-LFG-RoleIcon-Tank-Micro-Raid",
+    HEALER  = "UI-LFG-RoleIcon-Healer-Micro-Raid",
+    DAMAGER = "UI-LFG-RoleIcon-DPS-Micro-Raid",
+}
+
+local ROLE_ICON_TEXTURE = "Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES"
+
+local ROLE_TEX_COORDS = {
+    TANK = { 0, 19 / 64, 22 / 64, 41 / 64 },
+    HEALER = { 20 / 64, 39 / 64, 1 / 64, 20 / 64 },
+    DAMAGER = { 20 / 64, 39 / 64, 22 / 64, 41 / 64 },
 }
 
 local INFO_BAR_TEXT_DEFAULTS = {
@@ -650,7 +666,7 @@ function UnitFrames:GetRoleIconConfig(unitKey)
     end
 
     return {
-        enabled = get("enabled", false),
+        enabled = get("enabled", scope == "party"),
         corner  = get("corner", "TOPRIGHT"),
         size    = get("size", 18),
         insetX  = get("insetX", 2),
@@ -664,34 +680,51 @@ end
 function UnitFrames:ApplyRoleIconSettings(frame, unitKey)
     if not frame then return end
 
-    if not frame.TwichRoleIcon then
-        frame.TwichRoleIcon = frame:CreateTexture(nil, "OVERLAY", nil, 1)
+    if not frame.TwichRoleIconHost then
+        local host = CreateFrame("Frame", nil, frame)
+        host:SetAllPoints(frame)
+        host:SetFrameStrata(frame:GetFrameStrata())
+        host:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 5))
+        frame.TwichRoleIconHost = host
+        frame.TwichRoleIcon = host:CreateTexture(nil, "OVERLAY", nil, 1)
+    else
+        frame.TwichRoleIconHost:SetFrameStrata(frame:GetFrameStrata())
+        frame.TwichRoleIconHost:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 5))
     end
 
     local icon = frame.TwichRoleIcon
+    local host = frame.TwichRoleIconHost or frame
     local cfg = self:GetRoleIconConfig(unitKey)
 
     if not cfg.enabled then
         icon:Hide()
+        if frame.TwichRoleIconHost then
+            frame.TwichRoleIconHost:Hide()
+        end
         return
+    end
+
+    if frame.TwichRoleIconHost then
+        frame.TwichRoleIconHost:Show()
     end
 
     local sz = Clamp(cfg.size, 8, 40)
     icon:SetSize(sz, sz)
     icon:ClearAllPoints()
+    icon:SetDrawLayer("OVERLAY", 7)
 
     local corner = cfg.corner or "TOPRIGHT"
     local inX = tonumber(cfg.insetX) or 2
     local inY = tonumber(cfg.insetY) or 2
 
     if corner == "TOPLEFT" then
-        icon:SetPoint("TOPLEFT", frame, "TOPLEFT", inX, -inY)
+        icon:SetPoint("TOPLEFT", host, "TOPLEFT", inX, -inY)
     elseif corner == "TOPRIGHT" then
-        icon:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -inX, -inY)
+        icon:SetPoint("TOPRIGHT", host, "TOPRIGHT", -inX, -inY)
     elseif corner == "BOTTOMLEFT" then
-        icon:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", inX, inY)
+        icon:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", inX, inY)
     else
-        icon:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -inX, inY)
+        icon:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", -inX, inY)
     end
 
     -- Ensure the icon refreshes every time the frame shows with a new unit
@@ -699,6 +732,15 @@ function UnitFrames:ApplyRoleIconSettings(frame, unitKey)
         frame._twichRoleIconOnShowHooked = true
         frame:HookScript("OnShow", function(f)
             UnitFrames:UpdateRoleIcon(f, f._unitKey or unitKey)
+        end)
+    end
+
+    if not frame._twichRoleIconOnAttributeChangedHooked then
+        frame._twichRoleIconOnAttributeChangedHooked = true
+        frame:HookScript("OnAttributeChanged", function(f, name)
+            if name == "unit" then
+                UnitFrames:UpdateRoleIcon(f, f._unitKey or unitKey)
+            end
         end)
     end
 
@@ -720,7 +762,7 @@ function UnitFrames:UpdateRoleIcon(frame, unitKey)
         icon:Hide(); return
     end
 
-    local unit = frame.unit
+    local unit = ResolveFrameUnit(frame)
     if not unit or not UnitExists(unit) then
         icon:Hide(); return
     end
@@ -748,12 +790,14 @@ function UnitFrames:UpdateRoleIcon(frame, unitKey)
     end
 
     if show then
-        -- GetRoleIconAtlas is available since WoW 5.0; ROLE_ATLAS is a fallback.
-        local atlas = (_G.GetRoleIconAtlas and _G.GetRoleIconAtlas(displayRole))
-            or ROLE_ATLAS[displayRole]
+        local atlas = ROLE_ATLAS[displayRole]
         if atlas then
-            -- SetAtlas with false so our explicit SetSize is NOT overridden.
             icon:SetAtlas(atlas, false)
+            icon:SetSize(Clamp(cfg.size, 8, 40), Clamp(cfg.size, 8, 40))
+            icon:Show()
+        elseif ROLE_TEX_COORDS[displayRole] then
+            icon:SetTexture(ROLE_ICON_TEXTURE)
+            icon:SetTexCoord(unpack(ROLE_TEX_COORDS[displayRole]))
             icon:SetSize(Clamp(cfg.size, 8, 40), Clamp(cfg.size, 8, 40))
             icon:Show()
         else
@@ -1630,6 +1674,7 @@ end
 function UnitFrames:ApplyAuraSettings(frame, unitKey)
     if not frame or not frame.Auras then return end
     local aura                  = self:GetAuraConfigFor(unitKey)
+    local aurasEnabled          = aura.enabled ~= false
     local maxIcons              = math_max(1, math.floor(tonumber(aura.maxIcons) or 8))
     local iconSize              = Clamp(aura.iconSize or 18, 10, 40)
     local spacing               = Clamp(aura.spacing or 2, 0, 8)
@@ -1644,6 +1689,8 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
         return AuraMatchesDisplayMode(element.twichFilterMode, data)
     end
 
+    frame.Auras._forceHide = (not aurasEnabled) or aura.barMode == true
+
     if aura.barMode == true then
         -- Bar mode: hide icon grid, show bar container
         frame.Auras.num = 0; frame.Auras.numTotal = 0
@@ -1652,12 +1699,16 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
         local bars = self:EnsureAuraBarsContainer(frame)
         bars:ClearAllPoints()
         bars:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, yOff)
-        bars:SetShown(aura.enabled ~= false)
+        bars:SetShown(aurasEnabled)
         self:RefreshAuraBarsForFrame(frame, unitKey)
     else
         -- Icon mode
         if frame.AuraBars then frame.AuraBars:Hide() end
-        if filter == "HELPFUL" then
+        if not aurasEnabled then
+            frame.Auras.num = 0; frame.Auras.numTotal = 0
+            frame.Auras.numBuffs = 0; frame.Auras.numDebuffs = 0
+            frame.Auras:SetShown(false)
+        elseif filter == "HELPFUL" then
             frame.Auras.numBuffs = maxIcons; frame.Auras.numDebuffs = 0
             frame.Auras.numTotal = maxIcons
             frame.Auras.buffFilter = "HELPFUL"; frame.Auras.debuffFilter = nil
@@ -1670,21 +1721,23 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
             frame.Auras.numTotal = maxIcons
             frame.Auras.buffFilter = nil; frame.Auras.debuffFilter = nil
         end
-        frame.Auras.num = maxIcons
-        frame.Auras.size = iconSize
-        frame.Auras.spacing = spacing
-        frame.Auras.needFullUpdate = true
-        frame.Auras:SetShown(aura.enabled ~= false)
-        frame.Auras:ClearAllPoints()
-        frame.Auras:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, yOff)
-        frame.Auras:SetHeight(iconSize)
-        frame.Auras:SetWidth((iconSize * maxIcons) + (spacing * math_max(0, maxIcons - 1)))
-        if frame.Auras.ForceUpdate then
-            local resolvedUnit = frame.unit
-            if resolvedUnit then
-                frame.Auras:ForceUpdate()
-            else
-                frame.Auras:Hide()
+        if aurasEnabled then
+            frame.Auras.num = maxIcons
+            frame.Auras.size = iconSize
+            frame.Auras.spacing = spacing
+            frame.Auras.needFullUpdate = true
+            frame.Auras:SetShown(true)
+            frame.Auras:ClearAllPoints()
+            frame.Auras:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, yOff)
+            frame.Auras:SetHeight(iconSize)
+            frame.Auras:SetWidth((iconSize * maxIcons) + (spacing * math_max(0, maxIcons - 1)))
+            if frame.Auras.ForceUpdate then
+                local resolvedUnit = frame.unit
+                if resolvedUnit then
+                    frame.Auras:ForceUpdate()
+                else
+                    frame.Auras:Hide()
+                end
             end
         end
     end
@@ -1863,6 +1916,7 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
             end
         end
     end
+    frame.Castbar._forceHide = not enabled
     if not enabled then
         frame.Castbar:Hide()
     else
@@ -3648,6 +3702,11 @@ function UnitFrames:StyleFrame(frame)
     auras["growth-x"] = "RIGHT"
     auras["growth-y"] = "UP"
     auras.size = 18; auras.spacing = 2; auras.num = 8
+    auras:HookScript("OnShow", function(self)
+        if self._forceHide then
+            self:Hide()
+        end
+    end)
     frame.Auras = auras
 
     -- Embedded castbar for non-player units
@@ -3671,11 +3730,16 @@ function UnitFrames:StyleFrame(frame)
         cbIcon:SetSize(12, 12)
         cbIcon:SetPoint("RIGHT", castbar, "LEFT", -2, 0)
         cbIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92); castbar.Icon = cbIcon
+        castbar:HookScript("OnShow", function(self)
+            if self._forceHide then
+                self:Hide()
+            end
+        end)
         local capturedCBScope = ResolveCastbarScopeByUnitKey(capturedUnitKey)
         castbar.PostCastStart = function(cb)
             local db2 = UnitFrames:GetDB()
             local cfg = (db2.castbars and db2.castbars[capturedCBScope]) or {}
-            if cfg.enabled == false then cb:Hide() end
+            if cfg.enabled == false or cb._forceHide then cb:Hide() end
         end
         castbar.PostChannelStart = castbar.PostCastStart
         frame.Castbar = castbar
@@ -4215,8 +4279,15 @@ function UnitFrames:BuildDebugReport()
                     local cs = c.IsShown and c:IsShown() or false
                     local cw = c.GetWidth and math.floor(c:GetWidth() + 0.5) or 0
                     local ch = c.GetHeight and math.floor(c:GetHeight() + 0.5) or 0
-                    tinsert(lines, string.format("    child%d: unit=%-8s %dx%d shown=%s",
-                        i, cu, cw, ch, tostring(cs)))
+                    local roleIcon = c.TwichRoleIcon
+                    local roleShown = roleIcon and roleIcon.IsShown and roleIcon:IsShown() or false
+                    local memberKey = (k == "party" and "partyMember") or (k == "raid" and "raidMember") or
+                        (k == "tank" and "tankMember") or nil
+                    local roleCfg = memberKey and self:GetRoleIconConfig(memberKey) or nil
+                    tinsert(lines, string.format("    child%d: unit=%-8s %dx%d shown=%s roleIcon:%s/%s",
+                        i, cu, cw, ch, tostring(cs),
+                        roleCfg and tostring(roleCfg.enabled) or "n/a",
+                        roleShown and "shown" or "hidden"))
                 end
             end
         end
@@ -4318,8 +4389,8 @@ function UnitFrames:OnEnable()
     -- Guarded by a one-time migration flag so this doesn't clobber future explicit choices.
     do
         local db = self:GetDB()
+        db._migrated = db._migrated or {}
         if not (db._migrated and db._migrated.healerOnlyPower) then
-            db._migrated = db._migrated or {}
             if db.groups then
                 for _, gk in ipairs({ "party", "raid" }) do
                     if type(db.groups[gk]) == "table" and db.groups[gk].healerOnlyPower == false then
@@ -4328,6 +4399,16 @@ function UnitFrames:OnEnable()
                 end
             end
             db._migrated.healerOnlyPower = true
+        end
+
+        if not db._migrated.partyRoleIconDefault then
+            db.groups = db.groups or {}
+            db.groups.party = db.groups.party or {}
+            db.groups.party.roleIcon = db.groups.party.roleIcon or {}
+            if db.groups.party.roleIcon.enabled == nil then
+                db.groups.party.roleIcon.enabled = true
+            end
+            db._migrated.partyRoleIconDefault = true
         end
     end
 
@@ -4348,6 +4429,8 @@ function UnitFrames:OnEnable()
     self:RegisterEvent("PLAYER_TARGET_CHANGED", "OnTargetChanged")
     self:RegisterEvent("UPDATE_MOUSEOVER_UNIT", "OnMouseoverChanged")
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "RefreshAllFrames")
+    self:RegisterEvent("PLAYER_ROLES_ASSIGNED", "RefreshAllFrames")
+    self:RegisterEvent("ROLE_CHANGED_INFORM", "RefreshAllFrames")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "RefreshAllFrames")
 
     self.ticker = C_Timer.NewTicker(0.05, function()

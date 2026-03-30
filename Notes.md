@@ -67,6 +67,7 @@
 
 - I have aura bars enabled for target. The aura bars do not count down debuffs on target that player caused while in dungeons, they show but no timer and no callapsing bar as it times out.
 - I need to be able to style buffs differently from debuffs on aura bars.
-- Dungeon role indicator is not appearing
-
+- AI generated role icons
 - Need in combat and resting indicators (use AI to make icons)
+- Need targeted by/threat/aggro indicator
+- Heal prediction

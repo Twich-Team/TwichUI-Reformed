@@ -3604,23 +3604,33 @@ function UI:RenderColor(parent, y, width, option, path, key)
             return
         end
 
+        local function applyColor()
+            local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+            local na = option.hasAlpha == true and ColorPickerFrame:GetColorAlpha() or 1
+            ResolveOptionMethod(option, info, nr, ng, nb, na)
+            self:RequestRenderCurrentPage()
+        end
+
+        local function cancelColor(previousValues)
+            local prev = previousValues or { r = red, g = green, b = blue, a = alpha, opacity = alpha }
+            local prevAlpha = prev.a
+            if prevAlpha == nil then
+                prevAlpha = prev.opacity
+            end
+            ResolveOptionMethod(option, info, prev.r, prev.g, prev.b, prevAlpha or alpha)
+            self:RequestRenderCurrentPage()
+        end
+
         ColorPickerFrame:SetupColorPickerAndShow({
             r = red,
             g = green,
             b = blue,
             opacity = alpha,
             hasOpacity = option.hasAlpha == true,
-            swatchFunc = function()
-                local nr, ng, nb = ColorPickerFrame:GetColorRGB()
-                local na = option.hasAlpha == true and ColorPickerFrame:GetColorAlpha() or 1
-                ResolveOptionMethod(option, info, nr, ng, nb, na)
-                self:RequestRenderCurrentPage()
-            end,
-            cancelFunc = function(previousValues)
-                local prev = previousValues or { r = red, g = green, b = blue, a = alpha }
-                ResolveOptionMethod(option, info, prev.r, prev.g, prev.b, prev.a or alpha)
-                self:RequestRenderCurrentPage()
-            end,
+            swatchFunc = applyColor,
+            func = applyColor,
+            opacityFunc = applyColor,
+            cancelFunc = cancelColor,
         })
     end)
     return y

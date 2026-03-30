@@ -1384,15 +1384,16 @@ local function BuildCopyFromGroup(dstKey)
 end
 
 --- Builds an inline Role Icon IGroup for a given base path (units/X/roleIcon or groups/X/roleIcon).
-local function BuildRoleIconGroup(order, basePath)
+local function BuildRoleIconGroup(order, basePath, defaultEnabled)
+    defaultEnabled = defaultEnabled == true
     local disabled = ModuleDisabled()
     local isRoleOff = ModuleDisabled(function()
-        return GetPathValue(ExtendPath(basePath, "enabled"), false) ~= true
+        return GetPathValue(ExtendPath(basePath, "enabled"), defaultEnabled) ~= true
     end)
     return Widgets.IGroup(order, "Role Icon", {
         enabled = BuildToggle(1, "Show Role Icon",
             "Display the player's dungeon role icon (tank, healer, dps) directly on this frame.",
-            ExtendPath(basePath, "enabled"), false, { disabled = disabled, refreshConfig = true }),
+            ExtendPath(basePath, "enabled"), defaultEnabled, { disabled = disabled, refreshConfig = true }),
         filter = BuildSelect(2, "Show For",
             "Which roles will have the icon displayed.",
             ExtendPath(basePath, "filter"), "all", ROLE_ICON_FILTER_VALUES, { disabled = isRoleOff }),
@@ -1599,7 +1600,7 @@ local function BuildSingleUnitTab(unitKey, label)
                             "Show the mouseover highlight on this frame. Disable to hide it even when globally on.",
                             ExtendPath(basePath, "highlights", "showMouseover"), true, { disabled = disabled }),
                     }),
-                    roleIcon = BuildRoleIconGroup(4, ExtendPath(basePath, "roleIcon")),
+                    roleIcon = BuildRoleIconGroup(4, ExtendPath(basePath, "roleIcon"), false),
                     copyFrom = BuildCopyFromSingle(unitKey),
                 },
             },
@@ -1836,7 +1837,7 @@ local function BuildGroupTab(groupKey, label)
             auras    = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
             watchers = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
             colors   = colorsTab,
-            roleIcon = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon")),
+            roleIcon = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"), groupKey == "party"),
             infoBar  = BuildInfoBarTab(7, ExtendPath(basePath, "infoBar")),
         },
     }
