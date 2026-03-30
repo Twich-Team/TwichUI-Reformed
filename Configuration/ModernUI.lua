@@ -94,7 +94,7 @@ local NAV_ITEMS = {
     {
         id = "unitFrames",
         title = "Unit Frames",
-        description = "Standalone oUF unit frames, test mode, and full layout controls.",
+        description = "Configure your health bars, target frame, and party and raid frames.",
         accent = { 0.91, 0.45, 0.45 },
         path = { "unitFrames" },
     },

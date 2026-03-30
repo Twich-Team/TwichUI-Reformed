@@ -65,7 +65,6 @@ local INDICATOR_TYPES                  = {
     border = "Border Highlight",
 }
 local INDICATOR_SOURCES                = {
-    group               = "Spell Group",
     HELPFUL             = "Helpful",
     HARMFUL             = "Harmful",
     DISPELLABLE         = "Dispellable",
@@ -78,44 +77,40 @@ local GROW_DIR_VALUES                  = {
     UP    = "↑ Up",
     DOWN  = "↓ Down",
 }
-local MAX_SPELL_GROUPS                 = 8
 local MAX_INDICATORS                   = 6
--- Group-key list (g1..g8)
-local SPELL_GROUP_KEYS                 = {}
-for i = 1, MAX_SPELL_GROUPS do SPELL_GROUP_KEYS[#SPELL_GROUP_KEYS + 1] = "g" .. i end
 
-local HEALTH_MODE_VALUES = {
+local HEALTH_MODE_VALUES               = {
     theme = "Theme",
     class = "Class",
     custom = "Custom",
 }
 
-local UNIT_HEALTH_MODE_VALUES = {
+local UNIT_HEALTH_MODE_VALUES          = {
     inherit = "Inherit",
     theme = "Theme",
     class = "Class",
     custom = "Custom",
 }
 
-local POWER_COLOR_MODES = {
+local POWER_COLOR_MODES                = {
     custom    = "Custom",
     powertype = "Power Type",
 }
 
-local UNIT_POWER_COLOR_MODES = {
+local UNIT_POWER_COLOR_MODES           = {
     inherit   = "Inherit",
     custom    = "Custom",
     powertype = "Power Type",
 }
 
-local ROLE_ICON_CORNER_VALUES = {
+local ROLE_ICON_CORNER_VALUES          = {
     TOPLEFT     = "Top Left",
     TOPRIGHT    = "Top Right",
     BOTTOMLEFT  = "Bottom Left",
     BOTTOMRIGHT = "Bottom Right",
 }
 
-local ROLE_ICON_FILTER_VALUES = {
+local ROLE_ICON_FILTER_VALUES          = {
     all      = "All (fallback to DPS)",
     assigned = "Assigned Roles Only",
     nonDps   = "Healers & Tanks",
@@ -123,53 +118,53 @@ local ROLE_ICON_FILTER_VALUES = {
     tanks    = "Tanks Only",
 }
 
-local ROLE_ICON_TYPE_VALUES = {
+local ROLE_ICON_TYPE_VALUES            = {
     standard = "Standard (Blizzard)",
     twich = "Twich Icons",
 }
 
-local ROLE_ICON_PREVIEW_TEXTURE = "Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES"
-local ROLE_ICON_PREVIEW_TWICH = {
+local ROLE_ICON_PREVIEW_TEXTURE        = "Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES"
+local ROLE_ICON_PREVIEW_TWICH          = {
     TANK = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Tank", width = 64, height = 74 },
     HEALER = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Healer", width = 64, height = 68 },
     DAMAGER = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_DPS", width = 64, height = 74 },
 }
-local ROLE_ICON_PREVIEW_STANDARD = {
+local ROLE_ICON_PREVIEW_STANDARD       = {
     TANK = { texture = ROLE_ICON_PREVIEW_TEXTURE, width = 19, height = 19, textureWidth = 64, textureHeight = 64, texCoord = { 0, 19 / 64, 22 / 64, 41 / 64 } },
     HEALER = { texture = ROLE_ICON_PREVIEW_TEXTURE, width = 19, height = 19, textureWidth = 64, textureHeight = 64, texCoord = { 20 / 64, 39 / 64, 1 / 64, 20 / 64 } },
     DAMAGER = { texture = ROLE_ICON_PREVIEW_TEXTURE, width = 19, height = 19, textureWidth = 64, textureHeight = 64, texCoord = { 20 / 64, 39 / 64, 22 / 64, 41 / 64 } },
 }
 
-local STATE_ICON_PREVIEW_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon"
-local STATE_ICON_PREVIEW_TWICH = {
+local STATE_ICON_PREVIEW_TEXTURE       = "Interface\\CharacterFrame\\UI-StateIcon"
+local STATE_ICON_PREVIEW_TWICH         = {
     combat = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Combat", width = 64, height = 70 },
     resting = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Resting", width = 64, height = 63 },
 }
-local STATE_ICON_PREVIEW_STANDARD = {
+local STATE_ICON_PREVIEW_STANDARD      = {
     combat = { texture = STATE_ICON_PREVIEW_TEXTURE, width = 32, height = 32, textureWidth = 64, textureHeight = 64, texCoord = { 0.5, 1, 0, 0.49 } },
     resting = { texture = STATE_ICON_PREVIEW_TEXTURE, width = 32, height = 27, textureWidth = 64, textureHeight = 64, texCoord = { 0, 0.5, 0, 0.421875 } },
 }
 
-local STATE_INDICATOR_DEFAULTS = {
+local STATE_INDICATOR_DEFAULTS         = {
     combatIndicator = { point = "CENTER", relativePoint = "TOP", offsetX = 0, offsetY = 10, size = 20 },
     restingIndicator = { point = "CENTER", relativePoint = "TOPLEFT", offsetX = -2, offsetY = 8, size = 18 },
 }
 
 -- Default tag/justify for info bar text slots (mirrors INFO_BAR_TEXT_DEFAULTS in the engine)
-local INFO_BAR_SLOT_DEFAULTS = {
+local INFO_BAR_SLOT_DEFAULTS           = {
     { tag = "[name]",     justify = "LEFT" },
     { tag = "[perhp<$%]", justify = "CENTER" },
     { tag = "",           justify = "RIGHT" },
 }
 
-local GROUP_BY_VALUES = {
+local GROUP_BY_VALUES                  = {
     GROUP = "Group",
     CLASS = "Class",
     ASSIGNEDROLE = "Assigned Role",
     ROLE = "Role",
 }
 
-local COLOR_DEFAULTS = {
+local COLOR_DEFAULTS                   = {
     health = { 0.34, 0.84, 0.54, 1 },
     power = { 0.10, 0.72, 0.74, 1 },
     powerBackground = { 0.05, 0.06, 0.08, 0.85 },
@@ -190,7 +185,7 @@ local COLOR_DEFAULTS = {
     powerText = { 1, 1, 1, 1 },
 }
 
-local ROOT_TEXT_DEFAULTS = {
+local ROOT_TEXT_DEFAULTS               = {
     nameFormat = "full",
     healthFormat = "percent",
     powerFormat = "percent",
@@ -215,7 +210,7 @@ local ROOT_TEXT_DEFAULTS = {
     powerOffsetY = 0,
 }
 
-local SINGLE_UNIT_DEFAULTS = {
+local SINGLE_UNIT_DEFAULTS             = {
     player = { width = 260, height = 48, showPower = true, powerHeight = 10, powerDetached = false, powerWidth = 260 },
     target = { width = 240, height = 42, showPower = true, powerHeight = 10, powerDetached = false, powerWidth = 240 },
     targettarget = { width = 180, height = 30, showPower = true, powerHeight = 8, powerDetached = false, powerWidth = 180 },
@@ -224,7 +219,7 @@ local SINGLE_UNIT_DEFAULTS = {
     boss = { width = 220, height = 36, showPower = true, powerHeight = 8, powerDetached = false, powerWidth = 220 },
 }
 
-local SINGLE_LAYOUT_DEFAULTS = {
+local SINGLE_LAYOUT_DEFAULTS           = {
     player = { point = "BOTTOM", relativePoint = "BOTTOM", x = -260, y = 260 },
     target = { point = "BOTTOM", relativePoint = "BOTTOM", x = 260, y = 260 },
     targettarget = { point = "BOTTOM", relativePoint = "BOTTOM", x = 260, y = 212 },
@@ -234,7 +229,7 @@ local SINGLE_LAYOUT_DEFAULTS = {
     castbar = { point = "BOTTOM", relativePoint = "BOTTOM", x = -260, y = 220 },
 }
 
-local GROUP_DEFAULTS = {
+local GROUP_DEFAULTS                   = {
     party = {
         enabled = true,
         width = 180,
@@ -285,14 +280,14 @@ local GROUP_DEFAULTS = {
     },
 }
 
-local GROUP_LAYOUT_DEFAULTS = {
+local GROUP_LAYOUT_DEFAULTS            = {
     party = { point = "BOTTOMLEFT", relativePoint = "BOTTOM", x = 36, y = 360 },
     raid = { point = "BOTTOM", relativePoint = "BOTTOM", x = 0, y = 420 },
     tank = { point = "BOTTOMRIGHT", relativePoint = "BOTTOM", x = -36, y = 360 },
     boss = SINGLE_LAYOUT_DEFAULTS.boss,
 }
 
-local PLAYER_CASTBAR_DEFAULTS = {
+local PLAYER_CASTBAR_DEFAULTS          = {
     enabled = true,
     width = 260,
     height = 20,
@@ -318,7 +313,7 @@ local PLAYER_CASTBAR_DEFAULTS = {
     useCustomBackground = false,
 }
 
-local HEAL_PREDICTION_DEFAULTS = {
+local HEAL_PREDICTION_DEFAULTS         = {
     enabled = true,
     showPlayer = true,
     showOthers = true,
@@ -328,7 +323,7 @@ local HEAL_PREDICTION_DEFAULTS = {
     otherColor = { 0.56, 0.92, 0.72, 0.45 },
 }
 
-local EMBEDDED_CASTBAR_DEFAULTS = {
+local EMBEDDED_CASTBAR_DEFAULTS        = {
     target = { enabled = true, detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
     party  = { enabled = true, detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
     raid   = { enabled = true, detached = false, width = 120, height = 12, iconSize = 14, showIcon = true, showText = true, showTimeText = true, fontSize = 8, timeFontSize = 8, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
@@ -1228,184 +1223,6 @@ local function BuildAuraGroup(order, name, basePath, unitKey)
         genericBarStyle = genericBarStyle,
         buffBarStyle = buffBarStyle,
         debuffBarStyle = debuffBarStyle,
-    })
-end
-
--- ============================================================
--- Aura Watcher: Spell Groups section (global)
--- ============================================================
-
--- Returns a display-name→key map of spell groups that have a label set.
-local function GetSpellGroupValues()
-    local db  = Options:GetDB()
-    local out = {}
-    for _, key in ipairs(SPELL_GROUP_KEYS) do
-        local grp = db.spellGroups and db.spellGroups[key]
-        local lbl = grp and grp.label
-        if lbl and lbl ~= "" then
-            out[key] = lbl
-        else
-            out[key] = "Group " .. key:sub(2) -- "g3" → "Group 3"
-        end
-    end
-    return out
-end
-
-local function BuildSpellGroupSlot(order, groupKey)
-    local disabled = ModuleDisabled()
-    local basePath = { "spellGroups", groupKey }
-    local idx      = tonumber(groupKey:sub(2)) or 0
-    return Widgets.IGroup(order, "Group " .. idx, {
-        label = BuildInput(1, "Name",
-            "A short display name for this spell group (shown in indicator dropdowns).",
-            ExtendPath(basePath, "label"), "", {
-                disabled = disabled,
-                width    = "normal",
-            }),
-        spellIds = BuildInput(2, "Spell IDs",
-            "Comma-separated spell IDs to track. Example: 5484, 339, 118",
-            ExtendPath(basePath, "spellIds"), "", {
-                disabled = disabled,
-                width    = "full",
-            }),
-    })
-end
-
-local function BuildSpellGroupsSection(order)
-    local args = {}
-    for i, key in ipairs(SPELL_GROUP_KEYS) do
-        args[key] = BuildSpellGroupSlot(i, key)
-    end
-    return {
-        type        = "group",
-        name        = "Spell Groups",
-        order       = order,
-        inline      = false,
-        childGroups = "flow",
-        args        = args,
-    }
-end
-
--- ============================================================
--- Aura Watcher: per-scope indicator slots
--- ============================================================
-
-local function BuildIndicatorSlot(order, slotIdx, basePath)
-    local disabled = ModuleDisabled()
-    local path     = ExtendPath(basePath, slotIdx)
-    local itype    = function() return GetPathValue(ExtendPath(path, "type"), "icons") end
-    local source   = function() return GetPathValue(ExtendPath(path, "source"), "HARMFUL") end
-    local isIcons  = function() return itype() == "icons" end
-    local isBorder = function() return itype() == "border" end
-    local isGroup  = function() return source() == "group" end
-
-    return Widgets.IGroup(order, "Indicator " .. slotIdx, {
-        enabled = BuildToggle(1, "Enable",
-            "Activate this indicator slot.",
-            ExtendPath(path, "enabled"), false, {
-                disabled      = disabled,
-                refreshConfig = true,
-            }),
-        itype = BuildSelect(2, "Type",
-            "How to display the tracked aura(s).",
-            ExtendPath(path, "type"), "icons", INDICATOR_TYPES, {
-                disabled      = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(path, "enabled"), false) ~= true
-                end),
-                refreshConfig = true,
-            }),
-        source = BuildSelect(3, "Source",
-            "What to track: a named Spell Group or a generic aura filter.",
-            ExtendPath(path, "source"), "HARMFUL", INDICATOR_SOURCES, {
-                disabled = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(path, "enabled"), false) ~= true
-                end),
-                refreshConfig = true,
-            }),
-        groupKey = BuildSelect(4, "Spell Group",
-            "Which Spell Group to watch (define groups in the Spell Groups tab).",
-            ExtendPath(path, "groupKey"), "g1",
-            GetSpellGroupValues, {
-                disabled = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(path, "enabled"), false) ~= true
-                        or source() ~= "group"
-                end),
-            }),
-        onlyMine = BuildToggle(5, "Only Mine",
-            "Only show auras applied by you.",
-            ExtendPath(path, "onlyMine"), false, {
-                disabled = ModuleDisabled(function()
-                    return GetPathValue(ExtendPath(path, "enabled"), false) ~= true
-                end),
-            }),
-        iconSettings = Widgets.IGroup(6, "Icon Settings", {
-            anchor = BuildSelect(1, "Anchor Point",
-                "The corner / edge of the icon cluster anchored to the frame.",
-                ExtendPath(path, "anchor"), "TOPLEFT", POINT_VALUES, {
-                    disabled = ModuleDisabled(function()
-                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
-                    end),
-                }),
-            relativeAnchor = BuildSelect(2, "Frame Point",
-                "The matching point on the unit frame.",
-                ExtendPath(path, "relativeAnchor"), "TOPLEFT", POINT_VALUES, {
-                    disabled = ModuleDisabled(function()
-                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
-                    end),
-                }),
-            offsetX = BuildRange(3, "X Offset", "Horizontal offset from the anchor.",
-                ExtendPath(path, "offsetX"), 0, -200, 200, 1, {
-                    disabled = ModuleDisabled(function()
-                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
-                    end),
-                }),
-            offsetY = BuildRange(4, "Y Offset", "Vertical offset from the anchor.",
-                ExtendPath(path, "offsetY"), 0, -200, 200, 1, {
-                    disabled = ModuleDisabled(function()
-                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
-                    end),
-                }),
-            iconSize = BuildRange(5, "Icon Size", "Pixel size of each aura icon.",
-                ExtendPath(path, "iconSize"), 18, 8, 40, 1, {
-                    disabled = ModuleDisabled(function()
-                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
-                    end),
-                }),
-            spacing = BuildRange(6, "Spacing", "Gap between icons.",
-                ExtendPath(path, "spacing"), 2, 0, 12, 1, {
-                    disabled = ModuleDisabled(function()
-                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
-                    end),
-                }),
-            maxCount = BuildRange(7, "Max Count", "Maximum number of icons to show.",
-                ExtendPath(path, "maxCount"), 5, 1, 12, 1, {
-                    disabled = ModuleDisabled(function()
-                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
-                    end),
-                }),
-            growDirection = BuildSelect(8, "Grow Direction",
-                "Direction new icons are added in.",
-                ExtendPath(path, "growDirection"), "RIGHT", GROW_DIR_VALUES, {
-                    disabled = ModuleDisabled(function()
-                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isIcons()
-                    end),
-                }),
-        }),
-        borderSettings = Widgets.IGroup(7, "Border Settings", {
-            borderColor = BuildColor(1, "Color",
-                "Border color when the tracked aura is active.",
-                ExtendPath(path, "borderColor"), { 1, 0.5, 0, 1 }, true, {
-                    disabled = ModuleDisabled(function()
-                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isBorder()
-                    end),
-                }),
-            borderWidth = BuildRange(2, "Width", "Border thickness in pixels.",
-                ExtendPath(path, "borderWidth"), 2, 1, 8, 1, {
-                    disabled = ModuleDisabled(function()
-                        return GetPathValue(ExtendPath(path, "enabled"), false) ~= true or not isBorder()
-                    end),
-                }),
-        }),
     })
 end
 
@@ -3102,9 +2919,8 @@ function Options:BuildConfiguration()
     section.args = {
         title        = Widgets.TitleWidget(0, "Unit Frames"),
         description  = Widgets.Description(1,
-            "Standalone oUF unit frames with live previews, party and raid layout control, castbar styling, shared text rules, and scope-based colors."),
+            "Configure your player, target, party, and raid frames, including health bars, cast bars, auras, text, and colors."),
         generalGroup = BuildGeneralTab(),
-        spellGroups  = BuildSpellGroupsSection(5),
         singles      = BuildSinglesTab(),
         groups       = BuildGroupsTab(),
         castbar      = BuildCastbarTab(),
