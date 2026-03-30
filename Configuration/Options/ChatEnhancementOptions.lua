@@ -21,8 +21,14 @@ local DEFAULT_TAB_FONT_SIZE = 12
 local DEFAULT_ROW_GAP = 8
 local DEFAULT_SHELL_ACCENT = { r = 0.10, g = 0.72, b = 0.74 }
 local DEFAULT_TIMESTAMP_WIDTH = 58
+local DEFAULT_BN_WHISPER_INFO = _G.ChatTypeInfo and _G.ChatTypeInfo.BN_WHISPER or nil
 local DEFAULT_CHANNEL_COLORS = {
     addon = { r = 0.84, g = 0.48, b = 0.97 },
+    battleNetWhisper = {
+        r = DEFAULT_BN_WHISPER_INFO and DEFAULT_BN_WHISPER_INFO.r or 0.00,
+        g = DEFAULT_BN_WHISPER_INFO and DEFAULT_BN_WHISPER_INFO.g or 0.75,
+        b = DEFAULT_BN_WHISPER_INFO and DEFAULT_BN_WHISPER_INFO.b or 0.96,
+    },
     general = { r = 0.91, g = 0.83, b = 0.46 },
     guild = { r = 0.24, g = 0.85, b = 0.53 },
     instance = { r = 0.96, g = 0.55, b = 0.29 },

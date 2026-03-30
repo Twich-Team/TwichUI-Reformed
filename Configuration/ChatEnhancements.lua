@@ -182,7 +182,8 @@ local function BuildChatEnhancementConfiguration()
                         chatLocked = {
                             type = "toggle",
                             name = "Lock Chat",
-                            desc = "Prevent the chat frame from being moved or resized and hide the drag and resize handles.",
+                            desc =
+                            "Prevent the chat frame from being moved or resized and hide the drag and resize handles.",
                             order = 3,
                             width = "half",
                             handler = Options,
@@ -202,7 +203,8 @@ local function BuildChatEnhancementConfiguration()
                         showChromeAccent = {
                             type = "toggle",
                             name = "Show Accent",
-                            desc = "Show the accent glow, left accent bar, and bottom gradient on the chat chrome. Disable for a flat, minimal look.",
+                            desc =
+                            "Show the accent glow, left accent bar, and bottom gradient on the chat chrome. Disable for a flat, minimal look.",
                             order = 5,
                             width = "half",
                             handler = Options,
@@ -211,7 +213,8 @@ local function BuildChatEnhancementConfiguration()
                         },
                         positionNote = {
                             type = "description",
-                            name = "Position Override — enter exact pixel coordinates to snap the chat frame to a precise location. 0, 0 = bottom-left of screen. Leave blank to let WoW manage position.",
+                            name =
+                            "Position Override — enter exact pixel coordinates to snap the chat frame to a precise location. 0, 0 = bottom-left of screen. Leave blank to let WoW manage position.",
                             order = 10,
                             width = "full",
                         },
@@ -556,7 +559,8 @@ local function BuildChatEnhancementConfiguration()
                 tabStyle = {
                     type = "select",
                     name = "Tab Style",
-                    desc = "Visual style for chat tabs. Solid renders filled pill buttons; Transparent renders text-only with an accent underline.",
+                    desc =
+                    "Visual style for chat tabs. Solid renders filled pill buttons; Transparent renders text-only with an accent underline.",
                     order = 1,
                     width = "half",
                     handler = Options,
@@ -715,7 +719,8 @@ local function BuildChatEnhancementConfiguration()
             args = {
                 description = {
                     type = "description",
-                    name = "Capture optional chat renderer and shell diagnostics in the shared /tui debug console. Leave this disabled during normal play to avoid extra logging overhead.",
+                    name =
+                    "Capture optional chat renderer and shell diagnostics in the shared /tui debug console. Leave this disabled during normal play to avoid extra logging overhead.",
                     order = 1,
                     width = "full",
                 },
@@ -793,9 +798,11 @@ local function BuildChatEnhancementConfiguration()
                     name = "Private",
                     order = 3,
                     args = {
-                        whisperColor = CreateChannelColorOption(1, "Whisper", "whisper",
+                        battleNetWhisperColor = CreateChannelColorOption(1, "Battle.net Whisper",
+                            "battleNetWhisper", "Color used for Battle.net whispers and tells."),
+                        whisperColor = CreateChannelColorOption(2, "Whisper", "whisper",
                             "Color used for whispers and tells."),
-                        addonColor = CreateChannelColorOption(2, "Addon Output", "addon",
+                        addonColor = CreateChannelColorOption(3, "Addon Output", "addon",
                             "Color used for redirected addon output."),
                     },
                 },
@@ -1013,7 +1020,8 @@ local function BuildChatEnhancementConfiguration()
                 whisperTabs = {
                     type = "toggle",
                     name = "Whisper Tabs",
-                    desc = "Automatically open a dedicated chat tab for each whisper sender so conversations stay grouped. Replies are mirrored there too.",
+                    desc =
+                    "Automatically open a dedicated chat tab for each whisper sender so conversations stay grouped. Replies are mirrored there too.",
                     order = 1,
                     width = "half",
                     handler = Options,
@@ -1068,7 +1076,8 @@ local function BuildChatEnhancementConfiguration()
                     type = "description",
                     order = 0,
                     width = "full",
-                    name = "Display up to 3 datatext cells in the chat header area below the drag strip. Supports all datatexts registered in the Datatexts module.",
+                    name =
+                    "Display up to 3 datatext cells in the chat header area below the drag strip. Supports all datatexts registered in the Datatexts module.",
                 },
                 headerDatatextEnabled = {
                     type = "toggle",
@@ -1086,7 +1095,9 @@ local function BuildChatEnhancementConfiguration()
                     desc = "Number of datatext cells to display (1-3).",
                     order = 2,
                     width = "half",
-                    min = 1, max = 3, step = 1,
+                    min = 1,
+                    max = 3,
+                    step = 1,
                     handler = Options,
                     get = "GetHeaderDatatextSlotCount",
                     set = "SetHeaderDatatextSlotCount",
@@ -1097,7 +1108,9 @@ local function BuildChatEnhancementConfiguration()
                     desc = "Width of each datatext slot cell in pixels.",
                     order = 2.5,
                     width = "half",
-                    min = 32, max = 200, step = 4,
+                    min = 32,
+                    max = 200,
+                    step = 4,
                     handler = Options,
                     get = "GetHeaderDatatextSlotWidth",
                     set = "SetHeaderDatatextSlotWidth",
@@ -1138,7 +1151,9 @@ local function BuildChatEnhancementConfiguration()
                     desc = "Font size for header datatext cells (8-18).",
                     order = 6,
                     width = "half",
-                    min = 8, max = 18, step = 1,
+                    min = 8,
+                    max = 18,
+                    step = 1,
                     handler = Options,
                     get = "GetHeaderDatatextFontSize",
                     set = "SetHeaderDatatextFontSize",
@@ -1194,7 +1209,8 @@ local function BuildChatEnhancementConfiguration()
                 hideRealm = {
                     type = "toggle",
                     name = "Hide Realm Name",
-                    desc = "Strip the -RealmName suffix from player names in chat messages. The hyperlink target is kept intact so right-clicking still works.",
+                    desc =
+                    "Strip the -RealmName suffix from player names in chat messages. The hyperlink target is kept intact so right-clicking still works.",
                     order = 1,
                     width = "full",
                     handler = Options,
@@ -1204,7 +1220,8 @@ local function BuildChatEnhancementConfiguration()
                 historyLimit = {
                     type = "range",
                     name = "History Limit",
-                    desc = "Maximum number of messages to retain per chat frame. Older messages are trimmed when the limit is reached.",
+                    desc =
+                    "Maximum number of messages to retain per chat frame. Older messages are trimmed when the limit is reached.",
                     order = 2,
                     width = "full",
                     min = 50,
@@ -1217,7 +1234,8 @@ local function BuildChatEnhancementConfiguration()
                 addonRedirect = {
                     type = "toggle",
                     name = "Redirect Addon Output",
-                    desc = "Route CHAT_MSG_ADDON traffic into a chat window named \"AddOns\". Create that window first via the + tab button, name it AddOns, then enable this.",
+                    desc =
+                    "Route CHAT_MSG_ADDON traffic into a chat window named \"AddOns\". Create that window first via the + tab button, name it AddOns, then enable this.",
                     order = 3,
                     width = "half",
                     handler = Options,
@@ -1238,33 +1256,34 @@ local function BuildChatEnhancementConfiguration()
         local MAX_ROUTING_SLOTS = 20
         local routingArgs = optionsTab.args.routingGroup.args
         for i = 1, MAX_ROUTING_SLOTS do
-            local idx = i  -- capture loop variable for closures
+            local idx = i -- capture loop variable for closures
             routingArgs["routingPat_" .. idx] = {
-                type  = "input",
-                name  = "",
-                desc  = "Plain-text pattern. Any message containing this text (case-sensitive) is redirected to the chosen tab.",
-                order = 100 + idx * 3,
-                width = "double",
+                type   = "input",
+                name   = "",
+                desc   =
+                "Plain-text pattern. Any message containing this text (case-sensitive) is redirected to the chosen tab.",
+                order  = 100 + idx * 3,
+                width  = "double",
                 hidden = function()
                     return idx > #Options:GetRoutingEntries()
                 end,
-                get = function()
+                get    = function()
                     return Options:GetRoutingEntryPattern(idx)
                 end,
-                set = function(info, val)
+                set    = function(info, val)
                     Options:SetRoutingEntryPattern(idx, val)
                 end,
             }
             routingArgs["routingTab_" .. idx] = {
-                type   = "select",
-                name   = "",
-                desc   = "Chat tab that matching messages will be routed to.",
-                order  = 100 + idx * 3 + 1,
-                width  = "normal",
-                hidden = function()
+                type    = "select",
+                name    = "",
+                desc    = "Chat tab that matching messages will be routed to.",
+                order   = 100 + idx * 3 + 1,
+                width   = "normal",
+                hidden  = function()
                     return idx > #Options:GetRoutingEntries()
                 end,
-                values = function()
+                values  = function()
                     return Options:GetAvailableChatTabs()
                 end,
                 sorting = function()
@@ -1274,13 +1293,13 @@ local function BuildChatEnhancementConfiguration()
                     table.sort(s)
                     return s
                 end,
-                get = function()
+                get     = function()
                     local v    = Options:GetRoutingEntryTab(idx)
                     local tabs = Options:GetAvailableChatTabs()
                     -- Return nil if the stored tab no longer exists (avoids AceConfig warning).
                     return tabs[v] and v or nil
                 end,
-                set = function(info, val)
+                set     = function(info, val)
                     Options:SetRoutingEntryTab(idx, val)
                 end,
             }
@@ -1293,7 +1312,7 @@ local function BuildChatEnhancementConfiguration()
                 hidden = function()
                     return idx > #Options:GetRoutingEntries()
                 end,
-                func = function()
+                func   = function()
                     Options:RemoveRoutingEntry(idx)
                     ConfigurationModule:Refresh()
                 end,

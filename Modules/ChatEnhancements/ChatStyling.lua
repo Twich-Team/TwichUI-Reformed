@@ -158,6 +158,8 @@ local DEFAULT_CONTROL_BUTTONS    = {
 }
 
 local CHANNEL_TYPE_TO_KEY        = {
+    BN_WHISPER = "battleNetWhisper",
+    BN_WHISPER_INFORM = "battleNetWhisper",
     CHANNEL = "general",
     EMOTE = "emote",
     GUILD = "guild",
@@ -848,6 +850,10 @@ function ChatStylingModule:ResolveChannelKeyFromLabel(label)
                 return key
             end
         end
+    end
+
+    if cleanLabel:find("battle.net", 1, true) and (cleanLabel:find("whisper", 1, true) or cleanLabel:find("tell", 1, true)) then
+        return "battleNetWhisper"
     end
 
     if cleanLabel:find("whisper", 1, true) or cleanLabel:find("tell", 1, true) then

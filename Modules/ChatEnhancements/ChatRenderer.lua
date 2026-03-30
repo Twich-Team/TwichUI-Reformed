@@ -592,11 +592,11 @@ function ChatRendererModule:ResolveMessageChannelKey(message)
         end
     end
 
-    -- BNet whispers use a distinct link type; keep them as whisper.
+    -- BNet whispers use a distinct link type and should keep their own color.
     -- Do NOT map regular |Hplayer: to whisper — that hyperlink appears in SAY,
     -- YELL, PARTY, etc. and would incorrectly colour all player messages pink.
     if message:find("|HBNplayer:", 1, true) then
-        return "whisper"
+        return "battleNetWhisper"
     end
 
     return nil
