@@ -347,48 +347,42 @@ local CASTBAR_STYLE_VALUES             = {
 }
 
 local CASTBAR_FANTASY_THEME_VALUES     = {
-    neutral = "Neutral",
-    neutral2 = "Neutral 2",
-    neutral3 = "Neutral 3",
-    metal = "Neutral - Metal",
-    metal_icon = "Metal Icon",
-    engrenages = "Engrenages",
-    honey_icon = "Honey - Icons",
-    mossystone_icon = "Mossy Stone - Icons",
-    mossystone = "Mossy Stone",
-    viking = "Viking Icon",
-    alliance = "Alliance",
-    horde = "Horde",
-    bronze = "Bronze",
-    aim = "Aim",
+    aim = "Hunt",
+    alliance = "Blue Sparkle",
     arcane = "Arcane",
-    arcaneum = "Arcaneum",
-    arctic = "Arctic",
-    chaos = "Chaos",
-    chiji = "Chi'ji",
+    arctic = "Frost",
+    bronze = "Gold Sparkle",
+    chaos = "Green Gas",
+    chiji = "Soft Leaves",
     earth = "Earth",
-    felfire = "Felfire",
+    felfire = "Green Fire",
     fire = "Fire",
-    fishing = "Fishing",
-    frost = "Frost",
-    frostfire = "Frostfire",
-    herbalism = "Herbalism",
+    fishing = "Water",
+    fists = "Green & Blue Leaves",
+    frostfire = "Purple Glow",
+    herbalism = "Leaves",
     holy = "Holy",
-    inferno = "Inferno",
-    lava = "Lava",
-    lumber = "Lumber",
-    mining = "Mining",
-    mistweaver = "Mistweaver",
-    moon = "Moon",
-    nature = "Nature",
-    sacred = "Sacred",
+    horde = "Red Sparkle",
+    lumber = "Wood",
+    mining = "Rock",
+    mistweaver = "Green Mist",
+    moon = "Lunar",
+    mossystone = "Celestial Green",
+    neutral = "Sparkle",
+    sacred = "Holy 2",
     shadow = "Shadow",
-    skinning = "Skinning",
-    thunder = "Thunder",
+    thunder = "Blue Sparkle",
     void = "Void",
-    water = "Water",
-    fists = "Fists of Fury",
 }
+
+local function ResolveCastbarFantasyTheme(value, defaultValue)
+    local theme = value or defaultValue or "holy"
+    if CASTBAR_FANTASY_THEME_VALUES[theme] ~= nil then
+        return theme
+    end
+
+    return defaultValue or "holy"
+end
 
 local function GetModule()
     return T:GetModule("UnitFrames", true)
@@ -2268,15 +2262,27 @@ local function BuildEmbeddedCastbarTab(scopeKey, label)
                         disabled = disabled,
                         refreshConfig = true,
                     }),
-                style = BuildSelect(1.5, "Style",
-                    "Choose between the current flat castbar and the animated Fantasy Cast Bar.",
-                    ExtendPath(path, "style"), defaults.style or "modern", CASTBAR_STYLE_VALUES, {
+                style = BuildToggle(1.5, "Particle Effects",
+                    "Enable Opulent-style particle effects on this castbar.",
+                    ExtendPath(path, "style"), false, {
                         disabled = disabled,
                         refreshConfig = true,
+                        get = function()
+                            return GetPathValue(ExtendPath(path, "style"), defaults.style or "modern") == "fantasy"
+                        end,
+                        set = function(value)
+                            SetPathValue(ExtendPath(path, "style"), value == true and "fantasy" or "modern", true)
+                        end,
                     }),
                 fantasyTheme = BuildSelect(1.75, "Fantasy Theme",
                     "Choose which Fantasy Cast Bar effect to use.",
                     ExtendPath(path, "fantasyTheme"), defaults.fantasyTheme or "holy", CASTBAR_FANTASY_THEME_VALUES, {
+                        get = function(value)
+                            return ResolveCastbarFantasyTheme(value, defaults.fantasyTheme or "holy")
+                        end,
+                        normalize = function(value)
+                            return ResolveCastbarFantasyTheme(value, defaults.fantasyTheme or "holy")
+                        end,
                         disabled = ModuleDisabled(function()
                             return GetPathValue(ExtendPath(path, "style"), defaults.style or "modern") ~= "fantasy"
                         end),
@@ -2817,15 +2823,27 @@ local function BuildCastbarTab()
                     PLAYER_CASTBAR_DEFAULTS.enabled, {
                         refreshConfig = true,
                     }),
-                style = BuildSelect(1.5, "Style",
-                    "Choose between the current flat castbar and the animated Fantasy Cast Bar.",
-                    { "castbar", "style" }, PLAYER_CASTBAR_DEFAULTS.style, CASTBAR_STYLE_VALUES, {
+                style = BuildToggle(1.5, "Particle Effects",
+                    "Enable Opulent-style particle effects on the standalone castbar.",
+                    { "castbar", "style" }, false, {
                         refreshConfig = true,
+                        get = function()
+                            return GetPathValue({ "castbar", "style" }, PLAYER_CASTBAR_DEFAULTS.style) == "fantasy"
+                        end,
+                        set = function(value)
+                            SetPathValue({ "castbar", "style" }, value == true and "fantasy" or "modern", true)
+                        end,
                     }),
                 fantasyTheme = BuildSelect(1.75, "Fantasy Theme",
                     "Choose which Fantasy Cast Bar effect to use.",
                     { "castbar", "fantasyTheme" }, PLAYER_CASTBAR_DEFAULTS.fantasyTheme,
                     CASTBAR_FANTASY_THEME_VALUES, {
+                        get = function(value)
+                            return ResolveCastbarFantasyTheme(value, PLAYER_CASTBAR_DEFAULTS.fantasyTheme)
+                        end,
+                        normalize = function(value)
+                            return ResolveCastbarFantasyTheme(value, PLAYER_CASTBAR_DEFAULTS.fantasyTheme)
+                        end,
                         disabled = ModuleDisabled(function()
                             return GetPathValue({ "castbar", "style" }, PLAYER_CASTBAR_DEFAULTS.style) ~= "fantasy"
                         end),
