@@ -3100,8 +3100,10 @@ function Options:GetDB()
     if db.groups.boss.yOffset == nil then db.groups.boss.yOffset = GROUP_DEFAULTS.boss.yOffset end
     if db.groups.boss.unitsPerColumn == nil then db.groups.boss.unitsPerColumn = GROUP_DEFAULTS.boss.unitsPerColumn end
     if db.groups.boss.columnSpacing == nil then db.groups.boss.columnSpacing = GROUP_DEFAULTS.boss.columnSpacing end
-    if db.groups.boss.columnAnchorPoint == nil then db.groups.boss.columnAnchorPoint = GROUP_DEFAULTS.boss
-        .columnAnchorPoint end
+    if db.groups.boss.columnAnchorPoint == nil then
+        db.groups.boss.columnAnchorPoint = GROUP_DEFAULTS.boss
+            .columnAnchorPoint
+    end
     if type(db.layout) ~= "table" then db.layout = {} end
     if type(db.colors) ~= "table" then db.colors = {} end
     if type(db.colors.scopes) ~= "table" then db.colors.scopes = {} end

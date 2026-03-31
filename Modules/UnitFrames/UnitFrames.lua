@@ -3871,7 +3871,8 @@ local function GetFantasyThemeEffectFamily(theme)
 end
 
 local function GetFantasyThemeFillMargins(theme)
-    local margins = FANTASY_THEME_FILL_MARGINS[theme or ""] or FANTASY_THEME_FILL_MARGINS[GetFantasyThemeEffectFamily(theme) or ""]
+    local margins = FANTASY_THEME_FILL_MARGINS[theme or ""] or
+    FANTASY_THEME_FILL_MARGINS[GetFantasyThemeEffectFamily(theme) or ""]
     if margins then
         return margins[1], margins[2]
     end
@@ -4130,7 +4131,7 @@ local function GetFantasyParticleTexture(theme, purpose, index)
         if family == "earth" then
             bucket = assets.debris
         else
-        bucket = assets.front or assets.misc
+            bucket = assets.front or assets.misc
         end
     elseif purpose == "ambient" or purpose == "stream" then
         bucket = assets.debris or assets.misc
@@ -4165,11 +4166,15 @@ local function GetFantasyParticleTexture(theme, purpose, index)
             bucket = purpose == "ripple" and waterAssets.circle or GetFantasyThemeAssets("earth").debris
         elseif family == "frost" then
             local frostAssets = GetFantasyThemeAssets(theme)
-            bucket = purpose == "mist" and (frostAssets.mist or { OPULENT_CASTBAR_TEXTURE_PATH .. "frost\\Mist_Frost_01" })
-                or { OPULENT_CASTBAR_TEXTURE_PATH .. "frost\\Particle_Frost_01", OPULENT_CASTBAR_TEXTURE_PATH .. "frost\\Particle_Frost_02" }
+            bucket = purpose == "mist" and
+                (frostAssets.mist or { OPULENT_CASTBAR_TEXTURE_PATH .. "frost\\Mist_Frost_01" })
+                or
+                { OPULENT_CASTBAR_TEXTURE_PATH .. "frost\\Particle_Frost_01", OPULENT_CASTBAR_TEXTURE_PATH ..
+                "frost\\Particle_Frost_02" }
         elseif family == "arcane" then
             local arcaneAssets = GetFantasyThemeAssets(theme)
-            bucket = purpose == "rune" and arcaneAssets.runes or { OPULENT_CASTBAR_TEXTURE_PATH .. "frost\\Particle_Frost_01" }
+            bucket = purpose == "rune" and arcaneAssets.runes or
+            { OPULENT_CASTBAR_TEXTURE_PATH .. "frost\\Particle_Frost_01" }
         elseif family == "void" then
             local voidAssets = GetFantasyThemeAssets(theme)
             bucket = purpose == "vortex" and voidAssets.vortex or GetFantasyThemeAssets("earth").debris
@@ -4738,8 +4743,10 @@ local function SpawnFantasyEarthOrbiter(fx, isRock)
     particle.centerY = centerY
     particle.orbitAngle = RandomRange(0, math_pi * 2)
     particle.orbitSpeed = RandomRange(0.28, 0.72) * (math.random(0, 1) == 0 and -1 or 1)
-    particle.radiusX = RandomRange(isRock and width * 0.18 or width * 0.14, isRock and width * 0.46 or width * 0.52) * effectScale
-    particle.radiusY = RandomRange(isRock and height * 0.55 or height * 0.75, isRock and height * 1.1 or height * 1.45) * effectScale
+    particle.radiusX = RandomRange(isRock and width * 0.18 or width * 0.14, isRock and width * 0.46 or width * 0.52) *
+    effectScale
+    particle.radiusY = RandomRange(isRock and height * 0.55 or height * 0.75, isRock and height * 1.1 or height * 1.45) *
+    effectScale
     particle.verticalBob = RandomRange(0.6, 2.8) * effectScale
     particle.phase = RandomRange(0, math_pi * 2)
     particle.rot = RandomRange(0, math_pi * 2)
@@ -4793,7 +4800,8 @@ local function SpawnFantasyEmberParticle(fx, frontX, familyOverride)
     particle.rotSpeed = RandomRange(-2.6, 2.6)
     particle.maxAlpha = family == "gather" and 0.92 or 0.85
     particle.tex:SetTexture(GetFantasyParticleTexture(theme, family == "gather" and "gather" or "ember", index))
-    particle.tex:SetSize(RandomRange(sizeMin, sizeMax) * math_min(effectScale, 1.9), RandomRange(sizeMin, sizeMax) * math_min(effectScale, 1.9))
+    particle.tex:SetSize(RandomRange(sizeMin, sizeMax) * math_min(effectScale, 1.9),
+        RandomRange(sizeMin, sizeMax) * math_min(effectScale, 1.9))
     particle.tex:SetBlendMode(family == "gather" and "BLEND" or "ADD")
     particle.tex:SetVertexColor(color[1], color[2], color[3], 1)
     particle.tex:Show()
@@ -5020,8 +5028,10 @@ local function SpawnFantasyGlowParticle(fx, frontX)
         or family == "moon" and math_min(barHeight * 0.28, 12)
         or (family == "nature" or family == "monk") and math_min(barHeight * 0.25, 10)
         or math_min(barHeight * 0.30, 14)
-    local sizeMin = family == "holy" and 4 or family == "moon" and 4 or (family == "nature" or family == "monk") and 6 or 5
-    local sizeMax = family == "holy" and 10 or family == "moon" and 10 or (family == "nature" or family == "monk") and 12 or 14
+    local sizeMin = family == "holy" and 4 or family == "moon" and 4 or (family == "nature" or family == "monk") and 6 or
+    5
+    local sizeMax = family == "holy" and 10 or family == "moon" and 10 or (family == "nature" or family == "monk") and 12 or
+    14
     local color = family == "holy" and { 1.0, 0.92, 0.45, 1 }
         or family == "moon" and { 0.0, 0.90, 1.0, 1 }
         or (family == "nature" or family == "monk") and { 0.30, 1.0, 0.25, 1 }
@@ -5035,16 +5045,21 @@ local function SpawnFantasyGlowParticle(fx, frontX)
         or family == "moon" and RandomRange(0.28, 0.60)
         or (family == "nature" or family == "monk") and RandomRange(0.18, 0.35)
         or RandomRange(0.15, 0.30)
-    particle.x = frontX + RandomRange((family == "holy" or family == "moon") and -2 or -4, (family == "holy" or family == "moon") and 4 or 4) * effectScale
+    particle.x = frontX +
+    RandomRange((family == "holy" or family == "moon") and -2 or -4, (family == "holy" or family == "moon") and 4 or 4) *
+    effectScale
     particle.y = (barHeight * 0.5) + RandomRange(-spread, spread) * effectScale
     particle.vy = family == "holy" and RandomRange(-8, 8)
         or family == "moon" and RandomRange(-6, 6)
         or (family == "nature" or family == "monk") and RandomRange(-5, 5)
         or RandomRange(-8, 12)
     particle.phase = RandomRange(0, math_pi * 2)
-    particle.maxAlpha = family == "holy" and 0.65 or family == "moon" and 0.55 or (family == "nature" or family == "monk") and 0.55 or 0.65
-    particle.tex:SetTexture(family == "moon" and GetFantasyParticleTexture(theme, "glow", 1) or "Interface\\Cooldown\\star4")
-    particle.tex:SetSize(RandomRange(sizeMin, sizeMax) * math_min(effectScale, 1.8), RandomRange(sizeMin, sizeMax) * math_min(effectScale, 1.8))
+    particle.maxAlpha = family == "holy" and 0.65 or family == "moon" and 0.55 or
+    (family == "nature" or family == "monk") and 0.55 or 0.65
+    particle.tex:SetTexture(family == "moon" and GetFantasyParticleTexture(theme, "glow", 1) or
+    "Interface\\Cooldown\\star4")
+    particle.tex:SetSize(RandomRange(sizeMin, sizeMax) * math_min(effectScale, 1.8),
+        RandomRange(sizeMin, sizeMax) * math_min(effectScale, 1.8))
     particle.tex:SetBlendMode("ADD")
     particle.tex:SetVertexColor(color[1], color[2], color[3], 1)
     particle.tex:Show()
@@ -5070,8 +5085,10 @@ local function SpawnFantasyThunderBolt(fx, frontX)
     bolt.y = height * 0.5
     bolt.maxAlpha = RandomRange(0.72, 0.96)
     bolt.width = RandomRange(math_max(26, height * 1.4), math_max(34, height * 2.2)) * math_min(effectScale, 1.9)
-    bolt.height = RandomRange(math_max(height + 16, height * 2.3), math_max(height + 26, height * 3.1)) * math_min(effectScale, 1.9)
-    bolt.tex:SetTexture((assets.bolts and assets.bolts[math.random(1, #assets.bolts)]) or GetFantasyThemeTexture("thunder", "bolt", 1))
+    bolt.height = RandomRange(math_max(height + 16, height * 2.3), math_max(height + 26, height * 3.1)) *
+    math_min(effectScale, 1.9)
+    bolt.tex:SetTexture((assets.bolts and assets.bolts[math.random(1, #assets.bolts)]) or
+    GetFantasyThemeTexture("thunder", "bolt", 1))
     bolt.tex:SetBlendMode("ADD")
     bolt.tex:SetVertexColor(color[1], color[2], color[3], 1)
     bolt.tex:SetSize(bolt.width, bolt.height)
@@ -5211,7 +5228,8 @@ local function UpdateFantasyParticle(fx, particle, elapsed)
         end
         particle.tex:SetSize((338 * (particle.scaleBase or 1)) * pulse, (169 * (particle.scaleBase or 1)) * pulse)
         particle.tex:SetAlpha(alpha)
-        SetFantasyTexturePoint(fx, particle.tex, particle.baseX or particle.x, (particle.baseY or particle.y) + math_sin((particle.life * 0.45) + (particle.phase or 0)) * 3)
+        SetFantasyTexturePoint(fx, particle.tex, particle.baseX or particle.x,
+            (particle.baseY or particle.y) + math_sin((particle.life * 0.45) + (particle.phase or 0)) * 3)
         SetTextureRotation(particle.tex, particle.rot)
         return
     end
@@ -5219,7 +5237,8 @@ local function UpdateFantasyParticle(fx, particle, elapsed)
     if particle.kind == "ripple" then
         particle.rot = particle.rot + (particle.rotSpeed or 0) * elapsed
         local size = (particle.baseSize or 1) * (1 + ((particle.grow or 0.3) * progress))
-        local alpha = (progress < 0.2 and progress / 0.2 or progress < 0.7 and 1 or math_max(0, (1 - progress) / 0.3)) * (particle.maxAlpha or 1)
+        local alpha = (progress < 0.2 and progress / 0.2 or progress < 0.7 and 1 or math_max(0, (1 - progress) / 0.3)) *
+        (particle.maxAlpha or 1)
         particle.tex:SetSize(size, size)
         particle.tex:SetAlpha(alpha)
         SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
@@ -5232,7 +5251,8 @@ local function UpdateFantasyParticle(fx, particle, elapsed)
         particle.rot = particle.rot + (particle.rotSpeed or 0) * elapsed
         particle.x = (particle.centerX or 0) + math_cos(particle.orbitAngle) * (particle.radiusX or 0)
         particle.y = (particle.centerY or 0) + math_sin(particle.orbitAngle) * (particle.radiusY or 0)
-        particle.tex:SetAlpha((particle.maxAlpha or 1) * (0.75 + (0.25 * math_sin((particle.life * 2.2) + (particle.phase or 0)))))
+        particle.tex:SetAlpha((particle.maxAlpha or 1) *
+        (0.75 + (0.25 * math_sin((particle.life * 2.2) + (particle.phase or 0)))))
         SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
         SetTextureRotation(particle.tex, particle.rot)
         return
@@ -5247,13 +5267,19 @@ local function UpdateFantasyParticle(fx, particle, elapsed)
     end
 
     if particle.kind == "glow" then
-        local damping = particle.family == "holy" and 0.88 or particle.family == "moon" and 0.91 or (particle.family == "nature" or particle.family == "monk") and 0.90 or 0.88
-        local wobble = particle.family == "holy" and 10 or particle.family == "moon" and 7.5 or (particle.family == "nature" or particle.family == "monk") and 10 or 12
-        local fadeStart = particle.family == "holy" and 0.2 or particle.family == "moon" and 0.22 or (particle.family == "nature" or particle.family == "monk") and 0.2 or 0.15
-        local fadeEnd = particle.family == "holy" and 0.75 or particle.family == "moon" and 0.82 or (particle.family == "nature" or particle.family == "monk") and 0.8 or 0.75
-        local tail = particle.family == "holy" and 0.25 or particle.family == "moon" and 0.18 or (particle.family == "nature" or particle.family == "monk") and 0.2 or 0.25
+        local damping = particle.family == "holy" and 0.88 or particle.family == "moon" and 0.91 or
+        (particle.family == "nature" or particle.family == "monk") and 0.90 or 0.88
+        local wobble = particle.family == "holy" and 10 or particle.family == "moon" and 7.5 or
+        (particle.family == "nature" or particle.family == "monk") and 10 or 12
+        local fadeStart = particle.family == "holy" and 0.2 or particle.family == "moon" and 0.22 or
+        (particle.family == "nature" or particle.family == "monk") and 0.2 or 0.15
+        local fadeEnd = particle.family == "holy" and 0.75 or particle.family == "moon" and 0.82 or
+        (particle.family == "nature" or particle.family == "monk") and 0.8 or 0.75
+        local tail = particle.family == "holy" and 0.25 or particle.family == "moon" and 0.18 or
+        (particle.family == "nature" or particle.family == "monk") and 0.2 or 0.25
         particle.vy = (particle.vy or 0) * damping
-        particle.y = particle.y + particle.vy * elapsed + math_sin((particle.life * wobble) + (particle.phase or 0)) * 0.4
+        particle.y = particle.y + particle.vy * elapsed +
+        math_sin((particle.life * wobble) + (particle.phase or 0)) * 0.4
         local alphaEnvelope
         if progress < fadeStart then
             alphaEnvelope = progress / fadeStart
