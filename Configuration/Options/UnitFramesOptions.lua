@@ -299,6 +299,7 @@ local PLAYER_CASTBAR_DEFAULTS          = {
     enabled = true,
     style = "modern",
     fantasyTheme = "holy",
+    fantasyEffectScale = 1,
     width = 260,
     height = 20,
     iconSize = 20,
@@ -334,10 +335,10 @@ local HEAL_PREDICTION_DEFAULTS         = {
 }
 
 local EMBEDDED_CASTBAR_DEFAULTS        = {
-    target = { enabled = true, style = "modern", fantasyTheme = "holy", detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
-    party  = { enabled = true, style = "modern", fantasyTheme = "holy", detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
-    raid   = { enabled = true, style = "modern", fantasyTheme = "holy", detached = false, width = 120, height = 12, iconSize = 14, showIcon = true, showText = true, showTimeText = true, fontSize = 8, timeFontSize = 8, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
-    boss   = { enabled = true, style = "modern", fantasyTheme = "holy", detached = false, width = 220, height = 12, iconSize = 18, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    target = { enabled = true, style = "modern", fantasyTheme = "holy", fantasyEffectScale = 1, detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    party  = { enabled = true, style = "modern", fantasyTheme = "holy", fantasyEffectScale = 1, detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    raid   = { enabled = true, style = "modern", fantasyTheme = "holy", fantasyEffectScale = 1, detached = false, width = 120, height = 12, iconSize = 14, showIcon = true, showText = true, showTimeText = true, fontSize = 8, timeFontSize = 8, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    boss   = { enabled = true, style = "modern", fantasyTheme = "holy", fantasyEffectScale = 1, detached = false, width = 220, height = 12, iconSize = 18, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
 }
 
 local CASTBAR_STYLE_VALUES             = {
@@ -2281,6 +2282,14 @@ local function BuildEmbeddedCastbarTab(scopeKey, label)
                         end),
                         refreshConfig = true,
                     }),
+                fantasyEffectScale = BuildRange(1.9, "Effect Expansion",
+                    "Increase particle spread and density around the castbar.",
+                    ExtendPath(path, "fantasyEffectScale"), defaults.fantasyEffectScale or 1, 0.5, 3, 0.05, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(path, "style"), defaults.style or "modern") ~= "fantasy"
+                        end),
+                        refreshConfig = true,
+                    }),
                 detached = BuildToggle(2, "Detached", "Detach these castbars from the unit frame.",
                     ExtendPath(path, "detached"), defaults.detached, {
                         disabled = disabled,
@@ -2817,6 +2826,14 @@ local function BuildCastbarTab()
                     "Choose which Fantasy Cast Bar effect to use.",
                     { "castbar", "fantasyTheme" }, PLAYER_CASTBAR_DEFAULTS.fantasyTheme,
                     CASTBAR_FANTASY_THEME_VALUES, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue({ "castbar", "style" }, PLAYER_CASTBAR_DEFAULTS.style) ~= "fantasy"
+                        end),
+                        refreshConfig = true,
+                    }),
+                fantasyEffectScale = BuildRange(1.9, "Effect Expansion",
+                    "Increase particle spread and density around the castbar.",
+                    { "castbar", "fantasyEffectScale" }, PLAYER_CASTBAR_DEFAULTS.fantasyEffectScale, 0.5, 3, 0.05, {
                         disabled = ModuleDisabled(function()
                             return GetPathValue({ "castbar", "style" }, PLAYER_CASTBAR_DEFAULTS.style) ~= "fantasy"
                         end),
