@@ -297,6 +297,8 @@ local GROUP_LAYOUT_DEFAULTS            = {
 
 local PLAYER_CASTBAR_DEFAULTS          = {
     enabled = true,
+    style = "modern",
+    fantasyTheme = "holy",
     width = 260,
     height = 20,
     iconSize = 20,
@@ -332,10 +334,59 @@ local HEAL_PREDICTION_DEFAULTS         = {
 }
 
 local EMBEDDED_CASTBAR_DEFAULTS        = {
-    target = { enabled = true, detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
-    party  = { enabled = true, detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
-    raid   = { enabled = true, detached = false, width = 120, height = 12, iconSize = 14, showIcon = true, showText = true, showTimeText = true, fontSize = 8, timeFontSize = 8, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
-    boss   = { enabled = true, detached = false, width = 220, height = 12, iconSize = 18, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    target = { enabled = true, style = "modern", fantasyTheme = "holy", detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    party  = { enabled = true, style = "modern", fantasyTheme = "holy", detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    raid   = { enabled = true, style = "modern", fantasyTheme = "holy", detached = false, width = 120, height = 12, iconSize = 14, showIcon = true, showText = true, showTimeText = true, fontSize = 8, timeFontSize = 8, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+    boss   = { enabled = true, style = "modern", fantasyTheme = "holy", detached = false, width = 220, height = 12, iconSize = 18, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
+}
+
+local CASTBAR_STYLE_VALUES             = {
+    modern = "Simple Modern",
+    fantasy = "Fantasy Cast Bar",
+}
+
+local CASTBAR_FANTASY_THEME_VALUES     = {
+    neutral = "Neutral",
+    neutral2 = "Neutral 2",
+    neutral3 = "Neutral 3",
+    metal = "Neutral - Metal",
+    metal_icon = "Metal Icon",
+    engrenages = "Engrenages",
+    honey_icon = "Honey - Icons",
+    mossystone_icon = "Mossy Stone - Icons",
+    mossystone = "Mossy Stone",
+    viking = "Viking Icon",
+    alliance = "Alliance",
+    horde = "Horde",
+    bronze = "Bronze",
+    aim = "Aim",
+    arcane = "Arcane",
+    arcaneum = "Arcaneum",
+    arctic = "Arctic",
+    chaos = "Chaos",
+    chiji = "Chi'ji",
+    earth = "Earth",
+    felfire = "Felfire",
+    fire = "Fire",
+    fishing = "Fishing",
+    frost = "Frost",
+    frostfire = "Frostfire",
+    herbalism = "Herbalism",
+    holy = "Holy",
+    inferno = "Inferno",
+    lava = "Lava",
+    lumber = "Lumber",
+    mining = "Mining",
+    mistweaver = "Mistweaver",
+    moon = "Moon",
+    nature = "Nature",
+    sacred = "Sacred",
+    shadow = "Shadow",
+    skinning = "Skinning",
+    thunder = "Thunder",
+    void = "Void",
+    water = "Water",
+    fists = "Fists of Fury",
 }
 
 local function GetModule()
@@ -2216,6 +2267,20 @@ local function BuildEmbeddedCastbarTab(scopeKey, label)
                         disabled = disabled,
                         refreshConfig = true,
                     }),
+                style = BuildSelect(1.5, "Style",
+                    "Choose between the current flat castbar and the animated Fantasy Cast Bar.",
+                    ExtendPath(path, "style"), defaults.style or "modern", CASTBAR_STYLE_VALUES, {
+                        disabled = disabled,
+                        refreshConfig = true,
+                    }),
+                fantasyTheme = BuildSelect(1.75, "Fantasy Theme",
+                    "Choose which Fantasy Cast Bar effect to use.",
+                    ExtendPath(path, "fantasyTheme"), defaults.fantasyTheme or "holy", CASTBAR_FANTASY_THEME_VALUES, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(path, "style"), defaults.style or "modern") ~= "fantasy"
+                        end),
+                        refreshConfig = true,
+                    }),
                 detached = BuildToggle(2, "Detached", "Detach these castbars from the unit frame.",
                     ExtendPath(path, "detached"), defaults.detached, {
                         disabled = disabled,
@@ -2741,6 +2806,20 @@ local function BuildCastbarTab()
             display = Widgets.IGroup(1, "Standalone Castbar", {
                 enabled = BuildToggle(1, "Enable", "Show the player standalone castbar.", { "castbar", "enabled" },
                     PLAYER_CASTBAR_DEFAULTS.enabled, {
+                        refreshConfig = true,
+                    }),
+                style = BuildSelect(1.5, "Style",
+                    "Choose between the current flat castbar and the animated Fantasy Cast Bar.",
+                    { "castbar", "style" }, PLAYER_CASTBAR_DEFAULTS.style, CASTBAR_STYLE_VALUES, {
+                        refreshConfig = true,
+                    }),
+                fantasyTheme = BuildSelect(1.75, "Fantasy Theme",
+                    "Choose which Fantasy Cast Bar effect to use.",
+                    { "castbar", "fantasyTheme" }, PLAYER_CASTBAR_DEFAULTS.fantasyTheme,
+                    CASTBAR_FANTASY_THEME_VALUES, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue({ "castbar", "style" }, PLAYER_CASTBAR_DEFAULTS.style) ~= "fantasy"
+                        end),
                         refreshConfig = true,
                     }),
                 width = BuildRange(2, "Width", "Standalone castbar width.", { "castbar", "width" },

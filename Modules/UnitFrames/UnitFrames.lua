@@ -43,6 +43,10 @@ local issecretvalue = _G.issecretvalue or function() return false end
 local math_min = math.min
 local math_max = math.max
 local math_abs = math.abs
+local math_floor = math.floor
+local math_cos = math.cos
+local math_sin = math.sin
+local math_pi = math.pi
 local StatusBarTimerDirection = (_G.Enum and _G.Enum.StatusBarTimerDirection) or nil
 
 local FRIENDLY_RANGE_SPELLS = {
@@ -3477,6 +3481,1364 @@ function UnitFrames:GetCastbarSmoothingMethod()
     return StatusBarInterpolation.Linear or StatusBarInterpolation.ExponentialEaseOut
 end
 
+local function MixTowardColor(color, target, amount)
+    local mix = Clamp(amount or 0, 0, 1)
+    local r = color[1] or 1
+    local g = color[2] or 1
+    local b = color[3] or 1
+    local a = color[4] or 1
+
+    return {
+        r + (((target and target[1]) or 1) - r) * mix,
+        g + (((target and target[2]) or 1) - g) * mix,
+        b + (((target and target[3]) or 1) - b) * mix,
+        a,
+    }
+end
+
+local function RandomRange(minValue, maxValue)
+    return minValue + (math.random() * (maxValue - minValue))
+end
+
+local function GetSpellTextureCompat(spellID)
+    if C_Spell and type(C_Spell.GetSpellTexture) == "function" then
+        return C_Spell.GetSpellTexture(spellID)
+    end
+
+    local getter = _G.GetSpellTexture
+    if type(getter) == "function" then
+        return getter(spellID)
+    end
+
+    return nil
+end
+
+local function SetTextureRotation(texture, angle)
+    local cosine = math_cos(angle)
+    local sine = math_sin(angle)
+    texture:SetTexCoord(
+        0.5 + (-0.5) * cosine - (-0.5) * sine, 0.5 + (-0.5) * sine + (-0.5) * cosine,
+        0.5 + (-0.5) * cosine - (0.5) * sine, 0.5 + (-0.5) * sine + (0.5) * cosine,
+        0.5 + (0.5) * cosine - (-0.5) * sine, 0.5 + (0.5) * sine + (-0.5) * cosine,
+        0.5 + (0.5) * cosine - (0.5) * sine, 0.5 + (0.5) * sine + (0.5) * cosine
+    )
+end
+
+local FANTASY_CASTBAR_THEME_COLORS = {
+    holy = { 1.0, 0.88, 0.45, 1 },
+    nature = { 0.38, 0.94, 0.42, 1 },
+    thunder = { 0.58, 0.84, 1.0, 1 },
+}
+
+local OPULENT_CASTBAR_TEXTURE_PATH = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\OpulentCastBars\\"
+
+local FANTASY_THEME_FOLDER_ALIASES = {
+    metal_icon = "metal_Icon",
+    honey_icon = "honey",
+    mossystone_icon = "mossystone",
+    lava = "fire2",
+}
+
+local FANTASY_THEME_BASE_ALIASES = {
+    neutral = "Neutral",
+    neutral2 = "Neutral2",
+    neutral3 = "Neutral3",
+    metal = "Metal",
+    metal_icon = "Metalicon",
+    engrenages = "Engrenages",
+    honey_icon = "Honey_Icon",
+    mossystone_icon = "Mossystone_Icon",
+    mossystone = "Mossystone",
+    viking = "Neutral2_Ennemy",
+    alliance = "Alliance",
+    horde = "Horde",
+    bronze = "Bronze",
+    aim = "Aim",
+    arcane = "Arcane",
+    arcaneum = "Arcaneum",
+    arctic = "Arctic",
+    chaos = "Chaos",
+    chiji = "Chiji",
+    earth = "Earth",
+    felfire = "Felfire",
+    fire = "Fire",
+    fishing = "Fishing",
+    frost = "Frost",
+    frostfire = "Frostfire",
+    herbalism = "Herbalism",
+    holy = "Holy",
+    inferno = "Inferno",
+    lava = "Fire2",
+    lumber = "Lumber",
+    mining = "Mining",
+    mistweaver = "Mistweaver",
+    moon = "Moon",
+    nature = "Nature",
+    sacred = "Sacred",
+    shadow = "Shadow",
+    skinning = "Skinning",
+    thunder = "Thunder",
+    void = "Void",
+    water = "Water",
+    fists = "Fists",
+}
+
+local FANTASY_THEME_LIGHT_ALIASES = {
+    holy = OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Light_Holy",
+    thunder = OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\Light_Thunder",
+    water = OPULENT_CASTBAR_TEXTURE_PATH .. "water\\Frame_Water_Light",
+    arctic = OPULENT_CASTBAR_TEXTURE_PATH .. "arctic\\Frame_Arctic_Light",
+    felfire = OPULENT_CASTBAR_TEXTURE_PATH .. "felfire\\Frame_Felfire_Light",
+    inferno = OPULENT_CASTBAR_TEXTURE_PATH .. "inferno\\Frame_Inferno_Light",
+    lava = OPULENT_CASTBAR_TEXTURE_PATH .. "fire2\\Frame_Fire2_Light",
+    mossystone = OPULENT_CASTBAR_TEXTURE_PATH .. "mossystone\\Frame_Mossystone_Light",
+    mossystone_icon = OPULENT_CASTBAR_TEXTURE_PATH .. "mossystone\\Frame_Mossystone_Icon_Light",
+    alliance = OPULENT_CASTBAR_TEXTURE_PATH .. "alliance\\BG_Alliance_Light",
+    horde = OPULENT_CASTBAR_TEXTURE_PATH .. "horde\\BG_Light_Horde",
+}
+
+local FANTASY_THEME_BG_LIGHT_ALIASES = {
+    alliance = OPULENT_CASTBAR_TEXTURE_PATH .. "alliance\\BG_Alliance_Light",
+    horde = OPULENT_CASTBAR_TEXTURE_PATH .. "horde\\BG_Light_Horde",
+    arctic = OPULENT_CASTBAR_TEXTURE_PATH .. "arctic\\FrostBG_Arctic",
+}
+
+local FANTASY_CASTBAR_THEME_ASSETS = {
+    holy = {
+        bg = OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\BG_Holy",
+        fill = OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Fill_Holy",
+        frame = OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Frame_Holy",
+        light = OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Light_Holy",
+        misc = {
+            OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Misc_Holy_01",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Misc_Holy_02",
+        },
+        front = {
+            OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Stars_Holy",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Misc_Holy_01",
+        },
+    },
+    nature = {
+        bg = OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\BG_Nature",
+        fill = OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Fill_Nature",
+        frames = {
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Frame_Nature_01",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Frame_Nature_02",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Frame_Nature_03",
+        },
+        misc = {
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_01",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_02",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_03",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_04",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_05",
+        },
+    },
+    thunder = {
+        bg = OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\BG_Thunder",
+        fill = OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\Fill_Thunder",
+        frame = OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\Frame_Thunder",
+        light = OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\Light_Thunder",
+        misc = {
+            OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\Lightning_01",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\Lightning_02",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\Lightning_03",
+        },
+        bolts = {
+            OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\Lightning_01",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\Lightning_02",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "thunder\\Lightning_03",
+        },
+    },
+}
+
+local FANTASY_NATURE_FRAME_SEQUENCE = { 1, 2, 3, 2 }
+local FANTASY_ART_NATIVE_WIDTH = 1024
+local FANTASY_ART_NATIVE_HEIGHT = 512
+
+local FANTASY_THEME_TEXTURE_BANDS = {
+    default = {
+        bg = { 0, 1, 194 / 512, 294 / 512 },
+        fill = { 0, 1, 198 / 512, 291 / 512 },
+        light = { 0, 1, 176 / 512, 336 / 512 },
+    },
+}
+
+local FANTASY_THEME_EFFECT_FAMILY = {
+    holy = "holy",
+    sacred = "holy",
+    moon = "holy",
+    alliance = "holy",
+    horde = "holy",
+    bronze = "holy",
+    nature = "nature",
+    aim = "nature",
+    fists = "nature",
+    mistweaver = "nature",
+    chiji = "nature",
+    earth = "nature",
+    herbalism = "nature",
+    water = "nature",
+    thunder = "thunder",
+    chaos = "thunder",
+    arcane = "thunder",
+    arcaneum = "thunder",
+    void = "thunder",
+}
+
+local FANTASY_THEME_FILL_MARGINS = {
+    holy = { 0.1758, 0.1709 },
+    sacred = { 0.1258, 0.1460 },
+    moon = { 0.0908, 0.0977 },
+    alliance = { 0.0908, 0.0977 },
+    horde = { 0.0908, 0.0977 },
+    bronze = { 0.0908, 0.0977 },
+    nature = { 0.0908, 0.0977 },
+    aim = { 0.0908, 0.0977 },
+    fists = { 0.1533, 0.0977 },
+    mistweaver = { 0.0908, 0.0977 },
+    chiji = { 0.0908, 0.0977 },
+    earth = { 0.0908, 0.0977 },
+    herbalism = { 0.0908, 0.0977 },
+    water = { 0.19, 0.21 },
+    thunder = { 0.1709, 0.1562 },
+    chaos = { 0.1221, 0.1162 },
+}
+
+local function GetFantasyThemeColor(theme)
+    return FANTASY_CASTBAR_THEME_COLORS[theme or "holy"] or FANTASY_CASTBAR_THEME_COLORS.holy
+end
+
+local function GetFantasyThemeEffectFamily(theme)
+    return FANTASY_THEME_EFFECT_FAMILY[theme or ""]
+end
+
+local function GetFantasyThemeFillMargins(theme)
+    local margins = FANTASY_THEME_FILL_MARGINS[theme or ""] or FANTASY_THEME_FILL_MARGINS[GetFantasyThemeEffectFamily(theme) or ""]
+    if margins then
+        return margins[1], margins[2]
+    end
+
+    return 0.0908, 0.0977
+end
+
+local function GetFantasyThemeTextureBand(theme, layer)
+    local bands = FANTASY_THEME_TEXTURE_BANDS[theme] or FANTASY_THEME_TEXTURE_BANDS.default
+    return bands[layer] or FANTASY_THEME_TEXTURE_BANDS.default[layer] or FANTASY_THEME_TEXTURE_BANDS.default.bg
+end
+
+local function ApplyFantasyTextureBand(texture, band)
+    if not texture then
+        return
+    end
+
+    local coords = band or FANTASY_THEME_TEXTURE_BANDS.default.bg
+    texture:SetTexCoord(coords[1], coords[2], coords[3], coords[4])
+end
+
+local function GetFantasyTextureBandAspect(band)
+    local coords = band or FANTASY_THEME_TEXTURE_BANDS.default.bg
+    local bandHeight = math_max(1, (coords[4] - coords[3]) * FANTASY_ART_NATIVE_HEIGHT)
+    return FANTASY_ART_NATIVE_WIDTH / bandHeight
+end
+
+local function GetFantasyThemeAssets(theme)
+    local key = theme or "holy"
+    local existing = FANTASY_CASTBAR_THEME_ASSETS[key]
+    if existing then
+        return existing
+    end
+
+    local folder = FANTASY_THEME_FOLDER_ALIASES[key] or key
+    local base = FANTASY_THEME_BASE_ALIASES[key]
+    if not base then
+        return FANTASY_CASTBAR_THEME_ASSETS.holy
+    end
+
+    local root = OPULENT_CASTBAR_TEXTURE_PATH .. folder .. "\\"
+    local assets = {
+        bg = root .. "BG_" .. base,
+        fill = root .. "Fill_" .. base,
+        frame = root .. "Frame_" .. base,
+        light = FANTASY_THEME_LIGHT_ALIASES[key] or (root .. "Frame_" .. base .. "_Light"),
+        bgLight = FANTASY_THEME_BG_LIGHT_ALIASES[key],
+    }
+
+    if key == "nature" then
+        assets.frames = {
+            root .. "Frame_Nature_01",
+            root .. "Frame_Nature_02",
+            root .. "Frame_Nature_03",
+        }
+        assets.misc = {
+            root .. "Leaf_01",
+            root .. "Leaf_02",
+            root .. "Leaf_03",
+            root .. "Leaf_04",
+            root .. "Leaf_05",
+        }
+    elseif key == "aim" then
+        assets.fill = root .. "Fill_Left_Aim"
+        assets.misc = {
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_01",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_02",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_03",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_04",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_05",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "skinning\\Misc_Skinning_01",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "skinning\\Misc_Skinning_02",
+        }
+    elseif key == "holy" then
+        assets.misc = {
+            root .. "Misc_Holy_01",
+            root .. "Misc_Holy_02",
+        }
+        assets.front = {
+            root .. "Stars_Holy",
+            root .. "Misc_Holy_01",
+        }
+    elseif key == "thunder" then
+        assets.misc = {
+            root .. "Lightning_01",
+            root .. "Lightning_02",
+            root .. "Lightning_03",
+        }
+        assets.bolts = {
+            root .. "Lightning_01",
+            root .. "Lightning_02",
+            root .. "Lightning_03",
+        }
+    elseif key == "fists" then
+        assets.misc = {
+            root .. "Leafpink_01",
+            root .. "Leafpink_02",
+            root .. "Leafpink_03",
+            root .. "Leafpink_04",
+            root .. "Leafpink_05",
+        }
+    elseif key == "sacred" or key == "moon" then
+        assets.misc = {
+            OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Misc_Holy_01",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Misc_Holy_02",
+        }
+        assets.front = {
+            OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Stars_Holy",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "holy\\Misc_Holy_01",
+        }
+    elseif key == "mistweaver" or key == "chiji" or key == "earth" or key == "water" or key == "herbalism" then
+        assets.misc = {
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_01",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_02",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_03",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_04",
+            OPULENT_CASTBAR_TEXTURE_PATH .. "nature\\Leaf_05",
+        }
+    end
+
+    FANTASY_CASTBAR_THEME_ASSETS[key] = assets
+    return assets
+end
+
+local function GetFantasyThemeTexture(theme, kind, index)
+    local assets = GetFantasyThemeAssets(theme)
+    local bucket = assets and assets[kind]
+    if type(bucket) == "table" and #bucket > 0 then
+        return bucket[((index or 1) - 1) % #bucket + 1]
+    end
+    if type(bucket) == "string" and bucket ~= "" then
+        return bucket
+    end
+    return "Interface\\Cooldown\\star4"
+end
+
+local function GetFantasyParticleTexture(theme, purpose, index)
+    local assets = GetFantasyThemeAssets(theme)
+    local family = GetFantasyThemeEffectFamily(theme)
+    local bucket = nil
+
+    if purpose == "front" then
+        bucket = assets.front or assets.misc
+    elseif purpose == "ambient" or purpose == "stream" then
+        bucket = assets.misc
+    end
+
+    if type(bucket) ~= "table" or #bucket == 0 then
+        if family == "holy" then
+            local holyAssets = GetFantasyThemeAssets("holy")
+            bucket = purpose == "front" and (holyAssets.front or holyAssets.misc) or holyAssets.misc
+        elseif family == "nature" then
+            bucket = GetFantasyThemeAssets("nature").misc
+        elseif family == "thunder" then
+            bucket = GetFantasyThemeAssets("thunder").misc
+        end
+    end
+
+    if type(bucket) == "table" and #bucket > 0 then
+        return bucket[((index or 1) - 1) % #bucket + 1]
+    end
+
+    return "Interface\\Cooldown\\star4"
+end
+
+local function SetFantasyTexturePoint(fx, texture, x, y)
+    texture:ClearAllPoints()
+    texture:SetPoint(
+        "CENTER",
+        fx.particleLayer,
+        "BOTTOMLEFT",
+        (fx.particleInsetX or 0) + x,
+        (fx.particleInsetY or 0) + y
+    )
+end
+
+local function ResetFantasyParticle(particle)
+    particle.active = false
+    particle.kind = nil
+    particle.tex:SetAlpha(0)
+    particle.tex:Hide()
+    particle.tex:SetTexCoord(0, 1, 0, 1)
+end
+
+local function ResetFantasyBolt(bolt)
+    bolt.active = false
+    bolt.tex:SetAlpha(0)
+    bolt.tex:Hide()
+end
+
+local function AcquireFantasyParticle(fx)
+    for index = 1, #fx.particles do
+        local particle = fx.particles[index]
+        if not particle.active then
+            return particle, index
+        end
+    end
+
+    return nil, nil
+end
+
+local function AcquireFantasyBolt(fx)
+    for index = 1, #fx.bolts do
+        local bolt = fx.bolts[index]
+        if not bolt.active then
+            return bolt, index
+        end
+    end
+
+    return nil, nil
+end
+
+local function HideFantasyCastbarVisuals(fx)
+    if not fx then
+        return
+    end
+
+    if fx.themeBG then
+        fx.themeBG:SetAlpha(0)
+    end
+    if fx.overlay then
+        fx.overlay:Hide()
+    end
+    if fx.fillGlow then
+        fx.fillGlow:SetAlpha(0)
+    end
+    if fx.themeFill then
+        fx.themeFill:SetAlpha(0)
+    end
+    if fx.themeLight then
+        fx.themeLight:SetAlpha(0)
+    end
+    if fx.pulse then
+        fx.pulse:SetAlpha(0)
+    end
+    if fx.themeFrame then
+        fx.themeFrame:SetAlpha(0)
+    end
+    if fx.edgeGlow then
+        fx.edgeGlow:SetAlpha(0)
+    end
+    if fx.completionFlash then
+        fx.completionFlash:SetAlpha(0)
+    end
+    if fx.castbar and fx.castbar.bg and fx.castbar.bg.SetAlpha then
+        fx.castbar.bg:SetAlpha(1)
+    end
+    if fx.sheenFrame then
+        fx.sheenFrame:Hide()
+    end
+    if fx.particleLayer then
+        fx.particleLayer:Hide()
+    end
+    if fx.particles then
+        for index = 1, #fx.particles do
+            ResetFantasyParticle(fx.particles[index])
+        end
+    end
+    if fx.bolts then
+        for index = 1, #fx.bolts do
+            ResetFantasyBolt(fx.bolts[index])
+        end
+    end
+end
+
+function UnitFrames:LayoutFantasyCastbarVisuals(castbar)
+    local fx = castbar and castbar.TwichFantasy
+    if not fx then
+        return
+    end
+
+    local width = math_max(1, castbar:GetWidth() or 1)
+    local height = math_max(1, castbar:GetHeight() or 1)
+
+    fx.width = width
+    fx.height = height
+    fx.sheenWidth = math_max(24, math_min(width * 0.34, 96))
+    fx.particleInsetX = math_max(18, height * 1.35)
+    fx.particleInsetY = math_max(14, height * 1.15)
+
+    local band = GetFantasyThemeTextureBand(fx.theme or castbar._twichFantasyTheme or "holy", "bg")
+    local artWidth = width
+    local artHeight = math_max(height, artWidth / GetFantasyTextureBandAspect(band))
+    fx.artWidth = artWidth
+    fx.artHeight = artHeight
+
+    if fx.artFrame then
+        fx.artFrame:ClearAllPoints()
+        fx.artFrame:SetPoint("CENTER", castbar, "CENTER", 0, 0)
+        fx.artFrame:SetSize(artWidth, artHeight)
+    end
+
+    fx.progressMask:SetWidth(math_max(1, math_floor((artWidth * (fx.progress or 0)) + 0.5)))
+    fx.sheenFrame:SetSize(fx.sheenWidth, artHeight)
+
+    if fx.particleLayer then
+        fx.particleLayer:ClearAllPoints()
+        fx.particleLayer:SetPoint("TOPLEFT", castbar, "TOPLEFT", -fx.particleInsetX, fx.particleInsetY)
+        fx.particleLayer:SetPoint("BOTTOMRIGHT", castbar, "BOTTOMRIGHT", fx.particleInsetX, -fx.particleInsetY)
+    end
+
+    local statusTexture = castbar.GetStatusBarTexture and castbar:GetStatusBarTexture() or nil
+    fx.edgeGlow:ClearAllPoints()
+    if statusTexture then
+        fx.edgeGlow:SetPoint("CENTER", statusTexture, "RIGHT", 0, 0)
+    else
+        fx.edgeGlow:SetPoint("LEFT", castbar, "LEFT", 0, 0)
+    end
+    fx.edgeGlow:SetSize(math_max(22, height * 1.9), math_max(height + 8, height * 2.5))
+end
+
+function UnitFrames:ResetFantasyCastbarVisuals(castbar)
+    local fx = castbar and castbar.TwichFantasy
+    if not fx then
+        return
+    end
+
+    fx.clock = 0
+    fx.progress = 0
+    fx.flashAlpha = 0
+    fx.finishPulseTriggered = false
+    fx.pulseBaseAlpha = 0.1
+    fx.edgeBaseAlpha = 0.35
+    fx.theme = nil
+    fx.natureFrameTimer = 0
+    fx.natureFrameStep = 1
+    fx.previousProgress = 0
+    fx.ambientAccumulator = 0
+    fx.frontAccumulator = 0
+    fx.streamAccumulator = 0
+    fx.glowAccumulator = 0
+    fx.nextBoltAt = RandomRange(0.16, 0.42)
+
+    if fx.progressMask then
+        fx.progressMask:SetWidth(1)
+    end
+    if fx.themeBG then
+        fx.themeBG:SetAlpha(0)
+    end
+    if fx.completionFlash then
+        fx.completionFlash:SetAlpha(0)
+    end
+    if fx.themeFill then
+        fx.themeFill:SetAlpha(0)
+    end
+    if fx.themeLight then
+        fx.themeLight:SetAlpha(0)
+    end
+    if fx.pulse then
+        fx.pulse:SetAlpha(0)
+    end
+    if fx.themeFrame then
+        fx.themeFrame:SetAlpha(0)
+    end
+    if fx.edgeGlow then
+        fx.edgeGlow:SetAlpha(0)
+    end
+    if fx.sheenFrame then
+        fx.sheenFrame:Hide()
+    end
+    if fx.particleLayer then
+        fx.particleLayer:Hide()
+    end
+    if fx.particles then
+        for index = 1, #fx.particles do
+            ResetFantasyParticle(fx.particles[index])
+        end
+    end
+    if fx.bolts then
+        for index = 1, #fx.bolts do
+            ResetFantasyBolt(fx.bolts[index])
+        end
+    end
+end
+
+function UnitFrames:EnsureFantasyCastbarVisuals(castbar)
+    if not castbar then
+        return nil
+    end
+
+    if castbar.TwichFantasy then
+        return castbar.TwichFantasy
+    end
+
+    if castbar.SetClipsChildren then
+        castbar:SetClipsChildren(false)
+    end
+
+    local overlay = CreateFrame("Frame", nil, castbar)
+    overlay:SetAllPoints(castbar)
+    overlay:SetFrameStrata(castbar:GetFrameStrata())
+    overlay:SetFrameLevel(math_max(1, castbar:GetFrameLevel() + 3))
+    overlay:EnableMouse(false)
+    overlay:Hide()
+
+    local artFrame = CreateFrame("Frame", nil, overlay)
+    artFrame:SetPoint("CENTER", overlay, "CENTER", 0, 0)
+    artFrame:SetSize(math_max(1, castbar:GetWidth() or 1), math_max(1, castbar:GetHeight() or 1))
+    artFrame:SetFrameLevel(overlay:GetFrameLevel())
+
+    local progressMask = artFrame:CreateMaskTexture()
+    progressMask:SetTexture("Interface\\Buttons\\WHITE8x8", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    progressMask:SetPoint("TOPLEFT", artFrame, "TOPLEFT")
+    progressMask:SetPoint("BOTTOMLEFT", artFrame, "BOTTOMLEFT")
+    progressMask:SetWidth(1)
+
+    local themeBG = artFrame:CreateTexture(nil, "BACKGROUND", nil, 0)
+    themeBG:SetAllPoints(artFrame)
+    themeBG:SetAlpha(0)
+
+    local fillGlow = artFrame:CreateTexture(nil, "ARTWORK", nil, 1)
+    fillGlow:SetTexture("Interface\\Buttons\\WHITE8x8")
+    fillGlow:SetAllPoints(artFrame)
+    fillGlow:SetBlendMode("ADD")
+    fillGlow:AddMaskTexture(progressMask)
+
+    local themeFill = artFrame:CreateTexture(nil, "ARTWORK", nil, 0)
+    themeFill:SetAllPoints(artFrame)
+    themeFill:SetBlendMode("BLEND")
+    themeFill:SetAlpha(0)
+    themeFill:AddMaskTexture(progressMask)
+
+    local themeLight = artFrame:CreateTexture(nil, "OVERLAY", nil, 3)
+    themeLight:SetAllPoints(artFrame)
+    themeLight:SetBlendMode("ADD")
+    themeLight:SetAlpha(0)
+    themeLight:AddMaskTexture(progressMask)
+
+    local pulse = artFrame:CreateTexture(nil, "ARTWORK", nil, 2)
+    pulse:SetTexture("Interface\\Buttons\\WHITE8x8")
+    pulse:SetAllPoints(artFrame)
+    pulse:SetBlendMode("ADD")
+    pulse:AddMaskTexture(progressMask)
+
+    local themeFrame = artFrame:CreateTexture(nil, "OVERLAY", nil, 2)
+    themeFrame:SetAllPoints(artFrame)
+    themeFrame:SetBlendMode("BLEND")
+    themeFrame:SetAlpha(0)
+
+    local sheenFrame = CreateFrame("Frame", nil, overlay)
+    sheenFrame:SetPoint("LEFT", overlay, "LEFT", -32, 0)
+    sheenFrame:SetHeight(math_max(1, castbar:GetHeight() or 1))
+    sheenFrame:SetFrameLevel(overlay:GetFrameLevel() + 1)
+    sheenFrame:Hide()
+
+    local sheenLeft = sheenFrame:CreateTexture(nil, "OVERLAY")
+    sheenLeft:SetPoint("TOPLEFT", sheenFrame, "TOPLEFT")
+    sheenLeft:SetPoint("BOTTOM", sheenFrame, "BOTTOM")
+    sheenLeft:SetPoint("RIGHT", sheenFrame, "CENTER")
+    sheenLeft:SetTexture("Interface\\Buttons\\WHITE8x8")
+    sheenLeft:SetBlendMode("ADD")
+    sheenLeft:AddMaskTexture(progressMask)
+
+    local sheenRight = sheenFrame:CreateTexture(nil, "OVERLAY")
+    sheenRight:SetPoint("TOP", sheenFrame, "TOP")
+    sheenRight:SetPoint("BOTTOMRIGHT", sheenFrame, "BOTTOMRIGHT")
+    sheenRight:SetPoint("LEFT", sheenFrame, "CENTER")
+    sheenRight:SetTexture("Interface\\Buttons\\WHITE8x8")
+    sheenRight:SetBlendMode("ADD")
+    sheenRight:AddMaskTexture(progressMask)
+
+    local edgeGlow = overlay:CreateTexture(nil, "OVERLAY", nil, 4)
+    edgeGlow:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
+    edgeGlow:SetBlendMode("ADD")
+    edgeGlow:SetAlpha(0)
+
+    local completionFlash = artFrame:CreateTexture(nil, "OVERLAY", nil, 5)
+    completionFlash:SetTexture("Interface\\Buttons\\WHITE8x8")
+    completionFlash:SetAllPoints(artFrame)
+    completionFlash:SetBlendMode("ADD")
+    completionFlash:SetAlpha(0)
+    completionFlash:AddMaskTexture(progressMask)
+
+    local particleLayer = CreateFrame("Frame", nil, overlay)
+    particleLayer:SetFrameStrata(castbar:GetFrameStrata())
+    particleLayer:SetFrameLevel(overlay:GetFrameLevel() + 2)
+    particleLayer:EnableMouse(false)
+    particleLayer:Hide()
+
+    local particles = {}
+    for index = 1, 180 do
+        local texture = particleLayer:CreateTexture(nil, "OVERLAY", nil, 1)
+        texture:SetAlpha(0)
+        texture:Hide()
+        particles[index] = {
+            tex = texture,
+            active = false,
+            seed = index,
+        }
+    end
+
+    local bolts = {}
+    for index = 1, 4 do
+        local texture = particleLayer:CreateTexture(nil, "OVERLAY", nil, 3)
+        texture:SetTexture("Interface\\CastingBar\\UI-CastingBar-Spark")
+        texture:SetBlendMode("ADD")
+        texture:SetAlpha(0)
+        texture:Hide()
+        bolts[index] = {
+            tex = texture,
+            active = false,
+        }
+    end
+
+    local fx = {
+        castbar = castbar,
+        overlay = overlay,
+        artFrame = artFrame,
+        progressMask = progressMask,
+        themeBG = themeBG,
+        fillGlow = fillGlow,
+        themeFill = themeFill,
+        themeLight = themeLight,
+        pulse = pulse,
+        themeFrame = themeFrame,
+        sheenFrame = sheenFrame,
+        sheenLeft = sheenLeft,
+        sheenRight = sheenRight,
+        edgeGlow = edgeGlow,
+        completionFlash = completionFlash,
+        particleLayer = particleLayer,
+        particles = particles,
+        bolts = bolts,
+        clock = 0,
+        progress = 0,
+        flashAlpha = 0,
+        pulseBaseAlpha = 0.1,
+        edgeBaseAlpha = 0.35,
+        finishPulseTriggered = false,
+        glowAccumulator = 0,
+        enabled = false,
+    }
+    castbar.TwichFantasy = fx
+
+    castbar:HookScript("OnSizeChanged", function(self)
+        UnitFrames:LayoutFantasyCastbarVisuals(self)
+        UnitFrames:SyncFantasyCastbarVisuals(self, true)
+    end)
+    castbar:HookScript("OnShow", function(self)
+        UnitFrames:ResetFantasyCastbarVisuals(self)
+        UnitFrames:SyncFantasyCastbarVisuals(self, true)
+    end)
+    castbar:HookScript("OnHide", function(self)
+        UnitFrames:ResetFantasyCastbarVisuals(self)
+    end)
+    castbar:HookScript("OnUpdate", function(self, elapsed)
+        UnitFrames:OnFantasyCastbarUpdate(self, elapsed)
+    end)
+
+    SetGradientCompat(sheenLeft, "HORIZONTAL", 1, 1, 1, 0, 1, 1, 1, 0.75)
+    SetGradientCompat(sheenRight, "HORIZONTAL", 1, 1, 1, 0.75, 1, 1, 1, 0)
+
+    self:LayoutFantasyCastbarVisuals(castbar)
+    return fx
+end
+
+local function SpawnFantasyAmbientParticle(fx)
+    local particle, index = AcquireFantasyParticle(fx)
+    if not particle then
+        return
+    end
+
+    local theme = fx.theme or "holy"
+    local family = GetFantasyThemeEffectFamily(theme)
+    if family ~= "holy" then
+        return
+    end
+
+    local function Gauss(range)
+        return (RandomRange(-range, range) + RandomRange(-range, range) + RandomRange(-range, range)) / 3
+    end
+
+    local color = GetFantasyThemeColor(theme)
+    local barHeight = fx.height or 20
+    local fillWidth = fx.fillWidth or fx.width or 1
+    local centerX = (fx.fillLeftX or 0) + (fillWidth * 0.5)
+    local xRange = (fillWidth * 0.5) + 5
+    local yRange = (barHeight * 0.5) + 5
+    local size = RandomRange(3, 20)
+
+    particle.active = true
+    particle.kind = "holy-ambient"
+    particle.family = family
+    particle.life = 0
+    particle.maxLife = RandomRange(0.6, 1.4)
+    particle.x = centerX + Gauss(xRange)
+    particle.y = (barHeight * 0.5) + Gauss(yRange)
+    particle.vx = RandomRange(-6, 6)
+    particle.vy = RandomRange(-4, 8)
+    particle.phase = RandomRange(0, math_pi * 2)
+    particle.maxAlpha = RandomRange(0.28, 0.65)
+    particle.tex:SetTexture(GetFantasyParticleTexture(theme, "ambient", index))
+    particle.tex:SetSize(size, size)
+    particle.tex:SetBlendMode("ADD")
+    particle.tex:SetVertexColor(color[1], color[2], color[3], 1)
+    particle.tex:Show()
+    SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
+end
+
+local function SpawnFantasyFrontParticle(fx, frontX)
+    local particle, index = AcquireFantasyParticle(fx)
+    if not particle then
+        return
+    end
+
+    local theme = fx.theme or "holy"
+    local family = GetFantasyThemeEffectFamily(theme)
+    local color = GetFantasyThemeColor(theme)
+    local barHeight = fx.height or 20
+
+    particle.active = true
+    particle.kind = family == "nature" and "leaf-burst" or "holy-front"
+    particle.family = family
+    particle.life = 0
+    particle.maxLife = family == "nature" and RandomRange(0.35, 0.75) or RandomRange(0.4, 0.9)
+    particle.x = frontX + RandomRange(-4, 6)
+    particle.y = (barHeight * 0.5) + RandomRange(-barHeight * 0.35, barHeight * 0.35)
+    particle.baseY = particle.y
+    if family == "nature" then
+        local angle = RandomRange(math_pi * 0.22, math_pi * 0.78)
+        local speed = RandomRange(35, 95)
+        particle.vx = math_cos(angle) * speed
+        particle.vy = math_sin(angle) * speed
+        particle.gravity = 80
+        particle.rotSpeed = RandomRange(-3.1, 3.1)
+    else
+        particle.vx = RandomRange(-10, 10)
+        particle.vy = RandomRange(-18, 4)
+        particle.gravity = 0
+        particle.rotSpeed = RandomRange(-1.4, 1.4)
+    end
+    particle.phase = RandomRange(0, math_pi * 2)
+    particle.rot = RandomRange(0, math_pi * 2)
+    particle.maxAlpha = family == "nature" and RandomRange(0.55, 0.88) or 0.9
+    local size = family == "nature" and RandomRange(7, 16) or RandomRange(4, 22)
+    particle.tex:SetTexture(GetFantasyParticleTexture(theme, "front", index))
+    particle.tex:SetSize(size, size)
+    particle.tex:SetBlendMode(family == "nature" and "BLEND" or "ADD")
+    particle.tex:SetVertexColor(color[1], color[2], color[3], 1)
+    particle.tex:Show()
+    SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
+end
+
+local function SpawnFantasyNatureStream(fx)
+    local particle, index = AcquireFantasyParticle(fx)
+    if not particle then
+        return
+    end
+
+    local theme = fx.theme or "nature"
+    local color = GetFantasyThemeColor(theme)
+    local size = RandomRange(10, 22)
+    local barHeight = fx.height or 20
+
+    particle.active = true
+    particle.kind = "stream"
+    particle.family = "nature"
+    particle.life = 0
+    particle.maxLife = RandomRange(1.0, 1.8)
+    particle.x = (fx.fillLeftX or 0) - size
+    particle.y = (barHeight * 0.5) + RandomRange(-barHeight * 0.25, barHeight * 0.25)
+    particle.baseY = particle.y
+    particle.vx = RandomRange(55, 120)
+    particle.vy = RandomRange(-4, 4)
+    particle.waveAmp = RandomRange(3, 9)
+    particle.waveFreq = RandomRange(1.2, 2.8)
+    particle.phase = RandomRange(0, math_pi * 2)
+    particle.rot = RandomRange(0, math_pi * 2)
+    particle.rotSpeed = RandomRange(-2.8, 2.8)
+    particle.maxAlpha = RandomRange(0.55, 0.9)
+    particle.deadX = ((fx.fillLeftX or 0) + (fx.fillWidth or (fx.width or 1))) + size * 2
+    particle.tex:SetTexture(GetFantasyParticleTexture(theme, "stream", index))
+    particle.tex:SetSize(size, size)
+    particle.tex:SetBlendMode("BLEND")
+    particle.tex:SetVertexColor(color[1], color[2], color[3], 1)
+    particle.tex:Show()
+    SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
+end
+
+local function SpawnFantasyGlowParticle(fx, frontX)
+    local particle = AcquireFantasyParticle(fx)
+    if not particle then
+        return
+    end
+
+    local theme = fx.theme or "holy"
+    local family = GetFantasyThemeEffectFamily(theme)
+    if not family then
+        return
+    end
+
+    local barHeight = fx.height or 20
+    local spread = family == "holy" and math_min(barHeight * 0.28, 12)
+        or family == "nature" and math_min(barHeight * 0.25, 10)
+        or math_min(barHeight * 0.30, 14)
+    local sizeMin = family == "holy" and 4 or family == "nature" and 6 or 5
+    local sizeMax = family == "holy" and 10 or family == "nature" and 12 or 14
+    local color = family == "holy" and { 1.0, 0.92, 0.45, 1 }
+        or family == "nature" and { 0.30, 1.0, 0.25, 1 }
+        or { 0.6, 0.85, 1.0, 1 }
+
+    particle.active = true
+    particle.kind = "glow"
+    particle.family = family
+    particle.life = 0
+    particle.maxLife = family == "holy" and RandomRange(0.25, 0.50)
+        or family == "nature" and RandomRange(0.18, 0.35)
+        or RandomRange(0.15, 0.30)
+    particle.x = frontX + RandomRange(family == "holy" and -2 or -4, family == "holy" and 4 or 4)
+    particle.y = (barHeight * 0.5) + RandomRange(-spread, spread)
+    particle.vy = family == "holy" and RandomRange(-8, 8)
+        or family == "nature" and RandomRange(-5, 5)
+        or RandomRange(-8, 12)
+    particle.phase = RandomRange(0, math_pi * 2)
+    particle.maxAlpha = family == "holy" and 0.65 or family == "nature" and 0.55 or 0.65
+    particle.tex:SetTexture("Interface\\Cooldown\\star4")
+    particle.tex:SetSize(RandomRange(sizeMin, sizeMax), RandomRange(sizeMin, sizeMax))
+    particle.tex:SetBlendMode("ADD")
+    particle.tex:SetVertexColor(color[1], color[2], color[3], 1)
+    particle.tex:Show()
+    SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
+end
+
+local function SpawnFantasyThunderBolt(fx, frontX)
+    local bolt = AcquireFantasyBolt(fx)
+    if not bolt then
+        return
+    end
+
+    local color = GetFantasyThemeColor("thunder")
+    local assets = GetFantasyThemeAssets("thunder")
+    local width = fx.width or 1
+    local height = fx.height or 20
+
+    bolt.active = true
+    bolt.life = 0
+    bolt.maxLife = RandomRange(0.14, 0.3)
+    bolt.x = RandomRange(math_max(8, frontX * 0.35), math_max(10, frontX))
+    bolt.y = height * 0.5
+    bolt.maxAlpha = RandomRange(0.72, 0.96)
+    bolt.width = RandomRange(math_max(26, height * 1.4), math_max(34, height * 2.2))
+    bolt.height = RandomRange(math_max(height + 16, height * 2.3), math_max(height + 26, height * 3.1))
+    bolt.tex:SetTexture((assets.bolts and assets.bolts[math.random(1, #assets.bolts)]) or GetFantasyThemeTexture("thunder", "bolt", 1))
+    bolt.tex:SetBlendMode("ADD")
+    bolt.tex:SetVertexColor(color[1], color[2], color[3], 1)
+    bolt.tex:SetSize(bolt.width, bolt.height)
+    bolt.tex:Show()
+    SetFantasyTexturePoint(fx, bolt.tex, bolt.x, bolt.y)
+end
+
+local function UpdateFantasyParticle(fx, particle, elapsed)
+    if not particle.active then
+        return
+    end
+
+    particle.life = particle.life + elapsed
+    local progress = particle.maxLife > 0 and (particle.life / particle.maxLife) or 1
+    if progress >= 1 then
+        ResetFantasyParticle(particle)
+        return
+    end
+
+    if particle.kind == "stream" then
+        particle.x = particle.x + particle.vx * elapsed
+        particle.y = particle.baseY + math_sin((particle.life * particle.waveFreq) + particle.phase) * particle.waveAmp +
+            particle.vy * particle.life
+        particle.rot = particle.rot + particle.rotSpeed * elapsed
+        local fade = particle.x > ((particle.deadX or (fx.width or 1)) - 40)
+            and math_max(0, 1 - (((particle.deadX or (fx.width or 1)) - particle.x) / 40)) or 0
+        local alpha = particle.maxAlpha * math_min(particle.life / 0.5, 1) * (1 - fade)
+        if particle.x >= (particle.deadX or (fx.width or 1)) then
+            ResetFantasyParticle(particle)
+            return
+        end
+        particle.tex:SetAlpha(alpha)
+        SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
+        SetTextureRotation(particle.tex, particle.rot)
+        return
+    end
+
+    if particle.kind == "holy-ambient" then
+        particle.x = particle.x + particle.vx * elapsed + math_sin((particle.life * 2) + (particle.phase or 0)) * 0.3
+        particle.y = particle.y + particle.vy * elapsed
+        local alpha = (progress < 0.25 and progress / 0.25 or progress < 0.65 and 1 or math_max(0, (1 - progress) / 0.35)) *
+            (particle.maxAlpha or 1)
+        particle.tex:SetAlpha(alpha)
+        SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
+        return
+    end
+
+    if particle.kind == "holy-front" then
+        particle.vy = (particle.vy or 0) - (8 * elapsed)
+        particle.x = particle.x + particle.vx * elapsed + math_sin((particle.life * 4) + (particle.phase or 0)) * 0.4
+        particle.y = particle.y + particle.vy * elapsed
+        local alpha = (progress < 0.2 and progress / 0.2 or progress < 0.7 and 1 or math_max(0, (1 - progress) / 0.3)) *
+            (particle.maxAlpha or 1)
+        particle.tex:SetAlpha(alpha)
+        SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
+        return
+    end
+
+    if particle.kind == "leaf-burst" then
+        particle.vy = particle.vy - (particle.gravity or 0) * elapsed
+        particle.x = particle.x + particle.vx * elapsed
+        particle.y = particle.y + particle.vy * elapsed
+        particle.rot = particle.rot + particle.rotSpeed * elapsed
+        local alpha = (progress < 0.55 and 1 or math_max(0, (1 - progress) / 0.45)) * (particle.maxAlpha or 1)
+        particle.tex:SetAlpha(alpha)
+        SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
+        SetTextureRotation(particle.tex, particle.rot)
+        return
+    end
+
+    if particle.kind == "glow" then
+        local damping = particle.family == "holy" and 0.88 or particle.family == "nature" and 0.90 or 0.88
+        local wobble = particle.family == "holy" and 10 or particle.family == "nature" and 10 or 12
+        local fadeStart = particle.family == "holy" and 0.2 or particle.family == "nature" and 0.2 or 0.15
+        local fadeEnd = particle.family == "holy" and 0.75 or particle.family == "nature" and 0.8 or 0.75
+        local tail = particle.family == "holy" and 0.25 or particle.family == "nature" and 0.2 or 0.25
+        particle.vy = (particle.vy or 0) * damping
+        particle.y = particle.y + particle.vy * elapsed + math_sin((particle.life * wobble) + (particle.phase or 0)) * 0.4
+        local alphaEnvelope
+        if progress < fadeStart then
+            alphaEnvelope = progress / fadeStart
+        elseif progress < fadeEnd then
+            alphaEnvelope = 1
+        else
+            alphaEnvelope = math_max(0, (1 - progress) / tail)
+        end
+        particle.tex:SetAlpha(alphaEnvelope * (particle.maxAlpha or 1))
+        SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
+        return
+    end
+
+    particle.x = particle.x + particle.vx * elapsed
+    particle.y = particle.y + particle.vy * elapsed + math_sin((particle.life * (particle.waveFreq or 2)) +
+        (particle.phase or 0)) * (particle.waveAmp or 0)
+    particle.rot = particle.rot + (particle.rotSpeed or 0) * elapsed
+
+    local alphaEnvelope
+    if progress < 0.18 then
+        alphaEnvelope = progress / 0.18
+    elseif progress < 0.75 then
+        alphaEnvelope = 1
+    else
+        alphaEnvelope = (1 - progress) / 0.25
+    end
+
+    particle.tex:SetAlpha(math_max(0, alphaEnvelope) * (particle.maxAlpha or 1))
+    SetFantasyTexturePoint(fx, particle.tex, particle.x, particle.y)
+    if particle.kind == "ambient" and fx.theme == "nature" then
+        SetTextureRotation(particle.tex, particle.rot)
+    end
+end
+
+local function UpdateFantasyBolt(fx, bolt, elapsed)
+    if not bolt.active then
+        return
+    end
+
+    bolt.life = bolt.life + elapsed
+    local progress = bolt.maxLife > 0 and (bolt.life / bolt.maxLife) or 1
+    if progress >= 1 then
+        ResetFantasyBolt(bolt)
+        return
+    end
+
+    bolt.tex:SetAlpha(((1 - progress) * (1 - progress)) * (bolt.maxAlpha or 1))
+    SetFantasyTexturePoint(fx, bolt.tex, bolt.x, bolt.y)
+end
+
+function UnitFrames:SyncFantasyCastbarVisuals(castbar, force)
+    local fx = self:EnsureFantasyCastbarVisuals(castbar)
+    if not fx then
+        return
+    end
+
+    local style = castbar._twichCastbarStyle or "modern"
+    fx.enabled = style == "fantasy"
+    if not fx.enabled then
+        HideFantasyCastbarVisuals(fx)
+        return
+    end
+
+    local theme = castbar._twichFantasyTheme or "holy"
+    if force or fx.theme ~= theme then
+        self:ResetFantasyCastbarVisuals(castbar)
+        fx.theme = theme
+    end
+
+    local assets = GetFantasyThemeAssets(theme)
+
+    local width = math_max(1, castbar:GetWidth() or 1)
+    local height = math_max(1, castbar:GetHeight() or 1)
+    if force or fx.width ~= width or fx.height ~= height then
+        self:LayoutFantasyCastbarVisuals(castbar)
+    end
+
+    if not castbar:IsShown() then
+        HideFantasyCastbarVisuals(fx)
+        return
+    end
+
+    fx.overlay:Show()
+    fx.sheenFrame:Hide()
+    fx.particleLayer:Show()
+
+    local _, maxValue = castbar:GetMinMaxValues()
+    local value = tonumber(castbar:GetValue()) or 0
+    local maxSafe = tonumber(maxValue) or 0
+    local progress = maxSafe > 0 and Clamp(value / maxSafe, 0, 1) or 0
+    local reverse = castbar.channeling == true or castbar._twichReverse == true
+    local visualProgress = reverse and (1 - progress) or progress
+    local marginL, marginR = GetFantasyThemeFillMargins(theme)
+    local fillLeftX = (fx.artWidth or width) * marginL
+    local fillWidth = (fx.artWidth or width) * (1 - marginL - marginR)
+    fx.visualProgress = visualProgress
+    fx.fillLeftX = fillLeftX
+    fx.fillWidth = fillWidth
+
+    if force or progress ~= fx.progress then
+        fx.progress = progress
+        fx.progressMask:SetWidth(math_max(1, math_floor(((fx.artWidth or width) * progress) + 0.5)))
+    end
+
+    local r, g, b, a = castbar:GetStatusBarColor()
+    if force or r ~= fx.baseR or g ~= fx.baseG or b ~= fx.baseB or a ~= fx.baseA then
+        local baseColor = { r or 1, g or 1, b or 1, a or 1 }
+        local themeColor = GetFantasyThemeColor(theme)
+        local highlightColor = MixTowardColor(baseColor, themeColor, 0.58)
+        local shadowColor = MixTowardColor(baseColor, { 0.12, 0.05, 0.02, 1 }, 0.68)
+        local pulseColor = MixTowardColor(baseColor, themeColor, 0.8)
+
+        SetGradientCompat(fx.fillGlow, "HORIZONTAL",
+            shadowColor[1], shadowColor[2], shadowColor[3], 0.18,
+            highlightColor[1], highlightColor[2], highlightColor[3], 0.42)
+        SetGradientCompat(fx.pulse, "VERTICAL",
+            pulseColor[1], pulseColor[2], pulseColor[3], 0.1,
+            highlightColor[1], highlightColor[2], highlightColor[3], 0.2)
+        fx.sheenLeft:SetVertexColor(highlightColor[1], highlightColor[2], highlightColor[3], 0.85)
+        fx.sheenRight:SetVertexColor(highlightColor[1], highlightColor[2], highlightColor[3], 0.85)
+        fx.edgeGlow:SetVertexColor(highlightColor[1], highlightColor[2], highlightColor[3], 0.95)
+        fx.completionFlash:SetVertexColor(1, 0.82, 0.42, 1)
+
+        if fx.themeBG then
+            fx.themeBG:SetTexture(assets.bg or "Interface\\Buttons\\WHITE8x8")
+            ApplyFantasyTextureBand(fx.themeBG, GetFantasyThemeTextureBand(theme, "bg"))
+            fx.themeBG:SetVertexColor(1, 1, 1, 1)
+            fx.themeBG:SetAlpha(1)
+        end
+        if fx.themeFill then
+            fx.themeFill:SetTexture(assets.fill)
+            ApplyFantasyTextureBand(fx.themeFill, GetFantasyThemeTextureBand(theme, "fill"))
+            fx.themeFill:SetVertexColor(1, 1, 1, 1)
+            fx.themeFill:SetAlpha(theme == "thunder" and 0.88 or 0.82)
+        end
+        if fx.themeLight and assets.light then
+            fx.themeLight:SetTexture(assets.light)
+            ApplyFantasyTextureBand(fx.themeLight, GetFantasyThemeTextureBand(theme, "light"))
+            fx.themeLight:SetVertexColor(1, 1, 1, 1)
+            fx.themeLight:SetAlpha(theme == "thunder" and 0.66 or 0.52)
+        elseif fx.themeLight then
+            fx.themeLight:SetAlpha(0)
+        end
+        if fx.themeFrame then
+            fx.themeFrame:SetTexture(assets.frame or (assets.frames and assets.frames[1]) or nil)
+            fx.themeFrame:SetVertexColor(1, 1, 1, 1)
+            fx.themeFrame:SetAlpha(0)
+        end
+
+        if castbar.bg and castbar.bg.SetAlpha then
+            castbar.bg:SetAlpha(0)
+        end
+
+        fx.baseR = r
+        fx.baseG = g
+        fx.baseB = b
+        fx.baseA = a
+    end
+
+    fx.pulseBaseAlpha = 0.07 + (0.12 * Clamp(visualProgress, 0, 1))
+    fx.edgeBaseAlpha = 0.3 + (0.38 * Clamp(visualProgress, 0, 1))
+
+    if visualProgress >= 0.965 and not fx.finishPulseTriggered then
+        fx.finishPulseTriggered = true
+        fx.flashAlpha = 0.78
+    elseif visualProgress <= 0.05 then
+        fx.finishPulseTriggered = false
+        fx.flashAlpha = 0
+    end
+
+    fx.fillGlow:SetAlpha(0)
+    fx.pulse:SetAlpha(0)
+    fx.edgeGlow:SetAlpha(0)
+end
+
+function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
+    local fx = castbar and castbar.TwichFantasy
+    if not fx or fx.enabled ~= true then
+        return
+    end
+
+    self:SyncFantasyCastbarVisuals(castbar)
+    if not castbar:IsShown() or not fx.overlay:IsShown() then
+        return
+    end
+
+    fx.clock = (fx.clock or 0) + (elapsed or 0)
+
+    local width = fx.width or math_max(1, castbar:GetWidth() or 1)
+    local height = fx.height or math_max(1, castbar:GetHeight() or 1)
+    local sheenWidth = fx.sheenWidth or math_max(24, math_min(width * 0.34, 96))
+    local travel = width + (sheenWidth * 2)
+    local speed = math_max(40, width * 0.42)
+    local offset = -sheenWidth + ((fx.clock * speed) % travel)
+    local family = GetFantasyThemeEffectFamily(fx.theme)
+    local visualProgress = Clamp(fx.visualProgress or fx.progress or 0, 0, 1)
+    local fillLeftX = fx.fillLeftX or 0
+    local fillWidth = fx.fillWidth or width
+    local frontX = fillLeftX + (fillWidth * visualProgress)
+    local assets = GetFantasyThemeAssets(fx.theme)
+
+    fx.sheenFrame:Hide()
+
+    if fx.themeFill then
+        fx.themeFill:SetAlpha(fx.theme == "thunder" and 0.92 or 0.84)
+    end
+    if fx.themeLight then
+        local lightWave = fx.theme == "holy" and (0.72 + 0.28 * ((math_sin(fx.clock * 2.6) + 1) * 0.5))
+            or fx.theme == "thunder" and (0.62 + 0.38 * ((math_sin(fx.clock * 7.4) + 1) * 0.5))
+            or 0.18
+        fx.themeLight:SetAlpha(lightWave)
+    end
+    if fx.themeFrame then
+        if fx.theme == "nature" and assets.frames then
+            fx.natureFrameTimer = (fx.natureFrameTimer or 0) + elapsed
+            if fx.natureFrameTimer >= 0.12 then
+                fx.natureFrameTimer = 0
+                fx.natureFrameStep = ((fx.natureFrameStep or 1) % #FANTASY_NATURE_FRAME_SEQUENCE) + 1
+                fx.themeFrame:SetTexture(assets.frames[FANTASY_NATURE_FRAME_SEQUENCE[fx.natureFrameStep]])
+            end
+            fx.themeFrame:SetAlpha(0)
+        else
+            fx.themeFrame:SetAlpha(0)
+        end
+    end
+
+    fx.pulse:SetAlpha(0)
+    fx.edgeGlow:SetAlpha(0)
+
+    if (fx.flashAlpha or 0) > 0 then
+        fx.flashAlpha = math_max(0, fx.flashAlpha - ((elapsed or 0) * 2.2))
+        fx.completionFlash:SetAlpha(fx.flashAlpha)
+    else
+        fx.completionFlash:SetAlpha(0)
+    end
+
+    if family == "nature" then
+        fx.streamAccumulator = (fx.streamAccumulator or 0) + elapsed
+        if fx.streamAccumulator >= 0.12 then
+            fx.streamAccumulator = 0
+            SpawnFantasyNatureStream(fx)
+        end
+    else
+        fx.streamAccumulator = 0
+    end
+
+    fx.frontAccumulator = (fx.frontAccumulator or 0) + elapsed
+    fx.ambientAccumulator = (fx.ambientAccumulator or 0) + elapsed
+    fx.glowAccumulator = (fx.glowAccumulator or 0) + elapsed
+
+    if family == "holy" then
+        if visualProgress < 0.90 and fx.frontAccumulator >= 0.08 then
+            fx.frontAccumulator = 0
+            SpawnFantasyFrontParticle(fx, frontX)
+            SpawnFantasyFrontParticle(fx, frontX)
+        end
+        if fx.ambientAccumulator >= 0.12 then
+            fx.ambientAccumulator = 0
+            SpawnFantasyAmbientParticle(fx)
+            SpawnFantasyAmbientParticle(fx)
+            SpawnFantasyAmbientParticle(fx)
+        end
+        if visualProgress < 0.87 and fx.glowAccumulator >= 0.02 then
+            fx.glowAccumulator = 0
+            local count = math.random(2, 4)
+            for _ = 1, count do
+                SpawnFantasyGlowParticle(fx, frontX)
+            end
+        end
+    elseif family == "nature" then
+        if visualProgress > 0.02 and visualProgress < 0.90 and fx.frontAccumulator >= 0.027 then
+            fx.frontAccumulator = 0
+            SpawnFantasyFrontParticle(fx, frontX)
+        end
+        if visualProgress < 0.87 and fx.glowAccumulator >= 0.02 then
+            fx.glowAccumulator = 0
+            local count = math.random(2, 4)
+            for _ = 1, count do
+                SpawnFantasyGlowParticle(fx, frontX)
+            end
+        end
+    elseif family == "thunder" then
+        if fx.clock >= (fx.nextBoltAt or 0) and frontX > (fillLeftX + 10) then
+            fx.nextBoltAt = fx.clock + RandomRange(0.18, 0.58)
+            SpawnFantasyThunderBolt(fx, frontX)
+        end
+        if visualProgress < 0.90 and fx.glowAccumulator >= 0.025 then
+            fx.glowAccumulator = 0
+            local count = math.random(2, 4)
+            for _ = 1, count do
+                SpawnFantasyGlowParticle(fx, frontX)
+            end
+        end
+    end
+
+    for index = 1, #fx.particles do
+        UpdateFantasyParticle(fx, fx.particles[index], elapsed)
+    end
+    for index = 1, #fx.bolts do
+        UpdateFantasyBolt(fx, fx.bolts[index], elapsed)
+    end
+end
+
 function UnitFrames:ApplyCastbarValue(bar, value, maxValue)
     if not bar or not bar.SetMinMaxValues or not bar.SetValue then return end
     local sm = self:GetCastbarSmoothingMethod()
@@ -3484,9 +4846,13 @@ function UnitFrames:ApplyCastbarValue(bar, value, maxValue)
     pcall(bar.SetMinMaxValues, bar, 0, maxValue)
     if sm then
         local ok = pcall(bar.SetValue, bar, value, sm)
-        if ok then return end
+        if ok then
+            self:SyncFantasyCastbarVisuals(bar)
+            return
+        end
     end
     pcall(bar.SetValue, bar, value)
+    self:SyncFantasyCastbarVisuals(bar)
 end
 
 function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
@@ -3495,12 +4861,17 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
     local scope           = ResolveCastbarScopeByUnitKey(unitKey)
     local cfg             = (db.castbars and db.castbars[scope]) or {}
     local enabled         = cfg.enabled ~= false
+    local style           = cfg.style or "modern"
+    local fantasyTheme    = cfg.fantasyTheme or "holy"
     local detached        = cfg.detached == true
     local barH            = Clamp(cfg.height or 12, 4, 40)
     local palette         = self:GetPalette(unitKey, frame.unit)
     local text            = self:GetTextConfigFor(unitKey)
     local texName         = (db.texture and db.texture ~= "") and db.texture or nil
     local texture         = texName and GetLSMTexture(texName) or GetThemeTexture()
+    if style == "fantasy" then
+        texture = GetFantasyThemeAssets(fantasyTheme).fill or texture
+    end
     local backgroundColor = palette.background
     local backgroundAlpha = 0.9
 
@@ -3523,14 +4894,23 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
         frame.Castbar:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, yOff)
     end
     frame.Castbar:SetStatusBarTexture(texture)
-    if cfg.useCustomColor == true and type(cfg.color) == "table" then
+    if style == "fantasy" then
+        frame.Castbar:SetStatusBarColor(1, 1, 1, 0)
+    elseif cfg.useCustomColor == true and type(cfg.color) == "table" then
         local c = cfg.color
         frame.Castbar:SetStatusBarColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 1)
     else
         frame.Castbar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 1)
     end
-    frame.Castbar:SetBackdropColor(backgroundColor[1], backgroundColor[2], backgroundColor[3], backgroundAlpha)
-    frame.Castbar:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
+    if style == "fantasy" then
+        frame.Castbar:SetBackdropColor(0, 0, 0, 0)
+        frame.Castbar:SetBackdropBorderColor(0, 0, 0, 0)
+    else
+        frame.Castbar:SetBackdropColor(backgroundColor[1], backgroundColor[2], backgroundColor[3], backgroundAlpha)
+        frame.Castbar:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
+    end
+    frame.Castbar._twichCastbarStyle = style
+    frame.Castbar._twichFantasyTheme = fantasyTheme
     if frame.Castbar.Text then
         self:ApplyFontObject(frame.Castbar.Text, Clamp(cfg.fontSize or 9, 6, 20), text.fontName, text)
         frame.Castbar.Text:SetShown(cfg.showText ~= false)
@@ -3590,6 +4970,7 @@ function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
             frame.Castbar:Hide()
         end
     end
+    self:SyncFantasyCastbarVisuals(frame.Castbar, true)
 end
 
 local function ApplyHighlightGlow(glowFrame, color)
@@ -5418,8 +6799,14 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         local palette = self:GetPalette("player", "player")
         local text = self:GetTextConfigFor("player")
         local castPreview = preview.castbar
+        local previewStyle = castSettings.style or "modern"
+        local previewTheme = castSettings.fantasyTheme or "holy"
         local texName = (castSettings.texture and castSettings.texture ~= "") and castSettings.texture
             or ((db.texture and db.texture ~= "") and db.texture or nil)
+        local previewTexture = texName and GetLSMTexture(texName) or GetThemeTexture()
+        if previewStyle == "fantasy" then
+            previewTexture = GetFantasyThemeAssets(previewTheme).fill or previewTexture
+        end
         castPreview:ClearAllPoints()
         castPreview:SetPoint(
             layout.point or "BOTTOM",
@@ -5429,8 +6816,10 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
             tonumber(layout.y) or 220
         )
         castPreview:SetSize(Clamp(castSettings.width or 260, 120, 600), Clamp(castSettings.height or 20, 10, 60))
-        castPreview:SetStatusBarTexture(texName and GetLSMTexture(texName) or GetThemeTexture())
-        if castSettings.useThemeAccentFill == true then
+        castPreview:SetStatusBarTexture(previewTexture)
+        if previewStyle == "fantasy" then
+            castPreview:SetStatusBarColor(1, 1, 1, 0)
+        elseif castSettings.useThemeAccentFill == true then
             local accent = GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })
             castPreview:SetStatusBarColor(accent[1] or 1, accent[2] or 1, accent[3] or 1, accent[4] or 1)
         elseif castSettings.useCustomColor == true and type(castSettings.color) == "table" then
@@ -5439,8 +6828,15 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         else
             castPreview:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 1)
         end
-        castPreview:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
-        castPreview:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
+        castPreview._twichCastbarStyle = previewStyle
+        castPreview._twichFantasyTheme = previewTheme
+        if previewStyle == "fantasy" then
+            castPreview:SetBackdropColor(0, 0, 0, 0)
+            castPreview:SetBackdropBorderColor(0, 0, 0, 0)
+        else
+            castPreview:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
+            castPreview:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
+        end
         if castPreview.bg then
             castPreview.bg:SetColorTexture(palette.background[1], palette.background[2], palette.background[3], 0.9)
         end
@@ -5493,6 +6889,7 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         ApplyStandaloneCastbarTextAnchors(castPreview, castSettings)
         castPreview:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
         castPreview:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
+        self:SyncFantasyCastbarVisuals(castPreview, true)
     end
 
     if not preview.bossAnchor then
@@ -6062,11 +7459,15 @@ function UnitFrames:StyleFrame(frame)
     -- Embedded castbar for non-player units
     if capturedUnitKey ~= "player" then
         local castbar = CreateFrame("StatusBar", nil, frame, "BackdropTemplate")
+        castbar:SetClipsChildren(false)
         castbar:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -2)
         castbar:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, -2)
         castbar:SetHeight(12)
         castbar:SetMinMaxValues(0, 1); castbar:SetValue(0)
         castbar:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        castbar.bg = castbar:CreateTexture(nil, "BACKGROUND")
+        castbar.bg:SetAllPoints(castbar)
+        castbar.bg:SetColorTexture(0.05, 0.06, 0.08, 0.9)
         castbar:SetBackdropColor(0.05, 0.06, 0.08, 0.9)
         castbar:SetBackdropBorderColor(0.24, 0.26, 0.32, 0.9)
         local cbText = castbar:CreateFontString(nil, "OVERLAY")
@@ -6155,6 +7556,7 @@ function UnitFrames:CreateCastbarFrame()
     local frame = CreateFrame("StatusBar", "TwichUIUnitFramesPlayerCastbar", UIParent, "BackdropTemplate")
     frame:SetMinMaxValues(0, 1)
     frame:SetValue(0)
+    frame:SetClipsChildren(false)
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Buttons\\WHITE8x8",
@@ -6320,9 +7722,19 @@ function UnitFrames:RefreshCastbarStyle()
     }
     local texName = (settings.texture and settings.texture ~= "") and settings.texture
         or ((db.texture and db.texture ~= "") and db.texture or nil)
-    castbar:SetStatusBarTexture(texName and GetLSMTexture(texName) or GetThemeTexture())
+    local style = settings.style or "modern"
+    local fantasyTheme = settings.fantasyTheme or "holy"
+    local castbarTexture = texName and GetLSMTexture(texName) or GetThemeTexture()
+    if style == "fantasy" then
+        castbarTexture = GetFantasyThemeAssets(fantasyTheme).fill or castbarTexture
+    end
+    castbar._twichCastbarStyle = style
+    castbar._twichFantasyTheme = fantasyTheme
+    castbar:SetStatusBarTexture(castbarTexture)
     castbar.smoothing = self:GetCastbarSmoothingMethod()
-    if settings.useThemeAccentFill == true then
+    if style == "fantasy" then
+        castbar:SetStatusBarColor(1, 1, 1, 0)
+    elseif settings.useThemeAccentFill == true then
         local accent = GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })
         castbar:SetStatusBarColor(accent[1] or 1, accent[2] or 1, accent[3] or 1, accent[4] or 1)
     elseif settings.useCustomColor == true and type(settings.color) == "table" then
@@ -6331,14 +7743,23 @@ function UnitFrames:RefreshCastbarStyle()
     else
         castbar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 1)
     end
-    castbar:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
-    castbar:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
+    if style == "fantasy" then
+        castbar:SetBackdropColor(0, 0, 0, 0)
+        castbar:SetBackdropBorderColor(0, 0, 0, 0)
+    else
+        castbar:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
+        castbar:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
+    end
+    if castbar.bg then
+        castbar.bg:SetColorTexture(palette.background[1], palette.background[2], palette.background[3], 0.9)
+    end
     castbar.spellText:SetShown(settings.showSpellText ~= false)
     castbar.timeText:SetShown(settings.showTimeText ~= false)
     self:ApplyFontObject(castbar.spellText, Clamp(settings.spellFontSize or 11, 6, 24), castbarTextStyle.fontName,
         castbarTextStyle)
     self:ApplyFontObject(castbar.timeText, Clamp(settings.timeFontSize or 10, 6, 24), castbarTextStyle.fontName,
         castbarTextStyle)
+    self:SyncFantasyCastbarVisuals(castbar, true)
 end
 
 function UnitFrames:UpdateCastbarElapsed()
@@ -6374,6 +7795,8 @@ function UnitFrames:BeginCastbar(name, icon, startMS, endMS, reverse)
     if castbar.spellText then castbar.spellText:SetText(name or "Casting") end
     if castbar.icon then castbar.icon:SetTexture(icon or 136243) end
     local duration = math_max(0.001, endSec - startSec)
+    castbar._twichReverse = reverse == true
+    self:ResetFantasyCastbarVisuals(castbar)
     self:ApplyCastbarValue(castbar, reverse and duration or 0, duration)
     castbar:Show()
     self._castbarState = { startTime = startSec, endTime = endSec, reverse = reverse == true }
@@ -6382,6 +7805,7 @@ end
 function UnitFrames:StopCastbar()
     local castbar = self.frames.castbar
     if castbar then
+        castbar._twichReverse = nil
         castbar:Hide()
     end
     self._castbarState = nil
