@@ -77,6 +77,12 @@ function T:OnInitialize()
     local errorLog = T.Tools and (T.Tools --[[@as any]]).ErrorLog --[[@as TwichUIErrorLog|nil]]
     if errorLog then
         errorLog:Install()
+        self:RegisterEvent("PLAYER_LOGIN", function()
+            errorLog:Install()
+        end)
+        self:RegisterEvent("PLAYER_ENTERING_WORLD", function()
+            errorLog:Install()
+        end)
     end
 
     ---@type ConfigurationModule

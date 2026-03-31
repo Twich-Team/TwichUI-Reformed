@@ -286,6 +286,11 @@ local function SafeCall(func, ...)
         return result
     end
 
+    local errorLog = T.Tools and (T.Tools --[[@as any]]).ErrorLog
+    if errorLog and type(errorLog.CaptureFailure) == "function" then
+        errorLog:CaptureFailure("Configuration.ModernUI.SafeCall", result, 3)
+    end
+
     return nil
 end
 

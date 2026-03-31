@@ -1175,6 +1175,40 @@ local function NormalizeCheckpointName(value, fallback)
     return fallback or "Checkpoint"
 end
 
+local function IsGenericBossCheckpointName(value, bossIndex)
+    if type(value) ~= "string" then
+        return false
+    end
+
+    local normalized = value:match("^%s*(.-)%s*$")
+    if not normalized or normalized == "" then
+        return true
+    end
+
+    local lowered = string.lower(normalized)
+    local numericBossIndex = tonumber(bossIndex)
+    if numericBossIndex and lowered == ("boss " .. numericBossIndex) then
+        return true
+    end
+
+    return lowered:match("^boss%s*%d+$") ~= nil
+end
+
+local function HasResolvedBossCheckpointNames(checkpoints)
+    local hasBossEntry = false
+
+    for _, checkpoint in ipairs(type(checkpoints) == "table" and checkpoints or {}) do
+        if type(checkpoint) == "table" and checkpoint.kind == "boss" then
+            hasBossEntry = true
+            if IsGenericBossCheckpointName(checkpoint.name, checkpoint.bossIndex) then
+                return false
+            end
+        end
+    end
+
+    return hasBossEntry
+end
+
 local function BuildDefaultBossCheckpointID(bossIndex)
     return "boss_" .. tostring(tonumber(bossIndex) or 0)
 end
@@ -1362,7 +1396,7 @@ function MPT:GetDefaultDungeonCheckpoints(mapID)
         return {}
     end
 
-    if self.dungeonCheckpointDefaults[mapID] then
+    if self.dungeonCheckpointDefaults[mapID] and HasResolvedBossCheckpointNames(self.dungeonCheckpointDefaults[mapID]) then
         local cached = {}
         for _, checkpoint in ipairs(self.dungeonCheckpointDefaults[mapID]) do
             cached[#cached + 1] = CloneCheckpointEntry(checkpoint)
@@ -1439,11 +1473,18 @@ function MPT:NormalizeDungeonCheckpointList(checkpoints, mapID)
             local bossIndex = kind == "boss" and tonumber(rawEntry.bossIndex) or nil
             local fallbackName = kind == "boss" and bossNameByIndex[bossIndex or index] or
                 format("Custom Checkpoint %d", index)
+            local resolvedName = NormalizeCheckpointName(rawEntry.name, fallbackName)
+
+            if kind == "boss" and IsGenericBossCheckpointName(resolvedName, bossIndex or index) and
+                not IsGenericBossCheckpointName(fallbackName, bossIndex or index) then
+                resolvedName = fallbackName
+            end
+
             normalized[#normalized + 1] = {
                 id = NormalizeCheckpointID(rawEntry.id, kind, bossIndex or index),
                 kind = kind,
                 bossIndex = bossIndex,
-                name = NormalizeCheckpointName(rawEntry.name, fallbackName),
+                name = resolvedName,
                 percent = ClampNumber(rawEntry.percent, 0, 100, kind == "boss" and 100 or 50),
                 notifyEnabled = rawEntry.notifyEnabled ~= false,
             }

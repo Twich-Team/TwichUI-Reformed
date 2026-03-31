@@ -4193,7 +4193,8 @@ function UnitFrames:ApplyBossLayout()
     local width = Clamp(bossUnit.width or 220, 120, 500)
     local height = Clamp(bossUnit.height or 36, 16, 120)
     local activeCount = CountActiveBossUnits()
-    local geometry = ResolveBossGeometry(settings, width, height, activeCount > 0 and activeCount or 1)
+    local layoutCount = activeCount > 0 and activeCount or MAX_BOSS_FRAMES
+    local geometry = ResolveBossGeometry(settings, width, height, layoutCount)
 
     self.bossAnchor:ClearAllPoints()
     self.bossAnchor:SetPoint(
@@ -4213,12 +4214,11 @@ function UnitFrames:ApplyBossLayout()
     for index = 1, MAX_BOSS_FRAMES do
         local frame = self.frames["boss" .. index]
         if frame then
+            frame:ClearAllPoints()
+            local x, y = GetBossFrameOffset(geometry, index)
+            frame:SetPoint("TOPLEFT", self.bossAnchor, "TOPLEFT", x, -y)
+
             local shouldShow = showBossFrames and index <= activeCount
-            if shouldShow then
-                frame:ClearAllPoints()
-                local x, y = GetBossFrameOffset(geometry, index)
-                frame:SetPoint("TOPLEFT", self.bossAnchor, "TOPLEFT", x, -y)
-            end
             frame:SetShown(shouldShow)
         end
     end
@@ -4922,6 +4922,10 @@ end
 function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     local setupWizard = T:GetModule("SetupWizard", true)
     if not setupWizard or not frame then
+        return
+    end
+
+    if type(layoutKey) == "string" and layoutKey:match("^boss%d+$") then
         return
     end
 

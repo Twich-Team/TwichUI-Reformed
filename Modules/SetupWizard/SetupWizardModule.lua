@@ -416,9 +416,10 @@ function SetupWizardModule:ApplyLayoutData(layoutData)
         local frame = entry and entry.frame
         local unitFrameKey = type(key) == "string" and key:match("^UF_(.+)$") or nil
         local skipZeroCapture = unitFrameKey == "party" or unitFrameKey == "raid" or unitFrameKey == "tank"
+        local skipBossChildCapture = type(unitFrameKey) == "string" and unitFrameKey:match("^boss%d+$") ~= nil
         local hasCapturedPosition = (tonumber(fd.x) or 0) ~= 0 or (tonumber(fd.y) or 0) ~= 0 or
             (tonumber(fd.w) or 0) > 0 or (tonumber(fd.h) or 0) > 0
-        if frame and frame.SetPoint and not (skipZeroCapture and not hasCapturedPosition) then
+        if frame and frame.SetPoint and not skipBossChildCapture and not (skipZeroCapture and not hasCapturedPosition) then
             local absX = (fd.x or 0) * sw
             local absY = (fd.y or 0) * sh
             local absW = fd.w and fd.w * sw
