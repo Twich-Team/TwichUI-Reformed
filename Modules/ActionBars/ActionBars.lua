@@ -122,6 +122,7 @@ local BLIZZARD_FRAMES_TO_HIDE = {
     "StoreMicroButton",
     "ProfessionMicroButton",
     "PVPMicroButton",
+    "HousingMicroButton",
     "MainMenuBarBackpackButton",
     "CharacterBag0Slot",
     "CharacterBag1Slot",
@@ -635,6 +636,25 @@ local function SuppressButtonArtTextures(button)
                 texture:Hide()
             end
         end
+    end
+end
+
+local function SuppressButtonBorder(button)
+    if not button then
+        return
+    end
+
+    local buttonName = button.GetName and button:GetName() or nil
+    local border = button.Border or (buttonName and _G[buttonName .. "Border"]) or nil
+    if not border then
+        return
+    end
+
+    if border.SetAlpha then
+        border:SetAlpha(0)
+    end
+    if border.Hide then
+        border:Hide()
     end
 end
 
@@ -2817,7 +2837,8 @@ function ActionBars:ApplyHolderStyle(holder, barSettings)
         insets = { left = 1, right = 1, top = 1, bottom = 1 },
     })
     holder:SetBackdropColor(bgR, bgG, bgB, barSettings.backdrop == false and 0 or 0.82)
-    holder:SetBackdropBorderColor(primaryR, primaryG, primaryB, barSettings.backdrop == false and 0 or 0.45)
+    holder:SetBackdropBorderColor(primaryR, primaryG, primaryB,
+        (barSettings.backdrop == false or barSettings.showBorder == false) and 0 or 0.45)
 
     if not holder.innerGlow then
         holder.innerGlow = holder:CreateTexture(nil, "ARTWORK")
@@ -2881,6 +2902,9 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
     SuppressButtonArtTextures(button)
     SuppressButtonAnimationEffects(button)
     SuppressSpellCastAnim(button)
+    if useMasque ~= true then
+        SuppressButtonBorder(button)
+    end
 
     if not button.__twichuiABChrome then
         local chrome = CreateFrame("Frame", nil, button, "BackdropTemplate")
@@ -2911,7 +2935,8 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
         insets = { left = 1, right = 1, top = 1, bottom = 1 },
     })
     chrome:SetBackdropColor(bgR, bgG, bgB, useMasque and 0 or 0.92)
-    chrome:SetBackdropBorderColor(primaryR, primaryG, primaryB, useMasque and 0 or 0.42)
+    chrome:SetBackdropBorderColor(primaryR, primaryG, primaryB,
+        (useMasque or (barSettings and barSettings.showBorder == false)) and 0 or 0.42)
     local accentEnabled = barSettings and barSettings.showAccent ~= false
     chrome.innerGlow:SetColorTexture(accentR, accentG, accentB, (useMasque or not accentEnabled) and 0 or 0.05)
     chrome.leftAccent:SetColorTexture(accentR, accentG, accentB, (useMasque or not accentEnabled) and 0 or 0.85)
@@ -2927,16 +2952,19 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
     if not button.__twichuiABHoverHooked then
         button:HookScript("OnEnter", function()
             ActionBars:SetBarHoverState(barKey, true)
+            SuppressButtonBorder(button)
             ActionBars:ShowButtonHoverEffect(button)
             if ActionBars.keybindModeActive == true then
                 ActionBars:BindUpdate(button)
             end
         end)
         button:HookScript("OnLeave", function()
+            SuppressButtonBorder(button)
             ActionBars:HideButtonHoverEffect(button)
             ActionBars:ScheduleBarFade(barKey)
         end)
         button:HookScript("OnHide", function()
+            SuppressButtonBorder(button)
             ActionBars:HideButtonHoverEffect(button)
         end)
         button.__twichuiABHoverHooked = true
