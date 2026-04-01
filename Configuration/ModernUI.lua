@@ -692,12 +692,30 @@ local function GetSectionByPath(root, path)
     return node
 end
 
+local function GetInheritedHandler(path, fallbackSection)
+    local currentPath = ClonePath(path or {})
+    local currentSection = fallbackSection or GetSectionByPath(ConfigurationModule.optionsTable, currentPath)
+
+    while currentSection do
+        if currentSection.handler ~= nil then
+            return currentSection.handler
+        end
+        if #currentPath == 0 then
+            break
+        end
+        table.remove(currentPath)
+        currentSection = GetSectionByPath(ConfigurationModule.optionsTable, currentPath)
+    end
+
+    return nil
+end
+
 local function BuildOptionInfo(path, key, option, parentSection)
     local info = BuildInfoPath(path, key)
     local parent = parentSection or GetSectionByPath(ConfigurationModule.optionsTable, path)
     info.option = option
     info.arg = option and option.arg or nil
-    info.handler = (option and option.handler) or (parent and parent.handler) or nil
+    info.handler = (option and option.handler) or GetInheritedHandler(path, parent)
     return info
 end
 
@@ -705,7 +723,7 @@ local function BuildSectionInfo(path, section)
     local info = ClonePath(path)
     info.option = section
     info.arg = section and section.arg or nil
-    info.handler = section and section.handler or nil
+    info.handler = (section and section.handler) or GetInheritedHandler(path, section)
     return info
 end
 
@@ -730,14 +748,11 @@ end
 local function IsOptionHidden(option, info)
     local hidden = option and option.hidden
     if type(hidden) == "function" then
-        local handler = (option and option.handler) or (info and info.handler) or nil
-        if handler then
-            local resolved = SafeCall(hidden, handler, info)
-            if resolved ~= nil then
-                return resolved == true
-            end
+        local resolved = SafeCall(hidden, info)
+        if resolved ~= nil then
+            return resolved == true
         end
-        return hidden(info) == true
+        return false
     end
     if type(hidden) == "string" then
         local handler = (option and option.handler) or (info and info.handler) or nil
@@ -751,14 +766,11 @@ end
 local function IsOptionDisabled(option, info)
     local disabled = option and option.disabled
     if type(disabled) == "function" then
-        local handler = (option and option.handler) or (info and info.handler) or nil
-        if handler then
-            local resolved = SafeCall(disabled, handler, info)
-            if resolved ~= nil then
-                return resolved == true
-            end
+        local resolved = SafeCall(disabled, info)
+        if resolved ~= nil then
+            return resolved == true
         end
-        return disabled(info) == true
+        return false
     end
     if type(disabled) == "string" then
         local handler = (option and option.handler) or (info and info.handler) or nil
@@ -771,14 +783,7 @@ end
 
 local function ResolveTextValue(value, info)
     if type(value) == "function" then
-        local handler = info and info.handler or nil
-        local resolved = nil
-        if handler then
-            resolved = SafeCall(value, handler, info)
-        end
-        if resolved == nil then
-            resolved = SafeCall(value, info)
-        end
+        local resolved = SafeCall(value, info)
         if resolved ~= nil then
             return tostring(resolved)
         end

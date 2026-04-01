@@ -2,12 +2,12 @@
 
 #### BugFixes
 
-- Fixed an issue where the Mythic+ timer would show "Boss {#}" instead of the boss name itself
-- Fixed an issue where boss health frames would layout awkwardly on screen
-- Another pass at chat to help harden from issues in raids and dungeons
+- Fixed an issue where the error log's error details frame would overflow the parent frame
+- Fixed an issue where the error log would not capture errors
 
 #### New
 
-- Added particle effects for cast bars. New toggle in cast bar settings allows addition of particle effects added to cast bars when casting.
+- Added particle effects for cast bars. New toggle in cast bar settings allows addition of particle effects added to cast bars when casting.'
+- New configuration section for the addon's error handler
 
 #### Other
