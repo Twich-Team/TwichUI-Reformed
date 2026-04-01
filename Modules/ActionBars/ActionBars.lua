@@ -418,10 +418,26 @@ local function CaptureFont(fontString)
     end
 
     local fontPath, size, flags = fontString:GetFont()
+    local shadowX, shadowY = 0, 0
+    if type(fontString.GetShadowOffset) == "function" then
+        shadowX, shadowY = fontString:GetShadowOffset()
+    end
+
+    local shadowR, shadowG, shadowB, shadowA = 0, 0, 0, 0
+    if type(fontString.GetShadowColor) == "function" then
+        shadowR, shadowG, shadowB, shadowA = fontString:GetShadowColor()
+    end
+
     return {
         fontPath = fontPath,
         size = size,
         flags = flags,
+        shadowX = shadowX,
+        shadowY = shadowY,
+        shadowR = shadowR,
+        shadowG = shadowG,
+        shadowB = shadowB,
+        shadowA = shadowA,
         shown = fontString.IsShown and fontString:IsShown() or true,
     }
 end
@@ -433,6 +449,13 @@ local function RestoreFont(fontString, fontState)
 
     if fontState.fontPath and fontState.size and fontString.SetFont then
         fontString:SetFont(fontState.fontPath, fontState.size, fontState.flags or "")
+    end
+
+    if fontString.SetShadowOffset then
+        fontString:SetShadowOffset(fontState.shadowX or 0, fontState.shadowY or 0)
+    end
+    if fontString.SetShadowColor then
+        fontString:SetShadowColor(fontState.shadowR or 0, fontState.shadowG or 0, fontState.shadowB or 0, fontState.shadowA or 0)
     end
 
     if fontState.shown == true then
@@ -2470,6 +2493,7 @@ function ActionBars:RestoreOriginalLayout()
             RestoreFont(self:GetButtonMacroName(button), state.name)
             RestoreButtonArtTextures(button, state.artTextures)
             RestoreSpellCastAnimState(button, state.spellCastAnim)
+            ActionBars:HideButtonHoverEffect(button)
             ActionBars:HidePixelGlow(button)
             ActionBars:HideProcGlow(button)
             ActionBars:HideNativeOverlayGlow(button)
@@ -2606,6 +2630,176 @@ function ActionBars:ResolveFont(fontName)
     return STANDARD_TEXT_FONT
 end
 
+function ActionBars:ApplyTextShadow(fontString, enabled)
+    if not fontString then
+        return
+    end
+
+    if fontString.SetShadowOffset then
+        if enabled == true then
+            fontString:SetShadowOffset(1, -1)
+        else
+            fontString:SetShadowOffset(0, 0)
+        end
+    end
+
+    if fontString.SetShadowColor then
+        if enabled == true then
+            fontString:SetShadowColor(0, 0, 0, 0.9)
+        else
+            fontString:SetShadowColor(0, 0, 0, 0)
+        end
+    end
+end
+
+function ActionBars:GetButtonHoverFrame(button)
+    if not button then
+        return nil
+    end
+
+    if button.__twichuiABHoverEffect then
+        return button.__twichuiABHoverEffect
+    end
+
+    local hover = CreateFrame("Frame", nil, button)
+    hover:SetAlpha(0)
+    hover:Hide()
+    hover:EnableMouse(false)
+
+    hover.ring = hover:CreateTexture(nil, "OVERLAY")
+    hover.ring:SetTexture([[Interface\Buttons\CheckButtonHilight]])
+    hover.ring:SetBlendMode("ADD")
+
+    hover.glaze = hover:CreateTexture(nil, "OVERLAY")
+    hover.glaze:SetTexture([[Interface\Buttons\UI-Listbox-Highlight2]])
+    hover.glaze:SetBlendMode("ADD")
+
+    hover.top = hover:CreateTexture(nil, "OVERLAY")
+    hover.bottom = hover:CreateTexture(nil, "OVERLAY")
+    hover.left = hover:CreateTexture(nil, "OVERLAY")
+    hover.right = hover:CreateTexture(nil, "OVERLAY")
+
+    hover.pulse = hover:CreateAnimationGroup()
+    hover.pulse:SetLooping("BOUNCE")
+
+    local glazeFadeOut = hover.pulse:CreateAnimation("Alpha")
+    glazeFadeOut:SetTarget(hover.glaze)
+    glazeFadeOut:SetOrder(1)
+    glazeFadeOut:SetDuration(0.38)
+    glazeFadeOut:SetFromAlpha(0.22)
+    glazeFadeOut:SetToAlpha(0.08)
+
+    local glazeFadeIn = hover.pulse:CreateAnimation("Alpha")
+    glazeFadeIn:SetTarget(hover.glaze)
+    glazeFadeIn:SetOrder(2)
+    glazeFadeIn:SetDuration(0.52)
+    glazeFadeIn:SetFromAlpha(0.08)
+    glazeFadeIn:SetToAlpha(0.22)
+
+    local ringFadeOut = hover.pulse:CreateAnimation("Alpha")
+    ringFadeOut:SetTarget(hover.ring)
+    ringFadeOut:SetOrder(1)
+    ringFadeOut:SetDuration(0.38)
+    ringFadeOut:SetFromAlpha(0.28)
+    ringFadeOut:SetToAlpha(0.12)
+
+    local ringFadeIn = hover.pulse:CreateAnimation("Alpha")
+    ringFadeIn:SetTarget(hover.ring)
+    ringFadeIn:SetOrder(2)
+    ringFadeIn:SetDuration(0.52)
+    ringFadeIn:SetFromAlpha(0.12)
+    ringFadeIn:SetToAlpha(0.28)
+
+    button.__twichuiABHoverEffect = hover
+    return hover
+end
+
+function ActionBars:UpdateButtonHoverEffect(button, actionBarDB, barSettings)
+    local hover = self:GetButtonHoverFrame(button)
+    if not hover then
+        return
+    end
+
+    local useMasque = actionBarDB and actionBarDB.useMasque == true and Masque ~= nil
+    local theme = T:GetModule("Theme", true)
+    local primaryR, primaryG, primaryB = FetchThemeColor(theme, "primaryColor", { 0.10, 0.72, 0.74 })
+    local accentR, accentG, accentB = FetchThemeColor(theme, "accentColor", { 0.96, 0.76, 0.24 })
+    local hoverR = (barSettings and barSettings.showAccent == false) and primaryR or accentR
+    local hoverG = (barSettings and barSettings.showAccent == false) and primaryG or accentG
+    local hoverB = (barSettings and barSettings.showAccent == false) and primaryB or accentB
+
+    local icon = self:GetButtonIcon(button)
+    local target = icon or button
+
+    if hover.SetFrameLevel then
+        hover:SetFrameLevel(button:GetFrameLevel() + 4)
+    end
+
+    hover:ClearAllPoints()
+    hover:SetPoint("TOPLEFT", button, "TOPLEFT", -2, 2)
+    hover:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 2, -2)
+
+    hover.ring:ClearAllPoints()
+    hover.ring:SetPoint("TOPLEFT", hover, "TOPLEFT", -4, 4)
+    hover.ring:SetPoint("BOTTOMRIGHT", hover, "BOTTOMRIGHT", 4, -4)
+    hover.ring:SetVertexColor(hoverR, hoverG, hoverB, useMasque and 0.22 or 0.28)
+
+    hover.glaze:ClearAllPoints()
+    hover.glaze:SetPoint("TOPLEFT", target, "TOPLEFT", -2, 2)
+    hover.glaze:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 2, -2)
+    hover.glaze:SetVertexColor(hoverR, hoverG, hoverB, useMasque and 0.14 or 0.22)
+
+    hover.top:ClearAllPoints()
+    hover.top:SetPoint("TOPLEFT", hover, "TOPLEFT", 1, -1)
+    hover.top:SetPoint("TOPRIGHT", hover, "TOPRIGHT", -1, -1)
+    hover.top:SetHeight(1)
+    hover.top:SetColorTexture(hoverR, hoverG, hoverB, useMasque and 0.32 or 0.55)
+
+    hover.bottom:ClearAllPoints()
+    hover.bottom:SetPoint("BOTTOMLEFT", hover, "BOTTOMLEFT", 1, 1)
+    hover.bottom:SetPoint("BOTTOMRIGHT", hover, "BOTTOMRIGHT", -1, 1)
+    hover.bottom:SetHeight(1)
+    hover.bottom:SetColorTexture(hoverR, hoverG, hoverB, useMasque and 0.24 or 0.45)
+
+    hover.left:ClearAllPoints()
+    hover.left:SetPoint("TOPLEFT", hover, "TOPLEFT", 1, -1)
+    hover.left:SetPoint("BOTTOMLEFT", hover, "BOTTOMLEFT", 1, 1)
+    hover.left:SetWidth(1)
+    hover.left:SetColorTexture(hoverR, hoverG, hoverB, useMasque and 0.28 or 0.50)
+
+    hover.right:ClearAllPoints()
+    hover.right:SetPoint("TOPRIGHT", hover, "TOPRIGHT", -1, -1)
+    hover.right:SetPoint("BOTTOMRIGHT", hover, "BOTTOMRIGHT", -1, 1)
+    hover.right:SetWidth(1)
+    hover.right:SetColorTexture(hoverR, hoverG, hoverB, useMasque and 0.20 or 0.38)
+end
+
+function ActionBars:ShowButtonHoverEffect(button)
+    local hover = self:GetButtonHoverFrame(button)
+    if not hover then
+        return
+    end
+
+    hover:SetAlpha(1)
+    hover:Show()
+    if hover.pulse and not hover.pulse:IsPlaying() then
+        hover.pulse:Play()
+    end
+end
+
+function ActionBars:HideButtonHoverEffect(button)
+    local hover = button and button.__twichuiABHoverEffect or nil
+    if not hover then
+        return
+    end
+
+    if hover.pulse and hover.pulse:IsPlaying() then
+        hover.pulse:Stop()
+    end
+    hover:SetAlpha(0)
+    hover:Hide()
+end
+
 function ActionBars:ApplyHolderStyle(holder, barSettings)
     if not holder or not holder.SetBackdrop then
         return
@@ -2723,15 +2917,27 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
     chrome.leftAccent:SetColorTexture(accentR, accentG, accentB, (useMasque or not accentEnabled) and 0 or 0.85)
     chrome:SetShown(useMasque ~= true)
 
+    self:UpdateButtonHoverEffect(button, actionBarDB, barSettings)
+    if button.IsMouseOver and button:IsMouseOver() then
+        self:ShowButtonHoverEffect(button)
+    else
+        self:HideButtonHoverEffect(button)
+    end
+
     if not button.__twichuiABHoverHooked then
         button:HookScript("OnEnter", function()
             ActionBars:SetBarHoverState(barKey, true)
+            ActionBars:ShowButtonHoverEffect(button)
             if ActionBars.keybindModeActive == true then
                 ActionBars:BindUpdate(button)
             end
         end)
         button:HookScript("OnLeave", function()
+            ActionBars:HideButtonHoverEffect(button)
             ActionBars:ScheduleBarFade(barKey)
+        end)
+        button:HookScript("OnHide", function()
+            ActionBars:HideButtonHoverEffect(button)
         end)
         button.__twichuiABHoverHooked = true
     end
@@ -2745,11 +2951,13 @@ function ActionBars:ApplyTypography(button, actionBarDB)
     local fontPath = self:ResolveFont(actionBarDB.textFont)
     local fontFlags = actionBarDB.fontOutline ~= "NONE" and (actionBarDB.fontOutline or "") or ""
     local textR, textG, textB = self:GetResolvedTextColor(actionBarDB)
+    local useShadow = actionBarDB.textShadow == true
 
     local hotKey = self:GetButtonHotKey(button)
     if hotKey then
         hotKey:SetFont(fontPath, ClampNumber(actionBarDB.hotkeyFontSize, 6, 24, 11), fontFlags)
         hotKey:SetTextColor(textR, textG, textB, 1)
+        self:ApplyTextShadow(hotKey, useShadow)
         self:UpdateButtonBindingText(button)
         if actionBarDB.showHotkeys == true then
             hotKey:Show()
@@ -2762,6 +2970,7 @@ function ActionBars:ApplyTypography(button, actionBarDB)
     if count then
         count:SetFont(fontPath, ClampNumber(actionBarDB.countFontSize, 6, 24, 11), fontFlags)
         count:SetTextColor(textR, textG, textB, 1)
+        self:ApplyTextShadow(count, useShadow)
         if actionBarDB.showCounts == true then
             count:Show()
         else
@@ -2774,6 +2983,7 @@ function ActionBars:ApplyTypography(button, actionBarDB)
         name:SetFont(fontPath, ClampNumber(actionBarDB.macroFontSize, 6, 24, 9), fontFlags)
         name:SetJustifyH("CENTER")
         name:SetTextColor(textR, textG, textB, 1)
+        self:ApplyTextShadow(name, useShadow)
         if actionBarDB.showMacroNames == true then
             name:Show()
         else
@@ -3138,6 +3348,8 @@ function ActionBars:ApplyMasqueSettings(actionBarDB)
                 if button.__twichuiABChrome then
                     button.__twichuiABChrome:Hide()
                 end
+
+                ActionBars:HideButtonHoverEffect(button)
 
                 SuppressButtonAnimationEffects(button)
                 SuppressSpellCastAnim(button)

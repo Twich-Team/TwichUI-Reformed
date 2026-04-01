@@ -20,7 +20,7 @@
 
 ## Action Bars
 
-- I would like a font shadow option for the action bar texts
+- Can we add a way to disable the border on action bars
 
 ## World Quest
 

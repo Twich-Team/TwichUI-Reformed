@@ -21,6 +21,7 @@ local ROOT_DEFAULTS = {
     showGrid = true,
     textFont = "__default",
     fontOutline = "NONE",
+    textShadow = true,
     hotkeyFontSize = 11,
     countFontSize = 11,
     macroFontSize = 9,
@@ -901,6 +902,20 @@ function Options:BuildConfiguration()
                 end,
                 set = function(_, value)
                     db.fontOutline = value
+                    RequestRefresh(false)
+                end,
+            },
+            shadow = {
+                type = "toggle",
+                name = "Text Shadow",
+                desc = "Apply a soft shadow to hotkeys, stack counts, and macro names.",
+                order = 2.25,
+                width = "half",
+                get = function()
+                    return db.textShadow == true
+                end,
+                set = function(_, value)
+                    db.textShadow = value == true
                     RequestRefresh(false)
                 end,
             },
