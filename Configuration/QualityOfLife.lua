@@ -2564,14 +2564,16 @@ local function BuildConfiguration()
             name = "Features to improve your overall user experience.",
         },
         choresTab = BuildChoresTab(),
-        gatheringTab = ConfigurationModuleRuntime.BuildGatheringTab and ConfigurationModuleRuntime.BuildGatheringTab() or nil,
+        gatheringTab = ConfigurationModuleRuntime.BuildGatheringTab and ConfigurationModuleRuntime.BuildGatheringTab() or
+        nil,
         easyFishTab = BuildEasyFishTab(),
         gossipHotkeysTab = BuildGossipHotkeysTab(),
         preyTweaksTab = BuildPreyTweaksTab(),
         questAutomationTab = BuildQuestAutomationTab(),
         questLogCleanerTab = BuildQuestLogCleanerTab(),
         satchelWatchTab = BuildSatchelWatchTab(),
-        smartMountTab = ConfigurationModuleRuntime.BuildSmartMountTab and ConfigurationModuleRuntime.BuildSmartMountTab(9),
+        smartMountTab = ConfigurationModuleRuntime.BuildSmartMountTab and
+        ConfigurationModuleRuntime.BuildSmartMountTab(9),
         teleportsTab = BuildTeleportsTab(),
         worldQuestsTab = BuildWorldQuestsTab(),
     }

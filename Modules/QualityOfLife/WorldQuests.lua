@@ -66,17 +66,17 @@ local DEBUG_SOURCE = "worldquests"
 local MAX_SOURCE_MAPS = 48
 
 local FILTER_DEFS = {
-    { key = "tracked", label = "Tracked" },
-    { key = "gear", label = "Loot" },
-    { key = "gold", label = "Gold" },
+    { key = "tracked",    label = "Tracked" },
+    { key = "gear",       label = "Loot" },
+    { key = "gold",       label = "Gold" },
     { key = "reputation", label = "Rep" },
-    { key = "items", label = "Items" },
+    { key = "items",      label = "Items" },
     { key = "profession", label = "Profession" },
-    { key = "pvp", label = "PvP" },
-    { key = "pet", label = "Pet" },
-    { key = "dungeon", label = "Dungeon" },
-    { key = "rare", label = "Rare" },
-    { key = "time", label = "Soon" },
+    { key = "pvp",        label = "PvP" },
+    { key = "pet",        label = "Pet" },
+    { key = "dungeon",    label = "Dungeon" },
+    { key = "rare",       label = "Rare" },
+    { key = "time",       label = "Soon" },
 }
 
 local QUEST_TYPE_FLAGS = {
@@ -163,11 +163,44 @@ local function CreateBackdrop(frame)
     frame.backdropApplied = true
 end
 
-local function SkinScrollBar(scrollFrame)
+local function SkinScrollBar(scrollFrame, color, hideButtons)
     local ui = T.Tools and T.Tools.UI
-    if ui and ui.SkinScrollBar then
-        ui.SkinScrollBar(scrollFrame)
+    if ui and ui.SkinTwichScrollBar then
+        ui.SkinTwichScrollBar(scrollFrame, color, hideButtons)
+    elseif ui and ui.SkinScrollBar then
+        ui.SkinScrollBar(scrollFrame, color, true, hideButtons)
     end
+
+    if hideButtons ~= true then
+        return
+    end
+
+    local scrollBar = scrollFrame and scrollFrame.ScrollBar
+    if not scrollBar then
+        return
+    end
+
+    local function HideArrowButton(button)
+        if not button then
+            return
+        end
+
+        button:Hide()
+        button:SetAlpha(0)
+        button:EnableMouse(false)
+        button:SetSize(1, 1)
+        button:ClearAllPoints()
+
+        if not button.twichWorldQuestsHideHook then
+            button:HookScript("OnShow", function(self)
+                self:Hide()
+            end)
+            button.twichWorldQuestsHideHook = true
+        end
+    end
+
+    HideArrowButton(scrollBar.ScrollUpButton)
+    HideArrowButton(scrollBar.ScrollDownButton)
 end
 
 local function SkinButton(button)
@@ -403,6 +436,30 @@ local function AddSummaryPiece(summaryParts, text)
     end
 end
 
+local function AddTooltipRewardLine(tooltipLines, text, icon)
+    if type(text) ~= "string" or text == "" then
+        return
+    end
+
+    tooltipLines[#tooltipLines + 1] = {
+        text = text,
+        icon = icon,
+    }
+end
+
+local function FormatTooltipRewardText(line)
+    if type(line) == "table" then
+        local text = tostring(line.text or "")
+        if line.icon then
+            return format("|T%s:14:14:0:0:64:64:4:60:4:60|t %s", tostring(line.icon), text)
+        end
+
+        return text
+    end
+
+    return tostring(line or "")
+end
+
 local function CompactSummary(summaryParts)
     local count = #summaryParts
     if count == 0 then
@@ -436,13 +493,15 @@ local function BuildQuestRewards(questID)
     if type(money) == "number" and money > 0 then
         flags.gold = true
         AddSummaryPiece(summaryParts, BuildMoneySummary(money))
-        tooltipLines[#tooltipLines + 1] = "Gold reward available."
+        AddTooltipRewardLine(tooltipLines, BuildMoneySummary(money), "Interface\\MoneyFrame\\UI-GoldIcon")
+        displayIcon = displayIcon or "Interface\\MoneyFrame\\UI-GoldIcon"
     end
 
     local currencyFn = type(C_QuestLog) == "table" and C_QuestLog.GetQuestRewardCurrencies or nil
     for index, currencyInfo in ipairs(type(currencyFn) == "function" and SafeCall(currencyFn, questID) or {}) do
         if type(currencyInfo) == "table" then
-            local quantity = tonumber(currencyInfo.totalRewardAmount or currencyInfo.quantity or currencyInfo.totalQuantity or 0) or 0
+            local quantity = tonumber(currencyInfo.totalRewardAmount or currencyInfo.quantity or
+            currencyInfo.totalQuantity or 0) or 0
             local currencyName = currencyInfo.name
             if not currencyName and type(C_CurrencyInfo) == "table" and type(C_CurrencyInfo.GetCurrencyInfo) == "function" then
                 local info = SafeCall(C_CurrencyInfo.GetCurrencyInfo, currencyInfo.currencyID)
@@ -451,7 +510,7 @@ local function BuildQuestRewards(questID)
 
             currencyName = currencyName or format("Currency %d", tonumber(currencyInfo.currencyID) or index)
             AddSummaryPiece(summaryParts, format("%s %s", tostring(quantity), currencyName))
-            tooltipLines[#tooltipLines + 1] = format("%s %s", tostring(quantity), currencyName)
+            AddTooltipRewardLine(tooltipLines, format("%s %s", tostring(quantity), currencyName), currencyInfo.texture)
             displayIcon = displayIcon or currencyInfo.texture
         end
     end
@@ -467,13 +526,14 @@ local function BuildQuestRewards(questID)
             and format("%s %s", tostring(reputationAmount), factionName)
             or factionName
         AddSummaryPiece(summaryParts, text)
-        tooltipLines[#tooltipLines + 1] = text
+        AddTooltipRewardLine(tooltipLines, text)
         factionIndex = factionIndex + 1
     end
 
     local rewardCount = type(GetNumQuestLogRewards) == "function" and tonumber(GetNumQuestLogRewards(questID)) or 0
     for rewardIndex = 1, rewardCount do
-        local itemName, itemTexture, itemCount, _, _, itemID, itemLevel = SafeCall(GetQuestLogRewardInfo, rewardIndex, questID)
+        local itemName, itemTexture, itemCount, _, _, itemID, itemLevel = SafeCall(GetQuestLogRewardInfo, rewardIndex,
+            questID)
         if type(itemName) == "string" and itemName ~= "" then
             displayIcon = displayIcon or itemTexture
             local itemEquipLoc = nil
@@ -495,7 +555,7 @@ local function BuildQuestRewards(questID)
             end
 
             AddSummaryPiece(summaryParts, label)
-            tooltipLines[#tooltipLines + 1] = label
+            AddTooltipRewardLine(tooltipLines, label, itemTexture)
         end
     end
 
@@ -607,6 +667,7 @@ local function BuildQuestEntry(questID, sourceMapID)
         flags = flags,
         rewardSummary = rewards.summary,
         rewardTooltipLines = rewards.tooltipLines,
+        rewardIcon = rewards.icon,
         timeLeftSeconds = timeLeftSeconds,
         timeLeftText = FormatRemainingTime(timeLeftSeconds),
         icon = icon,
@@ -702,12 +763,12 @@ function WorldQuests:GatherEntries(displayMapID)
         local questIDs = {}
         AppendQuestIDs(questIDs, seenQuestIDs,
             type(C_QuestLog) == "table" and type(C_QuestLog.GetQuestsOnMap) == "function"
-                and SafeCall(C_QuestLog.GetQuestsOnMap, mapID)
-                or nil)
+            and SafeCall(C_QuestLog.GetQuestsOnMap, mapID)
+            or nil)
         AppendQuestIDs(questIDs, seenQuestIDs,
             type(C_TaskQuest) == "table" and type(C_TaskQuest.GetQuestsOnMap) == "function"
-                and SafeCall(C_TaskQuest.GetQuestsOnMap, mapID)
-                or nil)
+            and SafeCall(C_TaskQuest.GetQuestsOnMap, mapID)
+            or nil)
 
         for _, questID in ipairs(questIDs) do
             local entry = BuildQuestEntry(questID, mapID)
@@ -833,7 +894,7 @@ local function CreateBrowserFrame(name, parent)
     frame.ScrollFrame = CreateFrame("ScrollFrame", nil, frame.ContentInset, "UIPanelScrollFrameTemplate")
     frame.ScrollFrame:SetPoint("TOPLEFT", frame.ContentInset, "TOPLEFT", 8, -8)
     frame.ScrollFrame:SetPoint("BOTTOMRIGHT", frame.ContentInset, "BOTTOMRIGHT", -20, 8)
-    SkinScrollBar(frame.ScrollFrame)
+    SkinScrollBar(frame.ScrollFrame, accent, true)
 
     frame.ScrollChild = CreateFrame("Frame", nil, frame.ScrollFrame)
     frame.ScrollChild:SetSize(1, 1)
@@ -921,7 +982,7 @@ local function EnsureRow(frame, index)
     end
 
     row = CreateFrame("Button", nil, frame.ScrollChild)
-    row:SetHeight(92)
+    row:SetHeight(86)
     row:EnableMouse(true)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
@@ -941,41 +1002,60 @@ local function EnsureRow(frame, index)
 
     row.IconBackdrop = row:CreateTexture(nil, "BORDER")
     row.IconBackdrop:SetPoint("TOPLEFT", row, "TOPLEFT", 8, -8)
-    row.IconBackdrop:SetSize(36, 36)
+    row.IconBackdrop:SetSize(26, 26)
     row.IconBackdrop:SetColorTexture(0, 0, 0, 0.28)
 
     row.Icon = row:CreateTexture(nil, "ARTWORK")
     row.Icon:SetPoint("CENTER", row.IconBackdrop, "CENTER", 0, 0)
-    row.Icon:SetSize(32, 32)
+    row.Icon:SetSize(20, 20)
     row.Icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+
+    row.TrackedCheck = row:CreateTexture(nil, "OVERLAY")
+    row.TrackedCheck:SetPoint("TOPRIGHT", row.IconBackdrop, "TOPRIGHT", 3, 0)
+    row.TrackedCheck:SetSize(11, 11)
+    row.TrackedCheck:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+    row.TrackedCheck:SetVertexColor(0.22, 0.95, 0.42, 1)
+    row.TrackedCheck:Hide()
 
     row.ActionAnchor = CreateFrame("Frame", nil, row)
     row.ActionAnchor:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -8)
     row.ActionAnchor:SetSize(52, 44)
 
     row.Title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    row.Title:SetPoint("TOPLEFT", row.IconBackdrop, "TOPRIGHT", 10, 0)
+    row.Title:SetPoint("TOPLEFT", row.IconBackdrop, "TOPRIGHT", 7, 0)
     row.Title:SetPoint("RIGHT", row.ActionAnchor, "LEFT", -8, 0)
     row.Title:SetJustifyH("LEFT")
     row.Title:SetWordWrap(true)
     row.Title:SetMaxLines(2)
 
     row.Subtitle = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    row.Subtitle:SetPoint("TOPLEFT", row.Title, "BOTTOMLEFT", 0, -4)
+    row.Subtitle:SetPoint("TOPLEFT", row.Title, "BOTTOMLEFT", 0, -2)
     row.Subtitle:SetPoint("RIGHT", row.ActionAnchor, "LEFT", -8, 0)
     row.Subtitle:SetJustifyH("LEFT")
     row.Subtitle:SetTextColor(0.78, 0.8, 0.84)
     row.Subtitle:SetWordWrap(false)
     row.Subtitle:SetMaxLines(1)
 
-    row.Rewards = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    row.Rewards:SetPoint("TOPLEFT", row.Subtitle, "BOTTOMLEFT", 0, -3)
-    row.Rewards:SetPoint("RIGHT", row.ActionAnchor, "LEFT", -8, 0)
-    row.Rewards:SetPoint("BOTTOM", row, "BOTTOM", 0, 8)
+    row.RewardRow = CreateFrame("Frame", nil, row)
+    row.RewardRow:SetPoint("TOPLEFT", row.Subtitle, "BOTTOMLEFT", 0, -3)
+    row.RewardRow:SetPoint("RIGHT", row.ActionAnchor, "LEFT", -8, 0)
+    row.RewardRow:SetHeight(24)
+
+    row.RewardIcon = row.RewardRow:CreateTexture(nil, "OVERLAY")
+    row.RewardIcon:SetPoint("LEFT", row.RewardRow, "LEFT", 0, 0)
+    row.RewardIcon:SetSize(12, 12)
+    row.RewardIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    row.RewardIcon:Hide()
+
+    row.Rewards = row.RewardRow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    row.Rewards:SetPoint("LEFT", row.RewardRow, "LEFT", 17, 0)
+    row.Rewards:SetPoint("RIGHT", row.RewardRow, "RIGHT", 0, 0)
     row.Rewards:SetJustifyH("LEFT")
+    row.Rewards:SetJustifyV("MIDDLE")
     row.Rewards:SetTextColor(0.92, 0.9, 0.84)
     row.Rewards:SetWordWrap(true)
     row.Rewards:SetMaxLines(2)
+    row.Rewards:SetHeight(24)
 
     row.Time = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     row.Time:SetPoint("TOPRIGHT", row.ActionAnchor, "TOPRIGHT", 0, 0)
@@ -1015,7 +1095,7 @@ function WorldQuests:BuildRowTooltip(row)
 
     GameTooltip:AddLine(" ")
     for _, line in ipairs(entry.rewardTooltipLines or {}) do
-        GameTooltip:AddLine(line, 0.9, 0.9, 0.9, true)
+        GameTooltip:AddLine(FormatTooltipRewardText(line), 0.9, 0.9, 0.9, true)
     end
 
     GameTooltip:AddLine(" ")
@@ -1087,18 +1167,21 @@ end
 
 function WorldQuests:BuildDisplaySections(entries)
     local sections = {}
-    local currentSection
+    local sectionsByTitle = {}
 
     for _, entry in ipairs(entries) do
-        if not currentSection or currentSection.title ~= entry.zoneName then
-            currentSection = {
-                title = entry.zoneName,
+        local title = entry.zoneName or "Zone"
+        local section = sectionsByTitle[title]
+        if not section then
+            section = {
+                title = title,
                 entries = {},
             }
-            sections[#sections + 1] = currentSection
+            sectionsByTitle[title] = section
+            sections[#sections + 1] = section
         end
 
-        currentSection.entries[#currentSection.entries + 1] = entry
+        section.entries[#section.entries + 1] = entry
     end
 
     return sections
@@ -1153,9 +1236,17 @@ function WorldQuests:RenderBrowser(frame)
             local row = EnsureRow(frame, nextRow)
             row.entry = entry
             row.Title:SetText(entry.title or "World Quest")
-            row.Subtitle:SetText(entry.tracked and (entry.zoneName .. "  •  Tracked") or entry.zoneName)
+            row.Subtitle:SetText(entry.zoneName)
             row.Rewards:SetText(entry.rewardSummary or "No reward data yet.")
             row.Time:SetText(entry.timeLeftText or "")
+            row.TrackedCheck:SetShown(entry.tracked == true)
+
+            if entry.rewardIcon then
+                row.RewardIcon:SetTexture(entry.rewardIcon)
+                row.RewardIcon:Show()
+            else
+                row.RewardIcon:Hide()
+            end
 
             if type(entry.atlas) == "string" and entry.atlas ~= "" then
                 row.Icon:SetAtlas(entry.atlas, true)
@@ -1287,6 +1378,11 @@ function WorldQuests:ShowWorldMapPanel()
         return
     end
 
+    local teleports = QOL.GetModule and QOL:GetModule("Teleports", true)
+    if teleports and teleports.HideWorldMapPanel then
+        teleports:HideWorldMapPanel()
+    end
+
     self:RenderBrowser(self.worldMapPanel)
     self.worldMapPanel:Show()
 
@@ -1378,7 +1474,8 @@ function WorldQuests:LayoutWorldMapButton()
 
     local questMapFrame = _G.QuestMapFrame
     local teleportsButton = _G.TwichUI_TeleportsWorldMapTabButton
-    local anchorTab = questMapFrame and (questMapFrame.MapLegendTab or questMapFrame.EventsTab or questMapFrame.QuestsTab)
+    local anchorTab = questMapFrame and
+    (questMapFrame.MapLegendTab or questMapFrame.EventsTab or questMapFrame.QuestsTab)
 
     button:ClearAllPoints()
     if teleportsButton and teleportsButton ~= button and teleportsButton:IsShown() then

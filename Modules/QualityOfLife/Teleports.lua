@@ -1056,6 +1056,11 @@ function Teleports:ShowWorldMapPanel()
         return
     end
 
+    local worldQuests = QOL.GetModule and QOL:GetModule("WorldQuests", true)
+    if worldQuests and worldQuests.HideWorldMapPanel then
+        worldQuests:HideWorldMapPanel()
+    end
+
     self.worldMapPanel.Title:SetText("Teleports")
     self:RenderBrowser(self.worldMapPanel, "map")
     self.worldMapPanel:Show()
