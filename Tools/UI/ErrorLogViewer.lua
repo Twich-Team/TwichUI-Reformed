@@ -52,31 +52,31 @@ end
 -- ---------------------------------------------------------------------------
 -- Theme constants (mirrors DebugConsole palette)
 -- ---------------------------------------------------------------------------
-local CLR_ACCENT             = { 0.10, 0.79, 0.77 } -- primary teal
-local CLR_GOLD               = { 0.98, 0.76, 0.22 } -- title accent stripe
-local CLR_WARN               = { 0.98, 0.56, 0.50 } -- close / danger
-local CLR_BG_DEEP            = { 0.03, 0.03, 0.05 }
-local CLR_BG_MID             = { 0.07, 0.07, 0.10 }
-local CLR_BG_PANEL           = { 0.05, 0.05, 0.07 }
-local CLR_TEXT_HI            = { 1.00, 0.95, 0.82 }
-local CLR_TEXT_MUT           = { 0.55, 0.60, 0.68 }
-local CLR_TEXT_DATE          = { 0.47, 0.52, 0.60 }
+local CLR_ACCENT               = { 0.10, 0.79, 0.77 } -- primary teal
+local CLR_GOLD                 = { 0.98, 0.76, 0.22 } -- title accent stripe
+local CLR_WARN                 = { 0.98, 0.56, 0.50 } -- close / danger
+local CLR_BG_DEEP              = { 0.03, 0.03, 0.05 }
+local CLR_BG_MID               = { 0.07, 0.07, 0.10 }
+local CLR_BG_PANEL             = { 0.05, 0.05, 0.07 }
+local CLR_TEXT_HI              = { 1.00, 0.95, 0.82 }
+local CLR_TEXT_MUT             = { 0.55, 0.60, 0.68 }
+local CLR_TEXT_DATE            = { 0.47, 0.52, 0.60 }
 
-local FRAME_W                = 880
-local FRAME_H                = 560
-local TITLEBAR_H             = 52
-local LIST_W                 = 276
-local ROW_H                  = 44
-local INSET                  = 6
+local FRAME_W                  = 880
+local FRAME_H                  = 560
+local TITLEBAR_H               = 52
+local LIST_W                   = 276
+local ROW_H                    = 44
+local INSET                    = 6
 
 ---@class TwichUIErrorLogViewer
 ---@field frame Frame|nil
 ---@field rowPool table
 ---@field selectedIndex number|nil
-local ErrorLogViewer         = UI.ErrorLogViewer or {}
-UI.ErrorLogViewer            = ErrorLogViewer
-ErrorLogViewer.rowPool       = ErrorLogViewer.rowPool or {}
-ErrorLogViewer.selectedIndex = nil
+local ErrorLogViewer           = UI.ErrorLogViewer or {}
+UI.ErrorLogViewer              = ErrorLogViewer
+ErrorLogViewer.rowPool         = ErrorLogViewer.rowPool or {}
+ErrorLogViewer.selectedIndex   = nil
 ErrorLogViewer.selectedEntryId = ErrorLogViewer.selectedEntryId or nil
 
 -- ---------------------------------------------------------------------------
@@ -434,8 +434,8 @@ function ErrorLogViewer:Refresh()
     local el = Tools.ErrorLog
     if not el then return end
 
-    local errors = el:GetAll()
-    local count  = #errors
+    local errors        = el:GetAll()
+    local count         = #errors
     local selectedIndex = GetEntryIndexById(errors, self.selectedEntryId)
     if selectedIndex then
         self.selectedIndex = selectedIndex
@@ -513,7 +513,7 @@ function ErrorLogViewer:Refresh()
         self.selectedEntryId = nil
         frame.detailHeader:SetText("Error Details")
         frame.detailEditBox:SetText(
-        "No errors have been captured yet.\n\nErrors originating from TwichUI_Reformed will appear here automatically.")
+            "No errors have been captured yet.\n\nErrors originating from TwichUI_Reformed will appear here automatically.")
         frame.detailEditBox:HighlightText(0, 0)
         frame.detailContent:SetHeight(MeasureDetailTextHeight(frame, frame.detailEditBox:GetText()))
         UpdateDetailLayout(frame)

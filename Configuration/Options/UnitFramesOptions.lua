@@ -214,18 +214,18 @@ local ROOT_TEXT_DEFAULTS               = {
 }
 
 local SINGLE_UNIT_DEFAULTS             = {
-        player = {
-            width = 260,
-            height = 48,
-            showPower = true,
-            powerHeight = 10,
-            powerDetached = false,
-            powerWidth = 260,
-            classArtworkEnabled = false,
-            classArtworkScale = 1,
-            classArtworkOffsetX = 0,
-            classArtworkOffsetY = 0,
-        },
+    player = {
+        width = 260,
+        height = 48,
+        showPower = true,
+        powerHeight = 10,
+        powerDetached = false,
+        powerWidth = 260,
+        classArtworkEnabled = false,
+        classArtworkScale = 1,
+        classArtworkOffsetX = 0,
+        classArtworkOffsetY = 0,
+    },
     target = { width = 240, height = 42, showPower = true, powerHeight = 10, powerDetached = false, powerWidth = 240 },
     targettarget = { width = 180, height = 30, showPower = true, powerHeight = 8, powerDetached = false, powerWidth = 180 },
     focus = { width = 220, height = 38, showPower = true, powerHeight = 8, powerDetached = false, powerWidth = 220 },

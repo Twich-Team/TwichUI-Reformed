@@ -4,6 +4,7 @@
 
 - Fixed an issue where the error log's error details frame would overflow the parent frame
 - Fixed an issue where the error log would not capture errors
+- Fixed a hidden error that ocurred when accessing the profiles section of the configuration.
 
 #### New
 

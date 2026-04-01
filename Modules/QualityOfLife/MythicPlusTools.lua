@@ -1306,42 +1306,67 @@ local function NormalizeDungeonSearchKey(name)
     return value
 end
 
-local function FindBestEncounterJournalInstance(mapName)
+local CHALLENGE_MAP_TO_EJ_INSTANCE = {
+    [557] = 2805,     -- Windrunner Spire challenge map -> Encounter Journal instance
+    [2805] = 2805,    -- tolerate legacy/stored journal-instance keyed selections
+    [1254400] = 2805, -- tolerate older mistaken teleport-spell keyed data
+}
+
+local EJ_INSTANCE_TO_CHALLENGE_MAP = {
+    [2805] = 557, -- Windrunner Spire
+}
+
+local function FindBestEncounterJournalInstance(mapID, mapName)
     local ej = GetEncounterJournalFunctions()
     if not ej then
         return nil
     end
 
+    local preferredInstanceID = tonumber(mapID) and CHALLENGE_MAP_TO_EJ_INSTANCE[tonumber(mapID)] or nil
     local searchKey = NormalizeDungeonSearchKey(mapName)
-    if searchKey == "" then
+    if not preferredInstanceID and searchKey == "" then
         return nil
     end
 
-    local exactMatch, partialMatch
+    local exactMatch, partialMatch, preferredMatch
     local previousTier = ej.getCurrentTier()
-    for tierIndex = 1, ej.getNumTiers() do
+    local tierCount = tonumber(ej.getNumTiers()) or 0
+    for tierIndex = 1, tierCount do
         if not SafeEncounterJournalSelectTier(ej, tierIndex) then
             break
         end
-        local instanceIndex = 1
-        while true do
-            local instanceID, instanceName = ej.getInstanceByIndex(instanceIndex, true)
-            if not instanceID then
-                break
+        for _, isRaid in ipairs({ false, true }) do
+            local instanceIndex = 1
+            while true do
+                local instanceID, instanceName = ej.getInstanceByIndex(instanceIndex, isRaid)
+                if not instanceID then
+                    break
+                end
+
+                if preferredInstanceID and instanceID == preferredInstanceID then
+                    preferredMatch = { tier = tierIndex, id = instanceID, name = instanceName, isRaid = isRaid }
+                    break
+                end
+
+                local instanceKey = NormalizeDungeonSearchKey(instanceName)
+                if instanceKey == searchKey then
+                    exactMatch = { tier = tierIndex, id = instanceID, name = instanceName, isRaid = isRaid }
+                    break
+                elseif instanceKey ~= "" and searchKey ~= "" and
+                    (instanceKey:find(searchKey, 1, true) or searchKey:find(instanceKey, 1, true)) then
+                    partialMatch = partialMatch or
+                    { tier = tierIndex, id = instanceID, name = instanceName, isRaid = isRaid }
+                end
+
+                instanceIndex = instanceIndex + 1
             end
 
-            local instanceKey = NormalizeDungeonSearchKey(instanceName)
-            if instanceKey == searchKey then
-                exactMatch = { tier = tierIndex, id = instanceID, name = instanceName }
+            if preferredMatch or exactMatch then
                 break
-            elseif instanceKey ~= "" and (instanceKey:find(searchKey, 1, true) or searchKey:find(instanceKey, 1, true)) then
-                partialMatch = partialMatch or { tier = tierIndex, id = instanceID, name = instanceName }
             end
-
-            instanceIndex = instanceIndex + 1
         end
 
-        if exactMatch then
+        if preferredMatch or exactMatch then
             break
         end
     end
@@ -1350,7 +1375,7 @@ local function FindBestEncounterJournalInstance(mapName)
         SafeEncounterJournalSelectTier(ej, previousTier)
     end
 
-    return exactMatch or partialMatch
+    return preferredMatch or exactMatch or partialMatch
 end
 
 function MPT:GetSeasonalDungeonEntries()
@@ -1405,7 +1430,8 @@ function MPT:GetDefaultDungeonCheckpoints(mapID)
     end
 
     local bossNames = {}
-    local instanceInfo = FindBestEncounterJournalInstance(GetMythicPlusMapName(mapID))
+    local mapName = GetMythicPlusMapName(mapID)
+    local instanceInfo = FindBestEncounterJournalInstance(mapID, mapName)
     local ej = GetEncounterJournalFunctions()
     if instanceInfo and ej then
         local previousTier = ej.getCurrentTier()
@@ -1414,6 +1440,7 @@ function MPT:GetDefaultDungeonCheckpoints(mapID)
             if selectedOk then
                 local encounterIndex = 1
                 while true do
+                    pcall(ej.selectInstance, instanceInfo.id)
                     local name = ej.getEncounterInfoByIndex(encounterIndex)
                     if not name then
                         break
@@ -1553,6 +1580,21 @@ function MPT:GetDungeonCheckpointConfig(mapID, createIfMissing)
     local mapKey = tostring(mapID)
     local dungeonConfig = checkpointDB.dungeons[mapKey]
     if type(dungeonConfig) ~= "table" then
+        local legacyMapID = EJ_INSTANCE_TO_CHALLENGE_MAP[mapID]
+        if legacyMapID and checkpointDB.dungeons[tostring(legacyMapID)] then
+            dungeonConfig = checkpointDB.dungeons[tostring(legacyMapID)]
+        elseif legacyMapID == nil then
+            for legacyKey, legacyConfig in pairs(checkpointDB.dungeons) do
+                local legacyNumeric = tonumber(legacyKey)
+                if legacyNumeric and EJ_INSTANCE_TO_CHALLENGE_MAP[legacyNumeric] == mapID and type(legacyConfig) == "table" then
+                    dungeonConfig = legacyConfig
+                    checkpointDB.dungeons[mapKey] = legacyConfig
+                    checkpointDB.dungeons[legacyKey] = nil
+                    break
+                end
+            end
+        end
+
         local mapSearchKey = NormalizeDungeonSearchKey(GetMythicPlusMapName(mapID))
         for legacyKey, legacyConfig in pairs(checkpointDB.dungeons) do
             if legacyKey ~= mapKey and type(legacyConfig) == "table" then

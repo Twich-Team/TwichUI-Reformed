@@ -32,11 +32,11 @@ local function BuildErrorLogConfiguration()
     local section = W.NewConfigurationSection(95, "Error Log")
     section.childGroups = nil
     section.args = {
-        title    = W.TitleWidget(0, "Error Log"),
-        desc     = W.Description(5,
+        title         = W.TitleWidget(0, "Error Log"),
+        desc          = W.Description(5,
             "TwichUI captures unhandled Lua errors from its own code and keeps a rolling log. " ..
             "Use the viewer to inspect them and copy details for bug reports."),
-        status   = W.IGroup(10, "Status", {
+        status        = W.IGroup(10, "Status", {
             count = {
                 type  = "description",
                 order = 0,
@@ -102,7 +102,7 @@ local function BuildErrorLogConfiguration()
                 end,
             },
         }),
-        actions  = W.IGroup(20, "Actions", {
+        actions       = W.IGroup(20, "Actions", {
             open = {
                 type  = "execute",
                 order = 0,
@@ -127,7 +127,7 @@ local function BuildErrorLogConfiguration()
                 end,
             },
         }),
-        settings = W.IGroup(30, "Settings", {
+        settings      = W.IGroup(30, "Settings", {
             maxErrors = {
                 type  = "range",
                 order = 0,
