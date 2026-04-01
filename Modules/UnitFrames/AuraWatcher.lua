@@ -28,6 +28,7 @@ if not UnitFrames then return end
 local CreateFrame    = _G.CreateFrame
 local GetTime        = _G.GetTime
 local C_UnitAuras    = _G.C_UnitAuras
+local setmetatable   = _G.setmetatable
 local math_max       = math.max
 local math_min       = math.min
 local math_floor     = math.floor
@@ -37,6 +38,13 @@ local Clamp          = _G.Clamp or function(v, lo, hi) return math.max(lo, math.
 local MAX_INDICATORS = 6   -- indicator slots per frame
 local MAX_ICONS      = 12  -- icon slots per indicator
 local TIMER_RATE     = 0.1 -- icon timer update frequency (seconds)
+local FILTER_HELPFUL = { "HELPFUL" }
+local FILTER_HARMFUL = { "HARMFUL" }
+local FILTER_BOTH    = { "HELPFUL", "HARMFUL" }
+
+local spellLookupCache = setmetatable({}, { __mode = "k" })
+local singleSpellLookupCache = setmetatable({}, { __mode = "k" })
+local groupLookupCache = setmetatable({}, { __mode = "k" })
 
 local function ResolveFrameUnit(frame)
     if type(frame) ~= "table" then
@@ -121,6 +129,127 @@ local function BuildLookup(ids)
     return t
 end
 
+local function ClearSequentialTable(tbl)
+    if not tbl then
+        return tbl
+    end
+
+    for index = #tbl, 1, -1 do
+        tbl[index] = nil
+    end
+
+    return tbl
+end
+
+local function PushAuraResult(result, count, data, timing)
+    count = count + 1
+
+    local entry = result[count]
+    if not entry then
+        entry = {}
+        result[count] = entry
+    end
+
+    entry.icon = data.icon
+    entry.duration = timing.duration
+    entry.expirationTime = timing.expirationTime
+    entry.applications = timing.applications
+    entry.durationObject = timing.durationObject
+
+    return count
+end
+
+local function FinalizeAuraResults(result, count)
+    for index = #result, count + 1, -1 do
+        result[index] = nil
+    end
+
+    return result
+end
+
+local function GetCachedSpellLookup(cfg)
+    local ids = cfg and cfg.spellIds
+    if type(ids) ~= "table" or #ids == 0 then
+        return nil
+    end
+
+    local cache = spellLookupCache[cfg]
+    if cache and cache.ids == ids then
+        return cache.lookup
+    end
+
+    local lookup = BuildLookup(ids)
+    spellLookupCache[cfg] = {
+        ids = ids,
+        lookup = lookup,
+    }
+
+    return lookup
+end
+
+local function GetCachedSingleSpellLookup(cfg)
+    local spellId = cfg and tonumber(cfg.spellId) or nil
+    if not spellId or spellId <= 0 then
+        return nil
+    end
+
+    local cache = singleSpellLookupCache[cfg]
+    if cache and cache.spellId == spellId then
+        return cache.lookup
+    end
+
+    local lookup = { [spellId] = true }
+    singleSpellLookupCache[cfg] = {
+        spellId = spellId,
+        lookup = lookup,
+    }
+
+    return lookup
+end
+
+local function GetCachedGroupLookup(group)
+    if type(group) ~= "table" then
+        return nil
+    end
+
+    local raw = group.spellIds
+    if type(raw) ~= "string" or raw == "" then
+        return nil
+    end
+
+    local cache = groupLookupCache[group]
+    if cache and cache.raw == raw then
+        return cache.lookup
+    end
+
+    local ids = ParseSpellIds(raw)
+    local lookup = #ids > 0 and BuildLookup(ids) or nil
+    groupLookupCache[group] = {
+        raw = raw,
+        lookup = lookup,
+    }
+
+    return lookup
+end
+
+local function GetReusableAuraResults(frame, key)
+    if not (frame and frame._awState) then
+        return {}
+    end
+
+    local results = frame._awState.auraResults
+    if not results then
+        results = {}
+        frame._awState.auraResults = results
+    end
+
+    if not results[key] then
+        results[key] = {}
+    end
+
+    return results[key]
+end
+
 -- ============================================================
 -- Aura scanning
 -- ============================================================
@@ -139,10 +268,14 @@ local function ResolveIsPlayerAura(unit, auraInstanceID, filter, data)
 end
 
 -- Scan unit auras matching a spell-ID lookup table.
-local function ScanBySpellIds(unit, lookup, onlyMine)
-    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then return {} end
-    local result = {}
-    for _, filter in ipairs({ "HELPFUL", "HARMFUL" }) do
+local function ScanBySpellIds(unit, lookup, onlyMine, result)
+    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then
+        return ClearSequentialTable(result or {})
+    end
+
+    result = result or {}
+    local count = 0
+    for _, filter in ipairs(FILTER_BOTH) do
         local slots = { C_UnitAuras.GetAuraSlots(unit, filter) }
         for i = 2, #slots do
             local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
@@ -155,31 +288,30 @@ local function ScanBySpellIds(unit, lookup, onlyMine)
                 local isPlayerAura = ResolveIsPlayerAura(unit, data.auraInstanceID, filter, data)
                 if not onlyMine or isPlayerAura then
                     local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
-                    result[#result + 1] = {
-                        icon           = data.icon,
-                        duration       = timing.duration,
-                        expirationTime = timing.expirationTime,
-                        applications   = timing.applications,
-                        durationObject = timing.durationObject,
-                    }
+                    count = PushAuraResult(result, count, data, timing)
                 end
             end
         end
     end
-    return result
+
+    return FinalizeAuraResults(result, count)
 end
 
 -- Scan unit auras matching a generic filter (HELPFUL / HARMFUL / DISPELLABLE / etc).
-local function ScanByFilter(unit, source, onlyMine)
-    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then return {} end
-    local result = {}
+local function ScanByFilter(unit, source, onlyMine, result)
+    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then
+        return ClearSequentialTable(result or {})
+    end
+
+    result = result or {}
+    local count = 0
     local filters
     if source == "HELPFUL" then
-        filters = { "HELPFUL" }
+        filters = FILTER_HELPFUL
     elseif source == "HARMFUL" or source == "DISPELLABLE" or source == "DISPELLABLE_OR_BOSS" then
-        filters = { "HARMFUL" }
+        filters = FILTER_HARMFUL
     else
-        filters = { "HELPFUL", "HARMFUL" }
+        filters = FILTER_BOTH
     end
     for _, f in ipairs(filters) do
         local slots = { C_UnitAuras.GetAuraSlots(unit, f) }
@@ -190,56 +322,56 @@ local function ScanByFilter(unit, source, onlyMine)
                 if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
                     local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
                     if source ~= "HELPFUL" or UnitFrames:ShouldKeepGenericHelpfulAura(unit, data, timing, onlyMine) then
-                        result[#result + 1] = {
-                            icon           = data.icon,
-                            duration       = timing.duration,
-                            expirationTime = timing.expirationTime,
-                            applications   = timing.applications,
-                            durationObject = timing.durationObject,
-                        }
+                        count = PushAuraResult(result, count, data, timing)
                     end
                 end
             end
         end
     end
-    return result
+
+    return FinalizeAuraResults(result, count)
 end
 
 -- Resolve which auras are active for a given indicator config on a frame.
-local function ResolveAuras(frame, cfg)
+local function ResolveAuras(frame, cfg, resultKey)
     local unit = ResolveFrameUnit(frame)
-    if not IsValidAuraUnit(unit) then return {} end
+    local result = GetReusableAuraResults(frame, resultKey)
+    if not IsValidAuraUnit(unit) then
+        return ClearSequentialTable(result)
+    end
+
     local source   = cfg.source or "HARMFUL"
     local onlyMine = cfg.onlyMine and true or false
 
     -- Catalog-assigned spells (source == "spell").
     -- Supports spellIds array (new) and legacy spellId scalar.
     if source == "spell" then
-        local ids = cfg.spellIds
-        if type(ids) == "table" and #ids > 0 then
-            return ScanBySpellIds(unit, BuildLookup(ids), onlyMine)
+        local lookup = GetCachedSpellLookup(cfg)
+        if lookup then
+            return ScanBySpellIds(unit, lookup, onlyMine, result)
         end
-        local sid = tonumber(cfg.spellId)
-        if sid and sid > 0 then
-            return ScanBySpellIds(unit, { [sid] = true }, onlyMine)
+
+        lookup = GetCachedSingleSpellLookup(cfg)
+        if lookup then
+            return ScanBySpellIds(unit, lookup, onlyMine, result)
         end
-        return {}
+
+        return ClearSequentialTable(result)
     end
 
     -- Named spell group  (source == "group", groupKey references db.spellGroups)
     if source == "group" then
         local db  = UnitFrames:GetDB()
         local grp = db.spellGroups and cfg.groupKey and db.spellGroups[cfg.groupKey]
-        if grp and grp.spellIds and grp.spellIds ~= "" then
-            local ids = ParseSpellIds(grp.spellIds)
-            if #ids > 0 then
-                return ScanBySpellIds(unit, BuildLookup(ids), onlyMine)
-            end
+        local lookup = GetCachedGroupLookup(grp)
+        if lookup then
+            return ScanBySpellIds(unit, lookup, onlyMine, result)
         end
-        return {}
+
+        return ClearSequentialTable(result)
     end
 
-    return ScanByFilter(unit, source, onlyMine)
+    return ScanByFilter(unit, source, onlyMine, result)
 end
 
 -- ============================================================
@@ -636,6 +768,7 @@ local awFrameRegistry = {}
 function UnitFrames:AWAttach(frame)
     frame._awState = {
         unitKey        = nil,
+        auraResults    = {},
         iconContainers = {},
         borders        = {},
         overlays       = {},
@@ -679,7 +812,7 @@ function UnitFrames:AWUpdate(frame)
     for idx = 1, MAX_INDICATORS do
         local cfg = indicators[idx]
         if cfg and cfg.enabled ~= false then
-            local auras  = ResolveAuras(frame, cfg)
+            local auras  = ResolveAuras(frame, cfg, idx)
             local itype  = cfg.type or "icons"
             local active = #auras > 0
             if itype == "icons" then
@@ -692,13 +825,19 @@ function UnitFrames:AWUpdate(frame)
                 UpdateBorderIndicator(frame, idx, cfg, active)
                 local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
                 local ov = frame._awState.overlays and frame._awState.overlays[idx]
-                if ic then ic:Hide() end
+                if ic then
+                    SetIconContainerTimerActive(ic, false)
+                    ic:Hide()
+                end
                 if ov then ov:Hide() end
             elseif itype == "overlay" then
                 UpdateColorOverlayIndicator(frame, idx, cfg, active)
                 local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
                 local bd = frame._awState.borders and frame._awState.borders[idx]
-                if ic then ic:Hide() end
+                if ic then
+                    SetIconContainerTimerActive(ic, false)
+                    ic:Hide()
+                end
                 if bd then bd:Hide() end
             end
             -- Process extra indicator layers (same aura condition, different visual)
@@ -716,13 +855,19 @@ function UnitFrames:AWUpdate(frame)
                         UpdateBorderIndicator(frame, ei, extraCfg, active)
                         local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
                         local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
-                        if ic2 then ic2:Hide() end
+                        if ic2 then
+                            SetIconContainerTimerActive(ic2, false)
+                            ic2:Hide()
+                        end
                         if ov2 then ov2:Hide() end
                     elseif etype == "overlay" then
                         UpdateColorOverlayIndicator(frame, ei, extraCfg, active)
                         local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
                         local bd2 = frame._awState.borders and frame._awState.borders[ei]
-                        if ic2 then ic2:Hide() end
+                        if ic2 then
+                            SetIconContainerTimerActive(ic2, false)
+                            ic2:Hide()
+                        end
                         if bd2 then bd2:Hide() end
                     end
                 end
@@ -732,7 +877,10 @@ function UnitFrames:AWUpdate(frame)
             for lj = extraCount + 1, MAX_EXTRA_LAYERS do
                 local ei = MAX_INDICATORS * lj + idx
                 local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
-                if ic2 then ic2:Hide() end
+                if ic2 then
+                    SetIconContainerTimerActive(ic2, false)
+                    ic2:Hide()
+                end
                 local bd2 = frame._awState.borders and frame._awState.borders[ei]
                 if bd2 then bd2:Hide() end
                 local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
@@ -741,7 +889,10 @@ function UnitFrames:AWUpdate(frame)
         else
             -- Hide primary visuals and all potential extra layer slots
             local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
-            if ic then ic:Hide() end
+            if ic then
+                SetIconContainerTimerActive(ic, false)
+                ic:Hide()
+            end
             local bd = frame._awState.borders and frame._awState.borders[idx]
             if bd then bd:Hide() end
             local ov = frame._awState.overlays and frame._awState.overlays[idx]
@@ -749,7 +900,10 @@ function UnitFrames:AWUpdate(frame)
             for lj = 1, MAX_EXTRA_LAYERS do
                 local ei = MAX_INDICATORS * lj + idx
                 local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
-                if ic2 then ic2:Hide() end
+                if ic2 then
+                    SetIconContainerTimerActive(ic2, false)
+                    ic2:Hide()
+                end
                 local bd2 = frame._awState.borders and frame._awState.borders[ei]
                 if bd2 then bd2:Hide() end
                 local ov2 = frame._awState.overlays and frame._awState.overlays[ei]

@@ -39,11 +39,6 @@
 
 ## Unit Frames
 
-- The party colors i have set to class, however they are using the themes accent color
-- THe party and raid frames need to fade out if the the player cannot cast on them. for example in this fight, half the raid gets moved to a different phase, and they cannot be healed. they should be faded. elvui does this.,
-
-- We need to do a performance pass. Please inspect the addon, especially unit frames, auras, and action bars, but not exclusively those, for performance optimizations. we are hitting very high memory usage in combat (over 100mb) and fairly high out of combat (around 22mb, but climbs to around 40). I am also seeing slight lag/glitches/stuttering occasionally.
-
 ### General
 
 - Need an indicator for offline and ressurrected players.

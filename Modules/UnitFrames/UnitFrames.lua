@@ -15,6 +15,7 @@ local T = unpack(TwichRx)
 local UnitFrames = T:NewModule("UnitFrames", "AceEvent-3.0")
 
 local CreateFrame = _G.CreateFrame
+local C_Timer = _G.C_Timer
 local InCombatLockdown = _G.InCombatLockdown
 local UIParent = _G.UIParent
 local CheckInteractDistance = _G.CheckInteractDistance
@@ -2825,6 +2826,12 @@ function UnitFrames:GetTextConfigFor(unitKey)
 end
 
 function UnitFrames:GetAuraConfigFor(unitKey)
+    self._auraConfigCache = self._auraConfigCache or {}
+    local cached = self._auraConfigCache[unitKey]
+    if cached then
+        return cached
+    end
+
     local db = self:GetDB()
     db.auras = db.auras or {}
     db.auras.scopes = db.auras.scopes or {}
@@ -2924,6 +2931,8 @@ function UnitFrames:GetAuraConfigFor(unitKey)
             end
         end
     end
+
+    self._auraConfigCache[unitKey] = merged
     return merged
 end
 
@@ -2943,7 +2952,7 @@ local function GetAuraBarStyleValue(aura, isHarmfulAura, specificKey, genericKey
     return aura[genericKey]
 end
 
-function UnitFrames:GetAuraBarAppearance(aura, data, palette, text)
+function UnitFrames:GetAuraBarAppearance(aura, data, palette, text, outAppearance)
     local isHarmfulAura = data and data.isHarmfulAura == true
     local textureName = GetAuraBarStyleValue(aura, isHarmfulAura, "BarTexture", "barTexture")
     local texture = (textureName and textureName ~= "") and GetLSMTexture(textureName) or GetThemeTexture()
@@ -2968,18 +2977,18 @@ function UnitFrames:GetAuraBarAppearance(aura, data, palette, text)
         fillColor = NormalizeColor(isHarmfulAura and palette.health or palette.cast, { 1, 1, 1, 0.85 })
     end
 
-    return {
-        textureName = textureName,
-        texture = texture,
-        backgroundTextureName = backgroundTextureName,
-        backgroundTexture = backgroundTexture,
-        fillColor = fillColor,
-        backgroundColor = backgroundColor,
-        borderColor = borderColor,
-        textColor = textColor,
-        fontSize = (fontSize and fontSize > 0) and fontSize or nil,
-        fontName = fontName,
-    }
+    outAppearance = outAppearance or {}
+    outAppearance.textureName = textureName
+    outAppearance.texture = texture
+    outAppearance.backgroundTextureName = backgroundTextureName
+    outAppearance.backgroundTexture = backgroundTexture
+    outAppearance.fillColor = fillColor
+    outAppearance.backgroundColor = backgroundColor
+    outAppearance.borderColor = borderColor
+    outAppearance.textColor = textColor
+    outAppearance.fontSize = (fontSize and fontSize > 0) and fontSize or nil
+    outAppearance.fontName = fontName
+    return outAppearance
 end
 
 local MAX_AURA_BARS = 12
@@ -3056,30 +3065,81 @@ local function CompareHelpfulAuraData(a, b)
     return (tonumber(a.auraInstanceID) or 0) < (tonumber(b.auraInstanceID) or 0)
 end
 
-local function CollectAuraData(list, unit, unitKey, auraFilter, maxCount, onlyMine, filterMode)
+local function WipeSequentialTable(tbl)
+    for index = #tbl, 1, -1 do
+        tbl[index] = nil
+    end
+
+    return tbl
+end
+
+local function CopyAuraBarData(target, source)
+    target.name = source.name
+    target.icon = source.icon
+    target.auraInstanceID = source.auraInstanceID
+    target.spellId = source.spellId
+    target.dispelName = source.dispelName
+    target.isBossAura = source.isBossAura
+    target.isHarmful = source.isHarmful
+    target.isHarmfulAura = source.isHarmfulAura
+    target.duration = source.duration
+    target.expirationTime = source.expirationTime
+    target.applications = source.applications
+    target.durationObject = source.durationObject
+    target.isPlayerAura = source.isPlayerAura
+    target.priorityAura = source.priorityAura
+    target.priorityRank = source.priorityRank
+    target.categoryPriority = source.categoryPriority
+    target.prioritySource = source.prioritySource
+    target.category = source.category
+    target.dispelPriority = source.dispelPriority
+    target.isPriorityDispel = source.isPriorityDispel
+    return target
+end
+
+local function PopulateAuraBarData(target, data, timing, isHarmfulAura, isPlayerAura)
+    target.name = data.name
+    target.icon = data.icon
+    target.auraInstanceID = data.auraInstanceID
+    target.spellId = data.spellId
+    target.dispelName = data.dispelName
+    target.isBossAura = data.isBossAura
+    target.isHarmful = data.isHarmful
+    target.isHarmfulAura = isHarmfulAura
+    target.duration = timing.duration
+    target.expirationTime = timing.expirationTime
+    target.applications = timing.applications
+    target.durationObject = timing.durationObject
+    target.isPlayerAura = isPlayerAura
+    target.priorityAura = nil
+    target.priorityRank = nil
+    target.categoryPriority = nil
+    target.prioritySource = nil
+    target.category = nil
+    target.dispelPriority = nil
+    target.isPriorityDispel = nil
+    return target
+end
+
+local function CollectAuraData(list, scratch, unit, unitKey, auraFilter, maxCount, onlyMine, filterMode)
     if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then return end
     local playerFilter = auraFilter .. "|PLAYER"
     local slots = { C_UnitAuras.GetAuraSlots(unit, auraFilter) }
-    local candidates = {}
+    local candidates = WipeSequentialTable(scratch or {})
+    local candidateCount = 0
+    local isHarmfulAura = auraFilter:find("HARMFUL") ~= nil
     for i = 2, #slots do
         local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
         if data then
             local timing = UnitFrames:ResolveAuraTiming(unit, data, "bars")
-            local d = {
-                name = data.name,
-                icon = data.icon,
-                auraInstanceID = data.auraInstanceID,
-                spellId = data.spellId,
-                dispelName = data.dispelName,
-                isBossAura = data.isBossAura,
-                isHarmful = data.isHarmful,
-                isHarmfulAura = auraFilter:find("HARMFUL") ~= nil,
-                duration = timing.duration,
-                expirationTime = timing.expirationTime,
-                applications = timing.applications,
-                durationObject = timing.durationObject,
-                isPlayerAura = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter),
-            }
+            local isPlayerAura = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
+            candidateCount = candidateCount + 1
+            local d = candidates[candidateCount]
+            if not d then
+                d = {}
+                candidates[candidateCount] = d
+            end
+            PopulateAuraBarData(d, data, timing, isHarmfulAura, isPlayerAura)
             if auraFilter == "HELPFUL" then
                 UnitFrames:PopulateHelpfulAuraMetadata(unit, d, timing, unitKey, onlyMine)
             end
@@ -3087,7 +3147,9 @@ local function CollectAuraData(list, unit, unitKey, auraFilter, maxCount, onlyMi
                 and AuraMatchesDisplayMode(filterMode, d)
                 and (auraFilter ~= "HELPFUL" or UnitFrames:ShouldKeepGenericHelpfulAura(unit, d, timing, onlyMine,
                     unitKey)) then
-                candidates[#candidates + 1] = d
+                candidates[candidateCount] = d
+            else
+                candidateCount = candidateCount - 1
             end
         end
     end
@@ -3096,8 +3158,15 @@ local function CollectAuraData(list, unit, unitKey, auraFilter, maxCount, onlyMi
         table.sort(candidates, CompareHelpfulAuraData)
     end
 
-    for i = 1, math.min(maxCount, #candidates) do
-        list[#list + 1] = candidates[i]
+    local listCount = #list
+    for i = 1, math.min(maxCount, candidateCount) do
+        listCount = listCount + 1
+        local entry = list[listCount]
+        if not entry then
+            entry = {}
+            list[listCount] = entry
+        end
+        CopyAuraBarData(entry, candidates[i])
     end
 end
 
@@ -3118,17 +3187,21 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     local showTime   = aura.showTime ~= false
     local showStacks = aura.showStacks ~= false
 
-    local auraList   = {}
+    container._twichAuraBarList = WipeSequentialTable(container._twichAuraBarList or {})
+    container._twichAuraBarScratch = container._twichAuraBarScratch or {}
+    container._twichAuraBarAppearance = container._twichAuraBarAppearance or {}
+    local auraList = container._twichAuraBarList
     if frame._isTestPreview then
         auraList = self:GetPreviewAuraListForFrame(frame, unitKey)
     elseif filter == "HELPFUL" then
-        CollectAuraData(auraList, unit, unitKey, "HELPFUL", maxBars, onlyMine, filter)
+        CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HELPFUL", maxBars, onlyMine, filter)
     elseif filter == "HARMFUL" or filter == "DISPELLABLE" or filter == "DISPELLABLE_OR_BOSS" then
-        CollectAuraData(auraList, unit, unitKey, "HARMFUL", maxBars, onlyMine, filter)
+        CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HARMFUL", maxBars, onlyMine, filter)
     else
-        CollectAuraData(auraList, unit, unitKey, "HELPFUL", maxBars, onlyMine, filter)
+        CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HELPFUL", maxBars, onlyMine, filter)
         if #auraList < maxBars then
-            CollectAuraData(auraList, unit, unitKey, "HARMFUL", maxBars - #auraList, onlyMine, filter)
+            CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HARMFUL", maxBars - #auraList,
+                onlyMine, filter)
         end
     end
 
@@ -3138,7 +3211,7 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
         if not bar then break end
         local data = (i <= maxBars) and auraList[i] or nil
         if data then
-            local appearance = self:GetAuraBarAppearance(aura, data, palette, text)
+            local appearance = self:GetAuraBarAppearance(aura, data, palette, text, container._twichAuraBarAppearance)
             local texture = appearance.texture
             local backgroundTexture = appearance.backgroundTexture
             local barColor = appearance.fillColor
@@ -8396,11 +8469,44 @@ function UnitFrames:OnAddonLoaded(_, addonName)
     end
 end
 
-function UnitFrames:RefreshAllFrames()
+function UnitFrames:QueueRefreshAllFrames()
+    if self._fullRefreshQueued == true then
+        return
+    end
+
+    self._fullRefreshQueued = true
+    if not (C_Timer and type(C_Timer.After) == "function") then
+        self._fullRefreshQueued = false
+        self:RefreshAllFrames()
+        return
+    end
+
+    C_Timer.After(0, function()
+        if UnitFrames._fullRefreshQueued ~= true then
+            return
+        end
+
+        UnitFrames._fullRefreshQueued = false
+        if not UnitFrames:IsEnabled() then
+            return
+        end
+
+        UnitFrames:RefreshAllFrames()
+    end)
+end
+
+function UnitFrames:RefreshAllFrames(event)
+    if type(event) == "string" then
+        self:QueueRefreshAllFrames()
+        return
+    end
+
     if InCombatLockdown() then
         self._queuedRefresh = true
         return
     end
+
+    self._auraConfigCache = nil
 
     self:ApplyBlizzardPlayerCastbarVisibility()
     self:ApplyBlizzardRaidFrameVisibility()

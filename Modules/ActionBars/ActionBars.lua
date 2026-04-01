@@ -941,7 +941,7 @@ end
 
 function ActionBars:OnEnable()
     LogDebug("action bars enabled", false)
-    self:RegisterEvent("PLAYER_ENTERING_WORLD", "RequestRefresh")
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", "HandlePlayerEnteringWorld")
     self:RegisterEvent("SPELLS_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("UPDATE_SHAPESHIFT_FORMS", "RequestRefresh")
@@ -963,6 +963,24 @@ function ActionBars:OnEnable()
     self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
 
     self:RequestRefresh()
+end
+
+function ActionBars:HandlePlayerEnteringWorld()
+    self.pendingRefresh = true
+
+    if not (C_Timer and type(C_Timer.After) == "function") then
+        self:RefreshModuleState()
+        return
+    end
+
+    C_Timer.After(0.1, function()
+        local db = ActionBars:GetDB()
+        if not db or db.enabled == false or not ActionBars:IsEnabled() then
+            return
+        end
+
+        ActionBars:RefreshModuleState()
+    end)
 end
 
 function ActionBars:OnDisable()
@@ -1001,7 +1019,7 @@ function ActionBars:PLAYER_REGEN_ENABLED()
     if self.pendingRefresh == true then
         LogDebug("regen enabled processing deferred refresh", false)
         self.pendingRefresh = false
-        self:RefreshAll()
+        self:RefreshModuleState()
     end
 end
 
@@ -1055,9 +1073,42 @@ function ActionBars:SetLockState(locked)
     self:RequestRefresh()
 end
 
+function ActionBars:QueueRefreshAll()
+    if self._fullRefreshQueued == true then
+        return
+    end
+
+    self._fullRefreshQueued = true
+    if not (C_Timer and type(C_Timer.After) == "function") then
+        self._fullRefreshQueued = false
+        self:RefreshAll()
+        return
+    end
+
+    C_Timer.After(0, function()
+        if ActionBars._fullRefreshQueued ~= true then
+            return
+        end
+
+        ActionBars._fullRefreshQueued = false
+        local db = ActionBars:GetDB()
+        if not db or db.enabled == false or not ActionBars:IsEnabled() then
+            return
+        end
+
+        ActionBars:RefreshAll()
+    end)
+end
+
 function ActionBars:RequestRefresh()
     local db = self:GetDB()
-    if not db or db.enabled == false then
+    if not db then
+        self.pendingRefresh = true
+        LogDebug("refresh requested before db became available; deferring", false)
+        return
+    end
+
+    if db.enabled == false then
         return
     end
 
@@ -1069,7 +1120,7 @@ function ActionBars:RequestRefresh()
 
     self.pendingRefresh = false
     LogDebug("refresh requested", false)
-    self:RefreshAll()
+    self:QueueRefreshAll()
 end
 
 function ActionBars:BuildDebugReport()
@@ -3062,7 +3113,39 @@ function ActionBars:ApplyCooldownSettings()
     end
 end
 
-function ActionBars:RefreshButtonStates()
+function ActionBars:QueueButtonStateRefresh()
+    if self._buttonStateRefreshQueued == true then
+        return
+    end
+
+    self._buttonStateRefreshQueued = true
+    if not (C_Timer and type(C_Timer.After) == "function") then
+        self._buttonStateRefreshQueued = false
+        self:RefreshButtonStates(true)
+        return
+    end
+
+    C_Timer.After(0, function()
+        if ActionBars._buttonStateRefreshQueued ~= true then
+            return
+        end
+
+        ActionBars._buttonStateRefreshQueued = false
+        local db = ActionBars:GetDB()
+        if not db or db.enabled == false or not ActionBars:IsEnabled() then
+            return
+        end
+
+        ActionBars:RefreshButtonStates(true)
+    end)
+end
+
+function ActionBars:RefreshButtonStates(event)
+    if type(event) == "string" then
+        self:QueueButtonStateRefresh()
+        return
+    end
+
     local db = self:GetDB()
     if not db or db.enabled == false then
         return
@@ -3415,6 +3498,8 @@ function ActionBars:RefreshAll()
         self.pendingRefresh = true
         return
     end
+
+    self.pendingRefresh = false
 
     self:HideDefaultArt()
 

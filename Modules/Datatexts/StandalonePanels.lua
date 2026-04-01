@@ -378,7 +378,6 @@ local function CreateStandaloneSlot(frame, slotIndex)
         self.highlight:SetAlpha(1)
         self.hoverGlow:SetAlpha(1)
         self.hoverBar:SetAlpha(1)
-        self:GetParent():SetFrameStrata("MEDIUM")
         if not definition then
             return
         end
@@ -395,7 +394,6 @@ local function CreateStandaloneSlot(frame, slotIndex)
         self.highlight:SetAlpha(0)
         self.hoverGlow:SetAlpha(0)
         self.hoverBar:SetAlpha(0)
-        self:GetParent():SetFrameStrata(self:GetParent().defaultFrameStrata or "LOW")
 
         if definition and definition.onLeaveFunc then
             AssignDefinitionPanel(definition, self)

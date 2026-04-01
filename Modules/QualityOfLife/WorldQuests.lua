@@ -1540,11 +1540,30 @@ function WorldQuests:GetWorldQuestDataProvider()
     return nil
 end
 
+function WorldQuests:CanApplyMapPinRefresh()
+    local mapFrame = _G.WorldMapFrame
+    if not mapFrame or not mapFrame:IsShown() then
+        return false
+    end
+
+    local questMapFrame = _G.QuestMapFrame
+    if questMapFrame and not questMapFrame:IsShown() then
+        return false
+    end
+
+    if InCombatLockdown and InCombatLockdown() then
+        return false
+    end
+
+    return true
+end
+
 function WorldQuests:PostProcessWorldQuestPins(dataProvider)
     if not self:IsEnabled() then
         return
     end
-    if InCombatLockdown and InCombatLockdown() then
+
+    if not self:CanApplyMapPinRefresh() then
         self.pendingPinRefresh = true
         return
     end
@@ -1615,17 +1634,28 @@ function WorldQuests:EnsureProviderHooked()
 end
 
 function WorldQuests:QueueMapPinRefresh()
-    if self.pendingPinRefresh then
+    self.pendingPinRefresh = true
+    if self.pinRefreshTimerPending then
         return
     end
 
-    self.pendingPinRefresh = true
+    self.pinRefreshTimerPending = true
     local function Run()
-        self.pendingPinRefresh = false
-        if not self:IsEnabled() or (InCombatLockdown and InCombatLockdown()) then
-            self.pendingPinRefresh = true
+        self.pinRefreshTimerPending = false
+        if not self.pendingPinRefresh then
             return
         end
+
+        if not self:CanApplyMapPinRefresh() then
+            self.pinRefreshRetryCount = (self.pinRefreshRetryCount or 0) + 1
+            if self.pinRefreshRetryCount <= 20 then
+                self:QueueMapPinRefresh()
+            end
+            return
+        end
+
+        self.pendingPinRefresh = false
+        self.pinRefreshRetryCount = 0
 
         self:EnsureProviderHooked()
         local provider = self:GetWorldQuestDataProvider()
@@ -1635,7 +1665,7 @@ function WorldQuests:QueueMapPinRefresh()
     end
 
     if C_Timer and C_Timer.After then
-        C_Timer.After(0.05, Run)
+        C_Timer.After(0.1, Run)
     else
         Run()
     end
@@ -1752,8 +1782,4 @@ function WorldQuests:OnDisable()
     end
     self.hoveredQuestID = nil
     self.dataDirty = true
-    local provider = self:GetWorldQuestDataProvider()
-    if provider and provider.RefreshAllData then
-        provider:RefreshAllData()
-    end
 end
