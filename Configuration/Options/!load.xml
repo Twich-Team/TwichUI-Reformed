@@ -12,6 +12,7 @@
     <Include file='MythicPlusToolsOptions.lua' />
     <Include file='PreyTweaksOptions.lua' />
     <Include file='TeleportsOptions.lua' />
+    <Include file='WorldQuestsOptions.lua' />
     <Include file='GossipHotkeysOptions.lua' />
     <Include file='BestInSlotOptions.lua' />
     <Include file='GatheringOptions.lua' />

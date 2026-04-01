@@ -7,6 +7,8 @@ local T = unpack(TwichRx)
 
 ---@type ConfigurationModule
 local ConfigurationModule = T:GetModule("Configuration")
+local ConfigurationOptions = ConfigurationModule.Options --[[@as any]]
+local ConfigurationModuleRuntime = ConfigurationModule --[[@as any]]
 
 ---@type TexturesTool
 local Textures = T.Tools and T.Tools.Textures
@@ -21,27 +23,30 @@ local QLCOptions = ConfigurationModule.Options.QuestLogCleaner
 local GHCOptions = ConfigurationModule.Options.GossipHotkeys
 
 ---@type MythicPlusToolsConfigurationOptions
-local MPTOptions = ConfigurationModule.Options.MythicPlusTools
+local MPTOptions = ConfigurationOptions.MythicPlusTools
 
 ---@type PreyTweaksConfigurationOptions
-local PTOptions = ConfigurationModule.Options.PreyTweaks
+local PTOptions = ConfigurationOptions.PreyTweaks
 
 ---@type TeleportsConfigurationOptions
-local TPOptions = ConfigurationModule.Options.Teleports
+local TPOptions = ConfigurationOptions.Teleports
+
+---@type WorldQuestsConfigurationOptions
+local WQOptions = ConfigurationOptions.WorldQuests
 
 ---@type SatchelWatchConfigurationOptions
-local SWOptions = ConfigurationModule.Options.SatchelWatch
+local SWOptions = ConfigurationOptions.SatchelWatch
 
 ---@type ChoresConfigurationOptions
-local ChoresOptions = ConfigurationModule.Options.Chores
+local ChoresOptions = ConfigurationOptions.Chores
 local PreyIcon =
 "Interface\\AddOns\\TwichUI_Reformed\\Modules\\Chores\\Plumber\\Art\\ExpansionLandingPage\\Icons\\InProgressPrey.png"
 
 ---@type GatheringConfigurationOptions
-local GatheringOptions = ConfigurationModule.Options.Gathering
+local GatheringOptions = ConfigurationOptions.Gathering
 
 ---@type EasyFishConfigurationOptions
-local EasyFishOptions = ConfigurationModule.Options.EasyFish
+local EasyFishOptions = ConfigurationOptions.EasyFish
 
 local function BuildIconStyleLabel(style, text)
     local icon = Textures and Textures.GetPlayerClassTextureString and Textures:GetPlayerClassTextureString(14, style)
@@ -689,8 +694,8 @@ end
 
 local function BuildSatchelWatchTab()
     local W = ConfigurationModule.Widgets
-    local pveFrameLoadUI = _G.PVEFrame_LoadUI
-    local legacyLoadAddOn = _G.LoadAddOn
+    local pveFrameLoadUI = (_G --[[@as any]]).PVEFrame_LoadUI
+    local legacyLoadAddOn = (_G --[[@as any]]).LoadAddOn
 
     if type(pveFrameLoadUI) == "function" then
         pveFrameLoadUI()
@@ -1570,6 +1575,191 @@ local function BuildTeleportsTab()
     }
 end
 
+local function BuildWorldQuestsTab()
+    local W = ConfigurationModule.Widgets
+
+    local filterToggles = {
+        tracked = "Tracked",
+        gear = "Loot",
+        gold = "Gold",
+        reputation = "Reputation",
+        items = "Items",
+        profession = "Profession",
+        pvp = "PvP",
+        pet = "Pet Battles",
+        dungeon = "Dungeon",
+        rare = "Rare",
+        time = "Time Remaining",
+    }
+
+    local filterArgs = {}
+    local orderIndex = 1
+    for key, label in pairs(filterToggles) do
+        filterArgs[key] = {
+            type = "toggle",
+            name = label,
+            order = orderIndex,
+            width = 1.25,
+            disabled = function()
+                return not WQOptions:GetEnabled()
+            end,
+            get = function()
+                return WQOptions:GetFilterChipEnabled(key)
+            end,
+            set = function(_, value)
+                WQOptions:SetFilterChipEnabled(key, value)
+            end,
+        }
+        orderIndex = orderIndex + 1
+    end
+
+    return {
+        type = "group",
+        name = "World Quests",
+        order = 8.5,
+        args = {
+            desc = {
+                type = "description",
+                order = 1,
+                name =
+                "Adds a TwichUI world quest browser to the world map with reward summaries, map filtering, tracking control, and quick waypoint actions.",
+            },
+            enable = {
+                type = "toggle",
+                name = "Enable",
+                desc = "Enable the World Quests browser.",
+                order = 2,
+                handler = WQOptions,
+                get = "GetEnabled",
+                set = "SetEnabled",
+            },
+            integrationGroup = W.IGroup(10, "Integrations", {
+                showWorldMapTab = {
+                    type = "toggle",
+                    name = "World Map Tab",
+                    desc = "Add the World Quests browser as a side tab on the world map.",
+                    order = 1,
+                    width = 1.5,
+                    disabled = function() return not WQOptions:GetEnabled() end,
+                    handler = WQOptions,
+                    get = "GetShowWorldMapTab",
+                    set = "SetShowWorldMapTab",
+                },
+                onlyCurrentZone = {
+                    type = "toggle",
+                    name = "Only Current Map",
+                    desc = "Limit the browser to world quests returned directly for the currently displayed map.",
+                    order = 2,
+                    width = 1.5,
+                    disabled = function() return not WQOptions:GetEnabled() end,
+                    handler = WQOptions,
+                    get = "GetOnlyCurrentZone",
+                    set = "SetOnlyCurrentZone",
+                },
+                showChildZonesOnParentMaps = {
+                    type = "toggle",
+                    name = "Expand Parent Maps",
+                    desc = "When viewing a continent or larger map, include the child zones beneath it.",
+                    order = 3,
+                    width = 1.5,
+                    disabled = function() return not WQOptions:GetEnabled() or WQOptions:GetOnlyCurrentZone() end,
+                    handler = WQOptions,
+                    get = "GetShowChildZonesOnParentMaps",
+                    set = "SetShowChildZonesOnParentMaps",
+                },
+            }),
+            mapIconsGroup = W.IGroup(20, "Map Icon Behavior", {
+                hideFilteredPOI = {
+                    type = "toggle",
+                    name = "Hide Filtered Icons",
+                    desc = "Hide world quest icons on the world map when they do not match the active browser filters.",
+                    order = 1,
+                    width = 1.5,
+                    disabled = function() return not WQOptions:GetEnabled() end,
+                    handler = WQOptions,
+                    get = "GetHideFilteredPOI",
+                    set = "SetHideFilteredPOI",
+                },
+                hideUntrackedPOI = {
+                    type = "toggle",
+                    name = "Hide Untracked Icons",
+                    desc = "Only keep tracked world quest icons visible on the map.",
+                    order = 2,
+                    width = 1.5,
+                    disabled = function() return not WQOptions:GetEnabled() end,
+                    handler = WQOptions,
+                    get = "GetHideUntrackedPOI",
+                    set = "SetHideUntrackedPOI",
+                },
+                showHoveredPOI = {
+                    type = "toggle",
+                    name = "Always Show Hovered Quest",
+                    desc = "Temporarily reveal a hovered quest's map icon even when it would normally be hidden.",
+                    order = 3,
+                    width = 1.5,
+                    disabled = function() return not WQOptions:GetEnabled() end,
+                    handler = WQOptions,
+                    get = "GetShowHoveredPOI",
+                    set = "SetShowHoveredPOI",
+                },
+            }),
+            browserGroup = W.IGroup(30, "Browser Behavior", {
+                sortMethod = {
+                    type = "select",
+                    name = "Sort Method",
+                    desc = "Choose how the world quest list is sorted.",
+                    order = 1,
+                    values = {
+                        time = "Time Remaining",
+                        zone = "Zone",
+                        name = "Name",
+                        rewards = "Reward Summary",
+                    },
+                    disabled = function() return not WQOptions:GetEnabled() end,
+                    handler = WQOptions,
+                    get = "GetSortMethod",
+                    set = "SetSortMethod",
+                },
+                timeFilterHours = {
+                    type = "range",
+                    name = "Time Filter Threshold",
+                    desc = "Maximum remaining time for the Time Remaining filter chip.",
+                    order = 2,
+                    min = 1,
+                    max = 24,
+                    step = 1,
+                    suffix = " hours",
+                    disabled = function() return not WQOptions:GetEnabled() end,
+                    handler = WQOptions,
+                    get = "GetTimeFilterHours",
+                    set = "SetTimeFilterHours",
+                },
+            }),
+            filtersGroup = W.IGroup(40, "Visible Filter Chips", filterArgs),
+            previewGroup = W.IGroup(50, "Preview", {
+                open = {
+                    type = "execute",
+                    name = "Open Map Browser",
+                    desc = "Open the TwichUI world quest browser on the world map.",
+                    order = 1,
+                    disabled = function() return not WQOptions:GetEnabled() end,
+                    handler = WQOptions,
+                    func = "OpenPreview",
+                },
+                close = {
+                    type = "execute",
+                    name = "Close Map Browser",
+                    desc = "Close the world quest browser if it is open.",
+                    order = 2,
+                    disabled = function() return not WQOptions:GetEnabled() end,
+                    handler = WQOptions,
+                    func = "ClosePreview",
+                },
+            }),
+        },
+    }
+end
+
 local function BuildEasyFishTab()
     local W = ConfigurationModule.Widgets
 
@@ -1909,8 +2099,8 @@ end
 local function BuildChoresTab()
     local W = ConfigurationModule.Widgets
 
-    local pveFrameLoadUI = _G.PVEFrame_LoadUI
-    local legacyLoadAddOn = _G.LoadAddOn
+    local pveFrameLoadUI = (_G --[[@as any]]).PVEFrame_LoadUI
+    local legacyLoadAddOn = (_G --[[@as any]]).LoadAddOn
 
     local function EnsureGroupFinderLoaded()
         if type(pveFrameLoadUI) == "function" then
@@ -2374,15 +2564,16 @@ local function BuildConfiguration()
             name = "Features to improve your overall user experience.",
         },
         choresTab = BuildChoresTab(),
-        gatheringTab = ConfigurationModule.BuildGatheringTab and ConfigurationModule.BuildGatheringTab() or nil,
+        gatheringTab = ConfigurationModuleRuntime.BuildGatheringTab and ConfigurationModuleRuntime.BuildGatheringTab() or nil,
         easyFishTab = BuildEasyFishTab(),
         gossipHotkeysTab = BuildGossipHotkeysTab(),
         preyTweaksTab = BuildPreyTweaksTab(),
         questAutomationTab = BuildQuestAutomationTab(),
         questLogCleanerTab = BuildQuestLogCleanerTab(),
         satchelWatchTab = BuildSatchelWatchTab(),
-        smartMountTab = ConfigurationModule.BuildSmartMountTab and ConfigurationModule.BuildSmartMountTab(9),
+        smartMountTab = ConfigurationModuleRuntime.BuildSmartMountTab and ConfigurationModuleRuntime.BuildSmartMountTab(9),
         teleportsTab = BuildTeleportsTab(),
+        worldQuestsTab = BuildWorldQuestsTab(),
     }
 
     return optionsTab

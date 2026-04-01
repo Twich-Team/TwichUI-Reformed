@@ -1233,6 +1233,11 @@ function Teleports:CreateWorldMapButton()
     end
 
     self.worldMapButton = button
+
+    local worldQuests = QOL.GetModule and QOL:GetModule("WorldQuests", true)
+    if worldQuests and worldQuests.LayoutWorldMapButton then
+        worldQuests:LayoutWorldMapButton()
+    end
 end
 
 function Teleports:TryInitializeWorldMapTab()
@@ -1281,6 +1286,11 @@ function Teleports:RefreshNow(reason)
         self:HideWorldMapPanel()
     end
 
+    local worldQuests = QOL.GetModule and QOL:GetModule("WorldQuests", true)
+    if worldQuests and worldQuests.LayoutWorldMapButton then
+        worldQuests:LayoutWorldMapButton()
+    end
+
     if self.worldMapPanel and self.worldMapPanel:IsShown() then
         self:RenderBrowser(self.worldMapPanel, "map")
     end
@@ -1312,5 +1322,10 @@ function Teleports:OnDisable()
     self:HideDatatextPopup()
     if self.worldMapButton then
         self.worldMapButton:Hide()
+    end
+
+    local worldQuests = QOL.GetModule and QOL:GetModule("WorldQuests", true)
+    if worldQuests and worldQuests.LayoutWorldMapButton then
+        worldQuests:LayoutWorldMapButton()
     end
 end

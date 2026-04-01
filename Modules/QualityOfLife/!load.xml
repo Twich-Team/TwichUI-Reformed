@@ -9,5 +9,6 @@
     <Include file='PreyTweaks.xml' />
     <Include file='PreyTweaks.lua' />
     <Include file='Teleports.lua' />
+    <Include file='WorldQuests.lua' />
     <Include file='SatchelWatch.lua' />
 </Ui>

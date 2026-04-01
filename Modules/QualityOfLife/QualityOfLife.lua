@@ -12,7 +12,7 @@ QOL:SetEnabledState(true)
 function QOL:OnEnable()
     ---@type ConfigurationModule
     local CM = T:GetModule("Configuration")
-    local Options = CM.Options
+    local Options = CM.Options --[[@as any]]
 
     -- Enable submodules
     if Options.QuestAutomation and Options.QuestAutomation:IsModuleEnabled() then
@@ -38,5 +38,9 @@ function QOL:OnEnable()
 
     if Options.Teleports and Options.Teleports:GetEnabled() then
         self:GetModule("Teleports"):Enable()
+    end
+
+    if Options.WorldQuests and Options.WorldQuests:GetEnabled() then
+        self:GetModule("WorldQuests"):Enable()
     end
 end

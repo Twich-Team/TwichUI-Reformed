@@ -239,6 +239,7 @@ local PAGE_NAME_OVERRIDES = {
         satchelWatchTab = "Satchel Watch",
         smartMountTab = "Smart Mount",
         teleportsTab = "Teleports",
+        worldQuestsTab = "World Quests",
     },
     ["Notification Panel"] = {
         displayGroup = "Display",
@@ -274,7 +275,7 @@ local TAB_SECTION_OVERRIDES = {
         },
         {
             title = "Travel and Interaction",
-            keys = { "gossipHotkeysTab", "smartMountTab", "teleportsTab" },
+            keys = { "gossipHotkeysTab", "smartMountTab", "teleportsTab", "worldQuestsTab" },
         },
         {
             title = "Automation and Cleanup",
