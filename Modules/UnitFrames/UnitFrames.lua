@@ -23,10 +23,12 @@ local UnitClass = _G.UnitClass
 local UnitInRange = _G.UnitInRange
 local UnitInParty = _G.UnitInParty
 local UnitInRaid = _G.UnitInRaid
+local UnitCanAssist = _G.UnitCanAssist
 local UnitIsConnected = _G.UnitIsConnected
 local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
 local UnitIsPlayer = _G.UnitIsPlayer
 local UnitIsUnit = _G.UnitIsUnit
+local UnitPhaseReason = _G.UnitPhaseReason
 local UnitAffectingCombat = _G.UnitAffectingCombat
 local UnitPowerType = _G.UnitPowerType
 local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
@@ -410,21 +412,32 @@ end
 function UnitFrames:UpdateAuraRemainingText(fs, durationObject, expirationTime, duration)
     if not fs then return false end
 
+    local function SetIfChanged(text)
+        text = text or ""
+        if fs._twichAuraTimeText == text then
+            return
+        end
+
+        fs._twichAuraTimeText = text
+        fs:SetText(text)
+    end
+
     if durationObject and durationObject.GetRemainingDuration then
         local okRemaining, remaining = pcall(durationObject.GetRemainingDuration, durationObject)
         if okRemaining and remaining ~= nil then
             if issecretvalue and issecretvalue(remaining) then
                 fs:SetFormattedText("%.1f", remaining)
+                fs._twichAuraTimeText = nil
                 return true
             end
 
             if type(remaining) == "number" then
                 remaining = math_max(0, remaining)
                 if remaining <= 0 then
-                    fs:SetText("")
+                    SetIfChanged("")
                     return false
                 end
-                fs:SetText(self:FormatAuraRemainingTime(remaining))
+                SetIfChanged(self:FormatAuraRemainingTime(remaining))
                 return true
             end
         end
@@ -432,11 +445,11 @@ function UnitFrames:UpdateAuraRemainingText(fs, durationObject, expirationTime, 
 
     local remaining = self:GetAuraRemainingTime(nil, expirationTime, duration)
     if remaining <= 0 then
-        fs:SetText("")
+        SetIfChanged("")
         return false
     end
 
-    fs:SetText(self:FormatAuraRemainingTime(remaining))
+    SetIfChanged(self:FormatAuraRemainingTime(remaining))
     return true
 end
 
@@ -691,9 +704,36 @@ function UnitFrames:UnitInConfiguredSpellRange(unit, bucket)
     return nil
 end
 
+function UnitFrames:GetFriendlyUnitAssistState(unit)
+    if not unit or not UnitExists(unit) then
+        return nil, false
+    end
+
+    if type(UnitPhaseReason) == "function" then
+        local okPhase, phaseReason = pcall(UnitPhaseReason, unit)
+        if okPhase and not (issecretvalue and issecretvalue(phaseReason)) and phaseReason ~= nil then
+            return false, true
+        end
+    end
+
+    if type(UnitCanAssist) == "function" then
+        local okAssist, canAssist = pcall(UnitCanAssist, "player", unit)
+        if okAssist and not (issecretvalue and issecretvalue(canAssist)) and canAssist ~= nil then
+            return canAssist == true or canAssist == 1, true
+        end
+    end
+
+    return nil, false
+end
+
 function UnitFrames:GetFriendlyUnitRangeState(unit)
     if not unit or not UnitExists(unit) then
         return nil, false
+    end
+
+    local canAssist, assistChecked = self:GetFriendlyUnitAssistState(unit)
+    if assistChecked and canAssist == false then
+        return false, true
     end
 
     local okRange, inRange, wasChecked = pcall(UnitInRange, unit)
@@ -719,6 +759,36 @@ function UnitFrames:GetFriendlyUnitRangeState(unit)
     end
 
     return nil, false
+end
+
+function UnitFrames:ForceRangeFadeUpdate(frame)
+    if not frame or not frame.Range then
+        return
+    end
+
+    if frame.Range and type(frame.Range.ForceUpdate) == "function" then
+        frame.Range:ForceUpdate()
+    elseif type(frame.UpdateAllElements) == "function" then
+        frame:UpdateAllElements("ForceUpdate")
+    end
+end
+
+function UnitFrames:RegisterRangeFadeEvents(frame)
+    if not frame or frame._twichRangeFadeEventsRegistered then
+        return
+    end
+
+    frame._twichRangeFadeEventHandler = function(owner, _, unit)
+        if unit and owner and owner.unit and unit ~= owner.unit then
+            return
+        end
+
+        UnitFrames:ForceRangeFadeUpdate(owner)
+    end
+
+    frame:RegisterEvent("UNIT_PHASE", frame._twichRangeFadeEventHandler)
+    frame:RegisterEvent("UNIT_FLAGS", frame._twichRangeFadeEventHandler)
+    frame._twichRangeFadeEventsRegistered = true
 end
 
 function UnitFrames:ConfigureRangeFade(frame, unitKey)
@@ -760,6 +830,8 @@ function UnitFrames:ConfigureRangeFade(frame, unitKey)
         frame:SetAlpha(baseAlpha)
         return
     end
+
+    self:RegisterRangeFadeEvents(frame)
 
     if shouldEnable then
         if not frame:IsElementEnabled("Range") then
@@ -1691,11 +1763,14 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
 
     local healthScope = (unitKey and db.healthColorByScope[unitKey]) or db.healthColorByScope[resolvedScope] or {}
     local explicitUnitMode = unitHealth and unitHealth.mode
+    local explicitScopeMode = healthScope.mode
     local mode = (explicitUnitMode and explicitUnitMode ~= "inherit" and explicitUnitMode)
         or healthScope.mode
         or defaultHealthMode
 
-    if useThemeAccentHealth and mode == "class" and (explicitUnitMode == nil or explicitUnitMode == "inherit") then
+    if useThemeAccentHealth and mode == "class"
+        and (explicitUnitMode == nil or explicitUnitMode == "inherit")
+        and explicitScopeMode == nil then
         mode = "theme"
     end
 
@@ -2908,6 +2983,7 @@ function UnitFrames:GetAuraBarAppearance(aura, data, palette, text)
 end
 
 local MAX_AURA_BARS = 12
+local AURA_TIMER_UPDATE_RATE = 0.1
 
 function UnitFrames:EnsureAuraBarsContainer(frame)
     if frame.AuraBars then return frame.AuraBars end
@@ -2935,7 +3011,17 @@ function UnitFrames:EnsureAuraBarsContainer(frame)
         local stackText = bar:CreateFontString(nil, "OVERLAY")
         stackText:SetFont(_G.STANDARD_TEXT_FONT, 11, "OUTLINE")
         stackText:SetJustifyH("CENTER"); bar.stackText = stackText
-        bar:SetScript("OnUpdate", function(self2, _)
+        bar:SetScript("OnUpdate", function(self2, elapsed)
+            if not self2:IsShown() or self2._hasTimer ~= true then
+                return
+            end
+
+            self2._auraTimerElapsed = (self2._auraTimerElapsed or 0) + (elapsed or 0)
+            if self2._auraTimerElapsed < AURA_TIMER_UPDATE_RATE then
+                return
+            end
+
+            self2._auraTimerElapsed = 0
             local remaining = UnitFrames:GetAuraRemainingTime(nil, self2._expiry, self2._duration)
             if not self2._usesDurationObjectFill then
                 if remaining > 0 and self2._duration and self2._duration > 0 then
@@ -2979,18 +3065,21 @@ local function CollectAuraData(list, unit, unitKey, auraFilter, maxCount, onlyMi
         local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
         if data then
             local timing = UnitFrames:ResolveAuraTiming(unit, data, "bars")
-            local d = {}
-            for k, v in pairs(data) do d[k] = v end
-            d.name           = data.name
-            d.icon           = data.icon
-            d.auraInstanceID = data.auraInstanceID
-            d.spellId        = data.spellId
-            d.duration       = timing.duration
-            d.expirationTime = timing.expirationTime
-            d.applications   = timing.applications
-            d.durationObject = timing.durationObject
-            d.isPlayerAura   = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
-            d.isHarmfulAura  = auraFilter:find("HARMFUL") ~= nil
+            local d = {
+                name = data.name,
+                icon = data.icon,
+                auraInstanceID = data.auraInstanceID,
+                spellId = data.spellId,
+                dispelName = data.dispelName,
+                isBossAura = data.isBossAura,
+                isHarmful = data.isHarmful,
+                isHarmfulAura = auraFilter:find("HARMFUL") ~= nil,
+                duration = timing.duration,
+                expirationTime = timing.expirationTime,
+                applications = timing.applications,
+                durationObject = timing.durationObject,
+                isPlayerAura = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter),
+            }
             if auraFilter == "HELPFUL" then
                 UnitFrames:PopulateHelpfulAuraMetadata(unit, d, timing, unitKey, onlyMine)
             end
@@ -3090,6 +3179,7 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             bar._durationObject = data.durationObject
             bar._usesDurationObjectFill = false
             bar._hasTimer = self:ShouldUseAuraTimerFill(data.durationObject, exp, dur)
+            bar._auraTimerElapsed = 0
             if bar._hasTimer and data.durationObject and bar.SetTimerDuration then
                 local timerDirection = StatusBarTimerDirection and StatusBarTimerDirection.RemainingTime or nil
                 local okTimer = false
@@ -3169,13 +3259,18 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
                     bar.timeText:SetPoint("RIGHT", bar, "RIGHT", -3, 0)
                     bar.timeText:SetShown(bar._usesDurationObjectFill or bar._hasTimer == true or dur > 0)
                 else
+                    bar.timeText._twichAuraTimeText = nil
                     bar.timeText:SetText(""); bar.timeText:Hide()
                 end
             end
             bar:Show(); shown = shown + 1
         else
-            bar._duration = nil; bar._expiry = nil; bar._durationObject = nil; bar._usesDurationObjectFill = false; bar._hasTimer = nil; bar
+            bar._duration = nil; bar._expiry = nil; bar._durationObject = nil; bar._usesDurationObjectFill = false; bar._hasTimer = nil; bar._auraTimerElapsed = nil; bar
                 :Hide()
+            if bar.timeText then
+                bar.timeText._twichAuraTimeText = nil
+                bar.timeText:SetText("")
+            end
         end
     end
     container:SetWidth(frameWidth)
@@ -8741,6 +8836,29 @@ function UnitFrames:CreateCastbarFrame()
     return frame
 end
 
+function UnitFrames:StartStandaloneCastbarUpdates()
+    local castbar = self.frames.castbar
+    if not castbar or castbar._twichCastbarUpdating == true then
+        return
+    end
+
+    castbar._twichCastbarUpdating = true
+    castbar:SetScript("OnUpdate", function(_, elapsed)
+        UnitFrames:UpdateCastbarElapsed()
+        UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed or 0)
+    end)
+end
+
+function UnitFrames:StopStandaloneCastbarUpdates()
+    local castbar = self.frames.castbar
+    if not castbar then
+        return
+    end
+
+    castbar._twichCastbarUpdating = nil
+    castbar:SetScript("OnUpdate", nil)
+end
+
 ApplyStandaloneCastbarTextAnchors = function(castbar, settings)
     if not castbar then
         return
@@ -8798,16 +8916,20 @@ function UnitFrames:RefreshCastbarLayout()
     castbar:SetSize(Clamp(settings.width or 260, 120, 600), Clamp(settings.height or 20, 10, 60))
     if settings.enabled == false then
         castbar._forceHide = true
+        self:StopStandaloneCastbarUpdates()
         castbar:Hide()
     elseif db.testMode == true then
         castbar._forceHide = true
+        self:StopStandaloneCastbarUpdates()
         castbar:Hide()
     elseif not self._castbarState then
         castbar._forceHide = nil
         -- Only show if a cast is actually in progress; hide on initial load / layout refresh.
+        self:StopStandaloneCastbarUpdates()
         castbar:Hide()
     else
         castbar._forceHide = nil
+        self:StartStandaloneCastbarUpdates()
     end
     castbar:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
     castbar:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
@@ -8905,6 +9027,7 @@ function UnitFrames:UpdateCastbarElapsed()
     if now >= state.endTime then
         self:ApplyCastbarValue(castbar, duration, duration)
         if castbar.timeText then castbar.timeText:SetText("0.0") end
+        self:StopStandaloneCastbarUpdates()
         castbar:Hide()
         self._castbarState = nil
         return
@@ -8932,12 +9055,14 @@ function UnitFrames:BeginCastbar(name, icon, startMS, endMS, reverse)
     self:ApplyCastbarValue(castbar, reverse and duration or 0, duration)
     castbar:Show()
     self._castbarState = { startTime = startSec, endTime = endSec, reverse = reverse == true }
+    self:StartStandaloneCastbarUpdates()
 end
 
 function UnitFrames:StopCastbar()
     local castbar = self.frames.castbar
     if castbar then
         castbar._twichReverse = nil
+        self:StopStandaloneCastbarUpdates()
         castbar:Hide()
     end
     self._castbarState = nil
@@ -9281,6 +9406,12 @@ function UnitFrames:OnUnitTargetChanged()
 end
 
 function UnitFrames:OnUnitFlagsChanged()
+    if self._queuedRefresh and not InCombatLockdown() then
+        self._queuedRefresh = false
+        self:RefreshAllFrames()
+        return
+    end
+
     self:RefreshStateIndicatorFrames()
 end
 
@@ -9414,16 +9545,6 @@ function UnitFrames:OnEnable()
     self:RegisterEvent("PLAYER_TALENT_UPDATE", "ResetRangeSpellCache")
     self:RegisterEvent("ADDON_LOADED", "OnAddonLoaded")
 
-    self.ticker = C_Timer.NewTicker(0.05, function()
-        if UnitFrames._castbarState then
-            UnitFrames:UpdateCastbarElapsed()
-        end
-        if UnitFrames._queuedRefresh and not InCombatLockdown() then
-            UnitFrames._queuedRefresh = false
-            UnitFrames:RefreshAllFrames()
-        end
-    end)
-
     self:RefreshAllFrames()
 
     -- Apply Masque skinning if enabled (gated by db.castbar.masqueEnabled).
@@ -9489,10 +9610,7 @@ function UnitFrames:OnDisable()
     self:UnregisterMessage("TWICH_CONFIG_RESTORED")
     self:UnregisterAllEvents()
 
-    if self.ticker then
-        self.ticker:Cancel()
-        self.ticker = nil
-    end
+    self:StopStandaloneCastbarUpdates()
 
     for _, frame in pairs(self.frames) do
         if frame then

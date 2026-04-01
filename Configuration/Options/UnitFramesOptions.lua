@@ -2666,12 +2666,12 @@ local function BuildGeneralTab()
                 frameAlpha = BuildRange(8, "Alpha", "Overall Unit Frames alpha.", { "frameAlpha" }, db.frameAlpha or 1,
                     0.15, 1, 0.01),
                 distanceFade = BuildToggle(9, "Distance Fade",
-                    "Fade party, raid, and tank unit buttons when Blizzard reports they are out of range.",
+                    "Fade party, raid, and tank unit buttons when they are out of range or otherwise cannot currently be assisted, such as phased allies.",
                     { "distanceFade", "enabled" }, db.distanceFade and db.distanceFade.enabled == true, {
                         refreshConfig = true,
                     }),
                 distanceFadeAlpha = BuildRange(8, "Out of Range Alpha",
-                    "Alpha to use for party, raid, and tank unit buttons when they are outside range.",
+                    "Alpha to use for party, raid, and tank unit buttons when they are outside range or currently unassistable.",
                     { "distanceFade", "outsideAlpha" },
                     (db.distanceFade and db.distanceFade.outsideAlpha) or 0.45, 0.05, 1, 0.01, {
                         disabled = ModuleDisabled(function()

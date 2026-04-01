@@ -3071,7 +3071,6 @@ function ActionBars:RefreshButtonStates()
     for barKey, buttons in pairs(self.barButtons) do
         local settings = self:GetBarSettings(barKey)
         for _, button in ipairs(buttons) do
-            self:ApplyTypography(button, db)
             self:ApplyCooldownSettingsToButton(button, db, settings)
             self:UpdateButtonGlow(button)
             if db.showGrid == true then

@@ -283,6 +283,23 @@ local function UpdateDurationText(fs, expiry, duration, durationObject)
     UnitFrames:UpdateAuraRemainingText(fs, durationObject, expiry, duration)
 end
 
+local function SetIconContainerTimerActive(container, active)
+    if not container then
+        return
+    end
+
+    if active then
+        if container._timerActive ~= true then
+            container._timerActive = true
+            container:SetScript("OnUpdate", container._timerUpdateFunc)
+        end
+    elseif container._timerActive then
+        container._timerActive = nil
+        container._lastTick = 0
+        container:SetScript("OnUpdate", nil)
+    end
+end
+
 -- ============================================================
 -- Lazy container creation
 -- ============================================================
@@ -295,7 +312,7 @@ local function EnsureIconContainer(frame, idx)
         c:SetSize(1, 1)
         c._slots    = {}
         c._lastTick = 0
-        c:SetScript("OnUpdate", function(self2, elapsed)
+        c._timerUpdateFunc = function(self2, elapsed)
             self2._lastTick = (self2._lastTick or 0) + elapsed
             if self2._lastTick < TIMER_RATE then return end
             self2._lastTick = 0
@@ -304,7 +321,7 @@ local function EnsureIconContainer(frame, idx)
                     UpdateDurationText(slot.dur, slot._expiry, slot._duration, slot._durationObject)
                 end
             end
-        end)
+        end
         state.iconContainers[idx] = c
     end
     return state.iconContainers[idx]
@@ -357,6 +374,7 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
     local countTextStyle = GetAuraWatcherTextStyle(frame, cfg, "count")
     local durAnchor      = cfg.durAnchor or "TOPLEFT"
     local cntAnchor      = cfg.countAnchor or "BOTTOMRIGHT"
+    local needsTimerPoll = false
 
     -- Small inset offsets so text sits just inside the icon border
     local ANCHOR_OFS     = {
@@ -409,6 +427,10 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
         slot._expiry         = data.expirationTime
         slot._duration       = data.duration
         slot._durationObject = data.durationObject
+        if showDur and ((slot._durationObject and slot._durationObject.GetRemainingDuration) or
+            ((tonumber(slot._expiry) or 0) > 0 and (tonumber(slot._duration) or 0) > 0)) then
+            needsTimerPoll = true
+        end
 
         slot:Show()
     end
@@ -421,6 +443,7 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
 
     if shown == 0 then
         container:SetSize(1, 1)
+        SetIconContainerTimerActive(container, false)
         container:Hide()
     else
         local isHoriz = (cfg.growDirection == "RIGHT" or cfg.growDirection == "LEFT"
@@ -428,6 +451,7 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
         local tw = isHoriz and (shown * size + (shown - 1) * spacing) or size
         local th = isHoriz and size or (shown * size + (shown - 1) * spacing)
         container:SetSize(math_max(1, tw), math_max(1, th))
+        SetIconContainerTimerActive(container, needsTimerPoll)
         container:Show()
     end
 end
@@ -454,6 +478,10 @@ local function UpdateBorderIndicator(frame, idx, cfg, isActive)
     border:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", bw, -bw)
 
     if not isActive then
+        if border._onUpdateSet then
+            border:SetScript("OnUpdate", nil)
+            border._onUpdateSet = nil
+        end
         border:Hide()
         HideChaseDots(border)
         return
@@ -735,10 +763,19 @@ end
 function UnitFrames:AWHideAll(frame)
     if not frame._awState then return end
     for _, c in pairs(frame._awState.iconContainers or {}) do
-        if c then c:Hide() end
+        if c then
+            SetIconContainerTimerActive(c, false)
+            c:Hide()
+        end
     end
     for _, b in pairs(frame._awState.borders or {}) do
-        if b then b:Hide() end
+        if b then
+            if b._onUpdateSet then
+                b:SetScript("OnUpdate", nil)
+                b._onUpdateSet = nil
+            end
+            b:Hide()
+        end
     end
     for _, o in pairs(frame._awState.overlays or {}) do
         if o then o:Hide() end
