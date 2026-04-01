@@ -35,6 +35,7 @@ local IsSpellOverlayed = (C_SpellActivationOverlay and C_SpellActivationOverlay.
 local NUM_PET_ACTION_SLOTS = _G.NUM_PET_ACTION_SLOTS or 10
 local NUM_STANCE_SLOTS = _G.NUM_STANCE_SLOTS or 10
 local C_Timer = _G.C_Timer
+local GetTime = _G.GetTime
 local LibStub = _G.LibStub
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
 local ActionButton_ShowGrid = _G.ActionButton_ShowGrid
@@ -56,6 +57,7 @@ local upper = string.upper
 local unpackValues = table.unpack or _G.unpack
 
 local LSM = (T.Libs and T.Libs.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
+local LBG = LibStub and LibStub("LibButtonGlow-1.0", true)
 local Masque = LibStub and LibStub("Masque", true)
 local DebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
 local ErrorLog = T.Tools and T.Tools.ErrorLog
@@ -1645,6 +1647,51 @@ function ActionBars:ScheduleGlowSync(delaySeconds)
     end)
 end
 
+function ActionBars:ClearButtonGlow(button)
+    if not button then
+        return
+    end
+
+    self:HidePixelGlow(button)
+    self:HideProcGlow(button)
+    self:HideNativeOverlayGlow(button)
+end
+
+function ActionBars:ClearAllButtonGlows()
+    for _, buttons in pairs(self.barButtons) do
+        for _, button in ipairs(buttons) do
+            self:ClearButtonGlow(button)
+        end
+    end
+end
+
+function ActionBars:RefreshGlowState()
+    local token = (self.glowSyncToken or 0) + 1
+    self.glowSyncToken = token
+
+    local db = self:GetDB()
+    if not db or db.enabled == false or not self:IsEnabled() then
+        return
+    end
+
+    self:ClearAllButtonGlows()
+    self:UpdateAllButtonGlows()
+
+    C_Timer.After(0.05, function()
+        if ActionBars.glowSyncToken ~= token then
+            return
+        end
+
+        local refreshDB = ActionBars:GetDB()
+        if not refreshDB or refreshDB.enabled == false or not ActionBars:IsEnabled() then
+            return
+        end
+
+        ActionBars:ClearAllButtonGlows()
+        ActionBars:UpdateAllButtonGlows()
+    end)
+end
+
 function ActionBars:BindUpdate(button)
     if not self.keybindModeActive or InCombatLockdown() or not button then
         return
@@ -1898,7 +1945,23 @@ end
 
 function ActionBars:GetGlowStyle()
     local db = self:GetDB()
-    return db and db.procGlowStyle or "blizzard"
+    local style = db and db.procGlowStyle or "pixel"
+    if style == "pixel" or style == "proc" or style == "button" or style == "blizzard" or style == "none" then
+        return style
+    end
+
+    return "pixel"
+end
+
+function ActionBars:GetGlowColor()
+    local fallback = { 0.96, 0.76, 0.24 }
+    local db = self:GetDB()
+    if db and db.procGlowUseThemeColor ~= false then
+        local theme = T:GetModule("Theme", true)
+        return FetchThemeColor(theme, "accentColor", fallback)
+    end
+
+    return ResolveConfiguredColor(db and db.procGlowColor or nil, fallback)
 end
 
 function ActionBars:GetPixelGlowFrame(button)
@@ -1937,6 +2000,73 @@ function ActionBars:GetPixelGlowFrame(button)
     return glow
 end
 
+function ActionBars:GetProcGlowFrame(button)
+    if not button then
+        return nil
+    end
+
+    if button.__twichuiABProcGlow then
+        return button.__twichuiABProcGlow
+    end
+
+    local glow = CreateFrame("Frame", nil, button)
+    glow:SetFrameLevel(button:GetFrameLevel() + 7)
+    glow:SetAlpha(0)
+    glow:Hide()
+
+    glow.outer = glow:CreateTexture(nil, "ARTWORK")
+    glow.outer:SetTexture([[Interface\SpellActivationOverlay\IconAlert]])
+    glow.outer:SetTexCoord(0.00781250, 0.50781250, 0.27734375, 0.52734375)
+    glow.outer:SetBlendMode("ADD")
+
+    glow.outerOver = glow:CreateTexture(nil, "ARTWORK")
+    glow.outerOver:SetTexture([[Interface\SpellActivationOverlay\IconAlert]])
+    glow.outerOver:SetTexCoord(0.00781250, 0.50781250, 0.53515625, 0.78515625)
+    glow.outerOver:SetBlendMode("ADD")
+
+    glow.inner = glow:CreateTexture(nil, "OVERLAY")
+    glow.inner:SetTexture([[Interface\SpellActivationOverlay\IconAlert]])
+    glow.inner:SetTexCoord(0.00781250, 0.50781250, 0.27734375, 0.52734375)
+    glow.inner:SetBlendMode("ADD")
+
+    glow.innerOver = glow:CreateTexture(nil, "OVERLAY")
+    glow.innerOver:SetTexture([[Interface\SpellActivationOverlay\IconAlert]])
+    glow.innerOver:SetTexCoord(0.00781250, 0.50781250, 0.53515625, 0.78515625)
+    glow.innerOver:SetBlendMode("ADD")
+
+    glow.spark = glow:CreateTexture(nil, "OVERLAY")
+    glow.spark:SetTexture([[Interface\SpellActivationOverlay\IconAlert]])
+    glow.spark:SetTexCoord(0.00781250, 0.61718750, 0.00390625, 0.26953125)
+    glow.spark:SetBlendMode("ADD")
+
+    glow.anim = glow:CreateAnimationGroup()
+    glow.anim:SetLooping("BOUNCE")
+    local fadeOut = glow.anim:CreateAnimation("Alpha")
+    fadeOut:SetOrder(1)
+    fadeOut:SetDuration(0.75)
+    fadeOut:SetFromAlpha(0.82)
+    fadeOut:SetToAlpha(0.34)
+    local fadeIn = glow.anim:CreateAnimation("Alpha")
+    fadeIn:SetOrder(2)
+    fadeIn:SetDuration(0.75)
+    fadeIn:SetFromAlpha(0.34)
+    fadeIn:SetToAlpha(0.82)
+
+    glow.scaleAnim = glow:CreateAnimationGroup()
+    glow.scaleAnim:SetLooping("BOUNCE")
+    local scaleOut = glow.scaleAnim:CreateAnimation("Scale")
+    scaleOut:SetOrder(1)
+    scaleOut:SetDuration(0.75)
+    scaleOut:SetScale(1.04, 1.04)
+    local scaleIn = glow.scaleAnim:CreateAnimation("Scale")
+    scaleIn:SetOrder(2)
+    scaleIn:SetDuration(0.75)
+    scaleIn:SetScale(1 / 1.04, 1 / 1.04)
+
+    button.__twichuiABProcGlow = glow
+    return glow
+end
+
 function ActionBars:UpdatePixelGlowLayout(button)
     local glow = self:GetPixelGlowFrame(button)
     local icon = self:GetButtonIcon(button)
@@ -1950,8 +2080,7 @@ function ActionBars:UpdatePixelGlowLayout(button)
     glow:SetPoint("TOPLEFT", target, "TOPLEFT", -1, 1)
     glow:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 1, -1)
 
-    local theme = T:GetModule("Theme", true)
-    local red, green, blue = FetchThemeColor(theme, "accentColor", { 0.96, 0.76, 0.24 })
+    local red, green, blue = self:GetGlowColor()
 
     glow.top:ClearAllPoints()
     glow.top:SetPoint("TOPLEFT", glow, "TOPLEFT", 0, 0)
@@ -1976,6 +2105,54 @@ function ActionBars:UpdatePixelGlowLayout(button)
     glow.right:SetPoint("BOTTOMRIGHT", glow, "BOTTOMRIGHT", 0, 0)
     glow.right:SetWidth(1)
     glow.right:SetColorTexture(red, green, blue, 1)
+
+    glow:SetParent(targetParent)
+end
+
+function ActionBars:UpdateProcGlowLayout(button)
+    local glow = self:GetProcGlowFrame(button)
+    local icon = self:GetButtonIcon(button)
+    local target = icon or button
+    local targetParent = target:GetParent() or button
+    if not glow or not target then
+        return
+    end
+
+    glow:ClearAllPoints()
+    glow:SetPoint("TOPLEFT", target, "TOPLEFT", -7, 7)
+    glow:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 7, -7)
+
+    local red, green, blue = self:GetGlowColor()
+
+    glow.outer:ClearAllPoints()
+    glow.outer:SetPoint("CENTER", glow, "CENTER", 0, 0)
+    glow.outer:SetAllPoints(glow)
+    glow.outer:SetVertexColor(red, green, blue, 0.30)
+    glow.outer:SetDesaturated(true)
+
+    glow.outerOver:ClearAllPoints()
+    glow.outerOver:SetPoint("TOPLEFT", glow.outer, "TOPLEFT")
+    glow.outerOver:SetPoint("BOTTOMRIGHT", glow.outer, "BOTTOMRIGHT")
+    glow.outerOver:SetVertexColor(red, green, blue, 0.16)
+    glow.outerOver:SetDesaturated(true)
+
+    glow.inner:ClearAllPoints()
+    glow.inner:SetPoint("TOPLEFT", target, "TOPLEFT", -3, 3)
+    glow.inner:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 3, -3)
+    glow.inner:SetVertexColor(red, green, blue, 0.48)
+    glow.inner:SetDesaturated(true)
+
+    glow.innerOver:ClearAllPoints()
+    glow.innerOver:SetPoint("TOPLEFT", glow.inner, "TOPLEFT")
+    glow.innerOver:SetPoint("BOTTOMRIGHT", glow.inner, "BOTTOMRIGHT")
+    glow.innerOver:SetVertexColor(red, green, blue, 0.20)
+    glow.innerOver:SetDesaturated(true)
+
+    glow.spark:ClearAllPoints()
+    glow.spark:SetPoint("CENTER", target, "CENTER", 0, 0)
+    glow.spark:SetSize(target:GetWidth() * 1.35, target:GetHeight() * 1.35)
+    glow.spark:SetVertexColor(red, green, blue, 0.18)
+    glow.spark:SetDesaturated(true)
 
     glow:SetParent(targetParent)
 end
@@ -2007,6 +2184,72 @@ function ActionBars:HidePixelGlow(button)
     glow:Hide()
 end
 
+function ActionBars:ShowProcGlow(button)
+    local glow = self:GetProcGlowFrame(button)
+    if not glow then
+        return
+    end
+
+    self:UpdateProcGlowLayout(button)
+    glow:SetAlpha(0.82)
+    glow:Show()
+    if glow.anim and not glow.anim:IsPlaying() then
+        glow.anim:Play()
+    end
+    if glow.scaleAnim and not glow.scaleAnim:IsPlaying() then
+        glow.scaleAnim:Play()
+    end
+end
+
+function ActionBars:HideProcGlow(button)
+    local glow = button and button.__twichuiABProcGlow or nil
+    if not glow then
+        return
+    end
+
+    if glow.anim and glow.anim:IsPlaying() then
+        glow.anim:Stop()
+    end
+    if glow.scaleAnim and glow.scaleAnim:IsPlaying() then
+        glow.scaleAnim:Stop()
+    end
+    glow:SetAlpha(0)
+    glow:Hide()
+end
+
+function ActionBars:TintOverlayGlow(button, red, green, blue)
+    local overlay = button and (button.__LBGoverlay or button.overlay or button.SpellActivationAlert or nil) or nil
+    if not overlay then
+        return
+    end
+
+    for _, texture in ipairs({ overlay.spark, overlay.innerGlow, overlay.innerGlowOver, overlay.outerGlow, overlay.outerGlowOver, overlay.ants }) do
+        if texture and texture.SetVertexColor then
+            if texture.SetDesaturated then
+                texture:SetDesaturated(1)
+            end
+            texture:SetVertexColor(red, green, blue, 1)
+        end
+    end
+end
+
+function ActionBars:ShowActionButtonGlow(button)
+    if not button then
+        return
+    end
+
+    if LBG and LBG.ShowOverlayGlow then
+        LBG.ShowOverlayGlow(button)
+        local red, green, blue = self:GetGlowColor()
+        self:TintOverlayGlow(button, red, green, blue)
+        return
+    end
+
+    if ActionButton_ShowOverlayGlow then
+        pcall(ActionButton_ShowOverlayGlow, button)
+    end
+end
+
 function ActionBars:HideNativeOverlayGlow(button)
     if not button then
         return
@@ -2017,8 +2260,20 @@ function ActionBars:HideNativeOverlayGlow(button)
     end
 
     local buttonName = button.GetName and button:GetName() or nil
-    local overlay = button.__LBGoverlay or button.overlay or button.SpellActivationAlert or
+    local lbgOverlay = button.__LBGoverlay or nil
+    if lbgOverlay and LBG and LBG.HideOverlayGlow then
+        pcall(LBG.HideOverlayGlow, button)
+        if lbgOverlay.animOut and lbgOverlay.animOut.IsPlaying and lbgOverlay.animOut:IsPlaying() and lbgOverlay.animOut.Finish then
+            lbgOverlay.animOut:Finish()
+        end
+    end
+
+    local overlay = button.overlay or button.SpellActivationAlert or
         (buttonName and _G[buttonName .. "SpellActivationAlert"]) or nil
+
+    if overlay == lbgOverlay then
+        overlay = nil
+    end
 
     if overlay then
         if overlay.animIn and overlay.animIn.IsPlaying and overlay.animIn:IsPlaying() then
@@ -2041,19 +2296,21 @@ function ActionBars:UpdateButtonGlow(button)
     local style = self:GetGlowStyle()
     local active = self:IsButtonGlowActive(button)
 
+    self:ClearButtonGlow(button)
+
     if style == "pixel" then
-        self:HideNativeOverlayGlow(button)
         if active then
             self:ShowPixelGlow(button)
-        else
-            self:HidePixelGlow(button)
         end
-    elseif style == "none" then
-        self:HideNativeOverlayGlow(button)
-        self:HidePixelGlow(button)
-    else
-        self:HidePixelGlow(button)
-        self:HideNativeOverlayGlow(button)
+    elseif style == "proc" then
+        if active then
+            self:ShowProcGlow(button)
+        end
+    elseif style == "button" then
+        if active then
+            self:ShowActionButtonGlow(button)
+        end
+    elseif style == "blizzard" then
         if ActionButton_ShowOverlayGlow and ActionButton_HideOverlayGlow then
             pcall(active and ActionButton_ShowOverlayGlow or ActionButton_HideOverlayGlow, button)
         end
@@ -2214,6 +2471,7 @@ function ActionBars:RestoreOriginalLayout()
             RestoreButtonArtTextures(button, state.artTextures)
             RestoreSpellCastAnimState(button, state.spellCastAnim)
             ActionBars:HidePixelGlow(button)
+            ActionBars:HideProcGlow(button)
             ActionBars:HideNativeOverlayGlow(button)
 
             if state.shown == true then

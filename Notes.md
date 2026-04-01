@@ -20,17 +20,9 @@
 
 ## Action Bars
 
-- There is no way to set font color.
-- There is no way to set number of buttons.
-- I want to be able to disable the accent on the frame
-- There is what appears to be a casting bar animation on the button when i use it. Thats fine, but make it toggleable per bar, and make it only cover the icon itself.
-
-- The movers work, but they do not have the exact positioning and nudging capability that our unit frames ahve.
+- I would like a font shadow option for the action bar texts
 
 ## World Quest
-
-- Can we show an icon of the currency we get as the reward on the world quest list and tooltips? For the tracked indicator on the list, instead of saying tracked, can we just add a green check to the frame somewhere so its easier to see
-- When toggling between the teleports map tab and the world quest map tab, the frames that appear overlap each other instead of replacing.
 
 ## Other
 

@@ -31,6 +31,8 @@ local ROOT_DEFAULTS = {
     showCooldownText = true,
     showCooldownSwipe = false,
     procGlowStyle = "pixel",
+    procGlowUseThemeColor = true,
+    procGlowColor = { 0.96, 0.76, 0.24 },
 }
 
 local SIMPLE_VISIBILITY_RULES = {
@@ -482,6 +484,20 @@ local function RequestRefresh(refreshConfig)
     end
 end
 
+local function RequestGlowRefresh(refreshConfig)
+    local module = GetModule()
+    if module and type(module.RefreshGlowState) == "function" then
+        module:RefreshGlowState()
+    else
+        RequestRefresh(refreshConfig)
+        return
+    end
+
+    if refreshConfig and ConfigurationModule and ConfigurationModule.Refresh then
+        ConfigurationModule:Refresh()
+    end
+end
+
 local function GetFontValues()
     local values = {
         ["__default"] = "Theme / Default",
@@ -798,8 +814,10 @@ function Options:BuildConfiguration()
                 order = 3,
                 width = 1.3,
                 values = {
+                    pixel = "Pixel Border",
+                    proc = "Soft Proc",
+                    button = "Action Button",
                     blizzard = "Blizzard",
-                    pixel = "Pixel",
                     none = "None",
                 },
                 get = function()
@@ -807,7 +825,48 @@ function Options:BuildConfiguration()
                 end,
                 set = function(_, value)
                     db.procGlowStyle = value or "pixel"
-                    RequestRefresh(false)
+                    RequestGlowRefresh(false)
+                end,
+            },
+            glowUseThemeColor = {
+                type = "toggle",
+                name = "Use Theme Accent",
+                desc = "Drive supported glow styles from the current TwichUI accent color.",
+                order = 4,
+                width = "half",
+                disabled = function()
+                    local style = db.procGlowStyle or "pixel"
+                    return style == "none" or style == "blizzard"
+                end,
+                get = function()
+                    return db.procGlowUseThemeColor ~= false
+                end,
+                set = function(_, value)
+                    db.procGlowUseThemeColor = value ~= false
+                    RequestGlowRefresh(false)
+                end,
+            },
+            glowColor = {
+                type = "color",
+                name = "Glow Color",
+                desc = "Custom proc glow color for supported Action Bars glow styles.",
+                order = 5,
+                width = "half",
+                disabled = function()
+                    local style = db.procGlowStyle or "pixel"
+                    return style == "none" or style == "blizzard" or db.procGlowUseThemeColor ~= false
+                end,
+                get = function()
+                    local color = db.procGlowColor
+                    if type(color) == "table" then
+                        return color[1] or 0.96, color[2] or 0.76, color[3] or 0.24
+                    end
+
+                    return 0.96, 0.76, 0.24
+                end,
+                set = function(_, red, green, blue)
+                    db.procGlowColor = { red, green, blue }
+                    RequestGlowRefresh(false)
                 end,
             },
         }),
