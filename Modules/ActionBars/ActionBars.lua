@@ -1,4 +1,4 @@
----@diagnostic disable: undefined-field, inject-field, invisible
+---@diagnostic disable: undefined-field, inject-field, invisible, deprecated
 local TwichRx = _G.TwichRx
 ---@type TwichUI
 local T = unpack(TwichRx)
@@ -18,6 +18,20 @@ local UnregisterStateDriver = _G.UnregisterStateDriver
 local UIParent_ManageFramePositions = _G.UIParent_ManageFramePositions
 local UpdateMicroButtons = _G.UpdateMicroButtons
 local GetNumShapeshiftForms = _G.GetNumShapeshiftForms
+local GetActionInfo = _G.GetActionInfo
+local GetBindingKey = _G.GetBindingKey
+local GetBindingText = _G.GetBindingText
+local GetCurrentBindingSet = _G.GetCurrentBindingSet
+local LoadBindings = _G.LoadBindings
+local SaveBindings = _G.SaveBindings
+local SetBinding = _G.SetBinding
+local SetBindingClick = _G.SetBindingClick
+local IsAltKeyDown = _G.IsAltKeyDown
+local IsControlKeyDown = _G.IsControlKeyDown
+local IsShiftKeyDown = _G.IsShiftKeyDown
+local IsMetaKeyDown = _G.IsMetaKeyDown
+local C_SpellActivationOverlay = _G.C_SpellActivationOverlay
+local IsSpellOverlayed = (C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed) or _G.IsSpellOverlayed
 local NUM_PET_ACTION_SLOTS = _G.NUM_PET_ACTION_SLOTS or 10
 local NUM_STANCE_SLOTS = _G.NUM_STANCE_SLOTS or 10
 local C_Timer = _G.C_Timer
@@ -25,6 +39,8 @@ local LibStub = _G.LibStub
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
 local ActionButton_ShowGrid = _G.ActionButton_ShowGrid
 local ActionButton_HideGrid = _G.ActionButton_HideGrid
+local ActionButton_ShowOverlayGlow = _G.ActionButton_ShowOverlayGlow
+local ActionButton_HideOverlayGlow = _G.ActionButton_HideOverlayGlow
 
 local floor = math.floor
 local max = math.max
@@ -34,6 +50,9 @@ local pairs = pairs
 local ipairs = ipairs
 local type = type
 local tostring = tostring
+local find = string.find
+local format = string.format
+local upper = string.upper
 local unpackValues = table.unpack or _G.unpack
 
 local LSM = (T.Libs and T.Libs.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
@@ -45,6 +64,20 @@ local DEFAULT_VISIBILITY = "[petbattle] hide; show"
 local DEFAULT_HOLDER_PADDING = 6
 local MOUSEOVER_FADE_DELAY = 0.08
 local DEBUG_SOURCE_KEY = "actionbars"
+local PIXEL_GLOW_ALPHA = 0.9
+
+local function SplitBindingTarget(target)
+    if type(target) ~= "string" then
+        return nil, nil, nil
+    end
+
+    local frameName, clickButton = target:match("^CLICK%s+([^:]+):(.+)$")
+    if frameName and clickButton then
+        return "click", frameName, clickButton
+    end
+
+    return "command", target, nil
+end
 local BLIZZARD_FRAMES_TO_HIDE = {
     "MainMenuBar",
     "MainActionBar",
@@ -827,6 +860,7 @@ function ActionBars:OnInitialize()
     self.movers = {}
     self.barButtons = {}
     self.customButtons = {}
+    self.activeAlertSpells = {}
     self.originalButtons = {}
     self.originalFrames = {}
     self.originalRegions = {}
@@ -835,6 +869,8 @@ function ActionBars:OnInitialize()
     self.masqueButtons = {}
     self.pendingRefresh = false
     self.pendingDisable = false
+    self.keybindModeActive = false
+    self.bindingsChanged = false
 
     self:CreateInfrastructure()
 
@@ -861,6 +897,8 @@ end
 function ActionBars:OnEnable()
     LogDebug("action bars enabled", false)
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "RequestRefresh")
+    self:RegisterEvent("SPELLS_CHANGED", "RefreshButtonStates")
+    self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("UPDATE_SHAPESHIFT_FORMS", "RequestRefresh")
     self:RegisterEvent("PET_BAR_UPDATE", "RequestRefresh")
     self:RegisterEvent("PET_BAR_UPDATE_USABLE", "RequestRefresh")
@@ -868,6 +906,9 @@ function ActionBars:OnEnable()
     self:RegisterEvent("UPDATE_VEHICLE_ACTIONBAR", "RequestRefresh")
     self:RegisterEvent("UNIT_ENTERED_VEHICLE", "RequestRefresh")
     self:RegisterEvent("UNIT_EXITED_VEHICLE", "RequestRefresh")
+    self:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
+    self:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
+    self:RegisterEvent("UPDATE_BINDINGS", "RefreshButtonStates")
     self:RegisterEvent("ACTIONBAR_PAGE_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("ACTIONBAR_SLOT_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("ACTIONBAR_UPDATE_STATE", "RefreshButtonStates")
@@ -880,6 +921,10 @@ function ActionBars:OnEnable()
 end
 
 function ActionBars:OnDisable()
+    if self.keybindModeActive == true then
+        self:DeactivateBindMode(false)
+    end
+
     if InCombatLockdown() then
         self.pendingDisable = true
         LogDebug("disable deferred until leaving combat", false)
@@ -1445,6 +1490,598 @@ function ActionBars:GetButtonMacroName(button)
     return button and (button.Name or _G[button:GetName() .. "Name"]) or nil
 end
 
+function ActionBars:GetButtonBindingTarget(button)
+    if not button then
+        return nil
+    end
+
+    if button.keyBoundTarget then
+        return button.keyBoundTarget
+    end
+
+    local buttonName = button.GetName and button:GetName() or nil
+    if not buttonName then
+        return nil
+    end
+
+    if buttonName == "ExtraActionButton1" then
+        return "EXTRAACTIONBUTTON1"
+    end
+
+    if button.commandName then
+        return button.commandName
+    end
+
+    local action = tonumber(button.action or (button.GetAttribute and button:GetAttribute("action")) or nil)
+    if action then
+        local modAction = 1 + ((action - 1) % 12)
+        if find(buttonName, "^TwichUIActionBar_") then
+            return format("CLICK %s:LeftButton", buttonName)
+        elseif action < 25 or action > 72 then
+            return "ACTIONBUTTON" .. modAction
+        elseif action > 60 then
+            return "MULTIACTIONBAR1BUTTON" .. modAction
+        elseif action > 48 then
+            return "MULTIACTIONBAR2BUTTON" .. modAction
+        elseif action > 36 then
+            return "MULTIACTIONBAR4BUTTON" .. modAction
+        elseif action > 24 then
+            return "MULTIACTIONBAR3BUTTON" .. modAction
+        end
+    end
+
+    return format("CLICK %s:LeftButton", buttonName)
+end
+
+function ActionBars:GetButtonBindings(button)
+    local target = self:GetButtonBindingTarget(button)
+    if not target then
+        return {}
+    end
+
+    return { GetBindingKey(target) }
+end
+
+function ActionBars:GetButtonBindingLabel(button)
+    local bindings = self:GetButtonBindings(button)
+    local binding = bindings[1]
+    if not binding or binding == "" then
+        return ""
+    end
+
+    return GetBindingText and GetBindingText(binding, "KEY_", true) or binding
+end
+
+function ActionBars:SetBindingForTarget(chord, target)
+    local targetType, firstArg, secondArg = SplitBindingTarget(target)
+    if targetType == "click" and SetBindingClick then
+        SetBindingClick(chord, firstArg, secondArg or "LeftButton")
+        return
+    end
+
+    SetBinding(chord, firstArg)
+end
+
+function ActionBars:GetButtonDisplayName(button)
+    if not button then
+        return "Action"
+    end
+
+    local action = tonumber(button.action or (button.GetAttribute and button:GetAttribute("action")) or nil)
+    if action and GetActionInfo then
+        local actionType, actionID = GetActionInfo(action)
+        if actionType == "spell" and actionID and _G.C_Spell and _G.C_Spell.GetSpellName then
+            local spellName = _G.C_Spell.GetSpellName(actionID)
+            if type(spellName) == "string" and spellName ~= "" then
+                return spellName
+            end
+        elseif actionType == "macro" and actionID and _G.GetMacroInfo then
+            local macroName = _G.GetMacroInfo(actionID)
+            if type(macroName) == "string" and macroName ~= "" then
+                return macroName
+            end
+        end
+    end
+
+    return button:GetName() or "Action"
+end
+
+function ActionBars:UpdateButtonBindingText(button)
+    local hotKey = self:GetButtonHotKey(button)
+    if not hotKey then
+        return
+    end
+
+    hotKey:SetText(self:GetButtonBindingLabel(button))
+end
+
+function ActionBars:ShowBindOverlay(button)
+    local overlay = self:GetKeybindOverlay()
+    if not overlay or not button then
+        return
+    end
+
+    overlay.button = button
+    overlay:ClearAllPoints()
+    overlay:SetAllPoints(button)
+    overlay.label:SetText(self:GetButtonDisplayName(button))
+
+    local bindings = self:GetButtonBindings(button)
+    if #bindings == 0 then
+        overlay.bindingText:SetText("Unbound")
+    else
+        local display = {}
+        for _, binding in ipairs(bindings) do
+            display[#display + 1] = GetBindingText and GetBindingText(binding, "KEY_", true) or binding
+        end
+        overlay.bindingText:SetText(table.concat(display, "\n"))
+    end
+
+    overlay:Show()
+end
+
+function ActionBars:HideBindOverlay()
+    if self.bindOverlay then
+        self.bindOverlay.button = nil
+        self.bindOverlay:Hide()
+    end
+end
+
+function ActionBars:ScheduleGlowSync(delaySeconds)
+    local token = (self.glowSyncToken or 0) + 1
+    self.glowSyncToken = token
+
+    C_Timer.After(delaySeconds or 0.1, function()
+        if ActionBars.glowSyncToken ~= token then
+            return
+        end
+
+        local db = ActionBars:GetDB()
+        if not db or db.enabled == false or not ActionBars:IsEnabled() then
+            return
+        end
+
+        ActionBars:UpdateAllButtonGlows()
+    end)
+end
+
+function ActionBars:BindUpdate(button)
+    if not self.keybindModeActive or InCombatLockdown() or not button then
+        return
+    end
+
+    self:ShowBindOverlay(button)
+end
+
+function ActionBars:BindListener(key)
+    local overlay = self.bindOverlay
+    local button = overlay and overlay.button or nil
+    local target = button and self:GetButtonBindingTarget(button) or nil
+    if not button or not target then
+        return
+    end
+
+    self.bindingsChanged = true
+
+    if key == "ESCAPE" then
+        for _, binding in ipairs(self:GetButtonBindings(button)) do
+            SetBinding(binding)
+        end
+
+        T:Print(format("[TwichUI] Cleared bindings for %s.", self:GetButtonDisplayName(button)))
+        self:BindUpdate(button)
+        self:RefreshButtonStates()
+        return
+    end
+
+    if key == "LSHIFT" or key == "RSHIFT" or key == "LCTRL" or key == "RCTRL" or key == "LALT" or key == "RALT"
+        or key == "UNKNOWN" then
+        return
+    end
+
+    if key == "MiddleButton" then
+        key = "BUTTON3"
+    elseif find(key, "Button%d") then
+        key = upper(key)
+    end
+
+    local alt = IsAltKeyDown() and "ALT-" or ""
+    local ctrl = IsControlKeyDown() and "CTRL-" or ""
+    local shift = IsShiftKeyDown() and "SHIFT-" or ""
+    local meta = IsMetaKeyDown and IsMetaKeyDown() and "META-" or ""
+    local chord = alt .. ctrl .. shift .. meta .. key
+
+    self:SetBindingForTarget(chord, target)
+    T:Print(format("[TwichUI] %s bound to %s.", chord, self:GetButtonDisplayName(button)))
+    self:BindUpdate(button)
+    self:RefreshButtonStates()
+end
+
+function ActionBars:GetKeybindOverlay()
+    if self.bindOverlay then
+        return self.bindOverlay
+    end
+
+    local overlay = CreateFrame("Button", "TwichUIActionBarKeybindOverlay", UIParent, "BackdropTemplate")
+    overlay:SetFrameStrata("DIALOG")
+    overlay:SetFrameLevel(400)
+    overlay:EnableMouse(true)
+    overlay:EnableKeyboard(true)
+    overlay:EnableMouseWheel(true)
+    overlay:RegisterForClicks("AnyUp", "AnyDown")
+    overlay:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    overlay:SetBackdropColor(0, 0, 0, 0.78)
+    overlay:SetBackdropBorderColor(0.10, 0.72, 0.74, 0.95)
+    overlay:Hide()
+
+    overlay.label = overlay:CreateFontString(nil, "OVERLAY")
+    overlay.label:SetPoint("TOP", overlay, "TOP", 0, -5)
+    overlay.label:SetPoint("LEFT", overlay, "LEFT", 4, 0)
+    overlay.label:SetPoint("RIGHT", overlay, "RIGHT", -4, 0)
+    overlay.label:SetJustifyH("CENTER")
+    overlay.label:SetJustifyV("TOP")
+    overlay.label:SetFont(STANDARD_TEXT_FONT, 10, "")
+    overlay.label:SetTextColor(1, 0.95, 0.85, 1)
+
+    overlay.bindingText = overlay:CreateFontString(nil, "OVERLAY")
+    overlay.bindingText:SetPoint("TOPLEFT", overlay.label, "BOTTOMLEFT", 0, -4)
+    overlay.bindingText:SetPoint("BOTTOMRIGHT", overlay, "BOTTOMRIGHT", -4, 4)
+    overlay.bindingText:SetJustifyH("CENTER")
+    overlay.bindingText:SetJustifyV("MIDDLE")
+    overlay.bindingText:SetFont(STANDARD_TEXT_FONT, 11, "OUTLINE")
+    overlay.bindingText:SetTextColor(0.92, 0.94, 0.96, 1)
+
+    overlay:SetScript("OnKeyUp", function(_, key)
+        ActionBars:BindListener(key)
+    end)
+    overlay:SetScript("OnMouseUp", function(_, key)
+        ActionBars:BindListener(key)
+    end)
+    overlay:SetScript("OnMouseDown", function()
+    end)
+    overlay:SetScript("OnMouseWheel", function(_, delta)
+        ActionBars:BindListener(delta > 0 and "MOUSEWHEELUP" or "MOUSEWHEELDOWN")
+    end)
+    overlay:SetScript("OnHide", function(selfFrame)
+        selfFrame.button = nil
+    end)
+
+    self.bindOverlay = overlay
+    return overlay
+end
+
+function ActionBars:GetBindPopup()
+    if self.bindPopup then
+        return self.bindPopup
+    end
+
+    local popup = CreateFrame("Frame", "TwichUIActionBarBindPopup", UIParent, "BackdropTemplate")
+    popup:SetFrameStrata("DIALOG")
+    popup:SetFrameLevel(401)
+    popup:SetMovable(true)
+    popup:SetClampedToScreen(true)
+    popup:EnableMouse(true)
+    popup:RegisterForDrag("LeftButton")
+    popup:SetScript("OnDragStart", popup.StartMoving)
+    popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
+    popup:SetSize(360, 142)
+    popup:SetPoint("CENTER", UIParent, "CENTER", 0, 120)
+    popup:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    popup:SetBackdropColor(0.05, 0.06, 0.08, 0.97)
+    popup:SetBackdropBorderColor(0.10, 0.72, 0.74, 0.95)
+    popup:Hide()
+
+    popup.title = popup:CreateFontString(nil, "OVERLAY")
+    popup.title:SetPoint("TOPLEFT", popup, "TOPLEFT", 12, -10)
+    popup.title:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, -10)
+    popup.title:SetJustifyH("LEFT")
+    popup.title:SetFont(STANDARD_TEXT_FONT, 12, "")
+    popup.title:SetTextColor(1, 0.95, 0.85, 1)
+    popup.title:SetText("Quick Bind Mode")
+
+    popup.desc = popup:CreateFontString(nil, "OVERLAY")
+    popup.desc:SetPoint("TOPLEFT", popup.title, "BOTTOMLEFT", 0, -10)
+    popup.desc:SetPoint("TOPRIGHT", popup, "TOPRIGHT", -12, 0)
+    popup.desc:SetJustifyH("LEFT")
+    popup.desc:SetJustifyV("TOP")
+    popup.desc:SetFont(STANDARD_TEXT_FONT, 10, "")
+    popup.desc:SetTextColor(0.82, 0.84, 0.90, 1)
+    popup.desc:SetText("Hover any action and press a key or mouse combo to bind it. Press Escape on an action to clear its bindings.")
+
+    local function CreatePopupButton(text, point, relativeTo, relativePoint, xOffset)
+        local button = CreateFrame("Button", nil, popup, "BackdropTemplate")
+        button:SetSize(150, 24)
+        button:SetPoint(point, relativeTo, relativePoint, xOffset, 12)
+        button:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+        })
+        button:SetBackdropColor(0.09, 0.11, 0.15, 1)
+        button:SetBackdropBorderColor(0.20, 0.22, 0.30, 1)
+        button.text = button:CreateFontString(nil, "OVERLAY")
+        button.text:SetAllPoints(button)
+        button.text:SetFont(STANDARD_TEXT_FONT, 10, "")
+        button.text:SetTextColor(0.92, 0.94, 0.96, 1)
+        button.text:SetText(text)
+        return button
+    end
+
+    popup.save = CreatePopupButton("Save", "BOTTOMRIGHT", popup, "BOTTOM", -8)
+    popup.discard = CreatePopupButton("Discard", "BOTTOMLEFT", popup, "BOTTOM", 8)
+    popup.save:SetScript("OnClick", function()
+        ActionBars:DeactivateBindMode(true)
+    end)
+    popup.discard:SetScript("OnClick", function()
+        ActionBars:DeactivateBindMode(false)
+    end)
+
+    self.bindPopup = popup
+    return popup
+end
+
+function ActionBars:ActivateBindMode()
+    if InCombatLockdown() then
+        T:Print("[TwichUI] Cannot enable quick bind mode in combat.")
+        return
+    end
+
+    self.keybindModeActive = true
+    self.bindingsChanged = false
+    self:GetBindPopup():Show()
+    self:GetKeybindOverlay():Hide()
+    self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnBindModeCombatLockdown")
+end
+
+function ActionBars:DeactivateBindMode(save)
+    if save then
+        SaveBindings(GetCurrentBindingSet())
+        T:Print("[TwichUI] Action Bar bindings saved.")
+    else
+        LoadBindings(GetCurrentBindingSet())
+        T:Print("[TwichUI] Action Bar binding changes discarded.")
+    end
+
+    self.keybindModeActive = false
+    self.bindingsChanged = false
+    self:HideBindOverlay()
+    if self.bindPopup then
+        self.bindPopup:Hide()
+    end
+    self:UnregisterEvent("PLAYER_REGEN_DISABLED")
+    self:RefreshButtonStates()
+end
+
+function ActionBars:OnBindModeCombatLockdown()
+    self:DeactivateBindMode(false)
+end
+
+function ActionBars:GetButtonSpellID(button)
+    if not button then
+        return nil
+    end
+
+    local directSpellID = button.spellID or button.spellId or (button.GetSpellId and button:GetSpellId()) or nil
+    if directSpellID then
+        return directSpellID
+    end
+
+    local action = tonumber(button.action or (button.GetAttribute and button:GetAttribute("action")) or nil)
+    if not action or not GetActionInfo then
+        return nil
+    end
+
+    local actionType, actionID = GetActionInfo(action)
+    if actionType == "spell" then
+        return actionID
+    end
+
+    return nil
+end
+
+function ActionBars:IsButtonGlowActive(button)
+    local spellID = self:GetButtonSpellID(button)
+    if not spellID then
+        return false
+    end
+
+    return (IsSpellOverlayed and IsSpellOverlayed(spellID) == true) or self.activeAlertSpells[spellID] == true
+end
+
+function ActionBars:GetGlowStyle()
+    local db = self:GetDB()
+    return db and db.procGlowStyle or "blizzard"
+end
+
+function ActionBars:GetPixelGlowFrame(button)
+    if not button then
+        return nil
+    end
+
+    if button.__twichuiABPixelGlow then
+        return button.__twichuiABPixelGlow
+    end
+
+    local glow = CreateFrame("Frame", nil, button)
+    glow:SetFrameLevel(button:GetFrameLevel() + 8)
+    glow:SetAlpha(0)
+    glow:Hide()
+
+    glow.top = glow:CreateTexture(nil, "OVERLAY")
+    glow.bottom = glow:CreateTexture(nil, "OVERLAY")
+    glow.left = glow:CreateTexture(nil, "OVERLAY")
+    glow.right = glow:CreateTexture(nil, "OVERLAY")
+
+    glow.anim = glow:CreateAnimationGroup()
+    glow.anim:SetLooping("BOUNCE")
+    local fadeOut = glow.anim:CreateAnimation("Alpha")
+    fadeOut:SetOrder(1)
+    fadeOut:SetDuration(0.55)
+    fadeOut:SetFromAlpha(PIXEL_GLOW_ALPHA)
+    fadeOut:SetToAlpha(0.28)
+    local fadeIn = glow.anim:CreateAnimation("Alpha")
+    fadeIn:SetOrder(2)
+    fadeIn:SetDuration(0.55)
+    fadeIn:SetFromAlpha(0.28)
+    fadeIn:SetToAlpha(PIXEL_GLOW_ALPHA)
+
+    button.__twichuiABPixelGlow = glow
+    return glow
+end
+
+function ActionBars:UpdatePixelGlowLayout(button)
+    local glow = self:GetPixelGlowFrame(button)
+    local icon = self:GetButtonIcon(button)
+    local target = icon or button
+    local targetParent = target:GetParent() or button
+    if not glow or not target then
+        return
+    end
+
+    glow:ClearAllPoints()
+    glow:SetPoint("TOPLEFT", target, "TOPLEFT", -1, 1)
+    glow:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 1, -1)
+
+    local theme = T:GetModule("Theme", true)
+    local red, green, blue = FetchThemeColor(theme, "accentColor", { 0.96, 0.76, 0.24 })
+
+    glow.top:ClearAllPoints()
+    glow.top:SetPoint("TOPLEFT", glow, "TOPLEFT", 0, 0)
+    glow.top:SetPoint("TOPRIGHT", glow, "TOPRIGHT", 0, 0)
+    glow.top:SetHeight(1)
+    glow.top:SetColorTexture(red, green, blue, 1)
+
+    glow.bottom:ClearAllPoints()
+    glow.bottom:SetPoint("BOTTOMLEFT", glow, "BOTTOMLEFT", 0, 0)
+    glow.bottom:SetPoint("BOTTOMRIGHT", glow, "BOTTOMRIGHT", 0, 0)
+    glow.bottom:SetHeight(1)
+    glow.bottom:SetColorTexture(red, green, blue, 1)
+
+    glow.left:ClearAllPoints()
+    glow.left:SetPoint("TOPLEFT", glow, "TOPLEFT", 0, 0)
+    glow.left:SetPoint("BOTTOMLEFT", glow, "BOTTOMLEFT", 0, 0)
+    glow.left:SetWidth(1)
+    glow.left:SetColorTexture(red, green, blue, 1)
+
+    glow.right:ClearAllPoints()
+    glow.right:SetPoint("TOPRIGHT", glow, "TOPRIGHT", 0, 0)
+    glow.right:SetPoint("BOTTOMRIGHT", glow, "BOTTOMRIGHT", 0, 0)
+    glow.right:SetWidth(1)
+    glow.right:SetColorTexture(red, green, blue, 1)
+
+    glow:SetParent(targetParent)
+end
+
+function ActionBars:ShowPixelGlow(button)
+    local glow = self:GetPixelGlowFrame(button)
+    if not glow then
+        return
+    end
+
+    self:UpdatePixelGlowLayout(button)
+    glow:SetAlpha(PIXEL_GLOW_ALPHA)
+    glow:Show()
+    if glow.anim and not glow.anim:IsPlaying() then
+        glow.anim:Play()
+    end
+end
+
+function ActionBars:HidePixelGlow(button)
+    local glow = button and button.__twichuiABPixelGlow or nil
+    if not glow then
+        return
+    end
+
+    if glow.anim and glow.anim:IsPlaying() then
+        glow.anim:Stop()
+    end
+    glow:SetAlpha(0)
+    glow:Hide()
+end
+
+function ActionBars:HideNativeOverlayGlow(button)
+    if not button then
+        return
+    end
+
+    if ActionButton_HideOverlayGlow then
+        pcall(ActionButton_HideOverlayGlow, button)
+    end
+
+    local buttonName = button.GetName and button:GetName() or nil
+    local overlay = button.__LBGoverlay or button.overlay or button.SpellActivationAlert or
+        (buttonName and _G[buttonName .. "SpellActivationAlert"]) or nil
+
+    if overlay then
+        if overlay.animIn and overlay.animIn.IsPlaying and overlay.animIn:IsPlaying() then
+            overlay.animIn:Stop()
+        end
+        if overlay.animOut and overlay.animOut.IsPlaying and overlay.animOut:IsPlaying() then
+            overlay.animOut:Stop()
+        end
+        if overlay.Hide then
+            overlay:Hide()
+        end
+    end
+end
+
+function ActionBars:UpdateButtonGlow(button)
+    if not button then
+        return
+    end
+
+    local style = self:GetGlowStyle()
+    local active = self:IsButtonGlowActive(button)
+
+    if style == "pixel" then
+        self:HideNativeOverlayGlow(button)
+        if active then
+            self:ShowPixelGlow(button)
+        else
+            self:HidePixelGlow(button)
+        end
+    elseif style == "none" then
+        self:HideNativeOverlayGlow(button)
+        self:HidePixelGlow(button)
+    else
+        self:HidePixelGlow(button)
+        self:HideNativeOverlayGlow(button)
+        if ActionButton_ShowOverlayGlow and ActionButton_HideOverlayGlow then
+            pcall(active and ActionButton_ShowOverlayGlow or ActionButton_HideOverlayGlow, button)
+        end
+    end
+end
+
+function ActionBars:UpdateAllButtonGlows()
+    for _, buttons in pairs(self.barButtons) do
+        for _, button in ipairs(buttons) do
+            self:UpdateButtonGlow(button)
+        end
+    end
+end
+
+function ActionBars:SPELL_ACTIVATION_OVERLAY_GLOW_SHOW(_, spellID)
+    if spellID then
+        self.activeAlertSpells[spellID] = true
+    end
+    self:UpdateAllButtonGlows()
+end
+
+function ActionBars:SPELL_ACTIVATION_OVERLAY_GLOW_HIDE(_, spellID)
+    if spellID then
+        self.activeAlertSpells[spellID] = nil
+    end
+    self:UpdateAllButtonGlows()
+end
+
 function ActionBars:CreateCustomActionButton(definition, index)
     if not definition or not definition.key or not definition.actionPage or not self.blizzardHiddenRoot then
         return nil
@@ -1576,6 +2213,8 @@ function ActionBars:RestoreOriginalLayout()
             RestoreFont(self:GetButtonMacroName(button), state.name)
             RestoreButtonArtTextures(button, state.artTextures)
             RestoreSpellCastAnimState(button, state.spellCastAnim)
+            ActionBars:HidePixelGlow(button)
+            ActionBars:HideNativeOverlayGlow(button)
 
             if state.shown == true then
                 button:Show()
@@ -1829,6 +2468,9 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
     if not button.__twichuiABHoverHooked then
         button:HookScript("OnEnter", function()
             ActionBars:SetBarHoverState(barKey, true)
+            if ActionBars.keybindModeActive == true then
+                ActionBars:BindUpdate(button)
+            end
         end)
         button:HookScript("OnLeave", function()
             ActionBars:ScheduleBarFade(barKey)
@@ -1838,6 +2480,7 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
 
     self:ApplyTypography(button, actionBarDB)
     self:ApplyCooldownSettingsToButton(button, actionBarDB, barSettings)
+    self:UpdateButtonGlow(button)
 end
 
 function ActionBars:ApplyTypography(button, actionBarDB)
@@ -1849,6 +2492,7 @@ function ActionBars:ApplyTypography(button, actionBarDB)
     if hotKey then
         hotKey:SetFont(fontPath, ClampNumber(actionBarDB.hotkeyFontSize, 6, 24, 11), fontFlags)
         hotKey:SetTextColor(textR, textG, textB, 1)
+        self:UpdateButtonBindingText(button)
         if actionBarDB.showHotkeys == true then
             hotKey:Show()
         else
@@ -1933,6 +2577,7 @@ function ActionBars:RefreshButtonStates()
         for _, button in ipairs(buttons) do
             self:ApplyTypography(button, db)
             self:ApplyCooldownSettingsToButton(button, db, settings)
+            self:UpdateButtonGlow(button)
             if db.showGrid == true then
                 if type(ActionButton_ShowGrid) == "function" then
                     pcall(ActionButton_ShowGrid, button)
@@ -1946,6 +2591,8 @@ function ActionBars:RefreshButtonStates()
             holder:SetAlpha(self:GetTargetAlpha(settings, false))
         end
     end
+
+    self:ScheduleGlowSync(0.05)
 end
 
 function ActionBars:GetTargetAlpha(barSettings, hovered)
@@ -2283,5 +2930,7 @@ function ActionBars:RefreshAll()
 
     self:ApplyMasqueSettings(actionBarDB)
     self:RefreshButtonStates()
+    self:UpdateAllButtonGlows()
+    self:ScheduleGlowSync(0.15)
     self:UpdateMovers()
 end

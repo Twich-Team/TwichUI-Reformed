@@ -30,6 +30,7 @@ local ROOT_DEFAULTS = {
     showMacroNames = false,
     showCooldownText = true,
     showCooldownSwipe = false,
+    procGlowStyle = "pixel",
 }
 
 local SIMPLE_VISIBILITY_RULES = {
@@ -629,6 +630,13 @@ function Options:OpenDebugConsole()
     end
 end
 
+function Options:OpenQuickBindMode()
+    local module = GetModule()
+    if module and type(module.ActivateBindMode) == "function" then
+        module:ActivateBindMode()
+    end
+end
+
 function Options:BuildConfiguration()
     local Widgets = ConfigurationModule.Widgets
     local db = self:GetDB()
@@ -702,6 +710,16 @@ function Options:BuildConfiguration()
                     Options:OpenDebugConsole()
                 end,
             },
+            quickBind = {
+                type = "execute",
+                name = "Quick Bind Mode",
+                desc = "Open a hover-and-press keybind overlay for action buttons.",
+                order = 5.5,
+                width = 1.3,
+                func = function()
+                    Options:OpenQuickBindMode()
+                end,
+            },
             showGrid = {
                 type = "toggle",
                 name = "Show Empty Slots",
@@ -770,6 +788,25 @@ function Options:BuildConfiguration()
                 end,
                 set = function(_, value)
                     db.showCooldownSwipe = value == true
+                    RequestRefresh(false)
+                end,
+            },
+            glowStyle = {
+                type = "select",
+                name = "Proc Glow Style",
+                desc = "Choose how spell activation glows are rendered on action buttons.",
+                order = 3,
+                width = 1.3,
+                values = {
+                    blizzard = "Blizzard",
+                    pixel = "Pixel",
+                    none = "None",
+                },
+                get = function()
+                    return db.procGlowStyle or "pixel"
+                end,
+                set = function(_, value)
+                    db.procGlowStyle = value or "pixel"
                     RequestRefresh(false)
                 end,
             },
