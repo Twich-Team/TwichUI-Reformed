@@ -5,6 +5,7 @@
     <Include file='ModernUI.lua' />
 
     <Include file='Theme.lua' />
+    <Include file='ActionBars.lua' />
     <Include file='ChatEnhancements.lua' />
     <Include file='SmartMount.lua' />
     <Include file='Datatexts.lua' />

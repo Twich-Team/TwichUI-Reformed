@@ -20,6 +20,7 @@ local CHARACTER_BINDINGS = 2
 
 --- @class ConfigurationOptions
 --- @field ChatEnhancement ChatEnhancementConfigurationOptions
+--- @field ActionBars ActionBarsConfigurationOptions
 --- @field Media MediaConfigurationOptions
 --- @field SmartMount SmartMountConfigurationOptions
 --- @field EasyFish EasyFishConfigurationOptions

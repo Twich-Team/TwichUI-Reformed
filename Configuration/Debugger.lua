@@ -13,6 +13,15 @@ local function GetDebugConsole()
     return T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
 end
 
+local function OpenDebugSource(sourceKey)
+    local console = GetDebugConsole()
+    if console and console.Show then
+        console:Show(sourceKey)
+    else
+        T:Print("[TwichUI] Debug Console is not available.")
+    end
+end
+
 local function BuildDebugConsoleConfiguration()
     local W = ConfigurationModule.Widgets
 
@@ -29,12 +38,16 @@ local function BuildDebugConsoleConfiguration()
                 name  = "Open Debug Console",
                 desc  = "Open the TwichUI Debug Console window.",
                 func  = function()
-                    local console = GetDebugConsole()
-                    if console and console.Show then
-                        console:Show()
-                    else
-                        T:Print("[TwichUI] Debug Console is not available.")
-                    end
+                    OpenDebugSource()
+                end,
+            },
+            openActionBars = {
+                type  = "execute",
+                order = 2,
+                name  = "Open Action Bars Logs",
+                desc  = "Open the Debug Console focused on the Action Bars source.",
+                func  = function()
+                    OpenDebugSource("actionbars")
                 end,
             },
             clearAll = {

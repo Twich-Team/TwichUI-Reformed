@@ -50,6 +50,13 @@ local NAV_ITEMS = {
         path = { "Best In Slot" },
     },
     {
+        id = "actionBars",
+        title = "Action Bars",
+        description = "Primary bars, extra bars, pet bar, stance bar, movers, and button text controls.",
+        accent = { 0.98, 0.68, 0.26 },
+        path = { "Action Bars" },
+    },
+    {
         id = "chat",
         title = "Chat",
         description = "Messaging polish and interaction helpers.",

@@ -98,6 +98,7 @@ function T:OnInitialize()
         { module = self:GetModule("Chores"),                                     enabled = Options.Chores:GetEnabled() },
         { module = self:GetModule("SmartMount"),                                 enabled = Options.SmartMount:GetEnabled() },
         { module = self:GetModule("EasyFish"),                                   enabled = Options.EasyFish:GetEnabled() },
+        { module = self:GetModule("ActionBars"),                                 enabled = Options.ActionBars:GetEnabled() },
         { module = self:GetModule("Datatexts"),                                  enabled = Options.Datatext:IsModuleEnabled() },
         { module = self:GetModule("UnitFrames"),                                 enabled = Options.UnitFrames:GetEnabled() },
         { module = self:GetModule("BestInSlot"),                                 enabled = Options.BestInSlot:IsBestInSlotModuleEnabled() },

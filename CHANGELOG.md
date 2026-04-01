@@ -10,5 +10,6 @@
 
 - Added particle effects for cast bars. New toggle in cast bar settings allows addition of particle effects added to cast bars when casting.'
 - New configuration section for the addon's error handler
+- Added a new World Quest tab to the world map that shows available world quests as a filterable list
 
 #### Other
