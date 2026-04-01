@@ -78,6 +78,13 @@ local NAV_ITEMS = {
         path = { "Notification Panel" },
     },
     {
+        id = "errorLog",
+        title = "Error Log",
+        description = "Captured TwichUI errors, notification behavior, and log retention settings.",
+        accent = { 0.98, 0.56, 0.50 },
+        path = { "Error Log" },
+    },
+    {
         id = "profiles",
         title = "Profiles",
         description = "Profile storage and switching.",

@@ -214,7 +214,18 @@ local ROOT_TEXT_DEFAULTS               = {
 }
 
 local SINGLE_UNIT_DEFAULTS             = {
-    player = { width = 260, height = 48, showPower = true, powerHeight = 10, powerDetached = false, powerWidth = 260 },
+        player = {
+            width = 260,
+            height = 48,
+            showPower = true,
+            powerHeight = 10,
+            powerDetached = false,
+            powerWidth = 260,
+            classArtworkEnabled = false,
+            classArtworkScale = 1,
+            classArtworkOffsetX = 0,
+            classArtworkOffsetY = 0,
+        },
     target = { width = 240, height = 42, showPower = true, powerHeight = 10, powerDetached = false, powerWidth = 240 },
     targettarget = { width = 180, height = 30, showPower = true, powerHeight = 8, powerDetached = false, powerWidth = 180 },
     focus = { width = 220, height = 38, showPower = true, powerHeight = 8, powerDetached = false, powerWidth = 220 },
@@ -1772,6 +1783,22 @@ local function BuildSingleUnitTab(unitKey, label)
                             .height, 16, 180, 1, {
                                 disabled = disabled,
                             }),
+                        classArtworkEnabled = unitKey == "player" and BuildToggle(4, "Class Corner Artwork",
+                            "Show decorative class artwork on the top-left of the player frame.",
+                            ExtendPath(basePath, "classArtworkEnabled"), defaults.classArtworkEnabled, {
+                                disabled = disabled,
+                                refreshConfig = true,
+                            }) or nil,
+                        classArtworkScale = unitKey == "player" and BuildRange(5, "Artwork Scale",
+                            "Scale the decorative class artwork without changing its saved anchor offsets.",
+                            ExtendPath(basePath, "classArtworkScale"), defaults.classArtworkScale or 1, 0.5, 2.5, 0.01,
+                            {
+                                disabled = ModuleDisabled(function()
+                                    return GetPathValue(ExtendPath(basePath, "classArtworkEnabled"),
+                                        defaults.classArtworkEnabled) ~= true
+                                end),
+                                refreshConfig = true,
+                            }) or nil,
                     }),
                     power = Widgets.IGroup(2, "Power Bar", {
                         showPower = BuildToggle(1, "Show Power", "Show the embedded power bar.",
@@ -2418,6 +2445,9 @@ BuildColorScopeTab = function(scopeKey, label)
     local powerModePath = ExtendPath(colorPath, "powerColorMode")
     local disabled = ModuleDisabled()
     local function defaultMode()
+        if GetPathValue({ "useThemeAccentHealth" }, false) == true then
+            return "theme"
+        end
         return GetPathValue({ "useClassColor" }, false) == true and "class" or "theme"
     end
     local function defaultPowerMode()
@@ -2988,7 +3018,16 @@ local function BuildColorsTab()
                 "Global palette values provide the fallback look for Unit Frames. Scope tabs override them for single units, party, raid, tank, and boss frames."),
             palette = Widgets.IGroup(1, "Palette", {
                 health = BuildColor(1, "Health", "Fallback health color used when a scope is in Theme mode.",
-                    { "colors", "health" }, COLOR_DEFAULTS.health, true),
+                    { "colors", "health" }, COLOR_DEFAULTS.health, true, {
+                        disabled = function()
+                            return GetPathValue({ "useThemeAccentHealth" }, false) == true
+                        end,
+                    }),
+                useThemeAccentHealth = BuildToggle(1.25, "Use Appearance Accent",
+                    "Use the global Appearance accent color for health bars when their health mode resolves to Theme.",
+                    { "useThemeAccentHealth" }, false, {
+                        refreshConfig = true,
+                    }),
                 powerMode = BuildSelect(1.5, "Power Color Mode",
                     "How the power bar colour is determined globally.\n\nCustom: use the colour below.\nPower Type: automatically match the WoW power type colour (Mana=blue, Rage=red, Energy=yellow, etc.).",
                     { "powerColorMode" }, "custom", POWER_COLOR_MODES, {
@@ -3092,6 +3131,7 @@ function Options:GetDB()
     if db.smoothBars == nil then db.smoothBars = true end
     if db.showHealthText == nil then db.showHealthText = true end
     if db.showPowerText == nil then db.showPowerText = true end
+    if db.useThemeAccentHealth == nil then db.useThemeAccentHealth = false end
     if type(db.units) ~= "table" then db.units = {} end
     if type(db.groups) ~= "table" then db.groups = {} end
     if type(db.groups.boss) ~= "table" then db.groups.boss = {} end

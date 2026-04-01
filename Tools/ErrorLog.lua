@@ -17,8 +17,10 @@ local Tools           = T.Tools
 local date            = _G.date
 local debugstack      = _G.debugstack
 local geterrorhandler = _G.geterrorhandler
+local LibStub         = _G.LibStub
 local math            = math
 local pcall           = pcall
+local PlaySoundFile   = _G.PlaySoundFile
 local seterrorhandler = _G.seterrorhandler
 local table           = table
 local time            = _G.time
@@ -27,6 +29,7 @@ local type            = type
 
 local ADDON_NAME      = "TwichUI_Reformed"
 local DEFAULT_MAX     = 100
+local DEFAULT_SOUND   = "TwichUI Alert 1"
 local SHORT_MAX_LEN   = 220
 
 ---@class TwichUIErrorLog
@@ -48,9 +51,49 @@ local function GetLogsDB()
     local db = T.db and T.db.global
     if not db then return nil end
     if not db.errorLog then
-        db.errorLog = { errors = {}, maxErrors = DEFAULT_MAX }
+        db.errorLog = {
+            errors = {},
+            maxErrors = DEFAULT_MAX,
+            suppressChatOutput = false,
+            playAlertSound = false,
+            alertSound = DEFAULT_SOUND,
+        }
+    end
+    if db.errorLog.suppressChatOutput == nil then db.errorLog.suppressChatOutput = false end
+    if db.errorLog.playAlertSound == nil then db.errorLog.playAlertSound = false end
+    if type(db.errorLog.alertSound) ~= "string" or db.errorLog.alertSound == "" then
+        db.errorLog.alertSound = DEFAULT_SOUND
     end
     return db.errorLog
+end
+
+local function PlayAlertSound()
+    local db = GetLogsDB()
+    if not db or db.playAlertSound ~= true then
+        return
+    end
+
+    local theme = T:GetModule("Theme", true)
+    if theme then
+        local vol = theme:Get("soundVolume")
+        if type(vol) == "number" and vol <= 0 then
+            return
+        end
+    end
+
+    local soundKey = db.alertSound or DEFAULT_SOUND
+    local soundPath = nil
+    local lsm = (T.Libs and T.Libs.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
+    if lsm and type(lsm.Fetch) == "function" then
+        soundPath = lsm:Fetch("sound", soundKey, true)
+    end
+    if not soundPath and type(soundKey) == "string" and soundKey:find("\\", 1, true) then
+        soundPath = soundKey
+    end
+
+    if soundPath and type(PlaySoundFile) == "function" then
+        PlaySoundFile(soundPath, "Master")
+    end
 end
 
 --- Returns true if `msg` originates from our addon.
@@ -127,8 +170,11 @@ end
 function ErrorLog:Capture(detail, context, stack)
     local fullDetail = BuildDetail(detail, context, stack)
     local inserted = AppendEntry(fullDetail)
-    if inserted and T.Print then
-        T:Print("[TwichUI] Captured a new error. Open /tui errors to review details.")
+    if inserted then
+        PlayAlertSound()
+    end
+    if inserted and T.Print and self:GetSuppressChatOutput() ~= true then
+        T:Print("[TwichUI] Encountered an error. View details using /tui errors.")
     end
 end
 
@@ -198,6 +244,28 @@ function ErrorLog:Clear()
     end
 end
 
+---@param entryId number|string
+---@return boolean
+function ErrorLog:RemoveEntry(entryId)
+    local db = GetLogsDB()
+    if not db or type(db.errors) ~= "table" then
+        return false
+    end
+
+    for index, entry in ipairs(db.errors) do
+        if entry and entry.id == entryId then
+            table.remove(db.errors, index)
+            local viewer = Tools.UI and Tools.UI.ErrorLogViewer
+            if viewer and viewer.frame and viewer.frame:IsShown() then
+                viewer:Refresh()
+            end
+            return true
+        end
+    end
+
+    return false
+end
+
 --- Get the current max-errors cap.
 ---@return number
 function ErrorLog:GetMaxErrors()
@@ -215,6 +283,43 @@ function ErrorLog:SetMaxErrors(value)
     while #db.errors > cap do
         table.remove(db.errors)
     end
+end
+
+function ErrorLog:GetSuppressChatOutput()
+    local db = GetLogsDB()
+    return db and db.suppressChatOutput == true or false
+end
+
+function ErrorLog:SetSuppressChatOutput(value)
+    local db = GetLogsDB()
+    if not db then return end
+    db.suppressChatOutput = value == true
+end
+
+function ErrorLog:GetPlayAlertSound()
+    local db = GetLogsDB()
+    return db and db.playAlertSound == true or false
+end
+
+function ErrorLog:SetPlayAlertSound(value)
+    local db = GetLogsDB()
+    if not db then return end
+    db.playAlertSound = value == true
+end
+
+function ErrorLog:GetAlertSound()
+    local db = GetLogsDB()
+    return (db and db.alertSound) or DEFAULT_SOUND
+end
+
+function ErrorLog:SetAlertSound(value)
+    local db = GetLogsDB()
+    if not db then return end
+    if type(value) ~= "string" or value == "" then
+        db.alertSound = DEFAULT_SOUND
+        return
+    end
+    db.alertSound = value
 end
 
 --- FOR TESTING ONLY: directly inject a fake error entry.

@@ -561,6 +561,32 @@ local function Clamp(value, minimum, maximum)
     return numeric
 end
 
+local PLAYER_CLASS_ARTWORKS = {
+    PALADIN = {
+        texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Paladin",
+        width = 250,
+        height = 233,
+    },
+}
+
+local function RoundToNearestInteger(value)
+    local numeric = tonumber(value) or 0
+    if numeric >= 0 then
+        return math_floor(numeric + 0.5)
+    end
+
+    return math_floor(numeric - 0.5)
+end
+
+local function GetPlayerClassArtworkDefinition()
+    local _, classToken = UnitClass("player")
+    if not classToken then
+        return nil
+    end
+
+    return PLAYER_CLASS_ARTWORKS[classToken]
+end
+
 local RANGE_FADE_UNIT_KEYS = {
     partyMember = true,
     raidMember = true,
@@ -1604,6 +1630,15 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
     db.colors.scopes = db.colors.scopes or {}
     db.healthColorByScope = db.healthColorByScope or {}
 
+    local useThemeAccentHealth = db.useThemeAccentHealth == true
+    local themeHealthColor = useThemeAccentHealth
+        and GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })
+        or GetThemeColor("successColor", { 0.34, 0.84, 0.54, 1 })
+    local defaultHealthMode = useThemeAccentHealth
+        and "theme"
+        or (db.useClassColor == true and "class" or "theme")
+    local globalCustomHealthColor = CopyColor(db.colors.health or COLOR_DEFAULTS.health)
+
     local unitKey = nil
     local resolvedScope = scopeOrUnitKey or "singles"
     if resolvedScope ~= "singles" and resolvedScope ~= "party" and resolvedScope ~= "raid"
@@ -1625,8 +1660,7 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
     end
 
     local palette = {
-        health          = CopyColor(scopeColors.health or db.colors.health or
-            GetThemeColor("successColor", { 0.34, 0.84, 0.54, 1 })),
+        health          = CopyColor(themeHealthColor),
         power           = CopyColor(scopeColors.power or db.colors.power or
             GetThemeColor("primaryColor", { 0.10, 0.72, 0.74, 1 })),
         -- Alpha 0 → transparent when empty; the frame backdrop shows through so no black bar.
@@ -1656,15 +1690,22 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
     end
 
     local healthScope = (unitKey and db.healthColorByScope[unitKey]) or db.healthColorByScope[resolvedScope] or {}
-    local mode = (unitHealth and unitHealth.mode and unitHealth.mode ~= "inherit" and unitHealth.mode)
+    local explicitUnitMode = unitHealth and unitHealth.mode
+    local mode = (explicitUnitMode and explicitUnitMode ~= "inherit" and explicitUnitMode)
         or healthScope.mode
-        or (db.useClassColor == true and "class" or "theme")
+        or defaultHealthMode
+
+    if useThemeAccentHealth and mode == "class" and (explicitUnitMode == nil or explicitUnitMode == "inherit") then
+        mode = "theme"
+    end
 
     if mode == "custom" then
         if unitHealth and type(unitHealth.color) == "table" then
             palette.health = CopyColor(unitHealth.color)
         elseif type(healthScope.color) == "table" then
             palette.health = CopyColor(healthScope.color)
+        else
+            palette.health = CopyColor(globalCustomHealthColor)
         end
         UFDebug(string.format("GetPalette: scope=%s mode=custom r=%.2f g=%.2f b=%.2f",
             tostring(resolvedScope),
@@ -1702,6 +1743,11 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
         UFDebug(string.format("GetPalette: scope=%s mode=class token=%s found=%s",
             tostring(resolvedScope),
             tostring(classToken), tostring(classColor ~= nil)))
+    else
+        palette.health = CopyColor(themeHealthColor)
+        UFDebug(string.format("GetPalette: scope=%s mode=theme r=%.2f g=%.2f b=%.2f accent=%s",
+            tostring(resolvedScope),
+            palette.health[1], palette.health[2], palette.health[3], tostring(useThemeAccentHealth)))
     end
 
     return palette
@@ -6321,6 +6367,7 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     self:ApplyAuraSettings(frame, unitKey)
     self:ApplyTagVisibility(frame)
     self:ApplyClassBarSettings(frame, unitKey)
+    self:ApplyPlayerClassArtworkSettings(frame, unitKey)
     self:ApplyHighlightSettings(frame)
     self:ApplyUnitCastbarSettings(frame, unitKey)
     self:ApplyRoleIconSettings(frame, unitKey)
@@ -6328,6 +6375,183 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     self:ApplyStateIndicatorSettings(frame, unitKey, "restingIndicator")
     self:ApplyStateIndicatorSettings(frame, unitKey, "spiritIndicator")
     self:ApplyInfoBarSettings(frame, unitKey)
+end
+
+function UnitFrames:PositionPlayerClassArtwork(frame, offsetX, offsetY)
+    local artwork = frame and frame.TwichPlayerClassArtwork
+    if not artwork then
+        return
+    end
+
+    artwork:ClearAllPoints()
+    artwork:SetPoint("TOPLEFT", frame, "TOPLEFT", tonumber(offsetX) or 0, tonumber(offsetY) or 0)
+end
+
+function UnitFrames:UpdatePlayerClassArtworkDrag(frame)
+    local artwork = frame and frame.TwichPlayerClassArtwork
+    if not artwork or not artwork._dragging then
+        return
+    end
+
+    local scale = UIParent:GetEffectiveScale() or 1
+    local cursorX, cursorY = _G.GetCursorPosition()
+    local scaledX = cursorX / scale
+    local scaledY = cursorY / scale
+    local nextOffsetX = (artwork._dragStartOffsetX or 0) + (scaledX - (artwork._dragStartCursorX or scaledX))
+    local nextOffsetY = (artwork._dragStartOffsetY or 0) + (scaledY - (artwork._dragStartCursorY or scaledY))
+
+    artwork._pendingOffsetX = nextOffsetX
+    artwork._pendingOffsetY = nextOffsetY
+    self:PositionPlayerClassArtwork(frame, nextOffsetX, nextOffsetY)
+end
+
+function UnitFrames:StopPlayerClassArtworkDrag(frame, shouldPersist)
+    local artwork = frame and frame.TwichPlayerClassArtwork
+    if not artwork or not artwork._dragging then
+        return
+    end
+
+    artwork._dragging = false
+    artwork:SetScript("OnUpdate", nil)
+
+    local offsetX = RoundToNearestInteger(artwork._pendingOffsetX or artwork._dragStartOffsetX or 0)
+    local offsetY = RoundToNearestInteger(artwork._pendingOffsetY or artwork._dragStartOffsetY or 0)
+
+    if shouldPersist ~= false then
+        local settings = self:GetUnitSettings("player")
+        settings.classArtworkOffsetX = offsetX
+        settings.classArtworkOffsetY = offsetY
+        T:Print(string.format("[TwichUI] Player class artwork offsets: x=%d y=%d", offsetX, offsetY))
+    end
+
+    artwork._pendingOffsetX = nil
+    artwork._pendingOffsetY = nil
+    artwork._dragStartCursorX = nil
+    artwork._dragStartCursorY = nil
+    artwork._dragStartOffsetX = nil
+    artwork._dragStartOffsetY = nil
+
+    self:PositionPlayerClassArtwork(frame, offsetX, offsetY)
+end
+
+function UnitFrames:StartPlayerClassArtworkDrag(frame)
+    local artwork = frame and frame.TwichPlayerClassArtwork
+    if not artwork or self._playerClassArtworkAlignmentMode ~= true then
+        return
+    end
+
+    local settings = self:GetUnitSettings("player")
+    local scale = UIParent:GetEffectiveScale() or 1
+    local cursorX, cursorY = _G.GetCursorPosition()
+
+    artwork._dragging = true
+    artwork._dragStartCursorX = cursorX / scale
+    artwork._dragStartCursorY = cursorY / scale
+    artwork._dragStartOffsetX = tonumber(settings.classArtworkOffsetX) or 0
+    artwork._dragStartOffsetY = tonumber(settings.classArtworkOffsetY) or 0
+    artwork._pendingOffsetX = artwork._dragStartOffsetX
+    artwork._pendingOffsetY = artwork._dragStartOffsetY
+    artwork:SetScript("OnUpdate", function()
+        UnitFrames:UpdatePlayerClassArtworkDrag(frame)
+    end)
+end
+
+function UnitFrames:IsPlayerClassArtworkAlignmentModeEnabled()
+    return self._playerClassArtworkAlignmentMode == true
+end
+
+function UnitFrames:SetPlayerClassArtworkAlignmentMode(enabled)
+    local nextState = enabled == true
+    if self._playerClassArtworkAlignmentMode == nextState then
+        return
+    end
+
+    self._playerClassArtworkAlignmentMode = nextState
+    self:RefreshAllFrames()
+
+    if nextState then
+        T:Print("[TwichUI] Player class artwork alignment enabled. Drag the artwork, then use /tui artwork again when finished.")
+    else
+        T:Print("[TwichUI] Player class artwork alignment disabled.")
+    end
+end
+
+function UnitFrames:TogglePlayerClassArtworkAlignmentMode()
+    local settings = self:GetUnitSettings("player")
+    if settings.classArtworkEnabled ~= true then
+        T:Print("[TwichUI] Enable Class Corner Artwork on the player frame before aligning it.")
+        return
+    end
+
+    if not GetPlayerClassArtworkDefinition() then
+        T:Print("[TwichUI] No class corner artwork is available for your class yet.")
+        return
+    end
+
+    self:SetPlayerClassArtworkAlignmentMode(not self:IsPlayerClassArtworkAlignmentModeEnabled())
+end
+
+function UnitFrames:PrintPlayerClassArtworkOffsets()
+    local settings = self:GetUnitSettings("player")
+    local offsetX = RoundToNearestInteger(settings.classArtworkOffsetX or 0)
+    local offsetY = RoundToNearestInteger(settings.classArtworkOffsetY or 0)
+    T:Print(string.format("[TwichUI] Player class artwork offsets: x=%d y=%d", offsetX, offsetY))
+end
+
+function UnitFrames:ApplyPlayerClassArtworkSettings(frame, unitKey)
+    local artwork = frame and frame.TwichPlayerClassArtwork
+    if not artwork then
+        return
+    end
+
+    if unitKey ~= "player" then
+        if artwork._dragging then
+            self:StopPlayerClassArtworkDrag(frame, false)
+        end
+        artwork:Hide()
+        return
+    end
+
+    local settings = self:GetUnitSettings("player")
+    local definition = GetPlayerClassArtworkDefinition()
+    local shouldShow = settings.classArtworkEnabled == true and definition ~= nil
+
+    if not shouldShow then
+        if artwork._dragging then
+            self:StopPlayerClassArtworkDrag(frame, false)
+        end
+        artwork:EnableMouse(false)
+        if artwork.Border then artwork.Border:Hide() end
+        if artwork.Hint then artwork.Hint:Hide() end
+        artwork:Hide()
+        return
+    end
+
+    if not definition then
+        artwork:Hide()
+        return
+    end
+
+    local artworkScale = Clamp(settings.classArtworkScale or 1, 0.5, 2.5)
+    local artworkWidth = definition.width * artworkScale
+    local artworkHeight = definition.height * artworkScale
+    local artworkTexture = definition.texture
+
+    artwork._definition = definition
+    artwork._scale = artworkScale
+    artwork:SetSize(artworkWidth, artworkHeight)
+    artwork.Texture:SetTexture(artworkTexture)
+    artwork.Texture:SetVertexColor(1, 1, 1, 1)
+    self:PositionPlayerClassArtwork(frame, settings.classArtworkOffsetX or 0, settings.classArtworkOffsetY or 0)
+
+    local alignMode = self._playerClassArtworkAlignmentMode == true
+    if not alignMode and artwork._dragging then
+        self:StopPlayerClassArtworkDrag(frame, false)
+    end
+    artwork:EnableMouse(alignMode)
+    if artwork.Border then artwork.Border:SetShown(alignMode) end
+    if artwork.Hint then artwork.Hint:SetShown(alignMode) end
+    artwork:Show()
 end
 
 function UnitFrames:ApplyHeaderSettings(header, groupKey)
@@ -8292,6 +8516,53 @@ function UnitFrames:StyleFrame(frame)
             classPower[i] = bar
         end
         frame.ClassPower = classPower
+    end
+
+    if capturedUnitKey == "player" and not frame.TwichPlayerClassArtwork then
+        local artwork = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        artwork:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        artwork:SetSize(1, 1)
+        artwork:SetFrameStrata(frame:GetFrameStrata())
+        artwork:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 6))
+        artwork:EnableMouse(false)
+        artwork:Hide()
+
+        local texture = artwork:CreateTexture(nil, "ARTWORK", nil, 6)
+        texture:SetAllPoints(artwork)
+        artwork.Texture = texture
+
+        local border = CreateFrame("Frame", nil, artwork, "BackdropTemplate")
+        border:SetAllPoints(artwork)
+        border:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        border:SetBackdropBorderColor(0.18, 0.82, 1, 0.85)
+        border:SetBackdropColor(0, 0, 0, 0)
+        border:Hide()
+        artwork.Border = border
+
+        local hint = artwork:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        hint:SetPoint("BOTTOMLEFT", artwork, "TOPLEFT", 0, 6)
+        hint:SetText("Drag to align")
+        hint:SetTextColor(0.82, 0.94, 1, 0.95)
+        hint:Hide()
+        artwork.Hint = hint
+
+        artwork:SetScript("OnMouseDown", function(_, button)
+            if button ~= "LeftButton" then
+                return
+            end
+            UnitFrames:StartPlayerClassArtworkDrag(frame)
+        end)
+        artwork:SetScript("OnMouseUp", function(_, button)
+            if button ~= "LeftButton" then
+                return
+            end
+            UnitFrames:StopPlayerClassArtworkDrag(frame, true)
+        end)
+        artwork:SetScript("OnHide", function()
+            UnitFrames:StopPlayerClassArtworkDrag(frame, false)
+        end)
+
+        frame.TwichPlayerClassArtwork = artwork
     end
 
     local nameFS = health:CreateFontString(nil, "OVERLAY")

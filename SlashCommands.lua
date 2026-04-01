@@ -5,6 +5,10 @@
 local TwichRx = _G.TwichRx
 local T = unpack(TwichRx)
 
+local function GetUnitFramesModule()
+    return T:GetModule("UnitFrames", true)
+end
+
 local function OpenConfigurationPanel(input)
     local command = type(input) == "string" and input:match("^%s*(.-)%s*$") or ""
     local primaryCommand, remainder = command:match("^(%S+)%s*(.-)%s*$")
@@ -100,6 +104,32 @@ local function OpenConfigurationPanel(input)
             return
         end
         viewer:Toggle()
+        return
+    end
+
+    if primaryCommand == "artwork" then
+        local unitFrames = GetUnitFramesModule()
+        if not unitFrames then
+            T:Print("[TwichUI] Unit frames are unavailable")
+            return
+        end
+
+        if remainder == "print" then
+            if type(unitFrames.PrintPlayerClassArtworkOffsets) == "function" then
+                unitFrames:PrintPlayerClassArtworkOffsets()
+                return
+            end
+
+            T:Print("[TwichUI] Player class artwork tooling is unavailable")
+            return
+        end
+
+        if type(unitFrames.TogglePlayerClassArtworkAlignmentMode) == "function" then
+            unitFrames:TogglePlayerClassArtworkAlignmentMode()
+            return
+        end
+
+        T:Print("[TwichUI] Player class artwork tooling is unavailable")
         return
     end
 

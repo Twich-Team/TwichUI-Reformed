@@ -5,9 +5,17 @@
 local TwichRx = _G.TwichRx
 ---@type TwichUI
 local T = unpack(TwichRx)
+local LibStub = _G.LibStub
 
 ---@type ConfigurationModule
 local ConfigurationModule = T:GetModule("Configuration")
+
+local DEFAULT_SOUND = "TwichUI Alert 1"
+
+local function GetSoundValues()
+    local lsm = (T.Libs and T.Libs.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
+    return lsm and lsm:HashTable("sound") or {}
+end
 
 local function GetErrorLog()
     ---@type TwichUIErrorLog|nil
@@ -15,13 +23,14 @@ local function GetErrorLog()
 end
 
 local function GetViewer()
-    return T.Tools and T.Tools.UI and T.Tools.UI.ErrorLogViewer
+    return T.Tools and T.Tools.UI and (T.Tools.UI --[[@as any]]).ErrorLogViewer
 end
 
 local function BuildErrorLogConfiguration()
     local W = ConfigurationModule.Widgets
 
     local section = W.NewConfigurationSection(95, "Error Log")
+    section.childGroups = nil
     section.args = {
         title    = W.TitleWidget(0, "Error Log"),
         desc     = W.Description(5,
@@ -39,6 +48,57 @@ local function BuildErrorLogConfiguration()
                     else
                         return string.format("|cffff9a6c%d error%s captured.|r", n, n == 1 and "" or "s")
                     end
+                end,
+            },
+        }),
+        notifications = W.IGroup(15, "Notifications", {
+            suppressChatOutput = {
+                type = "toggle",
+                order = 10,
+                name = "Hide Chat Output",
+                desc = "Do not print a chat message when TwichUI captures a new error.",
+                get = function()
+                    local el = GetErrorLog()
+                    return el and el:GetSuppressChatOutput() or false
+                end,
+                set = function(_, value)
+                    local el = GetErrorLog()
+                    if el then el:SetSuppressChatOutput(value) end
+                end,
+            },
+            playAlertSound = {
+                type = "toggle",
+                order = 20,
+                name = "Play Alert Sound",
+                desc = "Play a sound whenever TwichUI captures a new error.",
+                get = function()
+                    local el = GetErrorLog()
+                    return el and el:GetPlayAlertSound() or false
+                end,
+                set = function(_, value)
+                    local el = GetErrorLog()
+                    if el then el:SetPlayAlertSound(value) end
+                end,
+            },
+            alertSound = {
+                type = "select",
+                dialogControl = "LSM30_Sound",
+                order = 25,
+                width = 2,
+                name = "Alert Sound",
+                desc = "Sound to play when a new TwichUI error is captured.",
+                values = GetSoundValues,
+                disabled = function()
+                    local el = GetErrorLog()
+                    return not (el and el:GetPlayAlertSound())
+                end,
+                get = function()
+                    local el = GetErrorLog()
+                    return el and el:GetAlertSound() or DEFAULT_SOUND
+                end,
+                set = function(_, value)
+                    local el = GetErrorLog()
+                    if el then el:SetAlertSound(value) end
                 end,
             },
         }),

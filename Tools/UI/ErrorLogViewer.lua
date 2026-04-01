@@ -42,7 +42,8 @@ local function MeasureDetailTextHeight(frame, text)
     end
 
     local measure = frame._detailMeasure
-    local width = (frame.detailContent and frame.detailContent:GetWidth() or 300) - 16
+    local width = (frame.detailEditBox and frame.detailEditBox:GetWidth() or
+        (frame.detailContent and frame.detailContent:GetWidth() or 300) - 16)
     measure:SetWidth(math.max(40, width))
     measure:SetText(text or "")
     return math.max(1, measure:GetStringHeight() + 16)
@@ -64,7 +65,7 @@ local CLR_TEXT_DATE          = { 0.47, 0.52, 0.60 }
 local FRAME_W                = 880
 local FRAME_H                = 560
 local TITLEBAR_H             = 52
-local LIST_W                 = 300
+local LIST_W                 = 276
 local ROW_H                  = 44
 local INSET                  = 6
 
@@ -76,6 +77,7 @@ local ErrorLogViewer         = UI.ErrorLogViewer or {}
 UI.ErrorLogViewer            = ErrorLogViewer
 ErrorLogViewer.rowPool       = ErrorLogViewer.rowPool or {}
 ErrorLogViewer.selectedIndex = nil
+ErrorLogViewer.selectedEntryId = ErrorLogViewer.selectedEntryId or nil
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -196,6 +198,45 @@ local function SetRowSelected(row, selected)
     end
 end
 
+local function UpdateDeleteButtonState(frame, hasSelection)
+    local button = frame and frame.deleteBtn
+    if not button then
+        return
+    end
+
+    button:SetEnabled(hasSelection == true)
+    button:SetAlpha(hasSelection == true and 1 or 0.45)
+end
+
+local function UpdateDetailLayout(frame)
+    if not frame or not frame.detailScroll or not frame.detailContent or not frame.detailEditBox then
+        return
+    end
+
+    local scrollWidth = frame.detailScroll:GetWidth() or 0
+    local contentWidth = math.max(220, scrollWidth - 8)
+    local editWidth = math.max(200, contentWidth - 20)
+
+    frame.detailContent:SetWidth(contentWidth)
+    frame.detailEditBox:SetWidth(editWidth)
+    local contentHeight = math.max(1, frame.detailContent:GetHeight() or 1)
+    frame.detailEditBox:SetHeight(math.max(1, contentHeight - 16))
+end
+
+local function GetEntryIndexById(errors, entryId)
+    if not entryId then
+        return nil
+    end
+
+    for index, entry in ipairs(errors or {}) do
+        if entry and entry.id == entryId then
+            return index
+        end
+    end
+
+    return nil
+end
+
 -- ---------------------------------------------------------------------------
 -- Frame construction
 -- ---------------------------------------------------------------------------
@@ -264,6 +305,14 @@ function ErrorLogViewer:EnsureFrame()
         if el and el.Clear then el:Clear() end
     end)
 
+    local deleteBtn = Btn(titleBar, 74, 26, "Delete", 0.98, 0.74, 0.30)
+    deleteBtn:SetPoint("RIGHT", clearBtn, "LEFT", -6, 0)
+    deleteBtn:SetScript("OnClick", function()
+        self:DeleteSelectedEntry()
+    end)
+    frame.deleteBtn = deleteBtn
+    UpdateDeleteButtonState(frame, false)
+
     -- -----------------------------------------------------------------------
     -- Body area (below title bar)
     -- -----------------------------------------------------------------------
@@ -301,7 +350,7 @@ function ErrorLogViewer:EnsureFrame()
         CLR_BG_PANEL[1], CLR_BG_PANEL[2], CLR_BG_PANEL[3] * 0.80, 0.92,
         0, 0, 0, 0.18)
     rightBg:SetPoint("TOPLEFT", frame, "TOPLEFT", INSET + LIST_W + INSET, bodyY)
-    rightBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -INSET, -INSET)
+    rightBg:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -INSET, INSET)
 
     -- Right panel header
     local detailHeader = rightBg:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -313,7 +362,7 @@ function ErrorLogViewer:EnsureFrame()
     -- Scroll frame for detail text
     local detailScroll = CreateFrame("ScrollFrame", nil, rightBg)
     detailScroll:SetPoint("TOPLEFT", rightBg, "TOPLEFT", 1, -24)
-    detailScroll:SetPoint("BOTTOMRIGHT", rightBg, "BOTTOMRIGHT", -1, 4)
+    detailScroll:SetPoint("BOTTOMRIGHT", rightBg, "BOTTOMRIGHT", -6, 6)
     detailScroll:EnableMouseWheel(true)
     detailScroll:SetScript("OnMouseWheel", function(_, delta)
         local cur  = detailScroll:GetVerticalScroll()
@@ -329,12 +378,12 @@ function ErrorLogViewer:EnsureFrame()
     -- Use an EditBox instead of FontString so users can select/copy stack traces.
     local detailEditBox = CreateFrame("EditBox", nil, detailContent)
     detailEditBox:SetPoint("TOPLEFT", detailContent, "TOPLEFT", 8, -8)
-    detailEditBox:SetPoint("TOPRIGHT", detailContent, "TOPRIGHT", -8, -8)
     detailEditBox:SetMultiLine(true)
     detailEditBox:SetAutoFocus(false)
     detailEditBox:SetFontObject(GameFontHighlightSmall)
     detailEditBox:SetTextColor(0.82, 0.88, 0.94)
     detailEditBox:SetJustifyH("LEFT")
+    detailEditBox:SetJustifyV("TOP")
     detailEditBox:SetTextInsets(0, 0, 0, 0)
     detailEditBox:SetScript("OnEscapePressed", function(self)
         self:ClearFocus()
@@ -356,6 +405,12 @@ function ErrorLogViewer:EnsureFrame()
     frame.detailEditBox = detailEditBox
     frame.detailContent = detailContent
     frame.detailScroll  = detailScroll
+    frame.rightBg       = rightBg
+
+    frame:SetScript("OnSizeChanged", function(self)
+        UpdateDetailLayout(self)
+    end)
+    UpdateDetailLayout(frame)
 
     -- Mousewheel on list
     listScroll:EnableMouseWheel(true)
@@ -381,6 +436,16 @@ function ErrorLogViewer:Refresh()
 
     local errors = el:GetAll()
     local count  = #errors
+    local selectedIndex = GetEntryIndexById(errors, self.selectedEntryId)
+    if selectedIndex then
+        self.selectedIndex = selectedIndex
+    elseif count == 0 then
+        self.selectedIndex = nil
+        self.selectedEntryId = nil
+    elseif self.selectedIndex and self.selectedIndex > count then
+        self.selectedIndex = 1
+        self.selectedEntryId = errors[1] and errors[1].id or nil
+    end
 
     -- Count label
     if count == 0 then
@@ -399,8 +464,9 @@ function ErrorLogViewer:Refresh()
 
     local content = frame.listContent
     local yOffset = 0
+    UpdateDetailLayout(frame)
 
-    for i, entry in pairs(errors) do
+    for i, entry in ipairs(errors) do
         local row = self.rowPool[i]
         if not row then
             row = MakeListRow(content)
@@ -444,13 +510,24 @@ function ErrorLogViewer:Refresh()
     -- If selection is out of range (e.g. after clear), reset detail panel
     if count == 0 then
         self.selectedIndex = nil
+        self.selectedEntryId = nil
         frame.detailHeader:SetText("Error Details")
         frame.detailEditBox:SetText(
         "No errors have been captured yet.\n\nErrors originating from TwichUI_Reformed will appear here automatically.")
         frame.detailEditBox:HighlightText(0, 0)
         frame.detailContent:SetHeight(MeasureDetailTextHeight(frame, frame.detailEditBox:GetText()))
-    elseif self.selectedIndex and self.selectedIndex > count then
-        self:SelectEntry(1, errors[1])
+        UpdateDetailLayout(frame)
+        UpdateDeleteButtonState(frame, false)
+    elseif self.selectedIndex then
+        self:SelectEntry(self.selectedIndex, errors[self.selectedIndex])
+    else
+        frame.detailHeader:SetText("Error Details")
+        frame.detailEditBox:SetText("Select an error on the left to inspect its full stack trace.")
+        frame.detailEditBox:HighlightText(0, 0)
+        frame.detailScroll:SetVerticalScroll(0)
+        frame.detailContent:SetHeight(MeasureDetailTextHeight(frame, frame.detailEditBox:GetText()))
+        UpdateDetailLayout(frame)
+        UpdateDeleteButtonState(frame, false)
     end
 end
 
@@ -463,6 +540,7 @@ function ErrorLogViewer:SelectEntry(index, entry)
     if oldRow then SetRowSelected(oldRow, false) end
 
     self.selectedIndex = index
+    self.selectedEntryId = entry.id
 
     -- Select new row
     local newRow = self.rowPool[index]
@@ -481,6 +559,41 @@ function ErrorLogViewer:SelectEntry(index, entry)
     -- Resize the scroll child to match current text height.
     local textH = MeasureDetailTextHeight(frame, detail)
     frame.detailContent:SetHeight(textH)
+    UpdateDetailLayout(frame)
+    UpdateDeleteButtonState(frame, true)
+end
+
+function ErrorLogViewer:DeleteSelectedEntry()
+    local frame = self.frame
+    local entryId = self.selectedEntryId
+    if not frame or not entryId then
+        return
+    end
+
+    local el = Tools.ErrorLog
+    if not el or type(el.RemoveEntry) ~= "function" then
+        return
+    end
+
+    local removed = el:RemoveEntry(entryId)
+    if not removed then
+        return
+    end
+
+    local errors = el:GetAll()
+    if #errors == 0 then
+        self.selectedIndex = nil
+        self.selectedEntryId = nil
+    else
+        local nextIndex = self.selectedIndex or 1
+        if nextIndex > #errors then
+            nextIndex = #errors
+        end
+        self.selectedIndex = nextIndex
+        self.selectedEntryId = errors[nextIndex] and errors[nextIndex].id or nil
+    end
+
+    self:Refresh()
 end
 
 -- ---------------------------------------------------------------------------
@@ -494,7 +607,7 @@ function ErrorLogViewer:Show()
     -- Auto-select first entry
     local el = Tools.ErrorLog
     local errors = el and el:GetAll() or {}
-    if #errors > 0 and not self.selectedIndex then
+    if #errors > 0 and not self.selectedEntryId then
         self:SelectEntry(1, errors[1])
     end
 end
