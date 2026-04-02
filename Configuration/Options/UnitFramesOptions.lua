@@ -147,10 +147,33 @@ local STATE_ICON_PREVIEW_STANDARD      = {
     spirit = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
 }
 
+local READY_CHECK_ICON_PREVIEW_STANDARD = {
+    ready = { texture = "Interface\\RaidFrame\\ReadyCheck-Ready", width = 32, height = 32 },
+    notready = { texture = "Interface\\RaidFrame\\ReadyCheck-NotReady", width = 32, height = 32 },
+}
+local READY_CHECK_ICON_PREVIEW_LEGACY  = {
+    ready = { texture = "Interface\\RaidFrame\\ReadyCheck-Ready", width = 32, height = 32 },
+    notready = { texture = "Interface\\RaidFrame\\ReadyCheck-NotReady", width = 32, height = 32 },
+}
+
 local STATE_INDICATOR_DEFAULTS         = {
     combatIndicator = { point = "CENTER", relativePoint = "TOP", offsetX = 0, offsetY = 10, size = 20, alpha = 1 },
     restingIndicator = { point = "CENTER", relativePoint = "TOPLEFT", offsetX = -2, offsetY = 8, size = 18, alpha = 1 },
     spiritIndicator = { point = "CENTER", relativePoint = "CENTER", offsetX = 0, offsetY = 0, size = 24, alpha = 0.9 },
+}
+
+local READY_CHECK_INDICATOR_DEFAULTS   = {
+    point = "TOP",
+    relativePoint = "TOP",
+    offsetX = 0,
+    offsetY = 8,
+    size = 16,
+    alpha = 1,
+}
+
+local READY_CHECK_ICON_TYPE_VALUES     = {
+    standard = "Standard (Raid Mark)",
+    legacy = "Legacy (RaidFrame)",
 }
 
 -- Default tag/justify for info bar text slots (mirrors INFO_BAR_TEXT_DEFAULTS in the engine)
@@ -737,6 +760,19 @@ local function BuildStateIndicatorTypeValues()
             ROLE_ICON_TYPE_VALUES.twich,
             BuildStateIndicatorPreviewMarkup(STATE_ICON_PREVIEW_TWICH.combat, 22),
             BuildStateIndicatorPreviewMarkup(STATE_ICON_PREVIEW_TWICH.resting, 22)),
+    }
+end
+
+local function BuildReadyCheckTypeValues()
+    return {
+        standard = string.format("%s  %s %s",
+            READY_CHECK_ICON_TYPE_VALUES.standard,
+            BuildStateIndicatorPreviewMarkup(READY_CHECK_ICON_PREVIEW_STANDARD.ready, 20),
+            BuildStateIndicatorPreviewMarkup(READY_CHECK_ICON_PREVIEW_STANDARD.notready, 20)),
+        legacy = string.format("%s  %s %s",
+            READY_CHECK_ICON_TYPE_VALUES.legacy,
+            BuildStateIndicatorPreviewMarkup(READY_CHECK_ICON_PREVIEW_LEGACY.ready, 20),
+            BuildStateIndicatorPreviewMarkup(READY_CHECK_ICON_PREVIEW_LEGACY.notready, 20)),
     }
 end
 
@@ -1593,6 +1629,36 @@ local function BuildStateIndicatorGroup(order, label, basePath, indicatorKey)
     })
 end
 
+local function BuildReadyCheckIndicatorGroup(order, basePath, defaultEnabled)
+    local defaults = READY_CHECK_INDICATOR_DEFAULTS
+    local disabled = ModuleDisabled()
+    local isOff = ModuleDisabled(function()
+        return GetPathValue(ExtendPath(basePath, "enabled"), defaultEnabled == true) ~= true
+    end)
+
+    return Widgets.IGroup(order, "Ready Check", {
+        enabled = BuildToggle(1, "Show Ready Check",
+            "Display ready check response icons (check or X) on this frame.",
+            ExtendPath(basePath, "enabled"), defaultEnabled == true, { disabled = disabled, refreshConfig = true }),
+        iconType = BuildSelect(2, "Icon Type",
+            "Choose which icon set to use for ready check responses.",
+            ExtendPath(basePath, "iconType"), "standard", BuildReadyCheckTypeValues,
+            { disabled = isOff, refreshConfig = true, width = "full" }),
+        point = BuildSelect(3, "Icon Point", "Which point of the icon should be anchored.",
+            ExtendPath(basePath, "point"), defaults.point, POINT_VALUES, { disabled = isOff }),
+        relativePoint = BuildSelect(4, "Frame Point", "Which point on the frame the icon should anchor to.",
+            ExtendPath(basePath, "relativePoint"), defaults.relativePoint, POINT_VALUES, { disabled = isOff }),
+        offsetX = BuildRange(5, "X Offset", "Horizontal offset from the chosen frame point.",
+            ExtendPath(basePath, "offsetX"), defaults.offsetX, -200, 200, 1, { disabled = isOff }),
+        offsetY = BuildRange(6, "Y Offset", "Vertical offset from the chosen frame point.",
+            ExtendPath(basePath, "offsetY"), defaults.offsetY, -200, 200, 1, { disabled = isOff }),
+        size = BuildRange(7, "Size", "Ready check icon size in pixels.",
+            ExtendPath(basePath, "size"), defaults.size, 8, 64, 1, { disabled = isOff }),
+        alpha = BuildRange(8, "Alpha", "Opacity of the ready check icon.",
+            ExtendPath(basePath, "alpha"), defaults.alpha, 0, 1, 0.01, { disabled = isOff }),
+    })
+end
+
 --- Builds a full Info Bar tab for a given base path (units/X/infoBar or groups/X/infoBar).
 local function BuildInfoBarTab(order, basePath)
     local disabled    = ModuleDisabled()
@@ -1877,6 +1943,8 @@ local function BuildSingleUnitTab(unitKey, label)
                         ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
                     spiritIndicator = BuildStateIndicatorGroup(8, "Spirit Indicator",
                         ExtendPath(basePath, "spiritIndicator"), "spiritIndicator"),
+                    readyCheckIndicator = BuildReadyCheckIndicatorGroup(9,
+                        ExtendPath(basePath, "readyCheckIndicator"), false),
                     copyFrom = BuildCopyFromSingle(unitKey),
                 },
             },
@@ -2162,7 +2230,9 @@ local function BuildGroupTab(groupKey, label)
                 ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
             spiritIndicator  = BuildStateIndicatorGroup(9, "Spirit Indicator",
                 ExtendPath(basePath, "spiritIndicator"), "spiritIndicator"),
-            infoBar          = BuildInfoBarTab(10, ExtendPath(basePath, "infoBar")),
+            readyCheckIndicator = BuildReadyCheckIndicatorGroup(10,
+                ExtendPath(basePath, "readyCheckIndicator"), true),
+            infoBar          = BuildInfoBarTab(11, ExtendPath(basePath, "infoBar")),
         },
     }
 end
@@ -2260,6 +2330,8 @@ local function BuildBossTab()
                         { "units", "boss", "restingIndicator" }, "restingIndicator"),
                     spiritIndicator = BuildStateIndicatorGroup(6, "Spirit Indicator",
                         { "units", "boss", "spiritIndicator" }, "spiritIndicator"),
+                    readyCheckIndicator = BuildReadyCheckIndicatorGroup(7,
+                        { "units", "boss", "readyCheckIndicator" }, false),
                 },
             },
             layout = BuildLayoutGroup(2, "Layout", "boss", GROUP_LAYOUT_DEFAULTS.boss, {

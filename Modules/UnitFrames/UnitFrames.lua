@@ -1267,6 +1267,19 @@ local TWICH_STATE_TEXTURES = {
     spirit = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
 }
 
+local READY_CHECK_ART = {
+    standard = {
+        ready = { atlas = "UI-LFG-ReadyMark-Raid", width = 1, height = 1 },
+        notready = { atlas = "UI-LFG-DeclineMark-Raid", width = 1, height = 1 },
+        waiting = { atlas = "UI-LFG-PendingMark-Raid", width = 1, height = 1 },
+    },
+    legacy = {
+        ready = { texture = "Interface\\RaidFrame\\ReadyCheck-Ready", width = 32, height = 32 },
+        notready = { texture = "Interface\\RaidFrame\\ReadyCheck-NotReady", width = 32, height = 32 },
+        waiting = { texture = "Interface\\RaidFrame\\ReadyCheck-Waiting", width = 32, height = 32 },
+    },
+}
+
 local STATE_INDICATOR_DEFS = {
     combatIndicator = {
         stateKey = "combat",
@@ -1303,6 +1316,17 @@ local STATE_INDICATOR_DEFS = {
     },
 }
 
+local READY_CHECK_INDICATOR_DEF = {
+    hostKey = "TwichReadyCheckIndicatorHost",
+    textureKey = "TwichReadyCheckIndicator",
+    defaultPoint = "TOP",
+    defaultRelativePoint = "TOP",
+    defaultOffsetX = 0,
+    defaultOffsetY = 8,
+    defaultSize = 16,
+    defaultAlpha = 1,
+}
+
 local function GetRoleIconArt(iconType, role)
     if iconType == "twich" then
         return TWICH_ROLE_TEXTURES[role]
@@ -1332,6 +1356,11 @@ local function GetStateIndicatorArt(iconType, stateKey)
     end
 
     return STANDARD_STATE_TEXTURES[stateKey]
+end
+
+local function GetReadyCheckArt(iconType, status)
+    local style = READY_CHECK_ART[iconType] or READY_CHECK_ART.standard
+    return style and style[status] or nil
 end
 
 local function GetScaledIconSize(size, art, minimumSize, maximumSize)
@@ -2036,6 +2065,45 @@ function UnitFrames:GetStateIndicatorConfig(unitKey, indicatorKey)
     }
 end
 
+function UnitFrames:GetReadyCheckIndicatorConfig(unitKey)
+    local db = self:GetDB()
+    local scope = ResolveScopeByUnitKey(unitKey)
+
+    local groupCfg = {}
+    if scope == "party" or scope == "raid" or scope == "tank" then
+        local grp = db.groups and db.groups[scope] or {}
+        groupCfg = type(grp.readyCheckIndicator) == "table" and grp.readyCheckIndicator or {}
+    end
+
+    local unitCfg = {}
+    local unitConfigKey = unitKey
+    if scope == "boss" then
+        unitConfigKey = "boss"
+    end
+    if scope == "singles" or scope == "boss" then
+        local u = db.units and db.units[unitConfigKey] or {}
+        unitCfg = type(u.readyCheckIndicator) == "table" and u.readyCheckIndicator or {}
+    end
+
+    local function get(k, default)
+        if unitCfg[k] ~= nil then return unitCfg[k] end
+        if groupCfg[k] ~= nil then return groupCfg[k] end
+        return default
+    end
+
+    local defaultEnabled = scope == "party" or scope == "raid" or scope == "tank"
+    return {
+        enabled = get("enabled", defaultEnabled),
+        point = get("point", READY_CHECK_INDICATOR_DEF.defaultPoint),
+        relativePoint = get("relativePoint", READY_CHECK_INDICATOR_DEF.defaultRelativePoint),
+        offsetX = get("offsetX", READY_CHECK_INDICATOR_DEF.defaultOffsetX),
+        offsetY = get("offsetY", READY_CHECK_INDICATOR_DEF.defaultOffsetY),
+        size = get("size", READY_CHECK_INDICATOR_DEF.defaultSize),
+        alpha = Clamp(get("alpha", READY_CHECK_INDICATOR_DEF.defaultAlpha), 0, 1),
+        iconType = get("iconType", "standard"),
+    }
+end
+
 function UnitFrames:ApplyStateIndicatorSettings(frame, unitKey, indicatorKey)
     if not frame then return end
 
@@ -2191,6 +2259,138 @@ function UnitFrames:RefreshStateIndicatorFrames()
                     self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "combatIndicator")
                     self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "restingIndicator")
                     self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "spiritIndicator")
+                end
+            end
+        end
+    end
+end
+
+function UnitFrames:ApplyReadyCheckIndicatorSettings(frame, unitKey)
+    if not frame then return end
+
+    if not frame[READY_CHECK_INDICATOR_DEF.hostKey] then
+        local host = CreateFrame("Frame", nil, frame)
+        host:SetAllPoints(frame)
+        host:SetFrameStrata(frame:GetFrameStrata())
+        host:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 6))
+        frame[READY_CHECK_INDICATOR_DEF.hostKey] = host
+        frame[READY_CHECK_INDICATOR_DEF.textureKey] = host:CreateTexture(nil, "OVERLAY", nil, 1)
+    else
+        frame[READY_CHECK_INDICATOR_DEF.hostKey]:SetFrameStrata(frame:GetFrameStrata())
+        frame[READY_CHECK_INDICATOR_DEF.hostKey]:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 6))
+    end
+
+    local host = frame[READY_CHECK_INDICATOR_DEF.hostKey]
+    local icon = frame[READY_CHECK_INDICATOR_DEF.textureKey]
+    local cfg = self:GetReadyCheckIndicatorConfig(unitKey)
+
+    if not cfg.enabled then
+        icon:Hide()
+        host:Hide()
+        return
+    end
+
+    host:Show()
+    icon:ClearAllPoints()
+    icon:SetDrawLayer("OVERLAY", 7)
+    icon:SetPoint(cfg.point or READY_CHECK_INDICATOR_DEF.defaultPoint, host,
+        cfg.relativePoint or READY_CHECK_INDICATOR_DEF.defaultRelativePoint,
+        tonumber(cfg.offsetX) or READY_CHECK_INDICATOR_DEF.defaultOffsetX,
+        tonumber(cfg.offsetY) or READY_CHECK_INDICATOR_DEF.defaultOffsetY)
+    icon:SetAlpha(Clamp(cfg.alpha or READY_CHECK_INDICATOR_DEF.defaultAlpha, 0, 1))
+
+    if not frame._twichReadyCheckOnShowHooked then
+        frame._twichReadyCheckOnShowHooked = true
+        frame:HookScript("OnShow", function(f)
+            UnitFrames:UpdateReadyCheckIndicator(f, f._unitKey or unitKey)
+        end)
+    end
+
+    if not frame._twichReadyCheckOnAttributeChangedHooked then
+        frame._twichReadyCheckOnAttributeChangedHooked = true
+        frame:HookScript("OnAttributeChanged", function(f, name)
+            if name == "unit" then
+                UnitFrames:UpdateReadyCheckIndicator(f, f._unitKey or unitKey)
+            end
+        end)
+    end
+
+    self:UpdateReadyCheckIndicator(frame, unitKey)
+end
+
+function UnitFrames:UpdateReadyCheckIndicator(frame, unitKey)
+    local icon = frame and frame[READY_CHECK_INDICATOR_DEF.textureKey]
+    local host = frame and frame[READY_CHECK_INDICATOR_DEF.hostKey]
+    if not icon then
+        return
+    end
+
+    local cfg = self:GetReadyCheckIndicatorConfig(unitKey)
+    if not cfg.enabled then
+        icon:Hide()
+        if host then
+            host:Hide()
+        end
+        return
+    end
+
+    if host then
+        host:Show()
+    end
+
+    local status = nil
+    if frame and frame._isTestPreview then
+        status = frame._testReadyStatus
+    else
+        local unit = ResolveFrameUnit(frame)
+        if unit and UnitExists(unit) and GetReadyCheckStatus then
+            status = GetReadyCheckStatus(unit)
+        end
+    end
+
+    if status ~= "ready" and status ~= "notready" and status ~= "waiting" then
+        icon:Hide()
+        return
+    end
+
+    local art = GetReadyCheckArt(cfg.iconType, status) or GetReadyCheckArt("standard", status)
+    if not art then
+        icon:Hide()
+        return
+    end
+
+    if art.atlas then
+        icon:SetAtlas(art.atlas, false)
+        icon:SetTexCoord(0, 1, 0, 1)
+    elseif art.texture then
+        icon:SetTexture(art.texture)
+        if art.texCoord then
+            icon:SetTexCoord(unpack(art.texCoord))
+        else
+            icon:SetTexCoord(0, 1, 0, 1)
+        end
+    else
+        icon:Hide()
+        return
+    end
+
+    icon:SetSize(GetScaledIconSize(cfg.size, art, 8, 64))
+    icon:Show()
+end
+
+function UnitFrames:RefreshReadyCheckIndicatorFrames()
+    for _, frame in pairs(self.frames) do
+        if frame then
+            self:UpdateReadyCheckIndicator(frame, frame._unitKey or ResolveFrameUnit(frame))
+        end
+    end
+
+    for _, header in pairs(self.headers) do
+        if header then
+            for index = 1, select('#', header:GetChildren()) do
+                local child = select(index, header:GetChildren())
+                if child then
+                    self:UpdateReadyCheckIndicator(child, child._unitKey or ResolveFrameUnit(child))
                 end
             end
         end
@@ -6543,6 +6743,7 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     self:ApplyStateIndicatorSettings(frame, unitKey, "combatIndicator")
     self:ApplyStateIndicatorSettings(frame, unitKey, "restingIndicator")
     self:ApplyStateIndicatorSettings(frame, unitKey, "spiritIndicator")
+    self:ApplyReadyCheckIndicatorSettings(frame, unitKey)
     self:ApplyInfoBarSettings(frame, unitKey)
 end
 
@@ -7886,6 +8087,7 @@ function UnitFrames:ApplyPreviewFrameData(frame, unitKey, label, mockClass)
     frame._testInCombat = state.inCombat == true
     frame._testIsDead = state.isDead == true
     frame._testIsResting = state.isResting == true and state.inCombat ~= true
+    frame._testReadyStatus = state.readyStatus or "ready"
 
     self:ApplySingleFrameSettings(frame, unitKey)
 
@@ -7983,6 +8185,7 @@ function UnitFrames:ApplyPreviewFrameData(frame, unitKey, label, mockClass)
     self:UpdateStateIndicator(frame, unitKey, "combatIndicator")
     self:UpdateStateIndicator(frame, unitKey, "restingIndicator")
     self:UpdateStateIndicator(frame, unitKey, "spiritIndicator")
+    self:UpdateReadyCheckIndicator(frame, unitKey)
 end
 
 function UnitFrames:CreatePreviewFrame(parent, width, height, label, scopeOrUnitKey, mockClass)
@@ -8030,6 +8233,7 @@ function UnitFrames:BuildOrRefreshSinglePreviews()
         self:UpdateStateIndicator(frame, entry.key, "combatIndicator")
         self:UpdateStateIndicator(frame, entry.key, "restingIndicator")
         self:UpdateStateIndicator(frame, entry.key, "spiritIndicator")
+        self:UpdateReadyCheckIndicator(frame, entry.key)
         frame:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
     end
 
@@ -9525,6 +9729,10 @@ function UnitFrames:OnPlayerRestingChanged()
     self:RefreshStateIndicatorFrames()
 end
 
+function UnitFrames:OnReadyCheckChanged()
+    self:RefreshReadyCheckIndicatorFrames()
+end
+
 function UnitFrames:OnEnable()
     -- Migration: old default was nil (no value stored) or false for healerOnlyPower.
     -- New semantics: nil means ON by default; false means explicitly OFF. If savedvars has
@@ -9646,6 +9854,9 @@ function UnitFrames:OnEnable()
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "RefreshAllFrames")
     self:RegisterEvent("PLAYER_ROLES_ASSIGNED", "RefreshAllFrames")
     self:RegisterEvent("ROLE_CHANGED_INFORM", "RefreshAllFrames")
+    self:RegisterEvent("READY_CHECK", "OnReadyCheckChanged")
+    self:RegisterEvent("READY_CHECK_CONFIRM", "OnReadyCheckChanged")
+    self:RegisterEvent("READY_CHECK_FINISHED", "OnReadyCheckChanged")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "RefreshAllFrames")
     self:RegisterEvent("SPELLS_CHANGED", "ResetRangeSpellCache")
     self:RegisterEvent("PLAYER_TALENT_UPDATE", "ResetRangeSpellCache")
