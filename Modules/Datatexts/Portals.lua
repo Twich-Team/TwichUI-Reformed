@@ -320,37 +320,111 @@ function PDT:FindToyHearthstones()
         LoadAddOn("Blizzard_Collections")
     end
 
-    -- ensure the toybox is not filtered
-    C_ToyBox.SetFilterString("")
+    local SEARCH_TEXTS = {
+        "returns you to",
+        "return you to",
+        "return to",
+        "teleports you to",
+        "teleports the caster to",
+    }
 
-    local SEARCH_TEXT = "returns you to"
+    local NAME_KEYWORDS = {
+        "hearthstone",
+        "sinstone",
+        "innkeeper",
+        "town portal",
+        "path of the naaru",
+        "stone of the hearth",
+    }
 
-    local function DoesItemHaveTooltipText(itemID, searchText)
-        local ttData = C_TooltipInfo.GetItemByID(itemID)
+    local function DoesItemHaveTooltipText(itemID, searchTexts)
+        local ttData
+        if C_TooltipInfo.GetToyByItemID then
+            ttData = C_TooltipInfo.GetToyByItemID(itemID)
+        end
+        if (not ttData or not ttData.lines) and C_TooltipInfo.GetItemByID then
+            ttData = C_TooltipInfo.GetItemByID(itemID)
+        end
+
         if ttData and ttData.lines then
             for i, line in ipairs(ttData.lines) do
                 local leftText = line.leftText
-                if leftText and leftText ~= "" and leftText:lower():find(searchText) then
-                    return true
+                if leftText and leftText ~= "" then
+                    local lowerText = leftText:lower()
+                    for _, searchText in ipairs(searchTexts) do
+                        if lowerText:find(searchText, 1, true) then
+                            return true
+                        end
+                    end
                 end
             end
         end
         return false
     end
 
-    local toyHearthstones = {}
-
-    local totalToys = C_ToyBox.GetNumToys() or 0
-    for index = 1, totalToys do
-        -- this is an index of OWNED and FILTERED TOYS
-        local toyItemID = C_ToyBox.GetToyFromIndex(index)
-        if not toyItemID then
-            break
+    local function DoesItemNameMatch(itemID, keywords)
+        if not (C_ToyBox and C_ToyBox.GetToyInfo) then
+            return false
         end
 
-        if DoesItemHaveTooltipText(toyItemID, SEARCH_TEXT) then
+        local _, itemName = C_ToyBox.GetToyInfo(itemID)
+        if (not itemName or itemName == "") and C_Item and C_Item.GetItemNameByID then
+            itemName = C_Item.GetItemNameByID(itemID)
+        end
+        if not itemName or itemName == "" then
+            return false
+        end
+
+        local lowerName = itemName:lower()
+        for _, keyword in ipairs(keywords) do
+            if lowerName:find(keyword, 1, true) then
+                return true
+            end
+        end
+
+        return false
+    end
+
+    local function CollectOwnedToyItemIDs()
+        local ownedToyIDs = {}
+        local seen = {}
+
+        if C_ToyBox.GetToyIDs then
+            local toyIDs = C_ToyBox.GetToyIDs()
+            if type(toyIDs) == "table" then
+                for _, toyItemID in ipairs(toyIDs) do
+                    if toyItemID and not seen[toyItemID] and (not PlayerHasToy or PlayerHasToy(toyItemID)) then
+                        seen[toyItemID] = true
+                        table.insert(ownedToyIDs, toyItemID)
+                    end
+                end
+            end
+        end
+
+        if #ownedToyIDs > 0 then
+            return ownedToyIDs
+        end
+
+        -- Fallback for clients where GetToyIDs is unavailable or unexpectedly empty.
+        local totalToys = C_ToyBox.GetNumToys and (C_ToyBox.GetNumToys() or 0) or 0
+        for index = 1, totalToys do
+            local toyItemID = C_ToyBox.GetToyFromIndex and C_ToyBox.GetToyFromIndex(index)
+            if toyItemID and not seen[toyItemID] and (not PlayerHasToy or PlayerHasToy(toyItemID)) then
+                seen[toyItemID] = true
+                table.insert(ownedToyIDs, toyItemID)
+            end
+        end
+
+        return ownedToyIDs
+    end
+
+    local toyHearthstones = {}
+
+    for _, toyItemID in ipairs(CollectOwnedToyItemIDs()) do
+        if DoesItemHaveTooltipText(toyItemID, SEARCH_TEXTS) or DoesItemNameMatch(toyItemID, NAME_KEYWORDS) then
             table.insert(toyHearthstones, toyItemID)
         end
     end
+
     return toyHearthstones
 end

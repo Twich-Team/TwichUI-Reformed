@@ -36,37 +36,233 @@ local hearthstoneSelector
 
 local function BuildHearthstoneCandidates()
     local collected = {}
+    local seen = {}
+
+    local current = Options.GetFavoriteHearthstone and (Options:GetFavoriteHearthstone() or 0) or 0
+
     table.insert(collected, {
         value = 0,
         name = "None",
         icon = nil,
         search = "none",
     })
+    seen[0] = true
+
+    local KNOWN_HEARTHSTONE_ITEM_IDS = {
+        6948,   -- Hearthstone
+        140192, -- Dalaran Hearthstone
+        110560, -- Garrison Hearthstone
+        54452,  -- Ethereal Portal
+        64488,  -- The Innkeeper's Daughter
+        93672,  -- Dark Portal
+        142542, -- Tome of Town Portal
+        162973, -- Greatfather Winter's Hearthstone
+        163045, -- Headless Horseman's Hearthstone
+        165669, -- Lunar Elder's Hearthstone
+        165670, -- Peddlefeet's Lovely Hearthstone
+        165802, -- Noble Gardener's Hearthstone
+        166746, -- Fire Eater's Hearthstone
+        166747, -- Brewfest Reveler's Hearthstone
+        168907, -- Holographic Digitalization Hearthstone
+        172179, -- Eternal Traveler's Hearthstone
+        180290, -- Night Fae Hearthstone
+        182773, -- Necrolord Hearthstone
+        183716, -- Venthyr Sinstone
+        184353, -- Kyrian Hearthstone
+        188952, -- Dominated Hearthstone
+        190196, -- Enlightened Hearthstone
+        200630, -- Ohn'ir Windsage's Hearthstone
+        206195, -- Path of the Naaru
+        208704, -- Deepdweller's Earthen Hearthstone
+        209035, -- Hearthstone of the Flame
+        212337, -- Stone of the Hearth
+        235016, -- TWW layout default favorite hearthstone
+    }
+
+    local NAME_KEYWORDS = {
+        "hearthstone",
+        "sinstone",
+        "innkeeper",
+        "town portal",
+        "path of the naaru",
+        "stone of the hearth",
+    }
+
+    local TOOLTIP_KEYWORDS = {
+        "returns you to",
+        "return you to",
+        "return to",
+        "teleports you to",
+        "teleports the caster to",
+    }
+
+    local function IsItemOwned(itemID)
+        if not itemID or itemID == 0 then
+            return false
+        end
+
+        if PlayerHasToy and PlayerHasToy(itemID) then
+            return true
+        end
+
+        if C_Item and C_Item.GetItemCount then
+            return (C_Item.GetItemCount(itemID) or 0) > 0
+        end
+
+        return false
+    end
+
+    local function AddCandidate(itemID)
+        itemID = tonumber(itemID) or 0
+        if itemID <= 0 or seen[itemID] then
+            return
+        end
+
+        local name, icon
+        if C_ToyBox and C_ToyBox.GetToyInfo then
+            local _, toyName, toyIcon = C_ToyBox.GetToyInfo(itemID)
+            name = toyName
+            icon = toyIcon
+        end
+        if not name and C_Item and C_Item.GetItemNameByID then
+            name = C_Item.GetItemNameByID(itemID)
+        end
+        if not icon and C_Item and C_Item.GetItemIconByID then
+            icon = C_Item.GetItemIconByID(itemID)
+        end
+
+        local label = tostring(name or ("Item " .. tostring(itemID)))
+        seen[itemID] = true
+        table.insert(collected, {
+            value = itemID,
+            name = label,
+            icon = icon,
+            search = label,
+            onEnter = TooltipForHearthstoneItem(itemID),
+            onLeave = TooltipHide,
+        })
+    end
+
+    local function DoesNameLookLikeHearthstone(itemID)
+        local name
+        if C_ToyBox and C_ToyBox.GetToyInfo then
+            local _, toyName = C_ToyBox.GetToyInfo(itemID)
+            name = toyName
+        end
+        if (not name or name == "") and C_Item and C_Item.GetItemNameByID then
+            name = C_Item.GetItemNameByID(itemID)
+        end
+        if not name or name == "" then
+            return false
+        end
+
+        local lowerName = name:lower()
+        for _, keyword in ipairs(NAME_KEYWORDS) do
+            if lowerName:find(keyword, 1, true) then
+                return true
+            end
+        end
+
+        return false
+    end
+
+    local function DoesTooltipLookLikeHearthstone(itemID)
+        if not C_TooltipInfo then
+            return false
+        end
+
+        local ttData
+        if C_TooltipInfo.GetToyByItemID then
+            ttData = C_TooltipInfo.GetToyByItemID(itemID)
+        end
+        if (not ttData or not ttData.lines) and C_TooltipInfo.GetItemByID then
+            ttData = C_TooltipInfo.GetItemByID(itemID)
+        end
+        if not ttData or not ttData.lines then
+            return false
+        end
+
+        for _, line in ipairs(ttData.lines) do
+            local leftText = line and line.leftText
+            if leftText and leftText ~= "" then
+                local lowerText = leftText:lower()
+                for _, keyword in ipairs(TOOLTIP_KEYWORDS) do
+                    if lowerText:find(keyword, 1, true) then
+                        return true
+                    end
+                end
+            end
+        end
+
+        return false
+    end
+
+    local function CollectOwnedToyItemIDs()
+        local ownedToyIDs = {}
+        local localSeen = {}
+
+        if C_ToyBox and C_ToyBox.GetToyIDs then
+            local toyIDs = C_ToyBox.GetToyIDs()
+            if type(toyIDs) == "table" then
+                for _, toyItemID in ipairs(toyIDs) do
+                    if toyItemID and not localSeen[toyItemID] and IsItemOwned(toyItemID) then
+                        localSeen[toyItemID] = true
+                        table.insert(ownedToyIDs, toyItemID)
+                    end
+                end
+            end
+        end
+
+        if #ownedToyIDs > 0 then
+            return ownedToyIDs
+        end
+
+        if C_ToyBox and C_ToyBox.GetNumToys and C_ToyBox.GetToyFromIndex then
+            local totalToys = C_ToyBox.GetNumToys() or 0
+            for index = 1, totalToys do
+                local toyItemID = C_ToyBox.GetToyFromIndex(index)
+                if toyItemID and not localSeen[toyItemID] and IsItemOwned(toyItemID) then
+                    localSeen[toyItemID] = true
+                    table.insert(ownedToyIDs, toyItemID)
+                end
+            end
+        end
+
+        return ownedToyIDs
+    end
 
     ---@type DataTextModule
     local DataTextModule = T:GetModule("Datatexts")
     local PortalDataText = DataTextModule and DataTextModule:GetModule("PortalDataText", true)
-    if not PortalDataText or not PortalDataText.FindToyHearthstones then
-        return collected
-    end
-
-    local ok, toyItemIDs = pcall(PortalDataText.FindToyHearthstones, PortalDataText)
-    if not ok or type(toyItemIDs) ~= "table" then
-        return collected
-    end
-
-    for _, itemID in ipairs(toyItemIDs) do
-        local _, name, icon = C_ToyBox.GetToyInfo(itemID)
-        if name then
-            table.insert(collected, {
-                value = itemID,
-                name = tostring(name or ""),
-                icon = icon,
-                search = tostring(name or ""),
-                onEnter = TooltipForHearthstoneItem(itemID),
-                onLeave = TooltipHide,
-            })
+    if PortalDataText and PortalDataText.FindToyHearthstones then
+        local ok, toyItemIDs = pcall(PortalDataText.FindToyHearthstones, PortalDataText)
+        if ok and type(toyItemIDs) == "table" then
+            for _, itemID in ipairs(toyItemIDs) do
+                AddCandidate(itemID)
+            end
         end
+    end
+
+    for _, toyItemID in ipairs(CollectOwnedToyItemIDs()) do
+        if DoesNameLookLikeHearthstone(toyItemID) or DoesTooltipLookLikeHearthstone(toyItemID) then
+            AddCandidate(toyItemID)
+        end
+    end
+
+    for _, itemID in ipairs(KNOWN_HEARTHSTONE_ITEM_IDS) do
+        if IsItemOwned(itemID) or itemID == current then
+            AddCandidate(itemID)
+        end
+    end
+
+    if current and current > 0 then
+        AddCandidate(current)
+    end
+
+    if #collected <= 1 then
+        AddCandidate(6948)
+        AddCandidate(140192)
+        AddCandidate(110560)
     end
 
     return collected
