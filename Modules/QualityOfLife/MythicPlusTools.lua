@@ -359,7 +359,17 @@ local function ApplyFontString(fontString, fontPath, fontSize, outline, red, gre
         return
     end
 
-    fontString:SetFont(fontPath, fontSize, outline)
+    local resolvedPath = fontPath or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local resolvedSize = tonumber(fontSize) or 12
+    local resolvedOutline = outline
+    if resolvedOutline == nil then
+        resolvedOutline = ""
+    end
+
+    if not fontString:SetFont(resolvedPath, resolvedSize, resolvedOutline) then
+        fontString:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", resolvedSize, resolvedOutline)
+    end
+
     if red then
         fontString:SetTextColor(red, green or red, blue or red, alpha or 1)
     end
@@ -2480,6 +2490,17 @@ function MPT:EnsureKeystoneHelperPanel()
 
     local bgR, bgG, bgB, _, borderR, borderG, borderB = GetBackdropColors()
 
+    local panelFontPath = GetGlobalFontPath() or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local function SetPanelFont(fontString, size)
+        if not fontString then
+            return
+        end
+
+        if not fontString:SetFont(panelFontPath, size or 11, "") then
+            fontString:SetFont(_G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size or 11, "")
+        end
+    end
+
     -- ── Frame ─────────────────────────────────────────────────────────────
     local frame                                       = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     frame:SetSize(W, TOTAL_H)
@@ -2499,6 +2520,7 @@ function MPT:EnsureKeystoneHelperPanel()
     title:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, titleY)
     title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PAD, titleY)
     title:SetJustifyH("LEFT")
+    SetPanelFont(title, 10)
     title:SetText("DUNGEON SETUP")
     frame.TitleText = title
 
@@ -2517,6 +2539,7 @@ function MPT:EnsureKeystoneHelperPanel()
     info:SetJustifyV("TOP")
     info:SetWordWrap(true)
     info:SetSpacing(1)
+    SetPanelFont(info, 11)
     info:SetTextColor(0.75, 0.75, 0.80)
     frame.InfoText = info
 
@@ -2526,6 +2549,7 @@ function MPT:EnsureKeystoneHelperPanel()
     btnReady:SetPoint("TOPLEFT", frame, "TOPLEFT", PAD, btnY)
     local fsReady = btnReady:CreateFontString(nil, "OVERLAY")
     btnReady:SetFontString(fsReady)
+    SetPanelFont(fsReady, 11)
     fsReady:SetText("Ready Check")
     frame.ReadyBtn = btnReady
     frame.FSReady  = fsReady
@@ -2535,6 +2559,7 @@ function MPT:EnsureKeystoneHelperPanel()
     btnPull:SetPoint("TOPLEFT", btnReady, "TOPRIGHT", 6, 0)
     local fsPull = btnPull:CreateFontString(nil, "OVERLAY")
     btnPull:SetFontString(fsPull)
+    SetPanelFont(fsPull, 11)
     fsPull:SetText("Pull Timer (5s)")
     frame.PullBtn = btnPull
     frame.FSPull  = fsPull
@@ -2577,6 +2602,7 @@ function MPT:EnsureKeystoneHelperPanel()
     togLabel:SetPoint("LEFT", checkBg, "RIGHT", 6, 0)
     togLabel:SetPoint("RIGHT", toggleRow, "RIGHT", 0, 0)
     togLabel:SetJustifyH("LEFT")
+    SetPanelFont(togLabel, 11)
     togLabel:SetText("Auto-start when timer ends")
     togLabel:SetTextColor(0.75, 0.75, 0.80)
     frame.ToggleLabel = togLabel
