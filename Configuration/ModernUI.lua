@@ -92,6 +92,13 @@ local NAV_ITEMS = {
         path = { "Error Log" },
     },
     {
+        id = "debugger",
+        title = "Debugger",
+        description = "Shared debug console sources, sound trace capture, and debug log actions.",
+        accent = { 0.55, 0.82, 0.55 },
+        path = { "Debugger" },
+    },
+    {
         id = "profiles",
         title = "Profiles",
         description = "Profile storage and switching.",

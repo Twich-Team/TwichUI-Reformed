@@ -85,6 +85,11 @@ function T:OnInitialize()
         end)
     end
 
+    local soundTrace = T.Tools and (T.Tools --[[@as any]]).SoundTrace
+    if soundTrace then
+        soundTrace:Install()
+    end
+
     ---@type ConfigurationModule
     local CM = self:GetModule("Configuration")
     local Options = CM.Options --[[@as any]]

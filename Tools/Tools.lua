@@ -14,6 +14,7 @@ local T = unpack(TwichRx)
 ---@field Quest QuestTools
 ---@field Game GameTool
 ---@field ErrorLog TwichUIErrorLog
+---@field SoundTrace TwichUISoundTrace
 local Tools = T.Tools or {}
 T.Tools = Tools
 

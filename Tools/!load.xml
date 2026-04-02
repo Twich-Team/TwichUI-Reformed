@@ -5,6 +5,7 @@
     <Include file='Skinning.lua' />
     <Include file='Quest.lua' />
     <Include file='Game.lua' />
+    <Include file='SoundTrace.lua' />
     <Include file='ErrorLog.lua' />
     <Include file='UI\!load.xml' />
     <Include file='func\!load.xml' />

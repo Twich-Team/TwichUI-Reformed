@@ -13,6 +13,10 @@ local function GetDebugConsole()
     return T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
 end
 
+local function GetSoundTrace()
+    return T.Tools and T.Tools.SoundTrace
+end
+
 local function OpenDebugSource(sourceKey)
     local console = GetDebugConsole()
     if console and console.Show then
@@ -50,6 +54,15 @@ local function BuildDebugConsoleConfiguration()
                     OpenDebugSource("actionbars")
                 end,
             },
+            openSounds = {
+                type  = "execute",
+                order = 3,
+                name  = "Open Sound Trace",
+                desc  = "Open the Debug Console focused on sound playback traces.",
+                func  = function()
+                    OpenDebugSource("sounds")
+                end,
+            },
             clearAll = {
                 type        = "execute",
                 order       = 5,
@@ -63,6 +76,57 @@ local function BuildDebugConsoleConfiguration()
                         console:ClearLogs()
                     end
                     ConfigurationModule:Refresh()
+                end,
+            },
+            clearSounds = {
+                type        = "execute",
+                order       = 6,
+                name        = "Clear Sound Trace",
+                desc        = "Clear only the sound trace entries.",
+                confirm     = true,
+                confirmText = "Clear the sound trace log?",
+                func        = function()
+                    local console = GetDebugConsole()
+                    if console and console.ClearLogs then
+                        console:ClearLogs("sounds")
+                    end
+                    ConfigurationModule:Refresh()
+                end,
+            },
+        }),
+        soundTrace = W.IGroup(15, "Sound Trace", {
+            desc = W.Description(0,
+                "Capture TwichUI-owned sound playback calls in the shared debug console. " ..
+                "Leave this off during normal play unless you are tracking a stray sound."),
+            enabled = {
+                type  = "toggle",
+                order = 5,
+                name  = "Enable Sound Trace",
+                desc  = "Log each TwichUI PlaySound and PlaySoundFile call with its caller path.",
+                get   = function()
+                    local soundTrace = GetSoundTrace()
+                    return soundTrace and soundTrace.GetEnabled and soundTrace:GetEnabled() or false
+                end,
+                set   = function(_, value)
+                    local soundTrace = GetSoundTrace()
+                    if soundTrace and soundTrace.SetEnabled then
+                        soundTrace:SetEnabled(value)
+                    end
+                    ConfigurationModule:Refresh()
+                end,
+            },
+            status = {
+                type  = "description",
+                order = 10,
+                name  = function()
+                    local console = GetDebugConsole()
+                    local lines = console and console.GetLines and console:GetLines("sounds") or {}
+                    local soundTrace = GetSoundTrace()
+                    local enabled = soundTrace and soundTrace.GetEnabled and soundTrace:GetEnabled() or false
+                    if enabled then
+                        return string.format("|cff69b86fSound trace enabled.|r %d entr%s buffered.", #lines, #lines == 1 and "y" or "ies")
+                    end
+                    return string.format("|cffff9a6cSound trace disabled.|r %d entr%s currently buffered.", #lines, #lines == 1 and "y" or "ies")
                 end,
             },
         }),

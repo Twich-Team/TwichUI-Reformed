@@ -15,6 +15,6 @@
     <Include file='MythicPlusTools.lua' />
     <Include file='BestInSlot.lua' />
     <Include file='NotificationPanel.lua' />
-    <Include file='ErrorLog.lua' />
     <Include file='Debugger.lua' />
+    <Include file='ErrorLog.lua' />
 </Ui>
