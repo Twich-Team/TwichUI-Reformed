@@ -14,11 +14,13 @@ local stringFind = string.find
 local stringFormat = string.format
 local stringGmatch = string.gmatch
 local stringGsub = string.gsub
+local stringLower = string.lower
 local tostring = tostring
 local type = type
 local tonumber = tonumber
 
 local DEBUG_SOURCE_KEY = "sounds"
+local MEDIA_SOUND_ROOT = "interface\\addons\\twichui_reformed\\media\\sounds\\"
 
 ---@class TwichUISoundTrace
 ---@field installed boolean|nil
@@ -63,6 +65,18 @@ local function NormalizeCallerLine(line)
         return "unknown"
     end
 
+    line = stringGsub(line, "^%s+", "")
+
+    local markerStart, markerEnd = stringFind(line, "Interface\\AddOns\\", 1, true)
+    if markerEnd then
+        return line:sub(markerEnd + 1)
+    end
+
+    markerStart, markerEnd = stringFind(line, "Interface/AddOns/", 1, true)
+    if markerEnd then
+        return line:sub(markerEnd + 1)
+    end
+
     local markerStart, markerEnd = stringFind(line, "TwichUI_Reformed\\", 1, true)
     if markerEnd then
         return line:sub(markerEnd + 1)
@@ -76,20 +90,54 @@ local function NormalizeCallerLine(line)
     return line
 end
 
+local function NormalizeSoundValue(soundValue)
+    if type(soundValue) ~= "string" or soundValue == "" then
+        return nil
+    end
+
+    local normalized = stringLower(soundValue)
+    normalized = stringGsub(normalized, "/", "\\")
+    return normalized
+end
+
+local function IsTrackedSoundValue(soundValue)
+    local normalized = NormalizeSoundValue(soundValue)
+    if not normalized then
+        return false
+    end
+
+    return stringFind(normalized, MEDIA_SOUND_ROOT, 1, true) ~= nil
+end
+
 local function ExtractCaller(stack)
     if type(stack) ~= "string" or stack == "" then
         return nil
     end
 
+    local fallbackCaller = nil
     for line in stringGmatch(stack, "[^\n]+") do
+        local normalized = NormalizeCallerLine(line)
+        local isTracerFrame = stringFind(line, "Tools\\SoundTrace.lua", 1, true)
+            or stringFind(line, "Tools/SoundTrace.lua", 1, true)
+        if not isTracerFrame and normalized ~= "unknown" and normalized ~= "" then
+            local isAddonFrame = stringFind(line, "Interface\\AddOns\\", 1, true)
+                or stringFind(line, "Interface/AddOns/", 1, true)
+            if isAddonFrame and not fallbackCaller then
+                fallbackCaller = normalized
+            end
+        end
+
         if stringFind(line, "TwichUI_Reformed", 1, true)
-            and not stringFind(line, "Tools\\SoundTrace.lua", 1, true)
-            and not stringFind(line, "Tools/SoundTrace.lua", 1, true) then
-            return NormalizeCallerLine((stringGsub(line, "^%s+", "")))
+            and not isTracerFrame then
+            return normalized, "twichui"
         end
     end
 
-    return nil
+    if fallbackCaller then
+        return fallbackCaller, "external"
+    end
+
+    return nil, nil
 end
 
 function SoundTrace:GetEnabled()
@@ -117,7 +165,7 @@ function SoundTrace:BuildDebugReport()
         stringFormat("Enabled: %s", self:GetEnabled() and "Yes" or "No"),
         stringFormat("Buffered entries: %d", #lines),
         "",
-        "This source logs TwichUI-owned PlaySound and PlaySoundFile calls with the resolved caller path.",
+        "This source logs TwichUI-owned sound calls and any playback of TwichUI media sound files, even if another addon triggered them.",
     }, "\n")
 end
 
@@ -154,11 +202,17 @@ function SoundTrace:LogTrace(apiName, soundValue, channel, stackLevel)
     end
 
     local stack = debugstack(tonumber(stackLevel) or 3, 8, 8)
-    if type(stack) ~= "string" or not stringFind(stack, "TwichUI_Reformed", 1, true) then
+    if type(stack) ~= "string" then
         return
     end
 
-    local caller = ExtractCaller(stack)
+    local trackedMediaSound = apiName == "PlaySoundFile" and IsTrackedSoundValue(soundValue)
+    local hasTwichUIFrame = stringFind(stack, "TwichUI_Reformed", 1, true) ~= nil
+    if not hasTwichUIFrame and not trackedMediaSound then
+        return
+    end
+
+    local caller, callerKind = ExtractCaller(stack)
     if not caller then
         return
     end
@@ -176,11 +230,12 @@ function SoundTrace:LogTrace(apiName, soundValue, channel, stackLevel)
         console,
         DEBUG_SOURCE_KEY,
         stringFormat(
-            "%s sound=%s channel=%s caller=%s",
+            "%s sound=%s channel=%s caller=%s source=%s",
             SafeString(apiName),
             SafeString(soundValue),
             SafeString(channel or "default"),
-            SafeString(caller)
+            SafeString(caller),
+            trackedMediaSound and (callerKind == "external" and "external-twichui-media" or "twichui-media") or "twichui"
         ),
         false
     )

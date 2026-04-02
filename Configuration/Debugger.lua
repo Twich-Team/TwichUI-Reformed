@@ -96,13 +96,13 @@ local function BuildDebugConsoleConfiguration()
         }),
         soundTrace = W.IGroup(15, "Sound Trace", {
             desc = W.Description(0,
-                "Capture TwichUI-owned sound playback calls in the shared debug console. " ..
+                "Capture TwichUI-owned sound playback calls and any playback of TwichUI media sounds in the shared debug console. " ..
                 "Leave this off during normal play unless you are tracking a stray sound."),
             enabled = {
                 type  = "toggle",
                 order = 5,
                 name  = "Enable Sound Trace",
-                desc  = "Log each TwichUI PlaySound and PlaySoundFile call with its caller path.",
+                desc  = "Log each TwichUI sound call, plus any use of TwichUI media sound files, with the caller path.",
                 get   = function()
                     local soundTrace = GetSoundTrace()
                     return soundTrace and soundTrace.GetEnabled and soundTrace:GetEnabled() or false

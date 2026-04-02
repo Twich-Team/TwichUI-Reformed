@@ -1204,6 +1204,23 @@ function ChatRendererModule:MeasureEntry(renderer, entry, bodyWidth)
     entry.rowHeight = mathMax(28, textHeight + 16)
 end
 
+function ChatRendererModule:ResolveRenderedRowHeight(row, entry)
+    if not row or not entry then
+        return nil
+    end
+
+    local baseFontSize = self.settings.chatFontSize or 13
+    local textHeight = row.Label and row.Label.GetStringHeight and row.Label:GetStringHeight() or 0
+    local timestampHeight = row.Timestamp and row.Timestamp.IsShown and row.Timestamp:IsShown()
+            and row.Timestamp.GetStringHeight and row.Timestamp:GetStringHeight()
+        or 0
+    local iconHeight = row.ClassIcon and row.ClassIcon.IsShown and row.ClassIcon:IsShown() and CLASS_ICON_SIZE or 0
+    local contentHeight = mathMax(baseFontSize, textHeight or 0, timestampHeight or 0, iconHeight or 0)
+    local paddedHeight = mathMax(28, math.ceil(contentHeight) + 18)
+
+    return paddedHeight, contentHeight
+end
+
 function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
     local grouped = entry.groupedWithPrevious
     local timestampsEnabled = self.settings.timestampsEnabled
@@ -1304,6 +1321,13 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
     row.Label:SetTextColor(entry.r, entry.g, entry.b)
     row.entry = entry
 
+    local renderedRowHeight, renderedBodyHeight = self:ResolveRenderedRowHeight(row, entry)
+    if renderedRowHeight and renderedRowHeight > (entry.rowHeight or 0) then
+        entry.bodyHeight = mathMax(entry.bodyHeight or 0, renderedBodyHeight or 0)
+        entry.rowHeight = renderedRowHeight
+        row:SetHeight(renderedRowHeight)
+    end
+
     row:Show()
     if entry.animateIn and self.settings.animationsEnabled then
         row:SetAlpha(0)
@@ -1361,11 +1385,11 @@ function ChatRendererModule:RelayoutRenderer(renderer)
         local spacing = previousEntry and (entry.groupedWithPrevious and groupedRowGap or rowGap) or 0
         offsetY = offsetY + spacing
         entry.yOffset = offsetY
-        offsetY = offsetY + entry.rowHeight
-        previousEntry = entry
 
         local row = self:EnsureRow(renderer, index)
         self:RefreshRow(renderer, row, entry, bodyWidth)
+        offsetY = offsetY + entry.rowHeight
+        previousEntry = entry
     end
 
     for index = #renderer.entries + 1, #(renderer.rows or {}) do
