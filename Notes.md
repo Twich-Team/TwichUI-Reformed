@@ -40,6 +40,8 @@
 
 ## Unit Frames
 
+- When changing zones, or entering and leaving combat, and what seems like randomly, i can see frames flicker on the screen. Looks like the companion and priority add, target, etc frames. the ones thjat shouldnt be shown at the time flash visible.
+
 ### General
 
 - Need an indicator for offline and ressurrected players.
@@ -52,6 +54,6 @@
 
 # Mythic+ Minion Checkpoint
 
-# Keybinding
+# Other
 
-- I have added an addon, Clicked, to the AddOnResources. This addon allows you to essentially create custom keybinds by utilzing macros. I want this functionality in TwichUI. It should be in its own configuration section in the configuration. Please examine Clicked, and recreate the logic natively in TwichUI. Ensure performance and ease of use while maintaining a clean interface.
+- In the Mounts data text menu, lets add a button to toggle between the two skyriding flight styles.

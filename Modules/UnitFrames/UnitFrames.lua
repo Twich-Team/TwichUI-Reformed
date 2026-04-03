@@ -103,6 +103,226 @@ local function UFDebug(msg)
     if dc and dc.Log then dc:Log("unitframes", msg, false) end
 end
 
+function UnitFrames:GetUFDiagnosticsMemoryKB()
+    if type(_G.UpdateAddOnMemoryUsage) == "function" then
+        _G.UpdateAddOnMemoryUsage()
+    end
+
+    if type(_G.GetAddOnMemoryUsage) == "function" then
+        local value = _G.GetAddOnMemoryUsage("TwichUI_Reformed")
+        if type(value) == "number" then
+            return value
+        end
+    end
+
+    if type(collectgarbage) == "function" then
+        local ok, value = pcall(collectgarbage, "count")
+        if ok and type(value) == "number" then
+            return value
+        end
+    end
+
+    return 0
+end
+
+function UnitFrames:GetUFDiagnosticsConfig()
+    local db = self:GetDB()
+    db.debug = db.debug or {}
+    db.debug.unitFramesDiagnostics = db.debug.unitFramesDiagnostics or {}
+    local cfg = db.debug.unitFramesDiagnostics
+
+    if cfg.enabled == nil then cfg.enabled = false end
+    if cfg.intervalSec == nil then cfg.intervalSec = 2 end
+    if cfg.minMemoryDeltaKB == nil then cfg.minMemoryDeltaKB = 512 end
+    if cfg.verbose == nil then cfg.verbose = false end
+
+    cfg.intervalSec = math_max(0.5, math_min(30, tonumber(cfg.intervalSec) or 2))
+    cfg.minMemoryDeltaKB = math_max(0, math_min(1024 * 50, tonumber(cfg.minMemoryDeltaKB) or 512))
+
+    return cfg
+end
+
+function UnitFrames:IsUFDiagnosticsEnabled()
+    return self._ufDiagEnabled == true
+end
+
+function UnitFrames:ResetUFDiagnosticsRuntime()
+    local now = (_G.GetTimePreciseSec or _G.GetTime)()
+    local memoryKB = self:GetUFDiagnosticsMemoryKB()
+    self._ufDiagRuntime = {
+        startedAt = now,
+        lastReportAt = now,
+        lastMemoryKB = memoryKB,
+        peakMemoryKB = memoryKB,
+        total = {},
+        window = {},
+        peaks = {},
+    }
+end
+
+function UnitFrames:SetUFDiagnosticsEnabled(enabled, silent)
+    local cfg = self:GetUFDiagnosticsConfig()
+    local nextState = enabled == true
+    cfg.enabled = nextState
+    self._ufDiagEnabled = nextState
+
+    if nextState then
+        self:ResetUFDiagnosticsRuntime()
+        if silent ~= true then
+            UFDebug("UFDiagnostics: enabled")
+            self:UFDiagMaybeReport("enable", true)
+        end
+    else
+        if silent ~= true then
+            UFDebug("UFDiagnostics: disabled")
+        end
+        self._ufDiagRuntime = nil
+    end
+end
+
+function UnitFrames:RefreshUFDiagnosticsState()
+    local cfg = self:GetUFDiagnosticsConfig()
+    self._ufDiagEnabled = cfg.enabled == true
+    if self._ufDiagEnabled then
+        if not self._ufDiagRuntime then
+            self:ResetUFDiagnosticsRuntime()
+        end
+    else
+        self._ufDiagRuntime = nil
+    end
+end
+
+function UnitFrames:SetUFDiagnosticsInterval(intervalSec)
+    local cfg = self:GetUFDiagnosticsConfig()
+    cfg.intervalSec = math_max(0.5, math_min(30, tonumber(intervalSec) or 2))
+end
+
+function UnitFrames:SetUFDiagnosticsMemoryDelta(minDeltaKB)
+    local cfg = self:GetUFDiagnosticsConfig()
+    cfg.minMemoryDeltaKB = math_max(0, math_min(1024 * 50, tonumber(minDeltaKB) or 512))
+end
+
+function UnitFrames:SetUFDiagnosticsVerbose(enabled)
+    local cfg = self:GetUFDiagnosticsConfig()
+    cfg.verbose = enabled == true
+end
+
+function UnitFrames:UFDiagBump(counterKey, amount)
+    if self._ufDiagEnabled ~= true then
+        return
+    end
+
+    local runtime = self._ufDiagRuntime
+    if not runtime then
+        self:ResetUFDiagnosticsRuntime()
+        runtime = self._ufDiagRuntime
+    end
+
+    local delta = amount or 1
+    runtime.total[counterKey] = (runtime.total[counterKey] or 0) + delta
+    runtime.window[counterKey] = (runtime.window[counterKey] or 0) + delta
+end
+
+function UnitFrames:UFDiagSetPeak(peakKey, value)
+    if self._ufDiagEnabled ~= true then
+        return
+    end
+
+    local runtime = self._ufDiagRuntime
+    if not runtime then
+        self:ResetUFDiagnosticsRuntime()
+        runtime = self._ufDiagRuntime
+    end
+
+    local numeric = tonumber(value)
+    if not numeric then
+        return
+    end
+
+    local previous = runtime.peaks[peakKey]
+    if not previous or numeric > previous then
+        runtime.peaks[peakKey] = numeric
+    end
+end
+
+function UnitFrames:UFDiagGetStatusLine()
+    local cfg = self:GetUFDiagnosticsConfig()
+    local runtime = self._ufDiagRuntime
+    local memoryKB = runtime and runtime.lastMemoryKB or self:GetUFDiagnosticsMemoryKB()
+    return string.format(
+        "UFDiagnostics: enabled=%s interval=%.1fs delta=%dkb verbose=%s mem=%.1fmb",
+        tostring(cfg.enabled == true),
+        tonumber(cfg.intervalSec) or 2,
+        math_floor((tonumber(cfg.minMemoryDeltaKB) or 512) + 0.5),
+        tostring(cfg.verbose == true),
+        (tonumber(memoryKB) or 0) / 1024
+    )
+end
+
+function UnitFrames:UFDiagMaybeReport(reason, force)
+    if self._ufDiagEnabled ~= true then
+        return
+    end
+
+    local runtime = self._ufDiagRuntime
+    if not runtime then
+        self:ResetUFDiagnosticsRuntime()
+        runtime = self._ufDiagRuntime
+    end
+
+    local cfg = self:GetUFDiagnosticsConfig()
+    local now = (_G.GetTimePreciseSec or _G.GetTime)()
+    local elapsed = now - (runtime.lastReportAt or now)
+    local minInterval = tonumber(cfg.intervalSec) or 2
+    if force ~= true and elapsed < minInterval then
+        return
+    end
+
+    local memoryKB = self:GetUFDiagnosticsMemoryKB()
+    local memoryDeltaKB = memoryKB - (runtime.lastMemoryKB or memoryKB)
+    runtime.lastMemoryKB = memoryKB
+    runtime.lastReportAt = now
+    if memoryKB > (runtime.peakMemoryKB or 0) then
+        runtime.peakMemoryKB = memoryKB
+    end
+
+    local absDeltaKB = math_abs(memoryDeltaKB)
+    local shouldLog = force == true or cfg.verbose == true or absDeltaKB >= (tonumber(cfg.minMemoryDeltaKB) or 512)
+    if not shouldLog then
+        wipe(runtime.window)
+        return
+    end
+
+    local window = runtime.window or {}
+    UFDebug(string.format(
+        "UFDiagnostics[%s]: dt=%.2fs mem=%.2fmb delta=%+.1fkb peak=%.2fmb",
+        tostring(reason or "tick"),
+        elapsed,
+        memoryKB / 1024,
+        memoryDeltaKB,
+        (runtime.peakMemoryKB or memoryKB) / 1024
+    ))
+    UFDebug(string.format(
+        "UFDiagnostics counters: awUpdate=%d awScanCalls=%d awSlots=%d awResults=%d auraBars=%d castTicks=%d castEvents=%d castStart=%d castStop=%d",
+        window.awUpdateCalls or 0,
+        window.awScanCalls or 0,
+        window.awSlotsScanned or 0,
+        window.awAurasReturned or 0,
+        window.auraBarRefreshCalls or 0,
+        window.castbarUpdateTicks or 0,
+        window.castEvents or 0,
+        window.castStarts or 0,
+        window.castStops or 0
+    ))
+    UFDebug(string.format(
+        "UFDiagnostics peaks: auraBarsVisible=%d awIndicatorsActive=%d",
+        runtime.peaks.auraBarsVisible or 0,
+        runtime.peaks.awIndicatorsActive or 0
+    ))
+
+    wipe(runtime.window)
+end
+
 local function ReadAuraNumber(value)
     if value == nil then return nil end
     if issecretvalue and issecretvalue(value) then return nil end
@@ -3396,6 +3616,7 @@ end
 
 function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     if not frame.AuraBars then return end
+    self:UFDiagBump("auraBarRefreshCalls", 1)
     local unit = ResolveFrameUnit(frame)
     if not unit and not frame._isTestPreview then return end
     local aura                        = self:GetAuraConfigFor(unitKey)
@@ -3570,6 +3791,9 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             end
         end
     end
+    self:UFDiagBump("auraBarsVisible", shown)
+    self:UFDiagSetPeak("auraBarsVisible", shown)
+    self:UFDiagMaybeReport("aurabars")
     container:SetWidth(frameWidth)
     container:SetHeight(math_max(1, shown * barH + math_max(0, shown - 1) * spacing))
 end
@@ -6742,9 +6966,21 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     if not frame.isHeaderChild then
         frame._forceHideFrame = db.testMode == true and not frame._isTestPreview
         local shouldShow = settings.enabled ~= false
+
+        if shouldShow and frame._isTestPreview ~= true and unitKey ~= "player" then
+            local resolvedUnit = ResolveFrameUnit(frame) or frame.unit
+            if not resolvedUnit or resolvedUnit == "" or not UnitExists(resolvedUnit) then
+                shouldShow = false
+            end
+        end
+
         if frame._forceHideFrame then
             shouldShow = false
         end
+        frame._twichNoUnitHidden = (not shouldShow)
+            and frame._forceHideFrame ~= true
+            and frame._isTestPreview ~= true
+            and unitKey ~= "player"
         frame:SetShown(shouldShow)
     end
 
@@ -8788,7 +9024,7 @@ function UnitFrames:StyleFrame(frame)
     frame:SetAttribute("useparent-unit", true)
     frame:RegisterForClicks("AnyUp")
     frame:HookScript("OnShow", function(self)
-        if self._forceHideFrame then
+        if self._forceHideFrame or self._twichNoUnitHidden then
             self:Hide()
         end
     end)
@@ -9178,8 +9414,10 @@ function UnitFrames:StartStandaloneCastbarUpdates()
 
     castbar._twichCastbarUpdating = true
     castbar:SetScript("OnUpdate", function(_, elapsed)
+        UnitFrames:UFDiagBump("castbarUpdateTicks", 1)
         UnitFrames:UpdateCastbarElapsed()
         UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed or 0)
+        UnitFrames:UFDiagMaybeReport("castbar")
     end)
 end
 
@@ -9351,6 +9589,7 @@ function UnitFrames:RefreshCastbarStyle()
 end
 
 function UnitFrames:UpdateCastbarElapsed()
+    self:UFDiagBump("castbarElapsedCalls", 1)
     local state = self._castbarState
     local castbar = self.frames.castbar
     if not state or not castbar then return end
@@ -9376,6 +9615,7 @@ function UnitFrames:UpdateCastbarElapsed()
 end
 
 function UnitFrames:BeginCastbar(name, icon, startMS, endMS, reverse)
+    self:UFDiagBump("castStarts", 1)
     local castbar = self.frames.castbar
     if not castbar then return end
     local startSec = (tonumber(startMS) or 0) / 1000
@@ -9393,6 +9633,7 @@ function UnitFrames:BeginCastbar(name, icon, startMS, endMS, reverse)
 end
 
 function UnitFrames:StopCastbar()
+    self:UFDiagBump("castStops", 1)
     local castbar = self.frames.castbar
     if castbar then
         castbar._twichReverse = nil
@@ -9403,6 +9644,7 @@ function UnitFrames:StopCastbar()
 end
 
 function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
+    self:UFDiagBump("castEvents", 1)
     if unit and unit ~= "player" then
         return
     end
@@ -9571,10 +9813,32 @@ end
 function UnitFrames:BuildDebugReport()
     local lines = { "TwichUI Unit Frames Debug Report", "" }
     local db = self:GetDB()
+    local diagCfg = self:GetUFDiagnosticsConfig()
+    local diagRt = self._ufDiagRuntime
 
     tinsert(lines, string.format("Module enabled: %s", tostring(db.enabled)))
     tinsert(lines, string.format("Scale: %.2f  Alpha: %.2f", db.scale or 1, db.frameAlpha or 1))
     tinsert(lines, string.format("Texture: %s", tostring(db.texture or "default")))
+    tinsert(lines, string.format("Diagnostics: enabled=%s interval=%.1fs delta=%dkb verbose=%s",
+        tostring(diagCfg.enabled == true),
+        tonumber(diagCfg.intervalSec) or 2,
+        math_floor((tonumber(diagCfg.minMemoryDeltaKB) or 512) + 0.5),
+        tostring(diagCfg.verbose == true)))
+    if diagRt then
+        tinsert(lines, string.format("Diagnostics memory: current=%.2fmb peak=%.2fmb",
+            (tonumber(diagRt.lastMemoryKB) or 0) / 1024,
+            (tonumber(diagRt.peakMemoryKB) or 0) / 1024))
+        local totals = diagRt.total or {}
+        tinsert(lines, string.format(
+            "Diagnostics totals: awUpdate=%d awScan=%d awSlots=%d awResults=%d auraBars=%d castTicks=%d castEvents=%d",
+            totals.awUpdateCalls or 0,
+            totals.awScanCalls or 0,
+            totals.awSlotsScanned or 0,
+            totals.awAurasReturned or 0,
+            totals.auraBarRefreshCalls or 0,
+            totals.castbarUpdateTicks or 0,
+            totals.castEvents or 0))
+    end
     tinsert(lines, "")
 
     local frameKeys = {}
@@ -9715,6 +9979,8 @@ function UnitFrames:OnInitialize()
             end,
         })
     end
+
+    self:RefreshUFDiagnosticsState()
 end
 
 -- Refresh target highlights on every frame when the player's target changes.
@@ -9758,6 +10024,7 @@ function UnitFrames:OnReadyCheckChanged()
 end
 
 function UnitFrames:OnEnable()
+    self:RefreshUFDiagnosticsState()
     -- Migration: old default was nil (no value stored) or false for healerOnlyPower.
     -- New semantics: nil means ON by default; false means explicitly OFF. If savedvars has
     -- an explicit false from before the default was changed to healer-only-ON, clear it
@@ -9983,6 +10250,7 @@ function UnitFrames:OnDisable()
     self:ApplyBlizzardRaidFrameVisibility()
 
     self:StopCastbar()
+    self._ufDiagRuntime = nil
 end
 
 function UnitFrames:SetTestMode(enabled)
@@ -10018,3 +10286,5 @@ function UnitFrames:RefreshFromOptions()
         self:RefreshAllFrames()
     end
 end
+
+

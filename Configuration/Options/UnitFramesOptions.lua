@@ -2652,6 +2652,9 @@ end
 
 local function BuildGeneralTab()
     local db = Options:GetDB()
+    local diagnosticsDisabled = ModuleDisabled(function()
+        return Options:GetDiagnosticsDB().enabled ~= true
+    end)
     return {
         type = "group",
         name = "General",
@@ -2773,8 +2776,88 @@ local function BuildGeneralTab()
                     "Use class color for health bars when a scope does not override it.", { "useClassColor" },
                     db.useClassColor == true),
             }),
-            sharedText = BuildTextGroup(2, "Shared Text Defaults", { "text" }, "__root"),
-            highlights = Widgets.IGroup(3, "Highlights", {
+            diagnostics = Widgets.IGroup(2, "Diagnostics", {
+                info = Widgets.Description(0,
+                    "Capture Unit Frames memory growth and hot-path counters in the shared Debug Console. Keep this disabled during normal play unless you are actively debugging."),
+                enabled = {
+                    type = "toggle",
+                    name = "Enable Diagnostics",
+                    desc = "Record Unit Frames diagnostics for aura, castbar, and frame update paths in the shared debug console.",
+                    order = 1,
+                    width = "full",
+                    get = function()
+                        return Options:GetDiagnosticsDB().enabled == true
+                    end,
+                    set = function(info, value)
+                        Options:SetDiagnosticsEnabled(info, value)
+                    end,
+                },
+                intervalSec = {
+                    type = "range",
+                    name = "Sample Interval",
+                    desc = "Minimum time between periodic diagnostics reports.",
+                    order = 2,
+                    min = 0.5,
+                    max = 30,
+                    step = 0.5,
+                    get = function()
+                        return tonumber(Options:GetDiagnosticsDB().intervalSec) or 2
+                    end,
+                    set = function(info, value)
+                        Options:SetDiagnosticsInterval(info, value)
+                    end,
+                    disabled = diagnosticsDisabled,
+                },
+                minMemoryDeltaKB = {
+                    type = "range",
+                    name = "Memory Delta Threshold",
+                    desc = "Minimum memory growth in KB before a periodic report is emitted when verbose mode is off.",
+                    order = 3,
+                    min = 0,
+                    max = 8192,
+                    step = 64,
+                    get = function()
+                        return tonumber(Options:GetDiagnosticsDB().minMemoryDeltaKB) or 512
+                    end,
+                    set = function(info, value)
+                        Options:SetDiagnosticsDelta(info, value)
+                    end,
+                    disabled = diagnosticsDisabled,
+                },
+                verbose = {
+                    type = "toggle",
+                    name = "Verbose Reporting",
+                    desc = "Emit diagnostics every interval even if memory growth is below the threshold.",
+                    order = 4,
+                    get = function()
+                        return Options:GetDiagnosticsDB().verbose == true
+                    end,
+                    set = function(info, value)
+                        Options:SetDiagnosticsVerbose(info, value)
+                    end,
+                    disabled = diagnosticsDisabled,
+                },
+                snapshot = BuildExecute(5, "Emit Snapshot",
+                    "Force an immediate diagnostics report to the Unit Frames debug console.", function()
+                        Options:EmitDiagnosticsSnapshot()
+                    end, {
+                        disabled = diagnosticsDisabled,
+                    }),
+                openDebug = BuildExecute(6, "Open Debug Console",
+                    "Open the shared Debug Console focused on Unit Frames.", function()
+                        Options:OpenDebugConsole()
+                    end),
+                status = {
+                    type = "description",
+                    order = 7,
+                    width = "full",
+                    name = function()
+                        return Options:GetDiagnosticsStatus()
+                    end,
+                },
+            }),
+            sharedText = BuildTextGroup(3, "Shared Text Defaults", { "text" }, "__root"),
+            highlights = Widgets.IGroup(4, "Highlights", {
                 showTarget = BuildToggle(1, "Target Highlight", "Highlight the current target frame.",
                     { "highlights", "showTarget" }, true, { refreshConfig = true }),
                 targetMode = BuildSelect(2, "Style", "Sharp border or additive glow around the target.",
@@ -3240,6 +3323,96 @@ end
 
 function Options:GetEnabled()
     return self:GetDB().enabled ~= false
+end
+
+function Options:GetDiagnosticsDB()
+    local db = self:GetDB()
+    db.debug = db.debug or {}
+    db.debug.unitFramesDiagnostics = db.debug.unitFramesDiagnostics or {}
+
+    local diag = db.debug.unitFramesDiagnostics
+    if diag.enabled == nil then diag.enabled = false end
+    if diag.intervalSec == nil then diag.intervalSec = 2 end
+    if diag.minMemoryDeltaKB == nil then diag.minMemoryDeltaKB = 512 end
+    if diag.verbose == nil then diag.verbose = false end
+
+    return diag
+end
+
+function Options:OpenDebugConsole()
+    local console = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+    if console and console.Show then
+        console:Show("unitframes")
+    else
+        T:Print("[TwichUI] Debug Console is not available.")
+    end
+end
+
+function Options:SetDiagnosticsEnabled(_, value)
+    local diag = self:GetDiagnosticsDB()
+    diag.enabled = value == true
+
+    local module = GetModule()
+    if module and type(module.SetUFDiagnosticsEnabled) == "function" then
+        module:SetUFDiagnosticsEnabled(value == true, true)
+    end
+
+    NotifyConfigurationChanged()
+end
+
+function Options:SetDiagnosticsInterval(_, value)
+    local diag = self:GetDiagnosticsDB()
+    diag.intervalSec = tonumber(value) or diag.intervalSec or 2
+
+    local module = GetModule()
+    if module and type(module.SetUFDiagnosticsInterval) == "function" then
+        module:SetUFDiagnosticsInterval(diag.intervalSec)
+    end
+end
+
+function Options:SetDiagnosticsDelta(_, value)
+    local diag = self:GetDiagnosticsDB()
+    diag.minMemoryDeltaKB = tonumber(value) or diag.minMemoryDeltaKB or 512
+
+    local module = GetModule()
+    if module and type(module.SetUFDiagnosticsMemoryDelta) == "function" then
+        module:SetUFDiagnosticsMemoryDelta(diag.minMemoryDeltaKB)
+    end
+end
+
+function Options:SetDiagnosticsVerbose(_, value)
+    local diag = self:GetDiagnosticsDB()
+    diag.verbose = value == true
+
+    local module = GetModule()
+    if module and type(module.SetUFDiagnosticsVerbose) == "function" then
+        module:SetUFDiagnosticsVerbose(value == true)
+    end
+end
+
+function Options:EmitDiagnosticsSnapshot()
+    local module = GetModule()
+    if module and type(module.UFDiagMaybeReport) == "function" then
+        module:UFDiagMaybeReport("config", true)
+    end
+
+    self:OpenDebugConsole()
+end
+
+function Options:GetDiagnosticsStatus()
+    local module = GetModule()
+    if module and type(module.UFDiagGetStatusLine) == "function" then
+        return module:UFDiagGetStatusLine()
+    end
+
+    local diag = self:GetDiagnosticsDB()
+    return string.format(
+        "Diagnostics: enabled=%s interval=%.1fs delta=%dkb verbose=%s",
+        tostring(diag.enabled == true),
+        tonumber(diag.intervalSec) or 2,
+        math.floor((tonumber(diag.minMemoryDeltaKB) or 512) + 0.5),
+        tostring(diag.verbose == true)
+    )
 end
 
 function Options:SetEnabled(_, value)

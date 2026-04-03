@@ -50,6 +50,15 @@ local function BuildDebugConsoleConfiguration()
                     OpenDebugSource("actionbars")
                 end,
             },
+            openUnitFrames = {
+                type  = "execute",
+                order = 3,
+                name  = "Open Unit Frames Logs",
+                desc  = "Open the Debug Console focused on the Unit Frames source.",
+                func  = function()
+                    OpenDebugSource("unitframes")
+                end,
+            },
             clearAll = {
                 type        = "execute",
                 order       = 5,

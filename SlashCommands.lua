@@ -133,6 +133,85 @@ local function OpenConfigurationPanel(input)
         return
     end
 
+    if primaryCommand == "ufdebug" then
+        local unitFrames = GetUnitFramesModule()
+        if not unitFrames then
+            T:Print("[TwichUI] Unit frames are unavailable")
+            return
+        end
+
+        local subCmd, subArgs = remainder:match("^(%S+)%s*(.-)%s*$")
+        subCmd = (subCmd or "status"):lower()
+        subArgs = subArgs or ""
+
+        if subCmd == "on" or subCmd == "enable" or subCmd == "start" then
+            if unitFrames.SetUFDiagnosticsEnabled then
+                unitFrames:SetUFDiagnosticsEnabled(true)
+                T:Print("[TwichUI] UnitFrames diagnostics enabled.")
+            end
+        elseif subCmd == "off" or subCmd == "disable" or subCmd == "stop" then
+            if unitFrames.SetUFDiagnosticsEnabled then
+                unitFrames:SetUFDiagnosticsEnabled(false)
+                T:Print("[TwichUI] UnitFrames diagnostics disabled.")
+            end
+        elseif subCmd == "once" or subCmd == "snapshot" then
+            if unitFrames.UFDiagMaybeReport then
+                unitFrames:UFDiagMaybeReport("manual", true)
+                T:Print("[TwichUI] UnitFrames diagnostics snapshot emitted to debugger.")
+            end
+        elseif subCmd == "interval" then
+            local seconds = tonumber(subArgs)
+            if not seconds then
+                T:Print("[TwichUI] Usage: /tui ufdebug interval <seconds>")
+                return
+            end
+            if unitFrames.SetUFDiagnosticsInterval then
+                unitFrames:SetUFDiagnosticsInterval(seconds)
+            end
+            if unitFrames.UFDiagGetStatusLine then
+                T:Print("[TwichUI] " .. unitFrames:UFDiagGetStatusLine())
+            end
+        elseif subCmd == "delta" or subCmd == "threshold" then
+            local kb = tonumber(subArgs)
+            if not kb then
+                T:Print("[TwichUI] Usage: /tui ufdebug delta <kb>")
+                return
+            end
+            if unitFrames.SetUFDiagnosticsMemoryDelta then
+                unitFrames:SetUFDiagnosticsMemoryDelta(kb)
+            end
+            if unitFrames.UFDiagGetStatusLine then
+                T:Print("[TwichUI] " .. unitFrames:UFDiagGetStatusLine())
+            end
+        elseif subCmd == "verbose" then
+            local mode = tostring(subArgs or ""):lower()
+            local enabled = (mode == "1" or mode == "true" or mode == "on" or mode == "yes")
+            if mode ~= "0" and mode ~= "false" and mode ~= "off" and mode ~= "no" and not enabled then
+                T:Print("[TwichUI] Usage: /tui ufdebug verbose <on|off>")
+                return
+            end
+            if unitFrames.SetUFDiagnosticsVerbose then
+                unitFrames:SetUFDiagnosticsVerbose(enabled)
+            end
+            if unitFrames.UFDiagGetStatusLine then
+                T:Print("[TwichUI] " .. unitFrames:UFDiagGetStatusLine())
+            end
+        else
+            if unitFrames.UFDiagGetStatusLine then
+                T:Print("[TwichUI] " .. unitFrames:UFDiagGetStatusLine())
+            else
+                T:Print("[TwichUI] UnitFrames diagnostics are unavailable.")
+            end
+            T:Print("[TwichUI] /tui ufdebug on|off|once|status|interval <sec>|delta <kb>|verbose <on|off>")
+        end
+
+        local console = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+        if console and type(console.Show) == "function" then
+            console:Show("unitframes")
+        end
+        return
+    end
+
     ---@type ConfigurationModule
     local ConfigurationModule = T:GetModule("Configuration")
     ConfigurationModule:ToggleOptionsUI()

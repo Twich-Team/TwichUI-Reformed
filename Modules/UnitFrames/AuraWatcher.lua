@@ -286,11 +286,14 @@ local function ScanBySpellIds(unit, lookup, onlyMine, result)
 
     result = result or {}
     local count = 0
+    local slotScans = 0
     local slotsBuffer = result._slotsBuffer or {}
     result._slotsBuffer = slotsBuffer
+    UnitFrames:UFDiagBump("awScanCalls", 1)
     for _, filter in ipairs(FILTER_BOTH) do
         local slotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, filter))
         for i = 2, slotsCount do
+            slotScans = slotScans + 1
             local slot = slotsBuffer[i]
             local data = C_UnitAuras.GetAuraDataBySlot(unit, slot)
             -- spellId can be a 'secret' type in combat — pcall the table lookup.
@@ -308,6 +311,9 @@ local function ScanBySpellIds(unit, lookup, onlyMine, result)
         end
     end
 
+    UnitFrames:UFDiagBump("awSlotsScanned", slotScans)
+    UnitFrames:UFDiagBump("awAurasReturned", count)
+
     return FinalizeAuraResults(result, count)
 end
 
@@ -319,8 +325,10 @@ local function ScanByFilter(unit, source, onlyMine, result)
 
     result = result or {}
     local count = 0
+    local slotScans = 0
     local slotsBuffer = result._slotsBuffer or {}
     result._slotsBuffer = slotsBuffer
+    UnitFrames:UFDiagBump("awScanCalls", 1)
 
     -- DISPELLABLE / DISPELLABLE_OR_BOSS: use WoW's engine-level "HARMFUL|RAID" filter.
     -- This is evaluated by the WoW client against the player's current class/spec
@@ -332,6 +340,7 @@ local function ScanByFilter(unit, source, onlyMine, result)
 
         local dispelSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL|RAID"))
         for i = 2, dispelSlotsCount do
+            slotScans = slotScans + 1
             local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
             if data then
                 data.isHarmfulAura = true
@@ -349,6 +358,7 @@ local function ScanByFilter(unit, source, onlyMine, result)
         if source == "DISPELLABLE_OR_BOSS" then
             local bossSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL"))
             for i = 2, bossSlotsCount do
+                slotScans = slotScans + 1
                 local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
                 if data and (not seen or not seen[data.auraInstanceID]) then
                     data.isHarmfulAura = true
@@ -364,6 +374,8 @@ local function ScanByFilter(unit, source, onlyMine, result)
             end
         end
 
+        UnitFrames:UFDiagBump("awSlotsScanned", slotScans)
+        UnitFrames:UFDiagBump("awAurasReturned", count)
         return FinalizeAuraResults(result, count)
     end
 
@@ -378,6 +390,7 @@ local function ScanByFilter(unit, source, onlyMine, result)
     for _, f in ipairs(filters) do
         local slotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, f))
         for i = 2, slotsCount do
+            slotScans = slotScans + 1
             local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
             if data then
                 -- isHarmful is a secret boolean in combat; annotate isHarmfulAura so
@@ -394,6 +407,9 @@ local function ScanByFilter(unit, source, onlyMine, result)
             end
         end
     end
+
+    UnitFrames:UFDiagBump("awSlotsScanned", slotScans)
+    UnitFrames:UFDiagBump("awAurasReturned", count)
 
     return FinalizeAuraResults(result, count)
 end
@@ -866,6 +882,7 @@ end
 function UnitFrames:AWUpdate(frame)
     if not frame or not frame._awState then return end
     if frame.IsShown and not frame:IsShown() then return end
+    self:UFDiagBump("awUpdateCalls", 1)
     local unit = ResolveFrameUnit(frame)
     if not IsValidAuraUnit(unit) then
         self:AWHideAll(frame)
@@ -876,6 +893,7 @@ function UnitFrames:AWUpdate(frame)
     if not unitKey then return end
 
     local indicators = self:AWGetIndicators(unitKey)
+    local activeIndicators = 0
 
     local MAX_EXTRA_LAYERS = 3
     for idx = 1, MAX_INDICATORS do
@@ -884,6 +902,9 @@ function UnitFrames:AWUpdate(frame)
             local auras  = ResolveAuras(frame, cfg, idx)
             local itype  = cfg.type or "icons"
             local active = #auras > 0
+            if active then
+                activeIndicators = activeIndicators + 1
+            end
             if itype == "icons" then
                 UpdateIconIndicator(frame, idx, cfg, auras)
                 local bd = frame._awState.borders and frame._awState.borders[idx]
@@ -980,6 +1001,10 @@ function UnitFrames:AWUpdate(frame)
             end
         end
     end
+
+    self:UFDiagSetPeak("awIndicatorsActive", activeIndicators)
+    self:UFDiagBump("awIndicatorsActive", activeIndicators)
+    self:UFDiagMaybeReport("aurawatcher")
 end
 
 --- Hides all indicator visuals on the frame (called when the unit is gone).
