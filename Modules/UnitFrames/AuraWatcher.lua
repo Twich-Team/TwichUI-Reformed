@@ -50,6 +50,9 @@ local groupLookupCache       = setmetatable({}, { __mode = "k" })
 -- immediately by PushAuraResult. Safe because scans never recurse.
 local _scanTimingBuffer      = { duration = 0, expirationTime = 0, applications = 0, durationObject = nil }
 
+-- Reusable dedup table for DISPELLABLE_OR_BOSS — avoids a {} allocation per scan.
+local _bossSeenBuffer        = {}
+
 -- Static function avoids allocating a new closure per aura slot in pcall.
 local function SafeTableLookup(tbl, key) return tbl[key] end
 
@@ -313,17 +316,60 @@ local function ResolveIsPlayerAura(unit, auraInstanceID, filter, data)
 end
 
 -- Scan unit auras matching a spell-ID lookup table.
-local function ScanBySpellIds(unit, lookup, onlyMine, result)
-    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then
+-- auraElement: frame.Auras (oUF element) — if allBuffs/allDebuffs are populated we
+-- iterate those cached tables instead of calling GetAuraDataBySlot per slot.
+local function ScanBySpellIds(unit, lookup, onlyMine, result, auraElement)
+    if not IsValidAuraUnit(unit) then
         return ClearSequentialTable(result or {})
     end
 
     result = result or {}
     local count = 0
     local slotScans = 0
+    UnitFrames:UFDiagBump("awScanCalls", 1)
+
+    -- Fast path: oUF already fetched and cached AuraData — no GetAuraDataBySlot calls.
+    local allBuffs   = auraElement and auraElement.allBuffs or nil
+    local allDebuffs = auraElement and auraElement.allDebuffs or nil
+    if allBuffs and allDebuffs then
+        for _, data in next, allBuffs do
+            slotScans = slotScans + 1
+            if data and data.spellId then
+                local _ok, _hit = pcall(SafeTableLookup, lookup, data.spellId)
+                if _ok and _hit then
+                    local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HELPFUL", data)
+                    if passPlayer then
+                        local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
+                        count = PushAuraResult(result, count, data, timing)
+                    end
+                end
+            end
+        end
+        for _, data in next, allDebuffs do
+            slotScans = slotScans + 1
+            if data and data.spellId then
+                local _ok, _hit = pcall(SafeTableLookup, lookup, data.spellId)
+                if _ok and _hit then
+                    data.isHarmfulAura = true
+                    local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                    if passPlayer then
+                        local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
+                        count = PushAuraResult(result, count, data, timing)
+                    end
+                end
+            end
+        end
+        UnitFrames:UFDiagBump("awSlotsScanned", slotScans)
+        UnitFrames:UFDiagBump("awAurasReturned", count)
+        return FinalizeAuraResults(result, count)
+    end
+
+    -- Fallback: raw API scan (oUF cache not yet populated on first update).
+    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then
+        return ClearSequentialTable(result)
+    end
     local slotsBuffer = result._slotsBuffer or {}
     result._slotsBuffer = slotsBuffer
-    UnitFrames:UFDiagBump("awScanCalls", 1)
     for _, filter in ipairs(FILTER_BOTH) do
         local slotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, filter))
         for i = 2, slotsCount do
@@ -352,25 +398,38 @@ local function ScanBySpellIds(unit, lookup, onlyMine, result)
 end
 
 -- Scan unit auras matching a generic filter (HELPFUL / HARMFUL / DISPELLABLE / etc).
-local function ScanByFilter(unit, source, onlyMine, result)
-    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then
+-- auraElement: frame.Auras (oUF element). For HELPFUL/HARMFUL/BOTH we iterate its
+-- allBuffs/allDebuffs cache. DISPELLABLE must still use GetAuraSlots("HARMFUL|RAID")
+-- because dispelName is a secret type in PvP — the engine filter is the safe path.
+local function ScanByFilter(unit, source, onlyMine, result, auraElement)
+    if not IsValidAuraUnit(unit) then
         return ClearSequentialTable(result or {})
     end
 
     result = result or {}
     local count = 0
     local slotScans = 0
-    local slotsBuffer = result._slotsBuffer or {}
-    result._slotsBuffer = slotsBuffer
     UnitFrames:UFDiagBump("awScanCalls", 1)
 
-    -- DISPELLABLE / DISPELLABLE_OR_BOSS: use WoW's engine-level "HARMFUL|RAID" filter.
-    -- This is evaluated by the WoW client against the player's current class/spec
-    -- and returns only the debuffs the player can actually dispel — without ever
-    -- touching dispelName or isHarmful, both of which are secret types in PvP and
-    -- throw errors when read even inside a pcall.
+    local allBuffs   = auraElement and auraElement.allBuffs or nil
+    local allDebuffs = auraElement and auraElement.allDebuffs or nil
+
+    -- DISPELLABLE / DISPELLABLE_OR_BOSS: dispellable part MUST use the engine filter.
+    -- Boss aura sub-scan uses allDebuffs cache when available.
     if source == "DISPELLABLE" or source == "DISPELLABLE_OR_BOSS" then
-        local seen = source == "DISPELLABLE_OR_BOSS" and {} or nil
+        if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then
+            return ClearSequentialTable(result)
+        end
+
+        local slotsBuffer = result._slotsBuffer or {}
+        result._slotsBuffer = slotsBuffer
+
+        -- Reuse module-level seen-buffer; clear before use.
+        local seen = nil
+        if source == "DISPELLABLE_OR_BOSS" then
+            seen = _bossSeenBuffer
+            for k in next, seen do seen[k] = nil end
+        end
 
         local dispelSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL|RAID"))
         for i = 2, dispelSlotsCount do
@@ -392,19 +451,39 @@ local function ScanByFilter(unit, source, onlyMine, result)
         -- it with == causes a taint error. Use issecretvalue() to detect the secure case
         -- and skip the comparison — boss debuffs in PvP are irrelevant to dispel tracking.
         if source == "DISPELLABLE_OR_BOSS" then
-            local bossSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL"))
-            for i = 2, bossSlotsCount do
-                slotScans = slotScans + 1
-                local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
-                if data and (not seen or not seen[data.auraInstanceID]) then
-                    data.isHarmfulAura = true
-                    local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
-                    if passPlayer then
-                        local rawBoss = data.isBossAura
-                        local isBoss = not (issecretvalue and issecretvalue(rawBoss)) and rawBoss == true
-                        if isBoss then
-                            local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
-                            count = PushAuraResult(result, count, data, timing)
+            if allDebuffs then
+                -- Fast path: iterate oUF cache, no GetAuraDataBySlot allocs.
+                for _, data in next, allDebuffs do
+                    if data and (not seen or not seen[data.auraInstanceID]) then
+                        slotScans = slotScans + 1
+                        data.isHarmfulAura = true
+                        local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                        if passPlayer then
+                            local rawBoss = data.isBossAura
+                            local isBoss = not (issecretvalue and issecretvalue(rawBoss)) and rawBoss == true
+                            if isBoss then
+                                local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
+                                count = PushAuraResult(result, count, data, timing)
+                            end
+                        end
+                    end
+                end
+            else
+                -- Fallback: raw API scan for boss auras.
+                local bossSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL"))
+                for i = 2, bossSlotsCount do
+                    slotScans = slotScans + 1
+                    local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
+                    if data and (not seen or not seen[data.auraInstanceID]) then
+                        data.isHarmfulAura = true
+                        local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                        if passPlayer then
+                            local rawBoss = data.isBossAura
+                            local isBoss = not (issecretvalue and issecretvalue(rawBoss)) and rawBoss == true
+                            if isBoss then
+                                local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
+                                count = PushAuraResult(result, count, data, timing)
+                            end
                         end
                     end
                 end
@@ -416,6 +495,48 @@ local function ScanByFilter(unit, source, onlyMine, result)
         return FinalizeAuraResults(result, count)
     end
 
+    -- HELPFUL / HARMFUL / BOTH: use oUF cache when available.
+    if allBuffs and allDebuffs then
+        local scanBuffs   = source ~= "HARMFUL"
+        local scanDebuffs = source ~= "HELPFUL"
+        if scanBuffs then
+            for _, data in next, allBuffs do
+                slotScans = slotScans + 1
+                if data then
+                    local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HELPFUL", data)
+                    if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
+                        local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
+                        if source ~= "HELPFUL" or UnitFrames:ShouldKeepGenericHelpfulAura(unit, data, timing, onlyMine) then
+                            count = PushAuraResult(result, count, data, timing)
+                        end
+                    end
+                end
+            end
+        end
+        if scanDebuffs then
+            for _, data in next, allDebuffs do
+                slotScans = slotScans + 1
+                if data then
+                    data.isHarmfulAura = true
+                    local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                    if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
+                        local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
+                        count = PushAuraResult(result, count, data, timing)
+                    end
+                end
+            end
+        end
+        UnitFrames:UFDiagBump("awSlotsScanned", slotScans)
+        UnitFrames:UFDiagBump("awAurasReturned", count)
+        return FinalizeAuraResults(result, count)
+    end
+
+    -- Fallback: raw API scan (oUF cache not yet populated on first update).
+    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then
+        return ClearSequentialTable(result)
+    end
+    local slotsBuffer = result._slotsBuffer or {}
+    result._slotsBuffer = slotsBuffer
     local filters
     if source == "HELPFUL" then
         filters = FILTER_HELPFUL
@@ -457,6 +578,10 @@ local function ResolveAuras(frame, unit, cfg, resultKey, scanCache)
     if not IsValidAuraUnit(unit) then
         return ClearSequentialTable(result)
     end
+
+    -- oUF's Auras element keeps allBuffs/allDebuffs current before PostUpdate fires.
+    -- Passing it to scan functions lets them skip GetAuraDataBySlot entirely.
+    local auraElement = frame and frame.Auras or nil
 
     local source   = cfg.source or "HARMFUL"
     local onlyMine = cfg.onlyMine and true or false
@@ -505,14 +630,14 @@ local function ResolveAuras(frame, unit, cfg, resultKey, scanCache)
     if source == "spell" then
         local lookup = GetCachedSpellLookup(cfg)
         if lookup then
-            local scanned = ScanBySpellIds(unit, lookup, onlyMine, result)
+            local scanned = ScanBySpellIds(unit, lookup, onlyMine, result, auraElement)
             if scanCache and cacheKey then scanCache[cacheKey] = scanned end
             return scanned
         end
 
         lookup = GetCachedSingleSpellLookup(cfg)
         if lookup then
-            local scanned = ScanBySpellIds(unit, lookup, onlyMine, result)
+            local scanned = ScanBySpellIds(unit, lookup, onlyMine, result, auraElement)
             if scanCache and cacheKey then scanCache[cacheKey] = scanned end
             return scanned
         end
@@ -526,7 +651,7 @@ local function ResolveAuras(frame, unit, cfg, resultKey, scanCache)
         local grp    = db.spellGroups and cfg.groupKey and db.spellGroups[cfg.groupKey]
         local lookup = GetCachedGroupLookup(grp)
         if lookup then
-            local scanned = ScanBySpellIds(unit, lookup, onlyMine, result)
+            local scanned = ScanBySpellIds(unit, lookup, onlyMine, result, auraElement)
             if scanCache and cacheKey then scanCache[cacheKey] = scanned end
             return scanned
         end
@@ -534,7 +659,7 @@ local function ResolveAuras(frame, unit, cfg, resultKey, scanCache)
         return ClearSequentialTable(result)
     end
 
-    local scanned = ScanByFilter(unit, source, onlyMine, result)
+    local scanned = ScanByFilter(unit, source, onlyMine, result, auraElement)
     if scanCache and cacheKey then scanCache[cacheKey] = scanned end
     return scanned
 end
