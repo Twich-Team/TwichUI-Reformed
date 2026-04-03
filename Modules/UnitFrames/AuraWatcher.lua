@@ -261,6 +261,19 @@ local function GetReusableAuraResults(frame, key)
     return results[key]
 end
 
+local function BuildSpellIdsSignature(ids)
+    if type(ids) ~= "table" or #ids == 0 then
+        return ""
+    end
+
+    local out = {}
+    for index = 1, #ids do
+        out[index] = tostring(ids[index])
+    end
+
+    return table.concat(out, ",")
+end
+
 -- ============================================================
 -- Aura scanning
 -- ============================================================
@@ -415,8 +428,7 @@ local function ScanByFilter(unit, source, onlyMine, result)
 end
 
 -- Resolve which auras are active for a given indicator config on a frame.
-local function ResolveAuras(frame, cfg, resultKey)
-    local unit = ResolveFrameUnit(frame)
+local function ResolveAuras(frame, unit, cfg, resultKey, scanCache)
     local result = GetReusableAuraResults(frame, resultKey)
     if not IsValidAuraUnit(unit) then
         return ClearSequentialTable(result)
@@ -425,17 +437,42 @@ local function ResolveAuras(frame, cfg, resultKey)
     local source   = cfg.source or "HARMFUL"
     local onlyMine = cfg.onlyMine and true or false
 
+    local cacheKey = nil
+    if source == "spell" then
+        if type(cfg.spellIds) == "table" and #cfg.spellIds > 0 then
+            cacheKey = "spell:list:" .. BuildSpellIdsSignature(cfg.spellIds) .. ":mine:" .. tostring(onlyMine)
+        elseif tonumber(cfg.spellId) then
+            cacheKey = "spell:single:" .. tostring(tonumber(cfg.spellId)) .. ":mine:" .. tostring(onlyMine)
+        end
+    elseif source == "group" then
+        local db = UnitFrames:GetDB()
+        local grp = db.spellGroups and cfg.groupKey and db.spellGroups[cfg.groupKey]
+        local raw = grp and grp.spellIds or ""
+        cacheKey = "group:" .. tostring(cfg.groupKey or "") .. ":" .. tostring(raw) .. ":mine:" .. tostring(onlyMine)
+    else
+        cacheKey = "filter:" .. tostring(source) .. ":mine:" .. tostring(onlyMine)
+    end
+
+    if scanCache and cacheKey and scanCache[cacheKey] then
+        UnitFrames:UFDiagBump("awScanCacheHits", 1)
+        return scanCache[cacheKey]
+    end
+
     -- Catalog-assigned spells (source == "spell").
     -- Supports spellIds array (new) and legacy spellId scalar.
     if source == "spell" then
         local lookup = GetCachedSpellLookup(cfg)
         if lookup then
-            return ScanBySpellIds(unit, lookup, onlyMine, result)
+            local scanned = ScanBySpellIds(unit, lookup, onlyMine, result)
+            if scanCache and cacheKey then scanCache[cacheKey] = scanned end
+            return scanned
         end
 
         lookup = GetCachedSingleSpellLookup(cfg)
         if lookup then
-            return ScanBySpellIds(unit, lookup, onlyMine, result)
+            local scanned = ScanBySpellIds(unit, lookup, onlyMine, result)
+            if scanCache and cacheKey then scanCache[cacheKey] = scanned end
+            return scanned
         end
 
         return ClearSequentialTable(result)
@@ -447,13 +484,17 @@ local function ResolveAuras(frame, cfg, resultKey)
         local grp    = db.spellGroups and cfg.groupKey and db.spellGroups[cfg.groupKey]
         local lookup = GetCachedGroupLookup(grp)
         if lookup then
-            return ScanBySpellIds(unit, lookup, onlyMine, result)
+            local scanned = ScanBySpellIds(unit, lookup, onlyMine, result)
+            if scanCache and cacheKey then scanCache[cacheKey] = scanned end
+            return scanned
         end
 
         return ClearSequentialTable(result)
     end
 
-    return ScanByFilter(unit, source, onlyMine, result)
+    local scanned = ScanByFilter(unit, source, onlyMine, result)
+    if scanCache and cacheKey then scanCache[cacheKey] = scanned end
+    return scanned
 end
 
 -- ============================================================
@@ -892,6 +933,16 @@ function UnitFrames:AWUpdate(frame)
     local unitKey = frame._awState.unitKey
     if not unitKey then return end
 
+    local scanCache = frame._awState.scanCache
+    if not scanCache then
+        scanCache = {}
+        frame._awState.scanCache = scanCache
+    else
+        for key in pairs(scanCache) do
+            scanCache[key] = nil
+        end
+    end
+
     local indicators = self:AWGetIndicators(unitKey)
     local activeIndicators = 0
 
@@ -899,7 +950,7 @@ function UnitFrames:AWUpdate(frame)
     for idx = 1, MAX_INDICATORS do
         local cfg = indicators[idx]
         if cfg and cfg.enabled ~= false then
-            local auras  = ResolveAuras(frame, cfg, idx)
+            local auras  = ResolveAuras(frame, unit, cfg, idx, scanCache)
             local itype  = cfg.type or "icons"
             local active = #auras > 0
             if active then

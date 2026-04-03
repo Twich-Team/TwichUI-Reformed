@@ -103,6 +103,21 @@ local function UFDebug(msg)
     if dc and dc.Log then dc:Log("unitframes", msg, false) end
 end
 
+local function UFDiagnosticsVerboseEnabled(self)
+    if not (self and type(self.GetUFDiagnosticsConfig) == "function") then
+        return false
+    end
+
+    local cfg = self:GetUFDiagnosticsConfig()
+    return cfg and cfg.enabled == true and cfg.verbose == true
+end
+
+local function UFDebugVerbose(self, msg)
+    if UFDiagnosticsVerboseEnabled(self) then
+        UFDebug(msg)
+    end
+end
+
 function UnitFrames:GetUFDiagnosticsMemoryKB()
     if type(_G.UpdateAddOnMemoryUsage) == "function" then
         _G.UpdateAddOnMemoryUsage()
@@ -177,6 +192,8 @@ function UnitFrames:SetUFDiagnosticsEnabled(enabled, silent)
             UFDebug("UFDiagnostics: disabled")
         end
         self._ufDiagRuntime = nil
+        self._auraTimingDebugSeen = nil
+        self._auraTimingDebugSeenCount = nil
     end
 end
 
@@ -189,6 +206,8 @@ function UnitFrames:RefreshUFDiagnosticsState()
         end
     else
         self._ufDiagRuntime = nil
+        self._auraTimingDebugSeen = nil
+        self._auraTimingDebugSeenCount = nil
     end
 end
 
@@ -402,10 +421,21 @@ local function BuildAuraTimingDebugKey(contextKey, unit, auraData, reason)
 end
 
 function UnitFrames:LogAuraTimingOnce(contextKey, unit, auraData, reason, detail)
+    if not UFDiagnosticsVerboseEnabled(self) then
+        return
+    end
+
     self._auraTimingDebugSeen = self._auraTimingDebugSeen or {}
+    self._auraTimingDebugSeenCount = self._auraTimingDebugSeenCount or 0
+    if self._auraTimingDebugSeenCount > 1024 then
+        self._auraTimingDebugSeen = {}
+        self._auraTimingDebugSeenCount = 0
+    end
+
     local key = BuildAuraTimingDebugKey(contextKey, unit, auraData, reason)
     if self._auraTimingDebugSeen[key] then return end
     self._auraTimingDebugSeen[key] = true
+    self._auraTimingDebugSeenCount = self._auraTimingDebugSeenCount + 1
 
     UFDebug(string.format(
         "AuraTiming: context=%s unit=%s spellId=%s auraInstanceID=%s reason=%s %s",
@@ -2031,6 +2061,9 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
         mode = "theme"
     end
 
+    local diagCfg = self:GetUFDiagnosticsConfig()
+    local logPaletteDetails = diagCfg and diagCfg.enabled == true and diagCfg.verbose == true
+
     if mode == "custom" then
         if unitHealth and type(unitHealth.color) == "table" then
             palette.health = CopyColor(unitHealth.color)
@@ -2039,9 +2072,11 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
         else
             palette.health = CopyColor(globalCustomHealthColor)
         end
-        UFDebug(string.format("GetPalette: scope=%s mode=custom r=%.2f g=%.2f b=%.2f",
-            tostring(resolvedScope),
-            palette.health[1], palette.health[2], palette.health[3]))
+        if logPaletteDetails then
+            UFDebug(string.format("GetPalette: scope=%s mode=custom r=%.2f g=%.2f b=%.2f",
+                tostring(resolvedScope),
+                palette.health[1], palette.health[2], palette.health[3]))
+        end
     elseif mode == "class" then
         local classToken = nil
         if unit then
@@ -2072,14 +2107,18 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
                 palette.health = { classColor.r, classColor.g, classColor.b, 1 }
             end
         end
-        UFDebug(string.format("GetPalette: scope=%s mode=class token=%s found=%s",
-            tostring(resolvedScope),
-            tostring(classToken), tostring(classColor ~= nil)))
+        if logPaletteDetails then
+            UFDebug(string.format("GetPalette: scope=%s mode=class token=%s found=%s",
+                tostring(resolvedScope),
+                tostring(classToken), tostring(classColor ~= nil)))
+        end
     else
         palette.health = CopyColor(themeHealthColor)
-        UFDebug(string.format("GetPalette: scope=%s mode=theme r=%.2f g=%.2f b=%.2f accent=%s",
-            tostring(resolvedScope),
-            palette.health[1], palette.health[2], palette.health[3], tostring(useThemeAccentHealth)))
+        if logPaletteDetails then
+            UFDebug(string.format("GetPalette: scope=%s mode=theme r=%.2f g=%.2f b=%.2f accent=%s",
+                tostring(resolvedScope),
+                palette.health[1], palette.health[2], palette.health[3], tostring(useThemeAccentHealth)))
+        end
     end
 
     return palette
@@ -2145,7 +2184,7 @@ function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
     powerBar._roleCollapsed = shouldCollapse
 
     if shouldCollapse then
-        UFDebug(string.format("UpdatePowerBarForRole: key=%s showPower=%s healerOnly=%s role=%s → COLLAPSE",
+        UFDebugVerbose(self, string.format("UpdatePowerBarForRole: key=%s showPower=%s healerOnly=%s role=%s → COLLAPSE",
             tostring(unitKey), tostring(effectiveShowPower == true), tostring(healerOnly), tostring(role)))
         powerBar:SetHeight(0)
         powerBar:SetAlpha(0)
@@ -2162,10 +2201,10 @@ function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
     else
         local restoreH = powerBar._designedHeight or 8
         if healerOnly then
-            UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=HEALER → RESTORE h=%d",
+            UFDebugVerbose(self, string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=HEALER → RESTORE h=%d",
                 tostring(unitKey), restoreH))
         else
-            UFDebug(string.format("UpdatePowerBarForRole: key=%s healerOnly=false → RESTORE h=%d", tostring(unitKey),
+            UFDebugVerbose(self, string.format("UpdatePowerBarForRole: key=%s healerOnly=false → RESTORE h=%d", tostring(unitKey),
                 restoreH))
         end
         powerBar:SetHeight(restoreH)
@@ -4081,7 +4120,7 @@ function UnitFrames:ApplyClassBarSettings(frame, unitKey)
     local cfg     = db.classBar or {}
     local enabled = cfg.enabled ~= false
 
-    UFDebug(string.format("ApplyClassBarSettings: unitKey=%s enabled=%s matchFrameWidth=%s cfgWidth=%s",
+    UFDebugVerbose(self, string.format("ApplyClassBarSettings: unitKey=%s enabled=%s matchFrameWidth=%s cfgWidth=%s",
         tostring(unitKey), tostring(enabled), tostring(cfg.matchFrameWidth), tostring(cfg.width)))
 
     -- ForceUpdate first so oUF shows/hides the correct individual bars based on
@@ -4099,7 +4138,7 @@ function UnitFrames:ApplyClassBarSettings(frame, unitKey)
         end
     end
     if segmentCount == 0 then segmentCount = maxBars end
-    UFDebug(string.format("ApplyClassBarSettings: maxBars=%d segmentCount=%d frameWidth=%.1f",
+    UFDebugVerbose(self, string.format("ApplyClassBarSettings: maxBars=%d segmentCount=%d frameWidth=%.1f",
         maxBars, segmentCount, frame:GetWidth()))
 
     local width
@@ -6832,7 +6871,7 @@ function UnitFrames:ApplyUnitFrameSize(frame, settings, unitKey)
         frame.Health:ClearAllPoints()
         frame.Power:ClearAllPoints()
 
-        UFDebug(string.format("ApplyUnitFrameSize: key=%s size=%dx%d powerH=%d detached=%s showPower=%s",
+        UFDebugVerbose(self, string.format("ApplyUnitFrameSize: key=%s size=%dx%d powerH=%d detached=%s showPower=%s",
             tostring(unitKey), width, height, powerHeight, tostring(detached), tostring(settings.showPower)))
         if powerHeight > 0 then
             -- Power is on — clear the force-hide guard and re-enable if oUF disabled it.
@@ -7192,7 +7231,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
     local growthDirection = ResolveGroupGrowthDirection(settings, "DOWN")
 
     local enabled = settings.enabled ~= false
-    UFDebug(string.format("ApplyHeaderSettings: key=%s enabled=%s layout=(%s,%s,%.0f,%.0f)",
+    UFDebugVerbose(self, string.format("ApplyHeaderSettings: key=%s enabled=%s layout=(%s,%s,%.0f,%.0f)",
         groupKey, tostring(enabled),
         tostring(layout.point or "CENTER"), tostring(layout.relativePoint or "CENTER"),
         tonumber(layout.x) or 0, tonumber(layout.y) or 0))
@@ -7223,7 +7262,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
         header:SetAttribute("showParty", enabled)
         header:SetAttribute("showPlayer", settings.showPlayer == true)
         header:SetAttribute("showSolo", settings.showSolo == true)
-        UFDebug(string.format("ApplyHeaderSettings: party showParty=%s showPlayer=%s showSolo=%s",
+        UFDebugVerbose(self, string.format("ApplyHeaderSettings: party showParty=%s showPlayer=%s showSolo=%s",
             tostring(enabled), tostring(settings.showPlayer == true), tostring(settings.showSolo == true)))
         -- Register a macro-conditional visibility driver so SecureGroupHeaderTemplate
         -- will automatically show/hide and SPAWN CHILDREN when the player is in a group.
@@ -7283,7 +7322,7 @@ function UnitFrames:ApplyHeaderSettings(header, groupKey)
                     -- tainted "secret" string — safe to PASS to WoW APIs but NOT to
                     -- format into strings. Log only the safe memberUnitKey.
                     local childUnit = child:GetAttribute("unit") or child.unit
-                    UFDebug(string.format("ApplyHeaderSettings: UpdatePowerBarForRole child key=%s",
+                    UFDebugVerbose(self, string.format("ApplyHeaderSettings: UpdatePowerBarForRole child key=%s",
                         tostring(memberUnitKey)))
                     -- Clear the role-collapse cache so that ApplyUnitFrameSize having just
                     -- restored SetHeight(designedHeight) doesn't cause an early return here.
@@ -7995,7 +8034,7 @@ function UnitFrames:UpdateMovers()
             -- Use the configured maxColumns for ALL group types (not just raid) so
             -- horizontally-arranged party/tank layouts get an accurate mover size.
             local geometry = BuildGroupGeometry(gs, w, rowH, rows, cols, 6, 8, "DOWN", gs.columnAnchorPoint or "LEFT")
-            UFDebug(string.format("UpdateMovers: %s mover dir=%s rows=%d cols=%d mw=%d mh=%d enabled=%s",
+            UFDebugVerbose(self, string.format("UpdateMovers: %s mover dir=%s rows=%d cols=%d mw=%d mh=%d enabled=%s",
                 key, tostring(geometry.growthDirection), rows, cols, geometry.width, geometry.height,
                 tostring(gs.enabled ~= false)))
             PlaceMover(mover,
@@ -9152,7 +9191,7 @@ function UnitFrames:StyleFrame(frame)
         classPower.PostVisibility = function(element, isVisible)
             local cfg = UnitFrames:GetDB().classBar or {}
             local shouldShow = cfg.enabled ~= false and isVisible
-            UFDebug(string.format("ClassPower.PostVisibility: isVisible=%s enabled=%s → container shown=%s",
+            UFDebugVerbose(UnitFrames, string.format("ClassPower.PostVisibility: isVisible=%s enabled=%s → container shown=%s",
                 tostring(isVisible), tostring(cfg.enabled ~= false), tostring(shouldShow)))
             element.container:SetShown(shouldShow)
         end
@@ -9160,10 +9199,10 @@ function UnitFrames:StyleFrame(frame)
             -- Guard: ApplyClassBarSettings calls ForceUpdate which re-fires PostUpdate.
             -- Without this guard the two functions recurse infinitely and freeze the client.
             if element._applyingSettings then
-                UFDebug("ClassPower.PostUpdate: skipped (inside ApplyClassBarSettings)")
+                UFDebugVerbose(UnitFrames, "ClassPower.PostUpdate: skipped (inside ApplyClassBarSettings)")
                 return
             end
-            UFDebug(string.format("ClassPower.PostUpdate: hasMaxChanged=%s",
+            UFDebugVerbose(UnitFrames, string.format("ClassPower.PostUpdate: hasMaxChanged=%s",
                 tostring(hasMaxChanged)))
             -- Re-run the full layout when the class resource maximum changes
             -- (e.g. spec swap from 5 to 6 segments or vice-versa).
@@ -9830,9 +9869,10 @@ function UnitFrames:BuildDebugReport()
             (tonumber(diagRt.peakMemoryKB) or 0) / 1024))
         local totals = diagRt.total or {}
         tinsert(lines, string.format(
-            "Diagnostics totals: awUpdate=%d awScan=%d awSlots=%d awResults=%d auraBars=%d castTicks=%d castEvents=%d",
+            "Diagnostics totals: awUpdate=%d awScan=%d awCacheHits=%d awSlots=%d awResults=%d auraBars=%d castTicks=%d castEvents=%d",
             totals.awUpdateCalls or 0,
             totals.awScanCalls or 0,
+            totals.awScanCacheHits or 0,
             totals.awSlotsScanned or 0,
             totals.awAurasReturned or 0,
             totals.auraBarRefreshCalls or 0,
