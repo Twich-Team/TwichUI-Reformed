@@ -6,16 +6,6 @@ local TwichRx = _G.TwichRx
 local T = unpack(TwichRx)
 
 local SummonByID = C_MountJournal.SummonByID
-local AuraUtil = _G.AuraUtil
-local C_UnitAuras = _G.C_UnitAuras
-local CastSpellByID = rawget(_G, "CastSpellByID")
-local GetSpellInfo = rawget(_G, "GetSpellInfo")
-local RunMacroText = rawget(_G, "RunMacroText")
-
-local SWITCH_FLIGHT_STYLE_SPELL_ID = 436854
-local FLIGHT_STYLE_SKYRIDING_AURA_ID = 404464
-local FLIGHT_STYLE_STEADY_AURA_ID = 404468
-local FindAuraBySpellID = AuraUtil and (AuraUtil.FindAuraBySpellId or AuraUtil.FindAuraBySpellID)
 
 ---@type DataTextModule
 local DataTextModule = T:GetModule("Datatexts")
@@ -26,44 +16,6 @@ local DataTextModule = T:GetModule("Datatexts")
 ---@field menuList table
 ---@field flaggedForRebuild boolean indicates if the menu needs to be rebuilt
 local MDT = DataTextModule:NewModule("MountDataText", "AceEvent-3.0")
-
-function MDT:IsSkyridingActive()
-    if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
-        if C_UnitAuras.GetPlayerAuraBySpellID(FLIGHT_STYLE_SKYRIDING_AURA_ID) then
-            return true
-        end
-        if C_UnitAuras.GetPlayerAuraBySpellID(FLIGHT_STYLE_STEADY_AURA_ID) then
-            return false
-        end
-    end
-
-    if FindAuraBySpellID then
-        if FindAuraBySpellID(FLIGHT_STYLE_SKYRIDING_AURA_ID, "player", "HELPFUL") then
-            return true
-        end
-        if FindAuraBySpellID(FLIGHT_STYLE_STEADY_AURA_ID, "player", "HELPFUL") then
-            return false
-        end
-    end
-
-    return nil
-end
-
-function MDT:ToggleFlightStyle()
-    if CastSpellByID then
-        local ok = pcall(CastSpellByID, SWITCH_FLIGHT_STYLE_SPELL_ID)
-        if ok then
-            return
-        end
-    end
-
-    if RunMacroText then
-        local spellName = GetSpellInfo and GetSpellInfo(SWITCH_FLIGHT_STYLE_SPELL_ID)
-        if spellName and spellName ~= "" then
-            RunMacroText("/cast " .. spellName)
-        end
-    end
-end
 
 ---@return DatatextConfigurationOptions options
 local function GetOptions()
@@ -115,9 +67,10 @@ function MDT:GetMenuList()
         tinsert(menuList, {
             text = T.Tools.Text.Icon(mountInfo.icon) .. " " .. mountInfo.name,
             notCheckable = true,
-            func = function()
+            spell = mountInfo.spellID,
+            func = (not mountInfo.spellID and mountInfo.mountID) and function()
                 SummonByID(mountInfo.mountID)
-            end,
+            end or nil,
         })
     end
 
@@ -164,42 +117,6 @@ function MDT:GetMenuList()
             AddMountEntry(mountInfo)
         end
     end
-
-    local isSkyriding = self:IsSkyridingActive()
-    local currentStyleText = "Current: Unknown"
-    if isSkyriding == true then
-        currentStyleText = "Current: Skyriding"
-    elseif isSkyriding == false then
-        currentStyleText = "Current: Steady Flight"
-    end
-
-    if #menuList > 0 then
-        tinsert(menuList, {
-            text = " ",
-            isTitle = true,
-            notCheckable = true,
-        })
-    end
-
-    tinsert(menuList, {
-        text = "Flight Style",
-        isTitle = true,
-        notCheckable = true,
-    })
-    tinsert(menuList, {
-        text = currentStyleText,
-        disabled = true,
-        notCheckable = true,
-    })
-    tinsert(menuList, {
-        text = (isSkyriding == true and "Switch to Steady Flight") or "Switch to Skyriding",
-        notCheckable = true,
-        func = function()
-            self:ToggleFlightStyle()
-            self.flaggedForRebuild = true
-        end,
-    })
-
 
     self.menuList = menuList
     self.flaggedForRebuild = false

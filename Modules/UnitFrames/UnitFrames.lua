@@ -17,6 +17,7 @@ local UnitFrames = T:NewModule("UnitFrames", "AceEvent-3.0")
 local CreateFrame = _G.CreateFrame
 local C_Timer = _G.C_Timer
 local InCombatLockdown = _G.InCombatLockdown
+local SecureHandlerSetFrameRef = _G.SecureHandlerSetFrameRef
 local UIParent = _G.UIParent
 local CheckInteractDistance = _G.CheckInteractDistance
 local UnitExists = _G.UnitExists
@@ -24,24 +25,11 @@ local UnitClass = _G.UnitClass
 local UnitInRange = _G.UnitInRange
 local UnitInParty = _G.UnitInParty
 local UnitInRaid = _G.UnitInRaid
-local UnitCanAssist = _G.UnitCanAssist
-local UnitIsConnected = _G.UnitIsConnected
-local UnitIsDeadOrGhost = _G.UnitIsDeadOrGhost
-local UnitIsPlayer = _G.UnitIsPlayer
-local UnitIsUnit = _G.UnitIsUnit
-local UnitPhaseReason = _G.UnitPhaseReason
-local UnitAffectingCombat = _G.UnitAffectingCombat
-local UnitPowerType = _G.UnitPowerType
 local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
-local IsResting = _G.IsResting
-local GetSpellInfo = _G.GetSpellInfo
-local GetSpecialization = _G.GetSpecialization
-local GetSpecializationInfo = _G.GetSpecializationInfo
 local StatusBarInterpolation = (_G.Enum and _G.Enum.StatusBarInterpolation) or _G.StatusBarInterpolation
 local RAID_CLASS_COLORS = _G.RAID_CLASS_COLORS
 local C_UnitAuras = _G.C_UnitAuras
 local C_Spell = _G.C_Spell
-local C_SpellBook = _G.C_SpellBook
 local issecretvalue = _G.issecretvalue or function() return false end
 local math_min = math.min
 local math_max = math.max
@@ -50,7 +38,6 @@ local math_floor = math.floor
 local math_cos = math.cos
 local math_sin = math.sin
 local math_pi = math.pi
-local StatusBarTimerDirection = (_G.Enum and _G.Enum.StatusBarTimerDirection) or nil
 
 local FRIENDLY_RANGE_SPELLS = {
     DEATHKNIGHT = { 47541 },
@@ -545,8 +532,8 @@ function UnitFrames:GetHelpfulAuraPromotionLookup()
                                 spellName = resolvedName
                             end
                         end
-                        if not spellName and GetSpellInfo then
-                            local okLegacyName, legacyName = pcall(GetSpellInfo, spellId)
+                        if not spellName and _G.GetSpellInfo then
+                            local okLegacyName, legacyName = pcall(_G.GetSpellInfo, spellId)
                             if okLegacyName and type(legacyName) == "string" and legacyName ~= "" then
                                 spellName = legacyName
                             end
@@ -718,7 +705,7 @@ end
 -- Checks db.powerTypeColors overrides first, then falls back to PowerBarColor.
 local function GetPowerTypeColor(unit, db)
     if not unit then return nil end
-    local powerType, powerToken = UnitPowerType(unit)
+    local powerType, powerToken = _G.UnitPowerType(unit)
     -- Check user overrides stored by token (e.g. db.powerTypeColors.MANA = {r,g,b,1})
     if db and type(db.powerTypeColors) == "table" then
         local ov = (powerToken and db.powerTypeColors[powerToken])
@@ -890,8 +877,8 @@ function UnitFrames:IsRangeCheckSpellKnown(spellID)
         return false
     end
 
-    if C_SpellBook and type(C_SpellBook.IsSpellInSpellBook) == "function" then
-        local okKnown, isKnown = pcall(C_SpellBook.IsSpellInSpellBook, spellID)
+    if _G.C_SpellBook and type(_G.C_SpellBook.IsSpellInSpellBook) == "function" then
+        local okKnown, isKnown = pcall(_G.C_SpellBook.IsSpellInSpellBook, spellID)
         if okKnown and isKnown then
             return true
         end
@@ -960,15 +947,15 @@ function UnitFrames:GetFriendlyUnitAssistState(unit)
         return nil, false
     end
 
-    if type(UnitPhaseReason) == "function" then
-        local okPhase, phaseReason = pcall(UnitPhaseReason, unit)
+    if type(_G.UnitPhaseReason) == "function" then
+        local okPhase, phaseReason = pcall(_G.UnitPhaseReason, unit)
         if okPhase and not (issecretvalue and issecretvalue(phaseReason)) and phaseReason ~= nil then
             return false, true
         end
     end
 
-    if type(UnitCanAssist) == "function" then
-        local okAssist, canAssist = pcall(UnitCanAssist, "player", unit)
+    if type(_G.UnitCanAssist) == "function" then
+        local okAssist, canAssist = pcall(_G.UnitCanAssist, "player", unit)
         if okAssist and not (issecretvalue and issecretvalue(canAssist)) and canAssist ~= nil then
             return canAssist == true or canAssist == 1, true
         end
@@ -996,7 +983,7 @@ function UnitFrames:GetFriendlyUnitRangeState(unit)
         end
     end
 
-    local spellBucket = (UnitIsDeadOrGhost and UnitIsDeadOrGhost(unit)) and "resurrect" or "friendly"
+    local spellBucket = (_G.UnitIsDeadOrGhost and _G.UnitIsDeadOrGhost(unit)) and "resurrect" or "friendly"
     local spellRange = self:UnitInConfiguredSpellRange(unit, spellBucket)
     if spellRange ~= nil then
         return spellRange, true
@@ -1064,8 +1051,8 @@ function UnitFrames:ConfigureRangeFade(frame, unitKey)
         local inRange = nil
         local isEligible = false
 
-        if unit and UnitExists(unit) and not (UnitIsUnit and UnitIsUnit(unit, "player")) and
-            (not UnitIsConnected or UnitIsConnected(unit)) then
+        if unit and UnitExists(unit) and not (_G.UnitIsUnit and _G.UnitIsUnit(unit, "player")) and
+            (not _G.UnitIsConnected or _G.UnitIsConnected(unit)) then
             inRange, isEligible = UnitFrames:GetFriendlyUnitRangeState(unit)
         end
 
@@ -1778,10 +1765,10 @@ local function GetPlayerDispelTypes()
     -- GetSpecialization() returns the spec index (1-4), not the spec ID.
     -- We need the actual spec ID from GetSpecializationInfo to match against
     -- known spec IDs like 105 (Resto Druid), 270 (Mistweaver), 264 (Resto Shaman).
-    local specIdx = GetSpecialization and GetSpecialization() or 0
+    local specIdx = _G.GetSpecialization and _G.GetSpecialization() or 0
     local specID = 0
-    if specIdx > 0 and GetSpecializationInfo then
-        specID = select(1, GetSpecializationInfo(specIdx)) or 0
+    if specIdx > 0 and _G.GetSpecializationInfo then
+        specID = select(1, _G.GetSpecializationInfo(specIdx)) or 0
     end
     if cachedDispelClass == classToken and cachedDispelSpec == specID then
         return cachedDispelTypes
@@ -2489,14 +2476,14 @@ function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
         end
     elseif unit and UnitExists(unit) then
         if indicatorKey == "combatIndicator" then
-            local okCombat, inCombat = pcall(UnitAffectingCombat, unit)
+            local okCombat, inCombat = pcall(_G.UnitAffectingCombat, unit)
             shouldShow = okCombat and inCombat == true
         elseif indicatorKey == "restingIndicator" then
-            local okPlayer, isPlayer = pcall(UnitIsUnit, unit, "player")
-            shouldShow = okPlayer and isPlayer == true and IsResting and IsResting() == true
+            local okPlayer, isPlayer = pcall(_G.UnitIsUnit, unit, "player")
+            shouldShow = okPlayer and isPlayer == true and _G.IsResting and _G.IsResting() == true
         elseif indicatorKey == "spiritIndicator" then
-            local okPlayer, isPlayer = pcall(UnitIsPlayer, unit)
-            local okDead, isDead = pcall(UnitIsDeadOrGhost, unit)
+            local okPlayer, isPlayer = pcall(_G.UnitIsPlayer, unit)
+            local okDead, isDead = pcall(_G.UnitIsDeadOrGhost, unit)
             shouldShow = okPlayer and isPlayer == true and okDead and isDead == true
         end
     end
@@ -3738,7 +3725,8 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             bar._hasTimer = self:ShouldUseAuraTimerFill(data.durationObject, exp, dur)
             bar._auraTimerElapsed = 0
             if bar._hasTimer and data.durationObject and bar.SetTimerDuration then
-                local timerDirection = StatusBarTimerDirection and StatusBarTimerDirection.RemainingTime or nil
+                local timerDirection = (_G.Enum and _G.Enum.StatusBarTimerDirection)
+                    and _G.Enum.StatusBarTimerDirection.RemainingTime or nil
                 local okTimer = false
                 if timerDirection ~= nil and StatusBarInterpolation and StatusBarInterpolation.Immediate then
                     okTimer = pcall(bar.SetTimerDuration, bar, data.durationObject, StatusBarInterpolation.Immediate,
@@ -8114,6 +8102,8 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     end)
 end
 
+do
+
 local PREVIEW_NAMES = {
     "Aeloria", "Bromm", "Cyrene", "Dathor", "Elyndra", "Fenrik", "Galen", "Hestia", "Ilya", "Jorren",
     "Kaelis", "Lyra", "Marek", "Nyssa", "Orin", "Perrin", "Quilla", "Riven", "Sylas", "Tarin",
@@ -8871,6 +8861,8 @@ function UnitFrames:ApplyTestModeToSingles()
     ApplyHiddenParent(self.frames and self.frames.castbar)
 end
 
+end
+
 function UnitFrames:ApplyBlizzardPlayerCastbarVisibility()
     local blizzardCastbar = _G.PlayerCastingBarFrame or _G.CastingBarFrame
     if not blizzardCastbar then
@@ -8966,9 +8958,55 @@ function UnitFrames:ApplyBlizzardRaidFrameVisibility()
     end
 end
 
+local function GetActiveClickCastHeader()
+    local clique = _G.Clique
+    if type(clique) == "table" and clique.header then
+        return clique.header
+    end
+
+    return _G.ClickCastHeader
+end
+
+function UnitFrames:RefreshHeaderClickCastSupport()
+    if InCombatLockdown() then
+        self._pendingHeaderClickCastRefresh = true
+        return false
+    end
+
+    self._pendingHeaderClickCastRefresh = nil
+
+    if type(SecureHandlerSetFrameRef) ~= "function" then
+        return false
+    end
+
+    local clickCastHeader = GetActiveClickCastHeader()
+    if not clickCastHeader then
+        return false
+    end
+
+    local updated = false
+
+    for _, header in pairs(self.headers or {}) do
+        if header then
+            local current = header.GetFrameRef and header:GetFrameRef("clickcast_header") or nil
+            if current ~= clickCastHeader then
+                SecureHandlerSetFrameRef(header, "clickcast_header", clickCastHeader)
+                updated = true
+            end
+        end
+    end
+
+    return updated
+end
+
 function UnitFrames:OnAddonLoaded(_, addonName)
     if addonName == "Blizzard_CompactRaidFrames" or addonName == "Blizzard_EditMode" then
         self:ApplyBlizzardRaidFrameVisibility()
+        return
+    end
+
+    if addonName == "Clicked" or addonName == "Clique" then
+        self:RefreshHeaderClickCastSupport()
     end
 end
 
@@ -10046,6 +10084,10 @@ function UnitFrames:OnUnitTargetChanged()
 end
 
 function UnitFrames:OnUnitFlagsChanged()
+    if self._pendingHeaderClickCastRefresh and not InCombatLockdown() then
+        self:RefreshHeaderClickCastSupport()
+    end
+
     if self._queuedRefresh and not InCombatLockdown() then
         self._queuedRefresh = false
         self:RefreshAllFrames()
@@ -10161,6 +10203,7 @@ function UnitFrames:OnEnable()
 
     self:ApplyBlizzardPlayerCastbarVisibility()
     self:ApplyBlizzardRaidFrameVisibility()
+    self:RefreshHeaderClickCastSupport()
 
     self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
     self:RegisterMessage("TWICH_CONFIG_RESTORED", "OnConfigRestored")
