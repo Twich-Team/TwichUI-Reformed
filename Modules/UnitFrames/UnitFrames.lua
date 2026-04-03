@@ -1525,26 +1525,33 @@ end
 local cachedDispelClass, cachedDispelSpec, cachedDispelTypes
 local function GetPlayerDispelTypes()
     local _, classToken = UnitClass("player")
-    local specID = GetSpecialization and GetSpecialization() or 0
+    -- GetSpecialization() returns the spec index (1-4), not the spec ID.
+    -- We need the actual spec ID from GetSpecializationInfo to match against
+    -- known spec IDs like 105 (Resto Druid), 270 (Mistweaver), 264 (Resto Shaman).
+    local specIdx = GetSpecialization and GetSpecialization() or 0
+    local specID = 0
+    if specIdx > 0 and GetSpecializationInfo then
+        specID = select(1, GetSpecializationInfo(specIdx)) or 0
+    end
     if cachedDispelClass == classToken and cachedDispelSpec == specID then
         return cachedDispelTypes
     end
     local dispelTypes = {}
     if classToken == "DRUID" then
         dispelTypes.Curse = true; dispelTypes.Poison = true
-        if specID == 105 then dispelTypes.Magic = true end
+        if specID == 105 then dispelTypes.Magic = true end -- Restoration
     elseif classToken == "MAGE" then
         dispelTypes.Curse = true
     elseif classToken == "MONK" then
         dispelTypes.Disease = true; dispelTypes.Poison = true
-        if specID == 270 then dispelTypes.Magic = true end
+        if specID == 270 then dispelTypes.Magic = true end -- Mistweaver
     elseif classToken == "PALADIN" then
         dispelTypes.Disease = true; dispelTypes.Magic = true; dispelTypes.Poison = true
     elseif classToken == "PRIEST" then
         dispelTypes.Disease = true; dispelTypes.Magic = true
     elseif classToken == "SHAMAN" then
         dispelTypes.Curse = true
-        if specID == 264 then dispelTypes.Magic = true end
+        if specID == 264 then dispelTypes.Magic = true end -- Restoration
     end
     cachedDispelClass = classToken; cachedDispelSpec = specID; cachedDispelTypes = dispelTypes
     return dispelTypes
@@ -3374,23 +3381,23 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     if not frame.AuraBars then return end
     local unit = ResolveFrameUnit(frame)
     if not unit and not frame._isTestPreview then return end
-    local aura       = self:GetAuraConfigFor(unitKey)
-    local maxBars    = math_max(1, math_min(math.floor(tonumber(aura.maxIcons) or 8), MAX_AURA_BARS))
-    local barH       = Clamp(aura.barHeight or 14, 8, 30)
-    local spacing    = Clamp(aura.spacing or 2, 0, 8)
-    local filter     = aura.filter or "ALL"
-    local onlyMine   = aura.onlyMine == true
-    local container  = frame.AuraBars
-    local frameWidth = math_max(40, frame:GetWidth())
-    local text       = self:GetTextConfigFor(unitKey)
-    local palette    = self:GetPalette(unitKey, unit, frame and frame._testMockClass or nil)
-    local showTime   = aura.showTime ~= false
-    local showStacks = aura.showStacks ~= false
+    local aura                        = self:GetAuraConfigFor(unitKey)
+    local maxBars                     = math_max(1, math_min(math.floor(tonumber(aura.maxIcons) or 8), MAX_AURA_BARS))
+    local barH                        = Clamp(aura.barHeight or 14, 8, 30)
+    local spacing                     = Clamp(aura.spacing or 2, 0, 8)
+    local filter                      = aura.filter or "ALL"
+    local onlyMine                    = aura.onlyMine == true
+    local container                   = frame.AuraBars
+    local frameWidth                  = math_max(40, frame:GetWidth())
+    local text                        = self:GetTextConfigFor(unitKey)
+    local palette                     = self:GetPalette(unitKey, unit, frame and frame._testMockClass or nil)
+    local showTime                    = aura.showTime ~= false
+    local showStacks                  = aura.showStacks ~= false
 
-    container._twichAuraBarList = WipeSequentialTable(container._twichAuraBarList or {})
-    container._twichAuraBarScratch = container._twichAuraBarScratch or {}
+    container._twichAuraBarList       = WipeSequentialTable(container._twichAuraBarList or {})
+    container._twichAuraBarScratch    = container._twichAuraBarScratch or {}
     container._twichAuraBarAppearance = container._twichAuraBarAppearance or {}
-    local auraList = container._twichAuraBarList
+    local auraList                    = container._twichAuraBarList
     if frame._isTestPreview then
         auraList = self:GetPreviewAuraListForFrame(frame, unitKey)
     elseif filter == "HELPFUL" then
@@ -6841,7 +6848,7 @@ function UnitFrames:SetPlayerClassArtworkAlignmentMode(enabled)
 
     if nextState then
         T:Print(
-        "[TwichUI] Player class artwork alignment enabled. Drag the artwork, then use /tui artwork again when finished.")
+            "[TwichUI] Player class artwork alignment enabled. Drag the artwork, then use /tui artwork again when finished.")
     else
         T:Print("[TwichUI] Player class artwork alignment disabled.")
     end

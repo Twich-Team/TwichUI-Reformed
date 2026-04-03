@@ -25,26 +25,26 @@ if not UnitFrames then return end
 -- ============================================================
 -- Upvalues
 -- ============================================================
-local CreateFrame    = _G.CreateFrame
-local GetTime        = _G.GetTime
-local C_UnitAuras    = _G.C_UnitAuras
-local setmetatable   = _G.setmetatable
-local math_max       = math.max
-local math_min       = math.min
-local math_floor     = math.floor
-local format         = string.format
-local Clamp          = _G.Clamp or function(v, lo, hi) return math.max(lo, math.min(hi, v)) end
+local CreateFrame            = _G.CreateFrame
+local GetTime                = _G.GetTime
+local C_UnitAuras            = _G.C_UnitAuras
+local setmetatable           = _G.setmetatable
+local math_max               = math.max
+local math_min               = math.min
+local math_floor             = math.floor
+local format                 = string.format
+local Clamp                  = _G.Clamp or function(v, lo, hi) return math.max(lo, math.min(hi, v)) end
 
-local MAX_INDICATORS = 6   -- indicator slots per frame
-local MAX_ICONS      = 12  -- icon slots per indicator
-local TIMER_RATE     = 0.1 -- icon timer update frequency (seconds)
-local FILTER_HELPFUL = { "HELPFUL" }
-local FILTER_HARMFUL = { "HARMFUL" }
-local FILTER_BOTH    = { "HELPFUL", "HARMFUL" }
+local MAX_INDICATORS         = 6 -- indicator slots per frame
+local MAX_ICONS              = 12 -- icon slots per indicator
+local TIMER_RATE             = 0.1 -- icon timer update frequency (seconds)
+local FILTER_HELPFUL         = { "HELPFUL" }
+local FILTER_HARMFUL         = { "HARMFUL" }
+local FILTER_BOTH            = { "HELPFUL", "HARMFUL" }
 
-local spellLookupCache = setmetatable({}, { __mode = "k" })
+local spellLookupCache       = setmetatable({}, { __mode = "k" })
 local singleSpellLookupCache = setmetatable({}, { __mode = "k" })
-local groupLookupCache = setmetatable({}, { __mode = "k" })
+local groupLookupCache       = setmetatable({}, { __mode = "k" })
 
 local function ResolveFrameUnit(frame)
     if type(frame) ~= "table" then
@@ -305,10 +305,56 @@ local function ScanByFilter(unit, source, onlyMine, result)
 
     result = result or {}
     local count = 0
+
+    -- DISPELLABLE / DISPELLABLE_OR_BOSS: use WoW's engine-level "HARMFUL|RAID" filter.
+    -- This is evaluated by the WoW client against the player's current class/spec
+    -- and returns only the debuffs the player can actually dispel — without ever
+    -- touching dispelName or isHarmful, both of which are secret types in PvP and
+    -- throw errors when read even inside a pcall.
+    if source == "DISPELLABLE" or source == "DISPELLABLE_OR_BOSS" then
+        local seen = source == "DISPELLABLE_OR_BOSS" and {} or nil
+
+        local dispelSlots = { C_UnitAuras.GetAuraSlots(unit, "HARMFUL|RAID") }
+        for i = 2, #dispelSlots do
+            local data = C_UnitAuras.GetAuraDataBySlot(unit, dispelSlots[i])
+            if data then
+                data.isHarmfulAura = true
+                local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                if passPlayer then
+                    if seen then seen[data.auraInstanceID] = true end
+                    local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
+                    count = PushAuraResult(result, count, data, timing)
+                end
+            end
+        end
+
+        -- For DISPELLABLE_OR_BOSS also include boss auras not already captured.
+        -- isBossAura is PvE metadata and readable outside of PvP secret restrictions.
+        if source == "DISPELLABLE_OR_BOSS" then
+            local bossSlots = { C_UnitAuras.GetAuraSlots(unit, "HARMFUL") }
+            for i = 2, #bossSlots do
+                local data = C_UnitAuras.GetAuraDataBySlot(unit, bossSlots[i])
+                if data and not seen[data.auraInstanceID] then
+                    data.isHarmfulAura = true
+                    local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                    if passPlayer then
+                        local _okb, _isBoss = pcall(function() return data.isBossAura == true end)
+                        if _okb and _isBoss then
+                            local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
+                            count = PushAuraResult(result, count, data, timing)
+                        end
+                    end
+                end
+            end
+        end
+
+        return FinalizeAuraResults(result, count)
+    end
+
     local filters
     if source == "HELPFUL" then
         filters = FILTER_HELPFUL
-    elseif source == "HARMFUL" or source == "DISPELLABLE" or source == "DISPELLABLE_OR_BOSS" then
+    elseif source == "HARMFUL" then
         filters = FILTER_HARMFUL
     else
         filters = FILTER_BOTH
@@ -318,6 +364,10 @@ local function ScanByFilter(unit, source, onlyMine, result)
         for i = 2, #slots do
             local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
             if data then
+                -- isHarmful is a secret boolean in combat; annotate isHarmfulAura so
+                -- CheckAuraMatchesFilter can reliably detect harmful auras without a
+                -- pcall comparison that may fail on the secret type.
+                if f == "HARMFUL" then data.isHarmfulAura = true end
                 local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, f, data)
                 if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
                     local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
@@ -361,8 +411,8 @@ local function ResolveAuras(frame, cfg, resultKey)
 
     -- Named spell group  (source == "group", groupKey references db.spellGroups)
     if source == "group" then
-        local db  = UnitFrames:GetDB()
-        local grp = db.spellGroups and cfg.groupKey and db.spellGroups[cfg.groupKey]
+        local db     = UnitFrames:GetDB()
+        local grp    = db.spellGroups and cfg.groupKey and db.spellGroups[cfg.groupKey]
         local lookup = GetCachedGroupLookup(grp)
         if lookup then
             return ScanBySpellIds(unit, lookup, onlyMine, result)
@@ -442,9 +492,9 @@ local function EnsureIconContainer(frame, idx)
     if not state.iconContainers[idx] then
         local c = CreateFrame("Frame", nil, frame)
         c:SetSize(1, 1)
-        c._slots    = {}
-        c._lastTick = 0
-        c._timerUpdateFunc = function(self2, elapsed)
+        c._slots                  = {}
+        c._lastTick               = 0
+        c._timerUpdateFunc        = function(self2, elapsed)
             self2._lastTick = (self2._lastTick or 0) + elapsed
             if self2._lastTick < TIMER_RATE then return end
             self2._lastTick = 0
@@ -560,7 +610,7 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
         slot._duration       = data.duration
         slot._durationObject = data.durationObject
         if showDur and ((slot._durationObject and slot._durationObject.GetRemainingDuration) or
-            ((tonumber(slot._expiry) or 0) > 0 and (tonumber(slot._duration) or 0) > 0)) then
+                ((tonumber(slot._expiry) or 0) > 0 and (tonumber(slot._duration) or 0) > 0)) then
             needsTimerPoll = true
         end
 
