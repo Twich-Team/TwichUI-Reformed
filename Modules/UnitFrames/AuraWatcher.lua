@@ -46,6 +46,27 @@ local spellLookupCache       = setmetatable({}, { __mode = "k" })
 local singleSpellLookupCache = setmetatable({}, { __mode = "k" })
 local groupLookupCache       = setmetatable({}, { __mode = "k" })
 
+-- Reusable timing buffer — filled in ResolveAuraTiming, values copied out
+-- immediately by PushAuraResult. Safe because scans never recurse.
+local _scanTimingBuffer      = { duration = 0, expirationTime = 0, applications = 0, durationObject = nil }
+
+-- Static function avoids allocating a new closure per aura slot in pcall.
+local function SafeTableLookup(tbl, key) return tbl[key] end
+
+-- Anchor inset offsets so text sits just inside the icon border.
+-- Defined at module scope so UpdateIconIndicator never re-allocates them.
+local ANCHOR_OFS = {
+    TOPLEFT     = { 1,  -1 },
+    TOP         = { 0,  -1 },
+    TOPRIGHT    = { -1, -1 },
+    LEFT        = { 1,   0 },
+    CENTER      = { 0,   0 },
+    RIGHT       = { -1,  0 },
+    BOTTOMLEFT  = { 1,   1 },
+    BOTTOM      = { 0,   1 },
+    BOTTOMRIGHT = { -1,  1 },
+}
+
 local function ResolveFrameUnit(frame)
     if type(frame) ~= "table" then
         return nil
@@ -312,12 +333,12 @@ local function ScanBySpellIds(unit, lookup, onlyMine, result)
             -- spellId can be a 'secret' type in combat — pcall the table lookup.
             local _ok_cfg, _cfg = false, nil
             if data and data.spellId then
-                _ok_cfg, _cfg = pcall(function() return lookup[data.spellId] end)
+                _ok_cfg, _cfg = pcall(SafeTableLookup, lookup, data.spellId)
             end
             if data and _ok_cfg and _cfg then
                 local isPlayerAura = ResolveIsPlayerAura(unit, data.auraInstanceID, filter, data)
                 if not onlyMine or isPlayerAura then
-                    local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
+                    local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
                     count = PushAuraResult(result, count, data, timing)
                 end
             end
@@ -360,14 +381,16 @@ local function ScanByFilter(unit, source, onlyMine, result)
                 local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
                 if passPlayer then
                     if seen then seen[data.auraInstanceID] = true end
-                    local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
+                    local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
                     count = PushAuraResult(result, count, data, timing)
                 end
             end
         end
 
         -- For DISPELLABLE_OR_BOSS also include boss auras not already captured.
-        -- isBossAura is PvE metadata and readable outside of PvP secret restrictions.
+        -- isBossAura is a secret boolean in PvP combat; reading it is fine but comparing
+        -- it with == causes a taint error. Use issecretvalue() to detect the secure case
+        -- and skip the comparison — boss debuffs in PvP are irrelevant to dispel tracking.
         if source == "DISPELLABLE_OR_BOSS" then
             local bossSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL"))
             for i = 2, bossSlotsCount do
@@ -377,9 +400,10 @@ local function ScanByFilter(unit, source, onlyMine, result)
                     data.isHarmfulAura = true
                     local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
                     if passPlayer then
-                        local _okb, _isBoss = pcall(function() return data.isBossAura == true end)
-                        if _okb and _isBoss then
-                            local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
+                        local rawBoss = data.isBossAura
+                        local isBoss = not (issecretvalue and issecretvalue(rawBoss)) and rawBoss == true
+                        if isBoss then
+                            local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
                             count = PushAuraResult(result, count, data, timing)
                         end
                     end
@@ -412,7 +436,7 @@ local function ScanByFilter(unit, source, onlyMine, result)
                 if f == "HARMFUL" then data.isHarmfulAura = true end
                 local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, f, data)
                 if passPlayer and UnitFrames:CheckAuraMatchesFilter(source, data) then
-                    local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher")
+                    local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
                     if source ~= "HELPFUL" or UnitFrames:ShouldKeepGenericHelpfulAura(unit, data, timing, onlyMine) then
                         count = PushAuraResult(result, count, data, timing)
                     end
@@ -437,20 +461,38 @@ local function ResolveAuras(frame, unit, cfg, resultKey, scanCache)
     local source   = cfg.source or "HARMFUL"
     local onlyMine = cfg.onlyMine and true or false
 
-    local cacheKey = nil
-    if source == "spell" then
-        if type(cfg.spellIds) == "table" and #cfg.spellIds > 0 then
-            cacheKey = "spell:list:" .. BuildSpellIdsSignature(cfg.spellIds) .. ":mine:" .. tostring(onlyMine)
-        elseif tonumber(cfg.spellId) then
-            cacheKey = "spell:single:" .. tostring(tonumber(cfg.spellId)) .. ":mine:" .. tostring(onlyMine)
+    -- Cache the cacheKey string on cfg — it never changes per cfg object once set
+    -- (spell list keys invalidate when the spellIds array reference changes).
+    local cacheKey = cfg._resolvedCacheKey
+    -- Invalidate cached spell-list key when the spellIds array is replaced (DB save).
+    if cacheKey and source == "spell" and type(cfg.spellIds) == "table" and cfg._spellIdsSrc ~= cfg.spellIds then
+        cfg._resolvedCacheKey = nil
+        cacheKey = cfg._resolvedCacheKey -- nil
+    end
+    if not cacheKey then
+        if source == "spell" then
+            if type(cfg.spellIds) == "table" and #cfg.spellIds > 0 then
+                -- spellIds reference check: rebuild key if array was replaced
+                if cfg._spellIdsSrc ~= cfg.spellIds then
+                    cfg._spellIdsSrc = cfg.spellIds
+                    cfg._resolvedCacheKey = "spell:list:" .. BuildSpellIdsSignature(cfg.spellIds) .. ":mine:" .. tostring(onlyMine)
+                end
+                cacheKey = cfg._resolvedCacheKey
+            elseif tonumber(cfg.spellId) then
+                cfg._resolvedCacheKey = "spell:single:" .. tostring(tonumber(cfg.spellId)) .. ":mine:" .. tostring(onlyMine)
+                cacheKey = cfg._resolvedCacheKey
+            end
+        elseif source ~= "group" then
+            cfg._resolvedCacheKey = "filter:" .. tostring(source) .. ":mine:" .. tostring(onlyMine)
+            cacheKey = cfg._resolvedCacheKey
         end
-    elseif source == "group" then
+    end
+    -- group keys include the current spellIds string from DB so cannot be cached on cfg
+    if source == "group" and not cacheKey then
         local db = UnitFrames:GetDB()
         local grp = db.spellGroups and cfg.groupKey and db.spellGroups[cfg.groupKey]
         local raw = grp and grp.spellIds or ""
         cacheKey = "group:" .. tostring(cfg.groupKey or "") .. ":" .. tostring(raw) .. ":mine:" .. tostring(onlyMine)
-    else
-        cacheKey = "filter:" .. tostring(source) .. ":mine:" .. tostring(onlyMine)
     end
 
     if scanCache and cacheKey and scanCache[cacheKey] then
@@ -631,18 +673,6 @@ local function UpdateIconIndicator(frame, idx, cfg, auras)
     local cntAnchor      = cfg.countAnchor or "BOTTOMRIGHT"
     local needsTimerPoll = false
 
-    -- Small inset offsets so text sits just inside the icon border
-    local ANCHOR_OFS     = {
-        TOPLEFT = { 1, -1 },
-        TOP = { 0, -1 },
-        TOPRIGHT = { -1, -1 },
-        LEFT = { 1, 0 },
-        CENTER = { 0, 0 },
-        RIGHT = { -1, 0 },
-        BOTTOMLEFT = { 1, 1 },
-        BOTTOM = { 0, 1 },
-        BOTTOMRIGHT = { -1, 1 },
-    }
 
     container:ClearAllPoints()
     container:SetPoint(

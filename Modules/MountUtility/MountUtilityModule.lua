@@ -6,7 +6,6 @@ local TwichRx = _G.TwichRx
 local T = unpack(TwichRx)
 
 local GetMountInfoByID = C_MountJournal.GetMountInfoByID
-local GetIsFavorite = C_MountJournal.GetIsFavorite
 local GetDisplayedMountInfo = C_MountJournal.GetDisplayedMountInfo
 local GetNumMounts = C_MountJournal.GetNumMounts
 local GetMountFromSpell = C_MountJournal.GetMountFromSpell
@@ -51,10 +50,8 @@ local function GetMountsFromMountJournal()
     local entries = {}
     local numMounts = GetNumMounts() or 0
     for displayIndex = 1, numMounts do
-        local creatureName, spellID, icon, _, _, _, _, _, _, _, isCollected, mountID =
+        local creatureName, spellID, icon, _, _, _, isFavorite, _, _, _, isCollected, mountID =
             GetDisplayedMountInfo(displayIndex)
-
-        local isFavorite = mountID and GetIsFavorite(mountID) or false
 
         if isCollected and mountID and creatureName and spellID then
             tinsert(entries, {
@@ -62,7 +59,7 @@ local function GetMountsFromMountJournal()
                 spellID = spellID,
                 icon = icon,
                 mountID = mountID,
-                isFavorite = isFavorite
+                isFavorite = isFavorite == true
             })
         end
     end

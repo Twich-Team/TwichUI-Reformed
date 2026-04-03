@@ -435,13 +435,14 @@ function UnitFrames:LogAuraTimingOnce(contextKey, unit, auraData, reason, detail
     ))
 end
 
-function UnitFrames:ResolveAuraTiming(unit, auraData, contextKey)
-    local timing = {
-        duration = ReadAuraNumber(auraData and auraData.duration) or 0,
-        expirationTime = ReadAuraNumber(auraData and auraData.expirationTime) or 0,
-        applications = ReadAuraNumber(auraData and auraData.applications) or 0,
-        durationObject = nil,
+function UnitFrames:ResolveAuraTiming(unit, auraData, contextKey, buffer)
+    local timing = buffer or {
+        duration = 0, expirationTime = 0, applications = 0, durationObject = nil,
     }
+    timing.duration       = ReadAuraNumber(auraData and auraData.duration) or 0
+    timing.expirationTime = ReadAuraNumber(auraData and auraData.expirationTime) or 0
+    timing.applications   = ReadAuraNumber(auraData and auraData.applications) or 0
+    timing.durationObject = nil
 
     if unit and auraData and auraData.auraInstanceID and C_UnitAuras and C_UnitAuras.GetAuraDuration then
         local okDurationObject, durationObject = pcall(C_UnitAuras.GetAuraDuration, unit, auraData.auraInstanceID)
