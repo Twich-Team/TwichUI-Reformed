@@ -417,13 +417,6 @@ local function ScanByFilter(unit, source, onlyMine, result, auraElement)
     -- DISPELLABLE / DISPELLABLE_OR_BOSS: dispellable part MUST use the engine filter.
     -- Boss aura sub-scan uses allDebuffs cache when available.
     if source == "DISPELLABLE" or source == "DISPELLABLE_OR_BOSS" then
-        if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then
-            return ClearSequentialTable(result)
-        end
-
-        local slotsBuffer = result._slotsBuffer or {}
-        result._slotsBuffer = slotsBuffer
-
         -- Reuse module-level seen-buffer; clear before use.
         local seen = nil
         if source == "DISPELLABLE_OR_BOSS" then
@@ -431,17 +424,43 @@ local function ScanByFilter(unit, source, onlyMine, result, auraElement)
             for k in next, seen do seen[k] = nil end
         end
 
-        local dispelSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL|RAID"))
-        for i = 2, dispelSlotsCount do
-            slotScans = slotScans + 1
-            local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
-            if data then
-                data.isHarmfulAura = true
-                local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
-                if passPlayer then
-                    if seen then seen[data.auraInstanceID] = true end
-                    local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
-                    count = PushAuraResult(result, count, data, timing)
+        if allDebuffs and C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID then
+            -- Fast path: reuse oUF's cached AuraData and ask the engine whether each
+            -- aura matches the RAID dispel filter. This keeps the PvP-safe filter logic
+            -- while avoiding GetAuraSlots/GetAuraDataBySlot allocations per update.
+            for _, data in next, allDebuffs do
+                if data and data.auraInstanceID then
+                    slotScans = slotScans + 1
+                    if not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, "HARMFUL|RAID") then
+                        data.isHarmfulAura = true
+                        local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                        if passPlayer then
+                            if seen then seen[data.auraInstanceID] = true end
+                            local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
+                            count = PushAuraResult(result, count, data, timing)
+                        end
+                    end
+                end
+            end
+        else
+            if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then
+                return ClearSequentialTable(result)
+            end
+
+            local slotsBuffer = result._slotsBuffer or {}
+            result._slotsBuffer = slotsBuffer
+            local dispelSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL|RAID"))
+            for i = 2, dispelSlotsCount do
+                slotScans = slotScans + 1
+                local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
+                if data then
+                    data.isHarmfulAura = true
+                    local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                    if passPlayer then
+                        if seen then seen[data.auraInstanceID] = true end
+                        local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
+                        count = PushAuraResult(result, count, data, timing)
+                    end
                 end
             end
         end
@@ -470,6 +489,8 @@ local function ScanByFilter(unit, source, onlyMine, result, auraElement)
                 end
             else
                 -- Fallback: raw API scan for boss auras.
+                local slotsBuffer = result._slotsBuffer or {}
+                result._slotsBuffer = slotsBuffer
                 local bossSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL"))
                 for i = 2, bossSlotsCount do
                     slotScans = slotScans + 1
