@@ -3304,6 +3304,17 @@ local function CopyAuraBarData(target, source)
     return target
 end
 
+local function FillAuraSlotBuffer(buffer, ...)
+    local count = select("#", ...)
+    for index = 1, count do
+        buffer[index] = select(index, ...)
+    end
+    for index = count + 1, #buffer do
+        buffer[index] = nil
+    end
+    return count
+end
+
 local function PopulateAuraBarData(target, data, timing, isHarmfulAura, isPlayerAura)
     target.name = data.name
     target.icon = data.icon
@@ -3331,11 +3342,13 @@ end
 local function CollectAuraData(list, scratch, unit, unitKey, auraFilter, maxCount, onlyMine, filterMode)
     if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then return end
     local playerFilter = auraFilter .. "|PLAYER"
-    local slots = { C_UnitAuras.GetAuraSlots(unit, auraFilter) }
+    local slots = scratch._slotBuffer or {}
+    scratch._slotBuffer = slots
+    local slotCount = FillAuraSlotBuffer(slots, C_UnitAuras.GetAuraSlots(unit, auraFilter))
     local candidates = WipeSequentialTable(scratch or {})
     local candidateCount = 0
     local isHarmfulAura = auraFilter:find("HARMFUL") ~= nil
-    for i = 2, #slots do
+    for i = 2, slotCount do
         local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
         if data then
             local timing = UnitFrames:ResolveAuraTiming(unit, data, "bars")
@@ -3356,12 +3369,16 @@ local function CollectAuraData(list, scratch, unit, unitKey, auraFilter, maxCoun
                     unitKey)) then
                 candidates[candidateCount] = d
             else
+                candidates[candidateCount] = nil
                 candidateCount = candidateCount - 1
             end
         end
     end
 
     if auraFilter == "HELPFUL" then
+        for i = #candidates, candidateCount + 1, -1 do
+            candidates[i] = nil
+        end
         table.sort(candidates, CompareHelpfulAuraData)
     end
 

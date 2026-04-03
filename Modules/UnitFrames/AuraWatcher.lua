@@ -35,8 +35,8 @@ local math_floor             = math.floor
 local format                 = string.format
 local Clamp                  = _G.Clamp or function(v, lo, hi) return math.max(lo, math.min(hi, v)) end
 
-local MAX_INDICATORS         = 6 -- indicator slots per frame
-local MAX_ICONS              = 12 -- icon slots per indicator
+local MAX_INDICATORS         = 6   -- indicator slots per frame
+local MAX_ICONS              = 12  -- icon slots per indicator
 local TIMER_RATE             = 0.1 -- icon timer update frequency (seconds)
 local FILTER_HELPFUL         = { "HELPFUL" }
 local FILTER_HARMFUL         = { "HARMFUL" }
@@ -139,6 +139,17 @@ local function ClearSequentialTable(tbl)
     end
 
     return tbl
+end
+
+local function FillAuraSlotBuffer(buffer, ...)
+    local count = select("#", ...)
+    for index = 1, count do
+        buffer[index] = select(index, ...)
+    end
+    for index = count + 1, #buffer do
+        buffer[index] = nil
+    end
+    return count
 end
 
 local function PushAuraResult(result, count, data, timing)
@@ -275,10 +286,13 @@ local function ScanBySpellIds(unit, lookup, onlyMine, result)
 
     result = result or {}
     local count = 0
+    local slotsBuffer = result._slotsBuffer or {}
+    result._slotsBuffer = slotsBuffer
     for _, filter in ipairs(FILTER_BOTH) do
-        local slots = { C_UnitAuras.GetAuraSlots(unit, filter) }
-        for i = 2, #slots do
-            local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
+        local slotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, filter))
+        for i = 2, slotsCount do
+            local slot = slotsBuffer[i]
+            local data = C_UnitAuras.GetAuraDataBySlot(unit, slot)
             -- spellId can be a 'secret' type in combat — pcall the table lookup.
             local _ok_cfg, _cfg = false, nil
             if data and data.spellId then
@@ -305,6 +319,8 @@ local function ScanByFilter(unit, source, onlyMine, result)
 
     result = result or {}
     local count = 0
+    local slotsBuffer = result._slotsBuffer or {}
+    result._slotsBuffer = slotsBuffer
 
     -- DISPELLABLE / DISPELLABLE_OR_BOSS: use WoW's engine-level "HARMFUL|RAID" filter.
     -- This is evaluated by the WoW client against the player's current class/spec
@@ -314,9 +330,9 @@ local function ScanByFilter(unit, source, onlyMine, result)
     if source == "DISPELLABLE" or source == "DISPELLABLE_OR_BOSS" then
         local seen = source == "DISPELLABLE_OR_BOSS" and {} or nil
 
-        local dispelSlots = { C_UnitAuras.GetAuraSlots(unit, "HARMFUL|RAID") }
-        for i = 2, #dispelSlots do
-            local data = C_UnitAuras.GetAuraDataBySlot(unit, dispelSlots[i])
+        local dispelSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL|RAID"))
+        for i = 2, dispelSlotsCount do
+            local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
             if data then
                 data.isHarmfulAura = true
                 local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
@@ -331,10 +347,10 @@ local function ScanByFilter(unit, source, onlyMine, result)
         -- For DISPELLABLE_OR_BOSS also include boss auras not already captured.
         -- isBossAura is PvE metadata and readable outside of PvP secret restrictions.
         if source == "DISPELLABLE_OR_BOSS" then
-            local bossSlots = { C_UnitAuras.GetAuraSlots(unit, "HARMFUL") }
-            for i = 2, #bossSlots do
-                local data = C_UnitAuras.GetAuraDataBySlot(unit, bossSlots[i])
-                if data and not seen[data.auraInstanceID] then
+            local bossSlotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, "HARMFUL"))
+            for i = 2, bossSlotsCount do
+                local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
+                if data and (not seen or not seen[data.auraInstanceID]) then
                     data.isHarmfulAura = true
                     local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
                     if passPlayer then
@@ -360,9 +376,9 @@ local function ScanByFilter(unit, source, onlyMine, result)
         filters = FILTER_BOTH
     end
     for _, f in ipairs(filters) do
-        local slots = { C_UnitAuras.GetAuraSlots(unit, f) }
-        for i = 2, #slots do
-            local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
+        local slotsCount = FillAuraSlotBuffer(slotsBuffer, C_UnitAuras.GetAuraSlots(unit, f))
+        for i = 2, slotsCount do
+            local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
             if data then
                 -- isHarmful is a secret boolean in combat; annotate isHarmfulAura so
                 -- CheckAuraMatchesFilter can reliably detect harmful auras without a
@@ -812,7 +828,7 @@ end
 -- ============================================================
 
 -- Registry of all active frames so we can force-push config changes.
-local awFrameRegistry = {}
+local awFrameRegistry = setmetatable({}, { __mode = "k" })
 
 --- Called once per frame in StyleFrame. Creates the per-frame state table.
 function UnitFrames:AWAttach(frame)
@@ -837,8 +853,10 @@ end
 --- Force-update all registered frames — called after designer config changes.
 function UnitFrames:AWForceUpdate()
     for frame in pairs(awFrameRegistry) do
-        if frame and frame.IsShown and frame:IsShown() then
+        if frame and frame.IsShown and frame:IsShown() and frame._awState then
             self:AWUpdate(frame)
+        else
+            awFrameRegistry[frame] = nil
         end
     end
 end
@@ -847,6 +865,7 @@ end
 --- UNIT_AURA fires on this frame's unit. Scans auras and refreshes all indicators.
 function UnitFrames:AWUpdate(frame)
     if not frame or not frame._awState then return end
+    if frame.IsShown and not frame:IsShown() then return end
     local unit = ResolveFrameUnit(frame)
     if not IsValidAuraUnit(unit) then
         self:AWHideAll(frame)
