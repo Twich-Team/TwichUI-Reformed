@@ -29,7 +29,7 @@ local math_min              = _G.math.min
 local wipe                  = _G.wipe
 
 --- Increment to re-show the wizard for all users (e.g. when a new setup step is added).
-local WIZARD_VERSION        = 2
+local WIZARD_VERSION        = 3
 
 ---@class SetupWizardModule : AceModule, AceEvent-3.0
 local SetupWizardModule     = T:NewModule("SetupWizard", "AceEvent-3.0")
@@ -684,6 +684,7 @@ function SetupWizardModule:DetectElvUIConflicts()
         chatEnabled = false,
         datatextEnabled = false,
         unitFramesEnabled = false,
+        actionBarsEnabled = false,
     }
     if not self:IsElvUIActive() then
         return result
@@ -712,6 +713,8 @@ function SetupWizardModule:DetectElvUIConflicts()
     result.datatextEnabled = datatextEnabled
     result.unitFramesEnabled = type(private) == "table" and type(private.unitframe) == "table" and
         private.unitframe.enable ~= false or false
+    result.actionBarsEnabled = type(private) == "table" and type(private.actionbar) == "table" and
+        private.actionbar.enable ~= false or false
     return result
 end
 
@@ -793,6 +796,70 @@ function SetupWizardModule:ApplyUnitFrameWizardChoices(choices)
     }
 
     return useTwichUnitFrames and conflicts.available and conflicts.unitFramesEnabled == true
+end
+
+--- Reads current action bar wizard choices from the DB.
+---@return table
+function SetupWizardModule:GetActionBarWizardChoices()
+    local CM = T:GetModule("Configuration", true)
+    local options = CM and CM.Options or nil
+    local abOptions = options and options.ActionBars or nil
+
+    local result = { useTwichActionBars = true }
+
+    if not (abOptions and type(abOptions.GetDB) == "function") then
+        return result
+    end
+
+    local db = abOptions:GetDB()
+    result.useTwichActionBars = db.enabled ~= false
+    return result
+end
+
+--- Applies the wizard action bar ownership choice; disables ElvUI action bars when TwichUI is chosen.
+--- Returns true if a reload is needed (TwichUI chosen and ElvUI action bars were active).
+---@param choices table|nil
+---@return boolean
+function SetupWizardModule:ApplyActionBarWizardChoices(choices)
+    local selected   = choices or {}
+    local useTwichAB = selected.useTwichActionBars ~= false
+    local conflicts  = self:DetectElvUIConflicts()
+
+    local CM         = T:GetModule("Configuration", true)
+    local options    = CM and CM.Options or nil
+    local abOptions  = options and options.ActionBars or nil
+    if abOptions and type(abOptions.GetDB) == "function" then
+        local db = abOptions:GetDB()
+        db.enabled = useTwichAB
+        local abModule = T:GetModule("ActionBars", true)
+        if abModule then
+            if useTwichAB then
+                if abModule.IsEnabled and not abModule:IsEnabled() and type(abModule.Enable) == "function" then
+                    pcall(abModule.Enable, abModule)
+                end
+            elseif abModule.IsEnabled and abModule:IsEnabled() and type(abModule.Disable) == "function" then
+                pcall(abModule.Disable, abModule)
+            end
+        end
+    end
+
+    local E = _G.ElvUI and _G.ElvUI[1]
+    if E and type(E.private) == "table" then
+        E.private.actionbar = E.private.actionbar or {}
+        if useTwichAB then
+            E.private.actionbar.enable = false
+        elseif conflicts.available then
+            E.private.actionbar.enable = true
+        end
+    end
+
+    local wizardDB = self:GetDB()
+    wizardDB.actionBarChoice = {
+        useTwichActionBars = useTwichAB,
+        appliedAt = _G.time and _G.time() or nil,
+    }
+
+    return useTwichAB and conflicts.available and conflicts.actionBarsEnabled == true
 end
 
 --- Applies wizard ownership choices between TwichUI and ElvUI for overlapping features.

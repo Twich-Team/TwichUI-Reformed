@@ -62,6 +62,7 @@ local STEP_DEFS          = {
     { id = "ui",         title = "UI & Chat" },
     { id = "layout",     title = "Layout" },
     { id = "unitframes", title = "Unit Frames" },
+    { id = "actionbars", title = "Action Bars" },
     { id = "theme",      title = "Theme" },
     { id = "fonts",      title = "Font Sizes" },
     { id = "elvui",      title = "ElvUI" },
@@ -87,10 +88,11 @@ UI.uiScaleRefs           = {}
 UI.chatFontSize          = 11
 UI.chatHeaderFontSize    = 11
 UI.datatextFontSize      = 11
-UI.elvuiConflictInfo     = { available = false, chatEnabled = false, datatextEnabled = false }
+UI.elvuiConflictInfo     = { available = false, chatEnabled = false, datatextEnabled = false, actionBarsEnabled = false }
 UI.useTwichChat          = true
 UI.useTwichDatatext      = true
 UI.useTwichUnitFrames    = true
+UI.useTwichActionBars    = true
 UI.showPlayerInParty     = true
 UI.showPartyCastbars     = true
 
@@ -573,6 +575,7 @@ function UI:_GetPendingWizardStateSnapshot(targetStep)
         useTwichChat = self.useTwichChat ~= false,
         useTwichDatatext = self.useTwichDatatext ~= false,
         useTwichUnitFrames = self.useTwichUnitFrames ~= false,
+        useTwichActionBars = self.useTwichActionBars ~= false,
         showPlayerInParty = self.showPlayerInParty ~= false,
         showPartyCastbars = self.showPartyCastbars ~= false,
     }
@@ -583,14 +586,26 @@ function UI:_NeedsUnitFrameConflictReload()
         self.elvuiConflictInfo.unitFramesEnabled == true
 end
 
+function UI:_NeedsActionBarConflictReload()
+    return self.useTwichActionBars ~= false and self.elvuiConflictInfo and self.elvuiConflictInfo.available and
+        self.elvuiConflictInfo.actionBarsEnabled == true
+end
+
 function UI:_GoNext()
     if self.currentStep < #STEP_DEFS then
         local currentStepDef = STEP_DEFS[self.currentStep]
-        if currentStepDef and currentStepDef.id == "unitframes" and self:_NeedsUnitFrameConflictReload() then
+
+        -- On the unit frames step: apply UF + AB choices together and reload once if needed.
+        -- (Action bars is the very next step, so its default state is already set.)
+        if currentStepDef and currentStepDef.id == "unitframes" and
+            (self:_NeedsUnitFrameConflictReload() or self:_NeedsActionBarConflictReload()) then
             SetupWizardModule:ApplyUnitFrameWizardChoices({
                 useTwichUnitFrames = self.useTwichUnitFrames,
                 showPlayerInParty = self.showPlayerInParty,
                 showPartyCastbars = self.showPartyCastbars,
+            })
+            SetupWizardModule:ApplyActionBarWizardChoices({
+                useTwichActionBars = self.useTwichActionBars,
             })
             SetupWizardModule:SetPendingWizardState(self:_GetPendingWizardStateSnapshot(self.currentStep + 1))
             self:_Close()
@@ -626,6 +641,9 @@ function UI:_GoNext()
             useTwichUnitFrames = self.useTwichUnitFrames,
             showPlayerInParty = self.showPlayerInParty,
             showPartyCastbars = self.showPartyCastbars,
+        })
+        SetupWizardModule:ApplyActionBarWizardChoices({
+            useTwichActionBars = self.useTwichActionBars,
         })
         SetupWizardModule:ApplyElvUIConflictChoices({
             useTwichChat = self.useTwichChat,
@@ -687,6 +705,7 @@ function UI:_RenderStep(n)
             ui = UI._BuildUIScaleContent,
             layout = UI._BuildLayoutContent,
             unitframes = UI._BuildUnitFramesContent,
+            actionbars = UI._BuildActionBarsContent,
             theme = UI._BuildThemeContent,
             fonts = UI._BuildFontSizeContent,
             elvui = UI._BuildElvUIContent,
@@ -698,6 +717,7 @@ function UI:_RenderStep(n)
         if stepId == "ui" and self._RefreshUIScaleSummary then self:_RefreshUIScaleSummary() end
         if stepId == "layout" then self:_RefreshLayoutCards() end
         if stepId == "unitframes" and self._RefreshUnitFrameSummary then self:_RefreshUnitFrameSummary() end
+        if stepId == "actionbars" and self._RefreshActionBarSummary then self:_RefreshActionBarSummary() end
         if stepId == "theme" then self:_RefreshThemeCards() end
         if stepId == "fonts" then
             if self._SyncFontSizeStateFromConfig then
@@ -766,6 +786,7 @@ function UI:Show()
     self.useTwichChat       = true
     self.useTwichDatatext   = true
     self.useTwichUnitFrames = true
+    self.useTwichActionBars = true
     self.showPlayerInParty  = true
     self.showPartyCastbars  = true
     self.uiScaleRefs        = {}
@@ -774,6 +795,9 @@ function UI:Show()
     self.useTwichUnitFrames = unitFrameChoices.useTwichUnitFrames ~= false
     self.showPlayerInParty  = unitFrameChoices.showPlayerInParty ~= false
     self.showPartyCastbars  = unitFrameChoices.showPartyCastbars ~= false
+
+    local abChoices         = SetupWizardModule:GetActionBarWizardChoices()
+    self.useTwichActionBars = abChoices.useTwichActionBars ~= false
 
     local pendingState      = SetupWizardModule:GetPendingWizardState()
     if type(pendingState) == "table" then
@@ -798,6 +822,9 @@ function UI:Show()
         if pendingState.useTwichUnitFrames ~= nil then
             self.useTwichUnitFrames = pendingState.useTwichUnitFrames == true
         end
+        if pendingState.useTwichActionBars ~= nil then
+            self.useTwichActionBars = pendingState.useTwichActionBars == true
+        end
         if pendingState.showPlayerInParty ~= nil then
             self.showPlayerInParty = pendingState.showPlayerInParty == true
         end
@@ -811,6 +838,7 @@ function UI:Show()
     self.layoutCardRefs = {}
     self.themeCardRefs  = {}
     self.unitFrameRefs  = {}
+    self.actionBarRefs  = {}
     self.finishRefs     = {}
     self:_RenderStep(self.currentStep)
 
@@ -1419,7 +1447,100 @@ function UI:_BuildUnitFramesContent(sf)
     RefreshOwnerButtons()
 end
 
--- ─── Step 5 — Theme ──────────────────────────────────────────────────────────
+-- ─── Step 5 — Action Bars ────────────────────────────────────────────────────
+
+function UI:_RefreshActionBarSummary()
+    local refs = self.actionBarRefs
+    if not refs then return end
+
+    local info     = self.elvuiConflictInfo or { available = false, actionBarsEnabled = false }
+    local useTwich = self.useTwichActionBars ~= false
+
+    if refs.infoText then
+        if info.available then
+            local availability = info.actionBarsEnabled and "ElvUI action bars are currently enabled." or
+                "ElvUI is installed, but its action bars are already disabled."
+            refs.infoText:SetText(string.format("%s\nOwner: %s", availability, useTwich and "TwichUI" or "ElvUI"))
+        else
+            refs.infoText:SetText("ElvUI action bars were not detected. TwichUI action bars will be used.")
+        end
+    end
+end
+
+function UI:_BuildActionBarsContent(sf)
+    local x, y    = PAD, -PAD
+    local info    = self.elvuiConflictInfo or { available = false, actionBarsEnabled = false }
+
+    local heading = NewText(sf, "Action Bars", 20)
+    heading:SetPoint("TOPLEFT", sf, "TOPLEFT", x, y)
+
+    local sub = NewText(sf,
+        "Choose who manages your action bars. TwichUI provides a custom bar system with fade, class-aware visibility, and theme integration.",
+        12, C.muted[1], C.muted[2], C.muted[3])
+    sub:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -5)
+    sub:SetWidth(W - PAD * 2 - 2)
+
+    local infoText = NewText(sf, "", 12, C.text[1], C.text[2], C.text[3])
+    infoText:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -18)
+    infoText:SetWidth(W - PAD * 2 - 2)
+
+    local ownerCard = CreateFrame("Frame", nil, sf, "BackdropTemplate")
+    ownerCard:SetSize(W - PAD * 2, 92)
+    ownerCard:SetPoint("TOPLEFT", infoText, "BOTTOMLEFT", 0, -16)
+    Backdrop(ownerCard, C.bg, C.border, 0.5, 0.6)
+
+    local ownerTitle = NewText(ownerCard, "Action Bar Owner", 11, C.gold[1], C.gold[2], C.gold[3])
+    ownerTitle:SetPoint("TOPLEFT", ownerCard, "TOPLEFT", 10, -8)
+
+    local twichBtn, twichLabel = NewButton(ownerCard, "TwichUI", 140, 30)
+    twichBtn:SetPoint("TOPLEFT", ownerTitle, "BOTTOMLEFT", 0, -12)
+    local elvBtn, elvLabel = NewButton(ownerCard, "ElvUI", 120, 30)
+    elvBtn:SetPoint("LEFT", twichBtn, "RIGHT", 12, 0)
+
+    local function RefreshOwnerButtons()
+        local useTwich = self.useTwichActionBars ~= false
+        if useTwich then
+            twichBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
+            twichBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
+            elvBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
+            elvBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+        else
+            elvBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
+            elvBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
+            twichBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
+            twichBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+        end
+        twichLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
+        elvLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
+        self:_RefreshActionBarSummary()
+    end
+
+    twichBtn:SetScript("OnClick", function()
+        self.useTwichActionBars = true
+        RefreshOwnerButtons()
+    end)
+    elvBtn:SetScript("OnClick", function()
+        self.useTwichActionBars = false
+        RefreshOwnerButtons()
+    end)
+
+    if not info.available then
+        elvBtn:Disable()
+        elvBtn:SetAlpha(0.45)
+        self.useTwichActionBars = true
+    end
+
+    local note = NewText(sf,
+        "The action bar choice and any ElvUI toggle are applied alongside unit frames at the end of this section — a single reload handles both.",
+        11, C.muted[1], C.muted[2], C.muted[3])
+    note:SetPoint("TOPLEFT", ownerCard, "BOTTOMLEFT", 0, -12)
+    note:SetWidth(W - PAD * 2 - 2)
+
+    self.actionBarRefs = { infoText = infoText }
+    RefreshOwnerButtons()
+end
+
+-- ─── Step 6 — Theme ──────────────────────────────────────────────────────────
 
 local CARD_H_THM = 96
 
@@ -1861,8 +1982,11 @@ function UI:_BuildFinishContent(sf)
     local unitFrameLabel = NewText(sf, "", 12, C.text[1], C.text[2], C.text[3])
     unitFrameLabel:SetPoint("TOPLEFT", integrationLabel, "BOTTOMLEFT", 0, -8)
 
+    local actionBarLabel = NewText(sf, "", 12, C.text[1], C.text[2], C.text[3])
+    actionBarLabel:SetPoint("TOPLEFT", unitFrameLabel, "BOTTOMLEFT", 0, -8)
+
     local resLabel = NewText(sf, "", 12, C.text[1], C.text[2], C.text[3])
-    resLabel:SetPoint("TOPLEFT", unitFrameLabel, "BOTTOMLEFT", 0, -8)
+    resLabel:SetPoint("TOPLEFT", actionBarLabel, "BOTTOMLEFT", 0, -8)
 
     local note = NewText(sf,
         "Your layout and theme have been applied.\n" ..
@@ -1878,6 +2002,7 @@ function UI:_BuildFinishContent(sf)
         chatLabel = chatLabel,
         integrationLabel = integrationLabel,
         unitFrameLabel = unitFrameLabel,
+        actionBarLabel = actionBarLabel,
         resLabel = resLabel,
     }
     self:_RefreshFinishSummary()
@@ -1918,6 +2043,10 @@ function UI:_RefreshFinishSummary()
             self.useTwichUnitFrames and "TwichUI" or "ElvUI",
             self.showPlayerInParty and "On" or "Off",
             self.showPartyCastbars and "On" or "Off"))
+    end
+    if refs.actionBarLabel then
+        refs.actionBarLabel:SetText(string.format("|cff787c88Bars    |r%s",
+            self.useTwichActionBars ~= false and "TwichUI" or "ElvUI"))
     end
     refs.resLabel:SetText(string.format("|cff787c88Screen  |r%dx%d", sw, sh))
 end

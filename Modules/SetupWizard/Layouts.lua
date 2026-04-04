@@ -99,21 +99,17 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
     -- Captured: 2026-03-28  |  3440x1440  |  layout id: signature
     -- Captured: 2026-03-30  |  3440x1440  |  layout id: standard
     -- Captured: 2026-03-30  |  3440x1440  |  layout id: standard
+    -- Captured: 2026-04-04  |  3440x1440  |  layout id: standard
     {
         id                  = "standard",
-        name                = "Standard",
-        description         = "Party and unit frames centered",
+        name                = "",
+        description         = "Add a description here.",
         role                = "any", -- "any" | "dps" | "healer" | "tank"
         referenceResolution = { w = 3440, h = 1440 },
         frames              = {
             ChatFrame1      = { x = 0.00000, y = 0.02083, w = 0.17500, h = 0.19931, scaleMode = "height" },
-            UF_boss         = { x = 0.27965, y = 0.93611, w = 0.14535, h = 0.02431 },
-            UF_boss1        = { x = 0.51599, y = 0.92222, w = 0.14535, h = 0.02431 },
-            UF_boss2        = { x = 0.42733, y = 0.00000, w = 0.14535, h = 0.02431 },
-            UF_boss3        = { x = 0.53401, y = 0.78819, w = 0.14535, h = 0.02431 },
-            UF_boss4        = { x = 0.42733, y = 0.00000, w = 0.14535, h = 0.02431 },
-            UF_boss5        = { x = 0.42733, y = 0.00000, w = 0.14535, h = 0.02431 },
-            UF_castbar      = { x = 0.44593, y = 0.22917, w = 0.10814, h = 0.02083 },
+            UF_boss         = { x = 0.35392, y = 0.91285, w = 0.29215, h = 0.08403 },
+            UF_castbar      = { x = 0.44593, y = 0.22361, w = 0.10814, h = 0.01944 },
             UF_focus        = { x = 0.64041, y = 0.59792, w = 0.06395, h = 0.02361 },
             UF_party        = { x = 0.00000, y = 0.00000, w = 0.00000, h = 0.00000 },
             UF_pet          = { x = 0.65407, y = 0.48542, w = 0.04942, h = 0.01944 },
@@ -126,6 +122,430 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
         apply               = function()
             local T = unpack(_G.TwichRx)
             T:GetModule("SetupWizard"):RestoreConfigSnapshot({
+                actionBars = {
+                    _cooldownSwipeDefaultsMigrated = true,
+                    bars = {
+                        bar1 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 10,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = true,
+                            mouseover = false,
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            scale = 1.02,
+                            showAccent = false,
+                            showBorder = false,
+                            showCooldownSwipe = true,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 1503,
+                            y = 386
+                        },
+                        bar10 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = false,
+                            point = "BOTTOM",
+                            relativePoint = "BOTTOM",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 0,
+                            y = 316
+                        },
+                        bar11 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = false,
+                            point = "BOTTOM",
+                            relativePoint = "BOTTOM",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 0,
+                            y = 354
+                        },
+                        bar12 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = false,
+                            point = "BOTTOM",
+                            relativePoint = "BOTTOM",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 0,
+                            y = 392
+                        },
+                        bar13 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = false,
+                            point = "BOTTOM",
+                            relativePoint = "BOTTOM",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 0,
+                            y = 430
+                        },
+                        bar14 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = false,
+                            point = "BOTTOM",
+                            relativePoint = "BOTTOM",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 0,
+                            y = 468
+                        },
+                        bar15 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = false,
+                            point = "BOTTOM",
+                            relativePoint = "BOTTOM",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 0,
+                            y = 506
+                        },
+                        bar2 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 34,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = true,
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 804,
+                            y = 1393
+                        },
+                        bar3 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 34,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = true,
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 2448,
+                            y = 633
+                        },
+                        bar4 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 10,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = true,
+                            mouseover = false,
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            scale = 1.02,
+                            showAccent = false,
+                            showBorder = false,
+                            showCooldownSwipe = true,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[bonusbar:5] hide;show",
+                            x = 1503,
+                            y = 346
+                        },
+                        bar5 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 5,
+                            buttonSize = 32,
+                            buttonsPerRow = 1,
+                            enabled = true,
+                            mouseover = true,
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            scale = 1.23,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 490,
+                            y = 69
+                        },
+                        bar6 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = true,
+                            mouseover = true,
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 812,
+                            y = 1349
+                        },
+                        bar7 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = false,
+                            point = "BOTTOM",
+                            relativePoint = "BOTTOM",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 0,
+                            y = 202
+                        },
+                        bar8 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = false,
+                            point = "BOTTOM",
+                            relativePoint = "BOTTOM",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 0,
+                            y = 240
+                        },
+                        bar9 = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 12,
+                            buttonSize = 32,
+                            buttonsPerRow = 12,
+                            enabled = false,
+                            mouseover = false,
+                            point = "BOTTOM",
+                            relativePoint = "BOTTOM",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 0,
+                            y = 278
+                        },
+                        extraAction = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 1,
+                            buttonSize = 52,
+                            buttonsPerRow = 1,
+                            enabled = true,
+                            mouseover = false,
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[extrabar] show; hide",
+                            x = 1073,
+                            y = 212
+                        },
+                        pet = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 10,
+                            buttonSize = 30,
+                            buttonsPerRow = 10,
+                            enabled = true,
+                            mouseover = false,
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle][vehicleui][overridebar] hide; [pet] show; hide",
+                            x = 603,
+                            y = 30
+                        },
+                        stance = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 10,
+                            buttonSize = 30,
+                            buttonsPerRow = 10,
+                            enabled = true,
+                            mouseover = false,
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            scale = 1,
+                            showAccent = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[petbattle] hide; show",
+                            x = 953,
+                            y = 29
+                        },
+                        vehicleExit = {
+                            _cooldownSwipeDefaultsMigrated = true,
+                            alpha = 1,
+                            backdrop = true,
+                            buttonCount = 1,
+                            buttonSize = 32,
+                            buttonsPerRow = 1,
+                            enabled = true,
+                            mouseover = false,
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            scale = 1,
+                            showAccent = true,
+                            showBorder = true,
+                            showCooldownSwipe = false,
+                            simpleVisibility = {},
+                            simpleVisibilityMode = "raw",
+                            visibility = "[vehicleui] show; hide",
+                            x = 1080,
+                            y = 163
+                        }
+                    },
+                    buttonSpacing = 4,
+                    countFontSize = 11,
+                    debugEnabled = true,
+                    enabled = true,
+                    fontOutline = "NONE",
+                    hotkeyFontSize = 11,
+                    lockBars = true,
+                    macroFontSize = 9,
+                    procGlowColor = { 0.94902, 0.776471, 0.439216 },
+                    procGlowStyle = "proc",
+                    procGlowUseThemeColor = false,
+                    showCooldownSwipe = true,
+                    showCooldownText = true,
+                    showCounts = true,
+                    showGrid = true,
+                    showHotkeys = true,
+                    showMacroNames = false,
+                    textColor = { 0.921569, 0.941177, 0.960784 },
+                    textFont = "Inter",
+                    textShadow = true,
+                    useMasque = true
+                },
                 bestInSlot = {
                     displayTime = 30,
                     enabled = true,
@@ -182,7 +602,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         font = "Inter Bold",
                         fontSize = 14,
                         slot1 = "TwichUI: Friends",
-                        slotWidth = 80
+                        slotWidth = 84
                     },
                     hideHeader = true,
                     hideRealm = true,
@@ -215,7 +635,11 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     timestampWidth = 70
                 },
                 chores = {
-                    categories = {},
+                    categories = {
+                        abundance = false,
+                        dungeon = false,
+                        specialAssignment = false
+                    },
                     countBountifulDelvesTowardTotal = false,
                     countProfessionsTowardTotal = false,
                     preyDifficulties = {
@@ -223,10 +647,29 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         normal = false
                     },
                     raidWings = {
+                        ["3126"] = false,
                         ["3155"] = false,
+                        ["3156"] = false,
+                        ["3159"] = false,
                         ["3160"] = false
                     },
                     trackBountifulDelves = false
+                },
+                customBindings = {
+                    bindings = {
+                        [1] = {
+                            actionType = "spell",
+                            actionValue = "Flash of Light",
+                            enabled = true,
+                            id = 1,
+                            keybind = "SHIFT-G",
+                            macroText = "",
+                            name = "Binding 1",
+                            specialization = 65
+                        }
+                    },
+                    enabled = true,
+                    nextId = 2
                 },
                 datatext = {
                     auctionMountShortcutEnabled = true,
@@ -239,9 +682,11 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             collapsedSections = {
                                 abundance = true,
                                 dungeon = false,
+                                prey = false,
                                 professionEnchanting = false,
                                 professionJewelcrafting = false,
-                                specialAssignment = false,
+                                raidFinder = true,
+                                specialAssignment = true,
                                 stormarion = true
                             },
                             locked = false,
@@ -304,7 +749,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     },
                     mythicplus = {},
                     portals = {
-                        favoriteHearthstoneItemID = 235016,
+                        favoriteHearthstoneItemID = 263933,
                         textColor = { 1, 1, 1, 1 }
                     },
                     specialization = {},
@@ -354,7 +799,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 },
                                 transparentTheme = true,
                                 useStyleOverrides = true,
-                                width = 750,
+                                width = 775,
                                 x = 0,
                                 y = 0
                             },
@@ -383,7 +828,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 },
                                 transparentTheme = true,
                                 useStyleOverrides = true,
-                                width = 750,
+                                width = 775,
                                 x = 0,
                                 y = 0
                             },
@@ -431,6 +876,9 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         textColor = { 1, 1, 1, 1 },
                         twentyFourHour = false
                     },
+                    toys = {
+                        textColor = { 1, 1, 1, 1 }
+                    },
                     vendorMountShortcutEnabled = true
                 },
                 dungeonTracking = {
@@ -438,6 +886,16 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     enabled = true,
                     leavePhrase = "tyfp",
                     notificationDisplayTime = 45
+                },
+                dynamicFlight = {
+                    anchorX = -1,
+                    anchorY = -346,
+                    enabled = true,
+                    locked = true,
+                    mainFont = "Exo2 Bold",
+                    secondaryFont = "Exo2 Bold",
+                    style = "transparent",
+                    width = 350
                 },
                 easyFish = {
                     enabled = false
@@ -451,6 +909,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     deathNotificationSound = "TwichUI Alert 4",
                     enabled = true,
                     interruptTrackerEnabled = false,
+                    interruptTrackerLocked = true,
                     interruptX = 867,
                     interruptY = 45,
                     mythicPlusCheckpointNotificationSound = "TwichUI Alert 2",
@@ -501,7 +960,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                         bossIndex = 1,
                                         id = "boss_1",
                                         kind = "boss",
-                                        name = "Boss 1",
+                                        name = "Zuraal the Ascended",
                                         notifyEnabled = true,
                                         percent = 25
                                     },
@@ -509,7 +968,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                         bossIndex = 2,
                                         id = "boss_2",
                                         kind = "boss",
-                                        name = "Boss 2",
+                                        name = "Saprish",
                                         notifyEnabled = true,
                                         percent = 50
                                     },
@@ -517,7 +976,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                         bossIndex = 3,
                                         id = "boss_3",
                                         kind = "boss",
-                                        name = "Boss 3",
+                                        name = "Viceroy Nezhar",
                                         notifyEnabled = true,
                                         percent = 75
                                     },
@@ -525,7 +984,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                         bossIndex = 4,
                                         id = "boss_4",
                                         kind = "boss",
-                                        name = "Boss 4",
+                                        name = "L'ura",
                                         notifyEnabled = true,
                                         percent = 100
                                     }
@@ -602,6 +1061,42 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                     }
                                 }
                             },
+                            ["557"] = {
+                                checkpoints = {
+                                    [1] = {
+                                        bossIndex = 1,
+                                        id = "boss_1",
+                                        kind = "boss",
+                                        name = "Emberdawn",
+                                        notifyEnabled = true,
+                                        percent = 25
+                                    },
+                                    [2] = {
+                                        bossIndex = 2,
+                                        id = "boss_2",
+                                        kind = "boss",
+                                        name = "Derelict Duo",
+                                        notifyEnabled = true,
+                                        percent = 50
+                                    },
+                                    [3] = {
+                                        bossIndex = 3,
+                                        id = "boss_3",
+                                        kind = "boss",
+                                        name = "Commander Kroluk",
+                                        notifyEnabled = true,
+                                        percent = 75
+                                    },
+                                    [4] = {
+                                        bossIndex = 4,
+                                        id = "boss_4",
+                                        kind = "boss",
+                                        name = "The Restless Heart",
+                                        notifyEnabled = true,
+                                        percent = 100
+                                    }
+                                }
+                            },
                             ["558"] = {
                                 checkpoints = {
                                     [1] = {
@@ -638,6 +1133,42 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                     }
                                 }
                             },
+                            ["559"] = {
+                                checkpoints = {
+                                    [1] = {
+                                        bossIndex = 1,
+                                        id = "boss_1",
+                                        kind = "boss",
+                                        name = "Chief Corewright Kasreth",
+                                        notifyEnabled = true,
+                                        percent = 25
+                                    },
+                                    [2] = {
+                                        bossIndex = 2,
+                                        id = "boss_2",
+                                        kind = "boss",
+                                        name = "Corewarden Nysarra",
+                                        notifyEnabled = true,
+                                        percent = 50
+                                    },
+                                    [3] = {
+                                        bossIndex = 3,
+                                        id = "boss_3",
+                                        kind = "boss",
+                                        name = "Lothraxion",
+                                        notifyEnabled = true,
+                                        percent = 75
+                                    },
+                                    [4] = {
+                                        bossIndex = 4,
+                                        id = "boss_4",
+                                        kind = "boss",
+                                        name = "Custom Checkpoint 4",
+                                        notifyEnabled = true,
+                                        percent = 100
+                                    }
+                                }
+                            },
                             ["560"] = {
                                 checkpoints = {
                                     [1] = {
@@ -667,7 +1198,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 }
                             }
                         },
-                        selectedMapID = 556
+                        selectedMapID = 557
                     },
                     mythicPlusTimerNotificationSound = "TwichUI Alert 1",
                     mythicPlusTimerRowGap = 0,
@@ -688,12 +1219,19 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     useFriendNoteAsName = true
                 },
                 preyTweaks = {
+                    autoSelectHuntReward = true,
+                    autoSuperTrackPreyQuest = true,
+                    autoTurnInPreyQuest = true,
+                    autoWatchPreyQuest = true,
                     barOffsetY = -60,
                     displayMode = "bar",
                     enabled = true,
+                    playPhaseChangeSound = true,
                     valueFontSize = 16
                 },
                 questAutomation = {
+                    autoCompleteWithRewards = true,
+                    automaticAccept = true,
                     automaticTurnIn = true,
                     enabled = true,
                     questType = {
@@ -705,17 +1243,20 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     enabled = false
                 },
                 satchelWatch = {
-                    enabled = false,
+                    enabled = true,
                     ignoredDungeonIDs = {},
                     notifyForHealers = true,
-                    notifyForHeroicDungeon = true,
+                    notifyForHeroicDungeon = false,
+                    notifyForRegularDungeon = false,
                     notifyOnlyForRaids = true,
                     notifyOnlyWhenNotCompleted = true,
                     notifyOnlyWhenNotInGroup = true,
                     periodicCheckEnabled = true,
                     raid_3126 = true,
+                    raid_3155 = false,
                     raid_3156 = true,
                     raid_3159 = true,
+                    raid_3160 = false,
                     roleIconType = "twich",
                     sound = "TwichUI Alert 2"
                 },
@@ -734,19 +1275,20 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     popupPosition = {
                         point = "CENTER",
                         relativePoint = "CENTER",
-                        x = 163.6,
-                        y = 29.9998
+                        x = -157.4,
+                        y = 80.9997
                     }
                 },
                 theme = {
-                    accentColor = { 0.94902, 0.776471, 0.439216 },
+                    accentColor = { 0.752941, 0.654902, 0.533333 },
+                    appliedThemePreset = "__custom",
                     backgroundAlpha = 0.8,
                     backgroundColor = { 0.0823529, 0.0941177, 0.12549 },
                     borderAlpha = 0.85,
                     borderColor = { 0.24, 0.26, 0.32 },
                     classIconStyle = "pixel",
                     globalFont = "Inter Bold",
-                    primaryColor = { 0.94902, 0.776471, 0.439216 },
+                    primaryColor = { 0.752941, 0.654902, 0.533333 },
                     soundProfile = "Standard",
                     statusBarTexture = "TwichUI Bright"
                 },
@@ -781,6 +1323,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 iconSize = 14,
                                 indicators = {
                                     [1] = {
+                                        _resolvedCacheKey = "filter:DISPELLABLE:mine:false",
                                         anchor = "TOPLEFT",
                                         borderAnim = "chase",
                                         borderColor = { 0.1, 0.72, 0.74, 1 },
@@ -827,6 +1370,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                         type = "border"
                                     },
                                     [2] = {
+                                        _resolvedCacheKey = "filter:DISPELLABLE_OR_BOSS:mine:false",
                                         anchor = "CENTER",
                                         durAnchor = "CENTER",
                                         durationFontSize = 14,
@@ -844,6 +1388,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                         type = "icons"
                                     },
                                     [3] = {
+                                        _resolvedCacheKey = "filter:HELPFUL:mine:true",
                                         anchor = "BOTTOMLEFT",
                                         durAnchor = "CENTER",
                                         durationFontName = "Inter Bold",
@@ -876,6 +1421,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 iconSize = 14,
                                 indicators = {
                                     [1] = {
+                                        _resolvedCacheKey = "filter:DISPELLABLE:mine:false",
                                         anchor = "TOPLEFT",
                                         borderAnim = "chase",
                                         borderColor = { 0.1, 0.72, 0.74, 1 },
@@ -922,6 +1468,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                         type = "border"
                                     },
                                     [2] = {
+                                        _resolvedCacheKey = "filter:DISPELLABLE_OR_BOSS:mine:false",
                                         anchor = "CENTER",
                                         durAnchor = "CENTER",
                                         durationFontSize = 14,
@@ -939,6 +1486,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                         type = "icons"
                                     },
                                     [3] = {
+                                        _resolvedCacheKey = "filter:HELPFUL:mine:true",
                                         anchor = "LEFT",
                                         durAnchor = "CENTER",
                                         durationFontName = "Inter Bold",
@@ -982,6 +1530,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 iconSize = 14,
                                 indicators = {
                                     [1] = {
+                                        _resolvedCacheKey = "filter:DISPELLABLE:mine:false",
                                         anchor = "TOPLEFT",
                                         borderAnim = "chase",
                                         borderColor = { 0.1, 0.72, 0.74, 1 },
@@ -1028,6 +1577,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                         type = "border"
                                     },
                                     [2] = {
+                                        _resolvedCacheKey = "filter:DISPELLABLE_OR_BOSS:mine:false",
                                         anchor = "CENTER",
                                         durAnchor = "CENTER",
                                         durationFontSize = 14,
@@ -1045,6 +1595,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                         type = "icons"
                                     },
                                     [3] = {
+                                        _resolvedCacheKey = "filter:HELPFUL:mine:true",
                                         anchor = "LEFT",
                                         durAnchor = "CENTER",
                                         durationFontName = "Inter Bold",
@@ -1304,9 +1855,11 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 yOffset = 2
                             }
                         },
-                        color = { 0.94902, 0.776471, 0.439216, 1 },
+                        color = { 0.752941, 0.654902, 0.533333, 1 },
                         enabled = true,
-                        height = 30,
+                        fantasyEffectScale = 1.2,
+                        fantasyTheme = "holy",
+                        height = 28,
                         iconPosition = "inside",
                         iconSide = "left",
                         iconSize = 28,
@@ -1314,9 +1867,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         showSpellText = true,
                         showTimeText = true,
                         spellFontSize = 14,
+                        style = "fantasy",
                         timeFontSize = 14,
                         useCustomColor = true,
-                        useThemeAccentFill = true,
+                        useThemeAccentFill = false,
                         width = 372
                     },
                     castbars = {
@@ -1412,7 +1966,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         background = { 0.0823529, 0.0941177, 0.12549, 1 },
                         border = { 0.24, 0.26, 0.32, 1 },
                         cast = { 0.96, 0.76, 0.24, 1 },
-                        health = { 0.34, 0.84, 0.54, 1 },
+                        health = { 0.545098, 0.290196, 0.890196, 1 },
                         power = { 0.1, 0.72, 0.74, 1 },
                         scopes = {
                             boss = {
@@ -1445,6 +1999,14 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             }
                         }
                     },
+                    debug = {
+                        unitFramesDiagnostics = {
+                            enabled = false,
+                            intervalSec = 2,
+                            minMemoryDeltaKB = 512,
+                            verbose = false
+                        }
+                    },
                     distanceFade = {
                         enabled = true,
                         outsideAlpha = 0.45
@@ -1453,10 +2015,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     frameAlpha = 1,
                     groups = {
                         boss = {
-                            columnAnchorPoint = "LEFT",
+                            columnAnchorPoint = "TOP",
                             columnSpacing = 8,
                             enabled = true,
-                            growthDirection = "DOWN",
+                            growthDirection = "LEFT",
                             height = 36,
                             unitsPerColumn = 2,
                             width = 220,
@@ -1491,7 +2053,20 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 }
                             },
                             maxColumns = 5,
+                            offlineIndicator = {
+                                enabled = true
+                            },
                             point = "TOP",
+                            readyCheckIndicator = {
+                                offsetY = 0,
+                                point = "CENTER",
+                                relativePoint = "CENTER",
+                                size = 32
+                            },
+                            resurrectIndicator = {
+                                enabled = true,
+                                relativePoint = "CENTER"
+                            },
                             roleIcon = {
                                 alpha = 0.85,
                                 corner = "BOTTOMRIGHT",
@@ -1503,11 +2078,15 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 size = 24
                             },
                             rowSpacing = 8,
-                            showPlayer = false,
+                            showPlayer = true,
                             showSolo = true,
                             spiritIndicator = {
                                 enabled = true,
                                 size = 47
+                            },
+                            summonIndicator = {
+                                enabled = true,
+                                relativePoint = "CENTER"
                             },
                             unitsPerColumn = 1,
                             width = 180,
@@ -1548,7 +2127,20 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 }
                             },
                             maxColumns = 5,
+                            offlineIndicator = {
+                                enabled = true
+                            },
                             point = "TOP",
+                            readyCheckIndicator = {
+                                offsetY = 2,
+                                point = "CENTER",
+                                relativePoint = "CENTER",
+                                size = 24
+                            },
+                            resurrectIndicator = {
+                                enabled = true,
+                                relativePoint = "CENTER"
+                            },
                             roleIcon = {
                                 alpha = 0.85,
                                 corner = "TOPRIGHT",
@@ -1565,6 +2157,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             spiritIndicator = {
                                 enabled = true,
                                 offsetY = 3
+                            },
+                            summonIndicator = {
+                                enabled = true,
+                                relativePoint = "CENTER"
                             },
                             unitsPerColumn = 5,
                             width = 125,
@@ -1667,10 +2263,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                     },
                     layout = {
                         boss = {
-                            point = "BOTTOMLEFT",
-                            relativePoint = "BOTTOMLEFT",
-                            x = 962,
-                            y = 1348
+                            point = "CENTER",
+                            relativePoint = "CENTER",
+                            x = 0,
+                            y = 655
                         },
                         boss1 = {
                             point = "BOTTOMLEFT",
@@ -1688,10 +2284,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         boss4 = {},
                         boss5 = {},
                         castbar = {
-                            point = "CENTER",
-                            relativePoint = "CENTER",
-                            x = 0,
-                            y = -375
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            x = 1534,
+                            y = 322
                         },
                         focus = {
                             point = "BOTTOMLEFT",
@@ -1725,10 +2321,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             y = 439
                         },
                         raid = {
-                            point = "CENTER",
-                            relativePoint = "CENTER",
-                            x = 0,
-                            y = -535
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
+                            x = 1398,
+                            y = 46
                         },
                         raidMember = {},
                         tank = {
@@ -1770,8 +2366,8 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         }
                     },
                     testMode = false,
-                    testPreviewParty = false,
-                    testPreviewRaid = true,
+                    testPreviewParty = true,
+                    testPreviewRaid = false,
                     text = {
                         fontName = "Exo2 Bold",
                         healthFontSize = 10,
@@ -1988,6 +2584,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         party = {},
                         partyMember = {
                             healPrediction = {
+                                healAbsorbColor = { 0.0588235, 0.0705882, 0.0901961, 0.4 },
                                 maxOverflow = 1
                             }
                         },
@@ -2023,6 +2620,10 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 spacing = 1,
                                 yOffset = 30
                             },
+                            classArtworkEnabled = false,
+                            classArtworkOffsetX = -13,
+                            classArtworkOffsetY = 13,
+                            classArtworkScale = 0.5,
                             colors = {
                                 background = { 0.133333, 0.14902, 0.176471, 1 },
                                 power = { 0.196078, 0.631373, 0.85098, 1 },
@@ -2041,7 +2642,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 maxOverflow = 1
                             },
                             healthColor = {
-                                color = { 0.94902, 0.776471, 0.439216, 1 },
+                                color = { 0.752941, 0.654902, 0.533333, 1 },
                                 mode = "custom"
                             },
                             height = 50,
@@ -2050,6 +2651,11 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             },
                             indicators = {},
                             powerDetached = true,
+                            powerFx = {
+                                effectScale = 1,
+                                enabled = true,
+                                theme = "moon"
+                            },
                             powerHeight = 15,
                             powerOffsetX = 0,
                             powerOffsetY = 120,
@@ -2076,7 +2682,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 healthOffsetY = 15,
                                 healthPoint = "TOPRIGHT",
                                 healthRelativePoint = "TOPRIGHT",
-                                nameColor = { 0.94902, 0.776471, 0.439216, 1 },
+                                nameColor = { 0.752941, 0.654902, 0.533333, 1 },
                                 nameFontSize = 24,
                                 nameFormat = "full",
                                 nameJustify = "LEFT",
@@ -2250,11 +2856,31 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                         },
                         unit = {}
                     },
-                    useClassColor = false
+                    useClassColor = false,
+                    useThemeAccentHealth = false
+                },
+                worldQuests = {
+                    enabled = true,
+                    enabledFilters = {
+                        dungeon = true,
+                        gear = true,
+                        gold = true,
+                        items = true,
+                        pet = true,
+                        profession = true,
+                        pvp = true,
+                        rare = true,
+                        reputation = true,
+                        time = true,
+                        tracked = true
+                    },
+                    hideUntrackedPOI = true,
+                    selectedFilters = {}
                 },
             })
         end,
     },
+    -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Captured: 2026-03-30  |  3440x1440  |  layout id: standard_left
     -- Captured: 2026-03-30  |  3440x1440  |  layout id: standard_offset
