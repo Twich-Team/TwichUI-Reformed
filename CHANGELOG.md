@@ -1,4 +1,4 @@
-### Version 0.0.5 [ April 02 2026 ]
+### Version 0.0.5 [ April 04 2026 ]
 
 #### BugFixes
 
@@ -19,5 +19,6 @@
 - Added in-house action bars with glow customization, easy keybinding, and custom hover effects
 - Added spirit icon to unit frames of dead players
 - Added heal absorb indicators to bars
+- Added offline, summon, and ressurect indicators to unit frames
 
 #### Other

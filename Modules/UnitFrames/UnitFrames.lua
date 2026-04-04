@@ -6587,6 +6587,189 @@ function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
     end
 end
 
+-- ---------------------------------------------------------------------------
+-- Power Bar Particle FX
+-- A lightweight ambient particle system for the player power (mana) bar that
+-- reuses the castbar particle textures, colour tables, and Update helpers.
+-- Only ambient/stream particles are spawned — no overlay art, sheen, or bolts.
+-- ---------------------------------------------------------------------------
+
+function UnitFrames:EnsurePowerBarFx(powerBar)
+    if not powerBar then return nil end
+    if powerBar.TwichPowerFx then return powerBar.TwichPowerFx end
+
+    if powerBar.SetClipsChildren then
+        powerBar:SetClipsChildren(false)
+    end
+
+    local particleLayer = CreateFrame("Frame", nil, powerBar)
+    particleLayer:SetFrameStrata(powerBar:GetFrameStrata())
+    particleLayer:SetFrameLevel(math_max(1, powerBar:GetFrameLevel() + 4))
+    particleLayer:EnableMouse(false)
+    particleLayer:Hide()
+
+    local particles = {}
+    for index = 1, 80 do
+        local texture = particleLayer:CreateTexture(nil, "OVERLAY", nil, 1)
+        texture:SetAlpha(0)
+        texture:Hide()
+        particles[index] = { tex = texture, active = false, seed = index }
+    end
+
+    local fx = {
+        powerBar         = powerBar,
+        particleLayer    = particleLayer,
+        particles        = particles,
+        clock            = 0,
+        enabled          = false,
+        ambientAccumulator = 0,
+        streamAccumulator  = 0,
+        width            = 1,
+        height           = 8,
+        particleInsetX   = 10,
+        particleInsetY   = 8,
+        effectScale      = 1,
+        theme            = "holy",
+    }
+    powerBar.TwichPowerFx = fx
+
+    powerBar:HookScript("OnSizeChanged", function(self)
+        UnitFrames:LayoutPowerBarFx(self)
+    end)
+    powerBar:HookScript("OnShow", function(self)
+        UnitFrames:SyncPowerBarFx(self, true)
+    end)
+    powerBar:HookScript("OnHide", function(self)
+        UnitFrames:ResetPowerBarFx(self)
+    end)
+    powerBar:HookScript("OnUpdate", function(self, elapsed)
+        UnitFrames:OnPowerBarFxUpdate(self, elapsed)
+    end)
+
+    self:LayoutPowerBarFx(powerBar)
+    return fx
+end
+
+function UnitFrames:LayoutPowerBarFx(powerBar)
+    local fx = powerBar and powerBar.TwichPowerFx
+    if not fx then return end
+
+    local width  = math_max(1, powerBar:GetWidth()  or 1)
+    local height = math_max(1, powerBar:GetHeight() or 1)
+    local effectScale = fx.effectScale or 1
+
+    fx.width          = width
+    fx.height         = height
+    fx.particleInsetX = math_max(10, height * 1.2) * effectScale
+    fx.particleInsetY = math_max(8,  height * 1.0) * effectScale
+
+    fx.particleLayer:ClearAllPoints()
+    fx.particleLayer:SetPoint("TOPLEFT",     powerBar, "TOPLEFT",     -fx.particleInsetX,  fx.particleInsetY)
+    fx.particleLayer:SetPoint("BOTTOMRIGHT", powerBar, "BOTTOMRIGHT",  fx.particleInsetX, -fx.particleInsetY)
+end
+
+function UnitFrames:ResetPowerBarFx(powerBar)
+    local fx = powerBar and powerBar.TwichPowerFx
+    if not fx then return end
+
+    if fx.particleLayer then fx.particleLayer:Hide() end
+    if fx.particles then
+        for i = 1, #fx.particles do
+            ResetFantasyParticle(fx.particles[i])
+        end
+    end
+    fx.clock              = 0
+    fx.ambientAccumulator = 0
+    fx.streamAccumulator  = 0
+end
+
+function UnitFrames:SyncPowerBarFx(powerBar, force)
+    local fx = self:EnsurePowerBarFx(powerBar)
+    if not fx then return end
+
+    local enabled     = powerBar._powerFxEnabled == true
+    local theme       = powerBar._powerFxTheme or "holy"
+    local effectScale = Clamp(tonumber(powerBar._powerFxScale) or 1, 0.5, 3)
+
+    fx.enabled = enabled
+    if not enabled then
+        self:ResetPowerBarFx(powerBar)
+        return
+    end
+
+    if force or fx.theme ~= theme then
+        self:ResetPowerBarFx(powerBar)
+        fx.theme = theme
+    end
+
+    if force or fx.effectScale ~= effectScale then
+        fx.effectScale = effectScale
+        self:LayoutPowerBarFx(powerBar)
+    end
+
+    local width  = math_max(1, powerBar:GetWidth()  or 1)
+    local height = math_max(1, powerBar:GetHeight() or 1)
+    if force or fx.width ~= width or fx.height ~= height then
+        self:LayoutPowerBarFx(powerBar)
+    end
+
+    if powerBar:IsShown() then
+        fx.particleLayer:SetFrameStrata(powerBar:GetFrameStrata())
+        fx.particleLayer:SetFrameLevel(math_max(1, powerBar:GetFrameLevel() + 4))
+        fx.particleLayer:Show()
+    end
+end
+
+function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
+    local fx = powerBar and powerBar.TwichPowerFx
+    if not fx or not fx.enabled then return end
+
+    local effectScale  = fx.effectScale or 1
+    local family       = GetFantasyThemeEffectFamily(fx.theme)
+
+    -- Ambient floating particles at a fixed rate scaled by effectScale.
+    -- No current-power reads: UnitPower is protected in combat and always
+    -- produces a tainted value that cannot be used in arithmetic.
+    fx.ambientAccumulator = (fx.ambientAccumulator or 0) + elapsed
+    local ambientInterval = 0.18 / math_max(0.5, effectScale)
+    if fx.ambientAccumulator >= ambientInterval then
+        fx.ambientAccumulator = 0
+        SpawnFantasyAmbientParticle(fx)
+    end
+
+    -- Stream for nature/monk themes
+    if family == "nature" or family == "monk" then
+        fx.streamAccumulator = (fx.streamAccumulator or 0) + elapsed
+        local streamInterval = 0.22 / math_max(0.5, effectScale)
+        if fx.streamAccumulator >= streamInterval then
+            fx.streamAccumulator = 0
+            SpawnFantasyNatureStream(fx)
+        end
+    else
+        fx.streamAccumulator = 0
+    end
+
+    -- Advance all active particles
+    for i = 1, #fx.particles do
+        UpdateFantasyParticle(fx, fx.particles[i], elapsed)
+    end
+end
+
+function UnitFrames:ApplyPowerBarFxSettings(frame, unitKey)
+    if unitKey ~= "player" or not frame.Power then return end
+
+    local db        = self:GetDB()
+    local units     = type(db.units)         == "table" and db.units         or {}
+    local playerCfg = type(units.player)     == "table" and units.player     or {}
+    local cfg       = type(playerCfg.powerFx) == "table" and playerCfg.powerFx or {}
+
+    frame.Power._powerFxEnabled = cfg.enabled == true
+    frame.Power._powerFxTheme   = cfg.theme or "holy"
+    frame.Power._powerFxScale   = Clamp(tonumber(cfg.effectScale) or 1, 0.5, 3)
+
+    self:SyncPowerBarFx(frame.Power, true)
+end
+
 function UnitFrames:ApplyCastbarValue(bar, value, maxValue)
     if not bar or not bar.SetMinMaxValues or not bar.SetValue then return end
     local sm = self:GetCastbarSmoothingMethod()
@@ -7198,6 +7381,7 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     self:ApplyPlayerClassArtworkSettings(frame, unitKey)
     self:ApplyHighlightSettings(frame)
     self:ApplyUnitCastbarSettings(frame, unitKey)
+    self:ApplyPowerBarFxSettings(frame, unitKey)
     self:ApplyRoleIconSettings(frame, unitKey)
     self:ApplyStateIndicatorSettings(frame, unitKey, "combatIndicator")
     self:ApplyStateIndicatorSettings(frame, unitKey, "restingIndicator")

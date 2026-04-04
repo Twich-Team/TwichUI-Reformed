@@ -1945,6 +1945,29 @@ local function BuildSingleUnitTab(unitKey, label)
                                         true
                                 end),
                             }),
+                        powerFxEnabled = unitKey == "player" and BuildToggle(9, "Particle Effects",
+                            "Enable ambient particle effects on the player power bar. Uses the same effects as the Fantasy Cast Bar.",
+                            ExtendPath(basePath, "powerFx", "enabled"), false, {
+                                disabled = disabled,
+                                refreshConfig = true,
+                            }) or nil,
+                        powerFxTheme = unitKey == "player" and BuildSelect(10, "Particle Theme",
+                            "Choose the particle effect theme for the player power bar.",
+                            ExtendPath(basePath, "powerFx", "theme"), "holy", CASTBAR_FANTASY_THEME_VALUES, {
+                                refreshConfig = true,
+                                disabled = ModuleDisabled(function()
+                                    return GetPathValue(ExtendPath(basePath, "powerFx", "enabled"), false) ~= true
+                                end),
+                                width = "full",
+                            }) or nil,
+                        powerFxEffectScale = unitKey == "player" and BuildRange(11, "Particle Expansion",
+                            "Increase particle spread and density around the power bar.",
+                            ExtendPath(basePath, "powerFx", "effectScale"), 1, 0.5, 3, 0.05, {
+                                refreshConfig = true,
+                                disabled = ModuleDisabled(function()
+                                    return GetPathValue(ExtendPath(basePath, "powerFx", "enabled"), false) ~= true
+                                end),
+                            }) or nil,
                     }),
                     healPrediction = BuildHealPredictionGroup(3, ExtendPath(basePath, "healPrediction")),
                     highlights = Widgets.IGroup(4, "Highlights", {
