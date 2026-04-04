@@ -20,5 +20,6 @@
 - Added spirit icon to unit frames of dead players
 - Added heal absorb indicators to bars
 - Added offline, summon, and ressurect indicators to unit frames
+- Added particle effects for power bars
 
 #### Other
