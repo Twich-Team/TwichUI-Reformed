@@ -62,11 +62,11 @@ local C_BTN_BD         = { 0.20, 0.22, 0.30 }
 -- ── Per-category tint colours ────────────────────────────────────────────────
 -- Handles are tinted by category so the user can identify module groups at a glance.
 local CATEGORY_COLORS  = {
-    ["Unit Frames"] = { 0.32, 0.55, 0.98 },  -- blue
-    ["Action Bars"] = { 0.98, 0.62, 0.22 },  -- orange
-    ["Data Panels"] = { 0.32, 0.85, 0.45 },  -- green
-    ["Chat"]        = { 0.82, 0.48, 0.95 },  -- purple
-    ["Gathering"]   = { 0.95, 0.88, 0.28 },  -- yellow
+    ["Unit Frames"] = { 0.32, 0.55, 0.98 }, -- blue
+    ["Action Bars"] = { 0.98, 0.62, 0.22 }, -- orange
+    ["Data Panels"] = { 0.32, 0.85, 0.45 }, -- green
+    ["Chat"]        = { 0.82, 0.48, 0.95 }, -- purple
+    ["Gathering"]   = { 0.95, 0.88, 0.28 }, -- yellow
     -- fallback: teal (C_ACCENT) for anything unrecognised
 }
 
@@ -1045,7 +1045,8 @@ function MoverModule:Activate()
         end
     end
 
-    print("|cff19c9c7[TwichUI]|r Move Mode active — drag handles or click for inspector. |cffff6060ESC|r or Exit button to close.")
+    print(
+    "|cff19c9c7[TwichUI]|r Move Mode active — drag handles or click for inspector. |cffff6060ESC|r or Exit button to close.")
 end
 
 function MoverModule:Deactivate()

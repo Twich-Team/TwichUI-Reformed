@@ -58,16 +58,16 @@ function BrandDT:OnClick(panel, button)
 
     local menuList = {
         {
-            text   = "Open Settings",
-            func   = function()
+            text = "Open Settings",
+            func = function()
                 if ConfigurationModule and ConfigurationModule.OpenOptionsUI then
                     ConfigurationModule:OpenOptionsUI()
                 end
             end,
         },
         {
-            text   = moversActive and "Lock Movers" or "Unlock Movers",
-            func   = function()
+            text = moversActive and "Lock Movers" or "Unlock Movers",
+            func = function()
                 if moversModule then
                     moversModule:Toggle()
                 end

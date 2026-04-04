@@ -100,11 +100,11 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
     -- Captured: 2026-03-30  |  3440x1440  |  layout id: standard
     -- Captured: 2026-03-30  |  3440x1440  |  layout id: standard
     -- Captured: 2026-04-04  |  3440x1440  |  layout id: standard
+    -- Captured: 2026-04-04  |  3440x1440  |  layout id: Standard
     {
-        id                  = "standard",
-        name                = "Standard",
-        description         =
-        "The original TwichUI layout, featuring a centered design, this layout is suitable for all roles and use in Mythic+ and raiding.",
+        id                  = "Standard",
+        name                = "standard",
+        description         = "Add a description here.",
         role                = "any", -- "any" | "dps" | "healer" | "tank"
         referenceResolution = { w = 3440, h = 1440 },
         frames              = {
@@ -145,7 +145,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             simpleVisibilityMode = "raw",
                             visibility = "[petbattle] hide; show",
                             x = 1503,
-                            y = 386
+                            y = 387
                         },
                         bar10 = {
                             _cooldownSwipeDefaultsMigrated = true,
@@ -280,7 +280,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             buttonCount = 12,
                             buttonSize = 34,
                             buttonsPerRow = 12,
-                            enabled = false,
+                            enabled = true,
                             mouseover = true,
                             point = "BOTTOMLEFT",
                             relativePoint = "BOTTOMLEFT",
@@ -334,7 +334,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             simpleVisibilityMode = "raw",
                             visibility = "[bonusbar:5] hide;show",
                             x = 1503,
-                            y = 346
+                            y = 349
                         },
                         bar5 = {
                             _cooldownSwipeDefaultsMigrated = true,
@@ -384,11 +384,11 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             backdrop = true,
                             buttonCount = 12,
                             buttonSize = 32,
-                            buttonsPerRow = 12,
+                            buttonsPerRow = 10,
                             enabled = false,
                             mouseover = false,
-                            point = "BOTTOM",
-                            relativePoint = "BOTTOM",
+                            point = "BOTTOMLEFT",
+                            relativePoint = "BOTTOMLEFT",
                             scale = 1,
                             showAccent = true,
                             showBorder = true,
@@ -396,8 +396,8 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             simpleVisibility = {},
                             simpleVisibilityMode = "raw",
                             visibility = "[petbattle] hide; show",
-                            x = 0,
-                            y = 202
+                            x = 1499,
+                            y = 171
                         },
                         bar8 = {
                             _cooldownSwipeDefaultsMigrated = true,
@@ -501,7 +501,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             simpleVisibilityMode = "raw",
                             visibility = "[petbattle] hide; show",
                             x = 953,
-                            y = 29
+                            y = 30
                         },
                         vehicleExit = {
                             _cooldownSwipeDefaultsMigrated = true,
@@ -900,6 +900,19 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                 },
                 easyFish = {
                     enabled = false
+                },
+                gathering = {
+                    enabled = false,
+                    hudTerrainTransparent = true,
+                    sessionState = {
+                        active = false,
+                        elapsedSeconds = 0,
+                        goldPerHour = 0,
+                        hasSession = false,
+                        items = {},
+                        savedAt = 1775332928,
+                        totalValue = 0
+                    }
                 },
                 gossipHotkeys = {
                     enabled = true
@@ -2644,7 +2657,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                             },
                             healthColor = {
                                 color = { 0.752941, 0.654902, 0.533333, 1 },
-                                mode = "custom"
+                                mode = "theme"
                             },
                             height = 50,
                             highlights = {
@@ -2678,12 +2691,13 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
                                 customNameTag = "[name(3)]",
                                 customPowerTag = "[perpp]",
                                 fontName = "Exo2 Bold",
+                                healthColor = { 1, 1, 1, 1 },
                                 healthFontSize = 24,
                                 healthFormat = "custom",
                                 healthOffsetY = 15,
                                 healthPoint = "TOPRIGHT",
                                 healthRelativePoint = "TOPRIGHT",
-                                nameColor = { 0.752941, 0.654902, 0.533333, 1 },
+                                nameColor = { 1, 1, 1, 1 },
                                 nameFontSize = 24,
                                 nameFormat = "full",
                                 nameJustify = "LEFT",
@@ -2881,6 +2895,7 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
             })
         end,
     },
+    -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
 
     -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
     -- Paste the block above into AVAILABLE_LAYOUTS in Layouts.lua
