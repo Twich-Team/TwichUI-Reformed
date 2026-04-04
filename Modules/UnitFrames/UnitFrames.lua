@@ -3527,6 +3527,30 @@ local function WipeSequentialTable(tbl)
     return tbl
 end
 
+---@class TwichUIAuraBarData
+---@field name string?
+---@field icon number?
+---@field auraInstanceID number?
+---@field spellId number?
+---@field dispelName string?
+---@field isBossAura boolean?
+---@field isHarmful boolean?
+---@field isHarmfulAura boolean?
+---@field duration number?
+---@field expirationTime number?
+---@field applications number?
+---@field durationObject table?
+---@field isPlayerAura boolean?
+---@field priorityAura boolean?
+---@field priorityRank number?
+---@field categoryPriority number?
+---@field prioritySource string?
+---@field category string?
+---@field dispelPriority number?
+---@field isPriorityDispel boolean?
+
+---@param target TwichUIAuraBarData
+---@param source TwichUIAuraBarData
 local function CopyAuraBarData(target, source)
     target.name = source.name
     target.icon = source.icon
@@ -3562,6 +3586,8 @@ local function FillAuraSlotBuffer(buffer, ...)
     return count
 end
 
+---@param target TwichUIAuraBarData
+---@param data AuraData
 local function PopulateAuraBarData(target, data, timing, isHarmfulAura, isPlayerAura)
     target.name = data.name
     target.icon = data.icon
@@ -3586,39 +3612,81 @@ local function PopulateAuraBarData(target, data, timing, isHarmfulAura, isPlayer
     return target
 end
 
-local function CollectAuraData(list, scratch, unit, unitKey, auraFilter, maxCount, onlyMine, filterMode)
-    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots or not IsValidAuraUnit(unit) then return end
-    local playerFilter = auraFilter .. "|PLAYER"
-    local slots = scratch._slotBuffer or {}
-    scratch._slotBuffer = slots
-    local slotCount = FillAuraSlotBuffer(slots, C_UnitAuras.GetAuraSlots(unit, auraFilter))
+local function CollectAuraData(list, scratch, unit, unitKey, auraFilter, maxCount, onlyMine, filterMode, auraElement)
+    if not IsValidAuraUnit(unit) then return end
+
     local candidates = WipeSequentialTable(scratch or {})
     local candidateCount = 0
     local isHarmfulAura = auraFilter:find("HARMFUL") ~= nil
-    for i = 2, slotCount do
-        local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
-        if data then
-            local timing = UnitFrames:ResolveAuraTiming(unit, data, "bars")
-            local isPlayerAura = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
-            candidateCount = candidateCount + 1
-            local d = candidates[candidateCount]
-            if not d then
-                d = {}
-                candidates[candidateCount] = d
-            end
-            PopulateAuraBarData(d, data, timing, isHarmfulAura, isPlayerAura)
+    local playerFilter = auraFilter .. "|PLAYER"
+    local timingBuffer = scratch._timingBuffer or { duration = 0, expirationTime = 0, applications = 0, durationObject = nil }
+    scratch._timingBuffer = timingBuffer
+
+    local function TryAddAura(data)
+        if not data or not data.auraInstanceID then return end
+
+        local timing = UnitFrames:ResolveAuraTiming(unit, data, "bars", timingBuffer)
+        local isPlayerAura = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, playerFilter)
+        candidateCount = candidateCount + 1
+        local d = candidates[candidateCount]
+        if not d then
+            d = {}
+            candidates[candidateCount] = d
+        end
+
+        PopulateAuraBarData(d, data, timing, isHarmfulAura, isPlayerAura)
+        if auraFilter == "HELPFUL" then
+            UnitFrames:PopulateHelpfulAuraMetadata(unit, d, timing, unitKey, onlyMine)
+        end
+
+        local keep = not onlyMine or d.isPlayerAura
+        if keep then
             if auraFilter == "HELPFUL" then
-                UnitFrames:PopulateHelpfulAuraMetadata(unit, d, timing, unitKey, onlyMine)
-            end
-            if (not onlyMine or d.isPlayerAura)
-                and AuraMatchesDisplayMode(filterMode, d)
-                and (auraFilter ~= "HELPFUL" or UnitFrames:ShouldKeepGenericHelpfulAura(unit, d, timing, onlyMine,
-                    unitKey)) then
-                candidates[candidateCount] = d
+                keep = AuraMatchesDisplayMode(filterMode, d)
+                    and UnitFrames:ShouldKeepGenericHelpfulAura(unit, d, timing, onlyMine, unitKey)
+            elseif filterMode == "DISPELLABLE" or filterMode == "DISPELLABLE_OR_BOSS" then
+                local isDispellable = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, "HARMFUL|RAID")
+                if filterMode == "DISPELLABLE_OR_BOSS" and not isDispellable then
+                    local rawBoss = data.isBossAura
+                    local isBoss = not (issecretvalue and issecretvalue(rawBoss)) and rawBoss == true
+                    keep = isBoss
+                else
+                    keep = isDispellable
+                end
             else
-                candidates[candidateCount] = nil
-                candidateCount = candidateCount - 1
+                keep = AuraMatchesDisplayMode(filterMode, d)
             end
+        end
+
+        if keep then
+            candidates[candidateCount] = d
+        else
+            candidates[candidateCount] = nil
+            candidateCount = candidateCount - 1
+        end
+    end
+
+    local cachedAuras = nil
+    if auraElement then
+        if auraFilter == "HELPFUL" then
+            cachedAuras = auraElement.allBuffs
+        elseif auraFilter == "HARMFUL" then
+            cachedAuras = auraElement.allDebuffs
+        end
+    end
+
+    if cachedAuras and C_UnitAuras and C_UnitAuras.IsAuraFilteredOutByInstanceID then
+        for _, data in next, cachedAuras do
+            TryAddAura(data)
+        end
+    else
+        if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then return end
+        local slots = scratch._slotBuffer or {}
+        scratch._slotBuffer = slots
+        local slotCount = FillAuraSlotBuffer(slots, C_UnitAuras.GetAuraSlots(unit, auraFilter))
+        for i = 2, slotCount do
+            local data = C_UnitAuras.GetAuraDataBySlot(unit, slots[i])
+            TryAddAura(data)
         end
     end
 
@@ -3658,6 +3726,7 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     local palette                     = self:GetPalette(unitKey, unit, frame and frame._testMockClass or nil)
     local showTime                    = aura.showTime ~= false
     local showStacks                  = aura.showStacks ~= false
+    local auraElement                 = frame.Auras
 
     container._twichAuraBarList       = WipeSequentialTable(container._twichAuraBarList or {})
     container._twichAuraBarScratch    = container._twichAuraBarScratch or {}
@@ -3666,14 +3735,17 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
     if frame._isTestPreview then
         auraList = self:GetPreviewAuraListForFrame(frame, unitKey)
     elseif filter == "HELPFUL" then
-        CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HELPFUL", maxBars, onlyMine, filter)
+        CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HELPFUL", maxBars, onlyMine, filter,
+            auraElement)
     elseif filter == "HARMFUL" or filter == "DISPELLABLE" or filter == "DISPELLABLE_OR_BOSS" then
-        CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HARMFUL", maxBars, onlyMine, filter)
+        CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HARMFUL", maxBars, onlyMine, filter,
+            auraElement)
     else
-        CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HELPFUL", maxBars, onlyMine, filter)
+        CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HELPFUL", maxBars, onlyMine, filter,
+            auraElement)
         if #auraList < maxBars then
             CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HARMFUL", maxBars - #auraList,
-                onlyMine, filter)
+                onlyMine, filter, auraElement)
         end
     end
 
