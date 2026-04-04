@@ -436,7 +436,7 @@ function UnitFrames:LogAuraTimingOnce(contextKey, unit, auraData, reason, detail
 end
 
 function UnitFrames:ResolveAuraTiming(unit, auraData, contextKey, buffer)
-    local timing = buffer or {
+    local timing          = buffer or {
         duration = 0, expirationTime = 0, applications = 0, durationObject = nil,
     }
     timing.duration       = ReadAuraNumber(auraData and auraData.duration) or 0
@@ -2215,11 +2215,13 @@ function UnitFrames:UpdatePowerBarForRole(powerBar, unitKey, unit)
     else
         local restoreH = powerBar._designedHeight or 8
         if healerOnly then
-            UFDebugVerbose(self, string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=HEALER → RESTORE h=%d",
-                tostring(unitKey), restoreH))
+            UFDebugVerbose(self,
+                string.format("UpdatePowerBarForRole: key=%s healerOnly=true role=HEALER → RESTORE h=%d",
+                    tostring(unitKey), restoreH))
         else
-            UFDebugVerbose(self, string.format("UpdatePowerBarForRole: key=%s healerOnly=false → RESTORE h=%d", tostring(unitKey),
-                restoreH))
+            UFDebugVerbose(self,
+                string.format("UpdatePowerBarForRole: key=%s healerOnly=false → RESTORE h=%d", tostring(unitKey),
+                    restoreH))
         end
         powerBar:SetHeight(restoreH)
         powerBar:SetAlpha(1)
@@ -3645,7 +3647,8 @@ local function CollectAuraData(list, scratch, unit, unitKey, auraFilter, maxCoun
     local candidateCount = 0
     local isHarmfulAura = auraFilter:find("HARMFUL") ~= nil
     local playerFilter = auraFilter .. "|PLAYER"
-    local timingBuffer = scratch._timingBuffer or { duration = 0, expirationTime = 0, applications = 0, durationObject = nil }
+    local timingBuffer = scratch._timingBuffer or
+    { duration = 0, expirationTime = 0, applications = 0, durationObject = nil }
     scratch._timingBuffer = timingBuffer
 
     local function TryAddAura(data)
@@ -3671,7 +3674,8 @@ local function CollectAuraData(list, scratch, unit, unitKey, auraFilter, maxCoun
                 keep = AuraMatchesDisplayMode(filterMode, d)
                     and UnitFrames:ShouldKeepGenericHelpfulAura(unit, d, timing, onlyMine, unitKey)
             elseif filterMode == "DISPELLABLE" or filterMode == "DISPELLABLE_OR_BOSS" then
-                local isDispellable = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, "HARMFUL|RAID")
+                local isDispellable = not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID,
+                    "HARMFUL|RAID")
                 if filterMode == "DISPELLABLE_OR_BOSS" and not isDispellable then
                     local rawBoss = data.isBossAura
                     local isBoss = not (issecretvalue and issecretvalue(rawBoss)) and rawBoss == true
@@ -8202,764 +8206,767 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
 end
 
 do
-
-local PREVIEW_NAMES = {
-    "Aeloria", "Bromm", "Cyrene", "Dathor", "Elyndra", "Fenrik", "Galen", "Hestia", "Ilya", "Jorren",
-    "Kaelis", "Lyra", "Marek", "Nyssa", "Orin", "Perrin", "Quilla", "Riven", "Sylas", "Tarin",
-}
-
-local PREVIEW_CAST_ICONS = {
-    136243, 135963, 135734, 136208, 237561,
-}
-
-local function GetPreviewIndexFromLabel(label)
-    return tonumber(type(label) == "string" and label:match("(%d+)$")) or 1
-end
-
-local function GetPreviewRoleForUnitKey(unitKey, index)
-    if unitKey == "tankMember" then
-        return "TANK"
-    end
-    if unitKey == "partyMember" then
-        local partyRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
-        return partyRoles[index] or "DAMAGER"
-    end
-    if unitKey == "raidMember" then
-        local raidRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "HEALER" }
-        return raidRoles[((index - 1) % #raidRoles) + 1]
-    end
-    if unitKey == "boss" or (type(unitKey) == "string" and unitKey:match("^boss")) then
-        return "TANK"
-    end
-    if unitKey == "player" then
-        local assigned = UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") or ""
-        if assigned == nil or assigned == "" or assigned == "NONE" then
-            return "DAMAGER"
-        end
-        return assigned
-    end
-    return "DAMAGER"
-end
-
-local function BuildPreviewUnitState(unitKey, label, mockClass)
-    local index = GetPreviewIndexFromLabel(label)
-    local role = GetPreviewRoleForUnitKey(unitKey, index)
-    local isDead = (unitKey == "partyMember" or unitKey == "raidMember" or unitKey == "tankMember") and index == 2
-    local healthMax = 1000000 + (index * 125000)
-    local healthCur = math_max(1, math.floor(healthMax * (0.42 + ((index % 4) * 0.12))))
-    local powerMax = 100
-    local powerCur = math_max(1, math.floor(powerMax * (0.25 + ((index % 5) * 0.13))))
-    local castDuration = 2.6 + ((index % 3) * 0.4)
-    local castProgress = castDuration * 0.62
-    local name = label or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
-
-    if unitKey == "player" then
-        name = UnitName("player") or "Player"
-    elseif unitKey == "target" then
-        name = "Training Dummy"
-    elseif unitKey == "targettarget" then
-        name = "Off Target"
-    elseif unitKey == "focus" then
-        name = "Priority Add"
-    elseif unitKey == "pet" then
-        name = "Companion"
-    elseif unitKey == "boss" or (type(unitKey) == "string" and unitKey:match("^boss")) then
-        name = label or ("Boss " .. tostring(index))
-        healthMax = 3800000 + (index * 250000)
-        healthCur = math_max(1, math.floor(healthMax * (0.68 - ((index - 1) * 0.08))))
-    end
-
-    if isDead then
-        healthCur = 0
-        powerCur = 0
-        castProgress = 0
-    end
-
-    return {
-        index = index,
-        name = name,
-        role = role,
-        inCombat = unitKey ~= "player" and unitKey ~= "pet" and not (unitKey == "partyMember" and index == 1),
-        isDead = isDead,
-        isResting = unitKey == "player" or ((unitKey == "partyMember" or unitKey == "raidMember") and index == 1),
-        classToken = mockClass,
-        healthCur = healthCur,
-        healthMax = healthMax,
-        powerCur = powerCur,
-        powerMax = powerMax,
-        level = 80,
-        castName = (role == "HEALER" and "Flash Heal") or (role == "TANK" and "Shield Slam") or "Chaos Bolt",
-        castIcon = PREVIEW_CAST_ICONS[((index - 1) % #PREVIEW_CAST_ICONS) + 1],
-        castDuration = castDuration,
-        castProgress = castProgress,
-        incomingPlayer = math.floor(healthMax * 0.12),
-        incomingOther = math.floor(healthMax * 0.07),
-        classPowerMax = unitKey == "player" and 5 or nil,
-        classPowerValue = unitKey == "player" and 3 or nil,
-        infoTexts = {
-            role,
-            string.format("%d%%", math.floor((healthCur / healthMax) * 100 + 0.5)),
-            "Burst Window",
-        },
+    local PREVIEW_NAMES = {
+        "Aeloria", "Bromm", "Cyrene", "Dathor", "Elyndra", "Fenrik", "Galen", "Hestia", "Ilya", "Jorren",
+        "Kaelis", "Lyra", "Marek", "Nyssa", "Orin", "Perrin", "Quilla", "Riven", "Sylas", "Tarin",
     }
-end
 
-local function FormatPreviewNumber(value)
-    local numeric = tonumber(value) or 0
-    if BreakUpLargeNumbers then
-        return BreakUpLargeNumbers(math.floor(numeric + 0.5))
-    end
-    return tostring(math.floor(numeric + 0.5))
-end
-
-local function BuildPreviewTagText(tag, state)
-    if not state then return "" end
-    local text = tostring(tag or "")
-    local hpPercent = string.format("%d%%",
-        math.floor(((state.healthCur or 0) / math_max(1, state.healthMax or 1)) * 100 + 0.5))
-    local ppPercent = string.format("%d%%",
-        math.floor(((state.powerCur or 0) / math_max(1, state.powerMax or 1)) * 100 + 0.5))
-
-    text = text:gsub("%[name%((%d+)%)%]", function(length)
-        return string.sub(state.name or "", 1, tonumber(length) or 0)
-    end)
-    text = text:gsub("%[name%]", state.name or "")
-    text = text:gsub("%[curhp%]", FormatPreviewNumber(state.healthCur))
-    text = text:gsub("%[curpp%]", FormatPreviewNumber(state.powerCur))
-    text = text:gsub("%[missinghp%]", FormatPreviewNumber((state.healthMax or 0) - (state.healthCur or 0)))
-    text = text:gsub("%[missingpp%]", FormatPreviewNumber((state.powerMax or 0) - (state.powerCur or 0)))
-    text = text:gsub("%[perhp.-%]", hpPercent)
-    text = text:gsub("%[perpp.-%]", ppPercent)
-    text = text:gsub("%[level%]", tostring(state.level or 80))
-    text = text:gsub("%[classification%]", "")
-    text = text:gsub("%s+", " ")
-    return text:gsub("^%s+", ""):gsub("%s+$", "")
-end
-
-local function BuildPreviewAuraList(state)
-    local now = GetTime()
-    return {
-        {
-            name = "Arcane Intellect",
-            icon = 135932,
-            applications = 1,
-            duration = 3600,
-            expirationTime = now + 3200,
-            isHarmfulAura = false,
-            isPlayerAura = true,
-        },
-        {
-            name = "Power Word: Shield",
-            icon = 135940,
-            applications = 1,
-            duration = 15,
-            expirationTime = now + 9.4,
-            isHarmfulAura = false,
-            isPlayerAura = true,
-        },
-        {
-            name = "Weakened Soul",
-            icon = 136214,
-            applications = 1,
-            duration = 12,
-            expirationTime = now + 6.8,
-            isHarmfulAura = true,
-            dispelName = "Magic",
-            isPlayerAura = false,
-        },
-        {
-            name = "Shadow Vulnerability",
-            icon = 136207,
-            applications = math_max(1, (state and state.index or 1) % 4),
-            duration = 18,
-            expirationTime = now + 12.1,
-            isHarmfulAura = true,
-            isPlayerAura = true,
-            isBossAura = true,
-        },
+    local PREVIEW_CAST_ICONS = {
+        136243, 135963, 135734, 136208, 237561,
     }
-end
 
-function UnitFrames:GetPreviewAuraListForFrame(frame, unitKey)
-    local aura = self:GetAuraConfigFor(unitKey)
-    local maxIcons = math_max(1, math.floor(tonumber(aura.maxIcons) or 8))
-    local filter = aura.filter or "ALL"
-    local onlyMine = aura.onlyMine == true
-    local source = frame and frame._testAuraList or BuildPreviewAuraList(frame and frame._testState)
-    local filtered = {}
-    for _, data in ipairs(source) do
-        if data and ((not onlyMine) or data.isPlayerAura == true) and AuraMatchesDisplayMode(filter, data) then
-            if filter == "HELPFUL" and data.isHarmfulAura ~= true then
-                filtered[#filtered + 1] = data
-            elseif (filter == "HARMFUL" or filter == "DISPELLABLE" or filter == "DISPELLABLE_OR_BOSS") and data.isHarmfulAura == true then
-                filtered[#filtered + 1] = data
-            elseif filter == "ALL" then
-                filtered[#filtered + 1] = data
+    local function GetPreviewIndexFromLabel(label)
+        return tonumber(type(label) == "string" and label:match("(%d+)$")) or 1
+    end
+
+    local function GetPreviewRoleForUnitKey(unitKey, index)
+        if unitKey == "tankMember" then
+            return "TANK"
+        end
+        if unitKey == "partyMember" then
+            local partyRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
+            return partyRoles[index] or "DAMAGER"
+        end
+        if unitKey == "raidMember" then
+            local raidRoles = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "HEALER" }
+            return raidRoles[((index - 1) % #raidRoles) + 1]
+        end
+        if unitKey == "boss" or (type(unitKey) == "string" and unitKey:match("^boss")) then
+            return "TANK"
+        end
+        if unitKey == "player" then
+            local assigned = UnitGroupRolesAssigned and UnitGroupRolesAssigned("player") or ""
+            if assigned == nil or assigned == "" or assigned == "NONE" then
+                return "DAMAGER"
             end
+            return assigned
         end
-        if #filtered >= maxIcons then
-            break
-        end
-    end
-    return filtered
-end
-
-function UnitFrames:RefreshPreviewAuraIcons(frame, unitKey)
-    if not frame or not frame._isTestPreview or not frame.Auras then return end
-    local aura = self:GetAuraConfigFor(unitKey)
-    local element = frame.Auras
-    local list = self:GetPreviewAuraListForFrame(frame, unitKey)
-    local iconSize = Clamp(aura.iconSize or 18, 10, 40)
-    local spacing = Clamp(aura.spacing or 2, 0, 8)
-    local textStyle = self:GetTextConfigFor(unitKey)
-
-    element._previewIcons = element._previewIcons or {}
-
-    for index = 1, math_max(#list, #element._previewIcons) do
-        local auraData = list[index]
-        local button = element._previewIcons[index]
-        if auraData then
-            if not button then
-                button = CreateFrame("Frame", nil, element, "BackdropTemplate")
-                button:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-                button.icon = button:CreateTexture(nil, "ARTWORK")
-                button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
-                button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
-                button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-                button.count = button:CreateFontString(nil, "OVERLAY")
-                button.count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
-                button.time = button:CreateFontString(nil, "OVERLAY")
-                button.time:SetPoint("TOP", button, "BOTTOM", 0, -1)
-                button:SetScript("OnUpdate", function(self)
-                    if self._expiry and self._duration and self.time then
-                        local remaining = math_max(0, self._expiry - GetTime())
-                        self.time:SetText(UnitFrames:FormatAuraRemainingTime(remaining))
-                        self.time:SetShown(remaining > 0)
-                    end
-                end)
-                element._previewIcons[index] = button
-            end
-
-            button:SetSize(iconSize, iconSize)
-            button:ClearAllPoints()
-            button:SetPoint("BOTTOMLEFT", element, "BOTTOMLEFT", (index - 1) * (iconSize + spacing), 0)
-            button:SetBackdropColor(0.04, 0.05, 0.07, 0.95)
-            button:SetBackdropBorderColor(0.16, 0.18, 0.24, 0.85)
-            button.icon:SetTexture(auraData.icon)
-            button._duration = auraData.duration
-            button._expiry = auraData.expirationTime
-            self:ApplyFontObject(button.count, Clamp(iconSize * 0.48, 6, 16), textStyle.fontName, textStyle)
-            self:ApplyFontObject(button.time, Clamp(iconSize * 0.44, 6, 16), textStyle.fontName, textStyle)
-            button.count:SetText((aura.showStacks ~= false and auraData.applications and auraData.applications > 1)
-                and tostring(auraData.applications) or "")
-            button.count:SetShown(aura.showStacks ~= false and auraData.applications and auraData.applications > 1)
-            button.time:SetShown(aura.showTime ~= false and (auraData.duration or 0) > 0)
-            button:Show()
-        elseif button then
-            button:Hide()
-        end
+        return "DAMAGER"
     end
 
-    element:SetWidth((iconSize * math_max(1, #list)) + (spacing * math_max(0, #list - 1)))
-    element:SetHeight(iconSize + ((aura.showTime ~= false and #list > 0) and 10 or 0))
-end
+    local function BuildPreviewUnitState(unitKey, label, mockClass)
+        local index = GetPreviewIndexFromLabel(label)
+        local role = GetPreviewRoleForUnitKey(unitKey, index)
+        local isDead = (unitKey == "partyMember" or unitKey == "raidMember" or unitKey == "tankMember") and index == 2
+        local healthMax = 1000000 + (index * 125000)
+        local healthCur = math_max(1, math.floor(healthMax * (0.42 + ((index % 4) * 0.12))))
+        local powerMax = 100
+        local powerCur = math_max(1, math.floor(powerMax * (0.25 + ((index % 5) * 0.13))))
+        local castDuration = 2.6 + ((index % 3) * 0.4)
+        local castProgress = castDuration * 0.62
+        local name = label or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
 
-function UnitFrames:ApplyPreviewFrameData(frame, unitKey, label, mockClass)
-    if not frame then return end
-
-    local state = BuildPreviewUnitState(unitKey, label, mockClass)
-    frame._testState = state
-    frame._testRole = state.role
-    frame._testMockClass = mockClass
-    frame._testAuraList = BuildPreviewAuraList(state)
-    frame._testInCombat = state.inCombat == true
-    frame._testIsDead = state.isDead == true
-    frame._testIsResting = state.isResting == true and state.inCombat ~= true
-    frame._testReadyStatus = state.readyStatus or "ready"
-
-    self:ApplySingleFrameSettings(frame, unitKey)
-
-    if frame.Health then
-        self:ApplySmoothBarValue(frame.Health, state.healthCur, state.healthMax)
-    end
-    if frame.Power then
-        self:ApplySmoothBarValue(frame.Power, state.powerCur, state.powerMax)
-    end
-    self:ApplyPreviewHealPrediction(frame, unitKey, state)
-
-    local textCfg = self:GetTextConfigFor(unitKey)
-    if frame.Name then
-        frame.Name:SetText(BuildPreviewTagText(BuildNameTag(textCfg.nameFormat, textCfg.customNameTag), state))
-    end
-    if frame.HealthValue then
-        frame.HealthValue:SetText(BuildPreviewTagText(BuildHealthTag(textCfg.healthFormat, textCfg.customHealthTag),
-            state))
-    end
-    if frame.PowerValue then
-        frame.PowerValue:SetText(BuildPreviewTagText(BuildPowerTag(textCfg.powerFormat, textCfg.customPowerTag), state))
-    end
-
-    if frame.ClassPower and state.classPowerMax then
-        local cfg = self:GetDB().classBar or {}
-        local container = frame.ClassPower.container
-        local spacing = Clamp(cfg.spacing or 2, 0, 40)
-        local maxBars = math_max(1, math_min(state.classPowerMax or 0, #frame.ClassPower))
-        local width = container and container:GetWidth() or frame:GetWidth()
-        local height = container and container:GetHeight() or 10
-        local barWidth = math_max(4, (width - spacing * math_max(0, maxBars - 1)) / maxBars)
-        for i = 1, #frame.ClassPower do
-            local bar = frame.ClassPower[i]
-            if bar then
-                bar:ClearAllPoints()
-                if i <= maxBars then
-                    bar:SetSize(barWidth, height)
-                    if i == 1 then
-                        bar:SetPoint("LEFT", container, "LEFT", 0, 0)
-                    else
-                        bar:SetPoint("LEFT", frame.ClassPower[i - 1], "RIGHT", spacing, 0)
-                    end
-                    bar:SetShown(true)
-                    bar:SetMinMaxValues(0, 1)
-                    bar:SetValue(i <= (state.classPowerValue or 0) and 1 or 0.15)
-                else
-                    bar:Hide()
-                end
-            end
-        end
-    end
-
-    if frame.Castbar then
-        local castCfg = (self:GetDB().castbars and self:GetDB().castbars[ResolveCastbarScopeByUnitKey(unitKey)]) or {}
-        if castCfg.enabled == false then
-            frame.Castbar:Hide()
-        else
-            frame.Castbar:Show()
-            self:ApplyCastbarValue(frame.Castbar, state.castProgress, state.castDuration)
-            if frame.Castbar.Text then frame.Castbar.Text:SetText(state.castName or "Casting") end
-            if frame.Castbar.Time then
-                frame.Castbar.Time:SetText(string.format("%.1f",
-                    (state.castDuration or 0) - (state.castProgress or 0)))
-            end
-            if frame.Castbar.Icon then frame.Castbar.Icon:SetTexture(state.castIcon or 136243) end
-        end
-    end
-
-    self:UpdateRoleIcon(frame, unitKey)
-
-    if frame.TwichInfoBar and frame.TwichInfoBar.infoTexts then
-        local cfg = self:GetInfoBarConfig(unitKey)
-        for i = 1, 3 do
-            local fs = frame.TwichInfoBar.infoTexts[i]
-            local tc = cfg.texts[i]
-            if fs and tc and fs:IsShown() then
-                if tc.tag and tc.tag ~= "" then
-                    fs:SetText(BuildPreviewTagText(tc.tag, state))
-                else
-                    fs:SetText(state.infoTexts and state.infoTexts[i] or "")
-                end
-            end
-        end
-    end
-
-    local auraCfg = self:GetAuraConfigFor(unitKey)
-    if auraCfg.enabled ~= false then
-        if auraCfg.barMode == true then
-            self:RefreshAuraBarsForFrame(frame, unitKey)
-        else
-            self:RefreshPreviewAuraIcons(frame, unitKey)
-        end
-    end
-
-    self:UpdateStateIndicator(frame, unitKey, "combatIndicator")
-    self:UpdateStateIndicator(frame, unitKey, "restingIndicator")
-    self:UpdateStateIndicator(frame, unitKey, "spiritIndicator")
-    self:UpdateReadyCheckIndicator(frame, unitKey)
-end
-
-function UnitFrames:CreatePreviewFrame(parent, width, height, label, scopeOrUnitKey, mockClass)
-    local frame = CreateFrame("Button", nil, parent, "BackdropTemplate")
-    frame._isTestPreview = true
-    frame._testMockClass = mockClass
-    self:StyleFrame(frame)
-    self:ApplyPreviewFrameData(frame, scopeOrUnitKey, label, mockClass)
-    return frame
-end
-
-function UnitFrames:UpdatePreviewFrame(frame, width, height, label, scopeOrUnitKey, mockClass)
-    if not frame then return end
-    frame:SetSize(width, height)
-    self:ApplyPreviewFrameData(frame, scopeOrUnitKey, label, mockClass or frame._testMockClass)
-end
-
-function UnitFrames:BuildOrRefreshSinglePreviews()
-    local preview = self.previewFrames
-    local db = self:GetDB()
-
-    for _, entry in ipairs(PREVIEW_SINGLE_UNITS) do
-        local settings = self:GetUnitSettings(entry.key)
-        local layout = self:GetLayoutSettings(entry.key)
-        local width = Clamp(settings.width or 220, 80, 600)
-        local height = Clamp(settings.height or 42, 16, 180)
-        local mockClass = PREVIEW_MOCK_CLASSES[entry.key]
-
-        if not preview[entry.key] then
-            preview[entry.key] = self:CreatePreviewFrame(UIParent, width, height, entry.label, entry.key, mockClass)
-        else
-            self:UpdatePreviewFrame(preview[entry.key], width, height, entry.label, entry.key, mockClass)
+        if unitKey == "player" then
+            name = UnitName("player") or "Player"
+        elseif unitKey == "target" then
+            name = "Training Dummy"
+        elseif unitKey == "targettarget" then
+            name = "Off Target"
+        elseif unitKey == "focus" then
+            name = "Priority Add"
+        elseif unitKey == "pet" then
+            name = "Companion"
+        elseif unitKey == "boss" or (type(unitKey) == "string" and unitKey:match("^boss")) then
+            name = label or ("Boss " .. tostring(index))
+            healthMax = 3800000 + (index * 250000)
+            healthCur = math_max(1, math.floor(healthMax * (0.68 - ((index - 1) * 0.08))))
         end
 
-        local frame = preview[entry.key]
-        frame:ClearAllPoints()
-        frame:SetPoint(
-            layout.point or "BOTTOM",
-            UIParent,
-            layout.relativePoint or "BOTTOM",
-            tonumber(layout.x) or 0,
-            tonumber(layout.y) or 0
-        )
-        frame:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
-        self:UpdateStateIndicator(frame, entry.key, "combatIndicator")
-        self:UpdateStateIndicator(frame, entry.key, "restingIndicator")
-        self:UpdateStateIndicator(frame, entry.key, "spiritIndicator")
-        self:UpdateReadyCheckIndicator(frame, entry.key)
-        frame:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
-    end
-
-    if not preview.castbar then
-        preview.castbar = CreateFrame("StatusBar", nil, UIParent, "BackdropTemplate")
-        preview.castbar:SetClipsChildren(false)
-        preview.castbar:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Buttons\\WHITE8x8",
-            edgeSize = 1,
-        })
-        preview.castbar.bg = preview.castbar:CreateTexture(nil, "BACKGROUND")
-        preview.castbar.bg:SetAllPoints(preview.castbar)
-        preview.castbar.bg:SetColorTexture(0.05, 0.06, 0.08, 0.9)
-
-        local iconButton = CreateFrame("Button", nil, preview.castbar)
-        iconButton:SetSize(20, 20)
-        iconButton:SetPoint("RIGHT", preview.castbar, "LEFT", -6, 0)
-        local iconTex = iconButton:CreateTexture(nil, "ARTWORK")
-        iconTex:SetAllPoints(iconButton)
-        iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        iconTex:SetTexture(136243)
-        preview.castbar.iconButton = iconButton
-        preview.castbar.icon = iconTex
-
-        preview.castbar.spellText = preview.castbar:CreateFontString(nil, "OVERLAY")
-        preview.castbar.spellText:SetPoint("LEFT", preview.castbar, "LEFT", 6, 0)
-        self:ApplyFontObject(preview.castbar.spellText, 11)
-
-        preview.castbar.timeText = preview.castbar:CreateFontString(nil, "OVERLAY")
-        preview.castbar.timeText:SetPoint("RIGHT", preview.castbar, "RIGHT", -6, 0)
-        self:ApplyFontObject(preview.castbar.timeText, 10)
-    end
-
-    do
-        local castSettings = db.castbar or {}
-        local layout = self:GetLayoutSettings("castbar")
-        local palette = self:GetPalette("player", "player")
-        local text = self:GetTextConfigFor("player")
-        local castPreview = preview.castbar
-        local previewStyle = castSettings.style or "modern"
-        local previewTheme = castSettings.fantasyTheme or "holy"
-        local texName = (castSettings.texture and castSettings.texture ~= "") and castSettings.texture
-            or ((db.texture and db.texture ~= "") and db.texture or nil)
-        local previewTexture = texName and GetLSMTexture(texName) or GetThemeTexture()
-        castPreview:ClearAllPoints()
-        castPreview:SetPoint(
-            layout.point or "BOTTOM",
-            UIParent,
-            layout.relativePoint or "BOTTOM",
-            tonumber(layout.x) or -260,
-            tonumber(layout.y) or 220
-        )
-        castPreview:SetSize(Clamp(castSettings.width or 260, 120, 600), Clamp(castSettings.height or 20, 10, 60))
-        castPreview:SetStatusBarTexture(previewTexture)
-        if castSettings.useThemeAccentFill == true then
-            local accent = GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })
-            castPreview:SetStatusBarColor(accent[1] or 1, accent[2] or 1, accent[3] or 1, accent[4] or 1)
-        elseif castSettings.useCustomColor == true and type(castSettings.color) == "table" then
-            castPreview:SetStatusBarColor(castSettings.color[1] or 1, castSettings.color[2] or 1,
-                castSettings.color[3] or 1, castSettings.color[4] or 1)
-        else
-            castPreview:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 1)
+        if isDead then
+            healthCur = 0
+            powerCur = 0
+            castProgress = 0
         end
-        castPreview._twichCastbarStyle = previewStyle
-        castPreview._twichFantasyTheme = previewTheme
-        castPreview._twichFantasyEffectScale = castSettings.fantasyEffectScale or 1
-        castPreview:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
-        castPreview:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
-        if castPreview.bg then
-            castPreview.bg:SetColorTexture(palette.background[1], palette.background[2], palette.background[3], 0.9)
-        end
-        castPreview:SetMinMaxValues(0, 100)
-        castPreview:SetValue(64)
-        castPreview.spellText:SetText("Shadow Bolt")
-        castPreview.timeText:SetText("1.4")
-        castPreview.spellText:SetShown(castSettings.showSpellText ~= false)
-        castPreview.timeText:SetShown(castSettings.showTimeText ~= false)
-        local castbarTextStyle = {
-            fontName = castSettings.fontName or text.fontName,
-            outlineMode = text.outlineMode,
-            shadowEnabled = text.shadowEnabled,
-            shadowOffsetX = text.shadowOffsetX,
-            shadowOffsetY = text.shadowOffsetY,
+
+        return {
+            index = index,
+            name = name,
+            role = role,
+            inCombat = unitKey ~= "player" and unitKey ~= "pet" and not (unitKey == "partyMember" and index == 1),
+            isDead = isDead,
+            isResting = unitKey == "player" or ((unitKey == "partyMember" or unitKey == "raidMember") and index == 1),
+            classToken = mockClass,
+            healthCur = healthCur,
+            healthMax = healthMax,
+            powerCur = powerCur,
+            powerMax = powerMax,
+            level = 80,
+            castName = (role == "HEALER" and "Flash Heal") or (role == "TANK" and "Shield Slam") or "Chaos Bolt",
+            castIcon = PREVIEW_CAST_ICONS[((index - 1) % #PREVIEW_CAST_ICONS) + 1],
+            castDuration = castDuration,
+            castProgress = castProgress,
+            incomingPlayer = math.floor(healthMax * 0.12),
+            incomingOther = math.floor(healthMax * 0.07),
+            classPowerMax = unitKey == "player" and 5 or nil,
+            classPowerValue = unitKey == "player" and 3 or nil,
+            infoTexts = {
+                role,
+                string.format("%d%%", math.floor((healthCur / healthMax) * 100 + 0.5)),
+                "Burst Window",
+            },
         }
-        self:ApplyFontObject(castPreview.spellText, Clamp(castSettings.spellFontSize or 11, 6, 24),
-            castbarTextStyle.fontName, castbarTextStyle)
-        self:ApplyFontObject(castPreview.timeText, Clamp(castSettings.timeFontSize or 10, 6, 24),
-            castbarTextStyle.fontName, castbarTextStyle)
-        do
-            local iconSize = Clamp(castSettings.iconSize or castSettings.height or 20, 12, 50)
-            local showIcon = castSettings.showIcon ~= false
-            local iconPos  = castSettings.iconPosition or "outside"
-            local iconSide = castSettings.iconSide or "left"
-            if castPreview.iconButton then
-                castPreview.iconButton:SetSize(iconSize, iconSize)
-                castPreview.iconButton:SetShown(showIcon)
-            end
-            if castPreview.icon then
-                castPreview.icon:SetShown(showIcon)
-            end
-            if castPreview.iconButton then
-                castPreview.iconButton:ClearAllPoints()
-                if iconPos == "inside" then
-                    if iconSide == "right" then
-                        castPreview.iconButton:SetPoint("RIGHT", castPreview, "RIGHT", -4, 0)
-                    else
-                        castPreview.iconButton:SetPoint("LEFT", castPreview, "LEFT", 4, 0)
-                    end
-                else
-                    if iconSide == "right" then
-                        castPreview.iconButton:SetPoint("LEFT", castPreview, "RIGHT", 6, 0)
-                    else
-                        castPreview.iconButton:SetPoint("RIGHT", castPreview, "LEFT", -6, 0)
-                    end
+    end
+
+    local function FormatPreviewNumber(value)
+        local numeric = tonumber(value) or 0
+        if BreakUpLargeNumbers then
+            return BreakUpLargeNumbers(math.floor(numeric + 0.5))
+        end
+        return tostring(math.floor(numeric + 0.5))
+    end
+
+    local function BuildPreviewTagText(tag, state)
+        if not state then return "" end
+        local text = tostring(tag or "")
+        local hpPercent = string.format("%d%%",
+            math.floor(((state.healthCur or 0) / math_max(1, state.healthMax or 1)) * 100 + 0.5))
+        local ppPercent = string.format("%d%%",
+            math.floor(((state.powerCur or 0) / math_max(1, state.powerMax or 1)) * 100 + 0.5))
+
+        text = text:gsub("%[name%((%d+)%)%]", function(length)
+            return string.sub(state.name or "", 1, tonumber(length) or 0)
+        end)
+        text = text:gsub("%[name%]", state.name or "")
+        text = text:gsub("%[curhp%]", FormatPreviewNumber(state.healthCur))
+        text = text:gsub("%[curpp%]", FormatPreviewNumber(state.powerCur))
+        text = text:gsub("%[missinghp%]", FormatPreviewNumber((state.healthMax or 0) - (state.healthCur or 0)))
+        text = text:gsub("%[missingpp%]", FormatPreviewNumber((state.powerMax or 0) - (state.powerCur or 0)))
+        text = text:gsub("%[perhp.-%]", hpPercent)
+        text = text:gsub("%[perpp.-%]", ppPercent)
+        text = text:gsub("%[level%]", tostring(state.level or 80))
+        text = text:gsub("%[classification%]", "")
+        text = text:gsub("%s+", " ")
+        return text:gsub("^%s+", ""):gsub("%s+$", "")
+    end
+
+    local function BuildPreviewAuraList(state)
+        local now = GetTime()
+        return {
+            {
+                name = "Arcane Intellect",
+                icon = 135932,
+                applications = 1,
+                duration = 3600,
+                expirationTime = now + 3200,
+                isHarmfulAura = false,
+                isPlayerAura = true,
+            },
+            {
+                name = "Power Word: Shield",
+                icon = 135940,
+                applications = 1,
+                duration = 15,
+                expirationTime = now + 9.4,
+                isHarmfulAura = false,
+                isPlayerAura = true,
+            },
+            {
+                name = "Weakened Soul",
+                icon = 136214,
+                applications = 1,
+                duration = 12,
+                expirationTime = now + 6.8,
+                isHarmfulAura = true,
+                dispelName = "Magic",
+                isPlayerAura = false,
+            },
+            {
+                name = "Shadow Vulnerability",
+                icon = 136207,
+                applications = math_max(1, (state and state.index or 1) % 4),
+                duration = 18,
+                expirationTime = now + 12.1,
+                isHarmfulAura = true,
+                isPlayerAura = true,
+                isBossAura = true,
+            },
+        }
+    end
+
+    function UnitFrames:GetPreviewAuraListForFrame(frame, unitKey)
+        local aura = self:GetAuraConfigFor(unitKey)
+        local maxIcons = math_max(1, math.floor(tonumber(aura.maxIcons) or 8))
+        local filter = aura.filter or "ALL"
+        local onlyMine = aura.onlyMine == true
+        local source = frame and frame._testAuraList or BuildPreviewAuraList(frame and frame._testState)
+        local filtered = {}
+        for _, data in ipairs(source) do
+            if data and ((not onlyMine) or data.isPlayerAura == true) and AuraMatchesDisplayMode(filter, data) then
+                if filter == "HELPFUL" and data.isHarmfulAura ~= true then
+                    filtered[#filtered + 1] = data
+                elseif (filter == "HARMFUL" or filter == "DISPELLABLE" or filter == "DISPELLABLE_OR_BOSS") and data.isHarmfulAura == true then
+                    filtered[#filtered + 1] = data
+                elseif filter == "ALL" then
+                    filtered[#filtered + 1] = data
                 end
             end
-        end
-        ApplyStandaloneCastbarTextAnchors(castPreview, castSettings)
-        castPreview:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
-        castPreview:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
-        self:SyncFantasyCastbarVisuals(castPreview, true)
-    end
-
-    if not preview.bossAnchor then
-        preview.bossAnchor = CreateFrame("Frame", nil, UIParent)
-    end
-
-    do
-        local bossLayout = self:GetLayoutSettings("boss")
-        local bossGroup = self:GetGroupSettings("boss")
-        local bossUnit = self:GetUnitSettings("boss")
-        local width = Clamp(bossUnit.width or 220, 120, 500)
-        local height = Clamp(bossUnit.height or 36, 16, 120)
-        local geometry = ResolveBossGeometry(bossGroup, width, height, MAX_BOSS_FRAMES)
-
-        preview.bossAnchor:ClearAllPoints()
-        preview.bossAnchor:SetPoint(
-            bossLayout.point or "RIGHT",
-            UIParent,
-            bossLayout.relativePoint or "RIGHT",
-            tonumber(bossLayout.x) or -60,
-            tonumber(bossLayout.y) or 520
-        )
-        preview.bossAnchor:SetSize(geometry.width, geometry.height)
-
-        local bossClasses = { "DEATHKNIGHT", "WARLOCK", "MAGE", "WARRIOR", "PRIEST" }
-        for index = 1, MAX_BOSS_FRAMES do
-            local key = "bossPreview" .. index
-            local bossMockClass = bossClasses[index] or "DEATHKNIGHT"
-            if not preview[key] then
-                preview[key] = self:CreatePreviewFrame(preview.bossAnchor, width, height, "Boss " .. index, "boss",
-                    bossMockClass)
-            else
-                self:UpdatePreviewFrame(preview[key], width, height, "Boss " .. index, "boss", bossMockClass)
+            if #filtered >= maxIcons then
+                break
             end
-
-            preview[key]:ClearAllPoints()
-            local x, y = GetBossFrameOffset(geometry, index)
-            preview[key]:SetPoint("TOPLEFT", preview.bossAnchor, "TOPLEFT", x, -y)
-            preview[key]:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
-            preview[key]:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
         end
-    end
-end
-
-function UnitFrames:BuildPreviewGroups()
-    local preview = self.previewFrames
-
-    local function EnsureContainer(key)
-        if not preview[key] then
-            preview[key] = CreateFrame("Frame", nil, UIParent)
-            preview[key].rows = {}
-        end
-        return preview[key]
+        return filtered
     end
 
-    local function PositionContainer(container, layout)
-        container:ClearAllPoints()
-        container:SetPoint(
-            layout.point or "CENTER",
-            UIParent,
-            layout.relativePoint or "CENTER",
-            tonumber(layout.x) or 0,
-            tonumber(layout.y) or 0
-        )
-    end
+    function UnitFrames:RefreshPreviewAuraIcons(frame, unitKey)
+        if not frame or not frame._isTestPreview or not frame.Auras then return end
+        local aura = self:GetAuraConfigFor(unitKey)
+        local element = frame.Auras
+        local list = self:GetPreviewAuraListForFrame(frame, unitKey)
+        local iconSize = Clamp(aura.iconSize or 18, 10, 40)
+        local spacing = Clamp(aura.spacing or 2, 0, 8)
+        local textStyle = self:GetTextConfigFor(unitKey)
 
-    local party = EnsureContainer("party")
-    do
-        local settings = self:GetGroupSettings("party")
-        local layout = self:GetLayoutSettings("party")
-        local width = Clamp(settings.width or 180, 80, 500)
-        local height = Clamp(settings.height or 36, 14, 120)
-        local totalMembers = 5
-        local unitsPerColumn, maxColumns = ResolveGroupHeaderCounts("party", settings, 5, 1)
-        unitsPerColumn = math_min(totalMembers, unitsPerColumn)
-        maxColumns = math_max(1, math_min(maxColumns, math.ceil(totalMembers / unitsPerColumn)))
-        local geometry = BuildGroupGeometry(settings, width, height, unitsPerColumn, maxColumns, 6, 6, "DOWN",
-            settings.columnAnchorPoint or "LEFT")
-        PositionContainer(party, layout)
-        party:SetSize(geometry.width, geometry.height)
-        for index = 1, totalMembers do
-            local partyMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
-            if not party.rows[index] then
-                party.rows[index] = self:CreatePreviewFrame(party, width, height, "Party " .. index, "partyMember",
-                    partyMockClass)
-            else
-                self:UpdatePreviewFrame(party.rows[index], width, height, "Party " .. index, "partyMember",
-                    partyMockClass)
-            end
-            local row = party.rows[index]
-            local x, y = GetGroupGeometryOffset(geometry, index)
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", party, "TOPLEFT", x, -y)
-            row:SetShown(index <= (unitsPerColumn * maxColumns))
-        end
-    end
+        element._previewIcons = element._previewIcons or {}
 
-    local raid = EnsureContainer("raid")
-    do
-        local settings = self:GetGroupSettings("raid")
-        local layout = self:GetLayoutSettings("raid")
-        local width = Clamp(settings.width or 120, 70, 300)
-        local height = Clamp(settings.height or 30, 14, 80)
-        local totalMembers = 20
-        local unitsPerColumn, maxColumns = ResolveGroupHeaderCounts("raid", settings, 5, 4)
-        unitsPerColumn = math_min(totalMembers, unitsPerColumn)
-        maxColumns = math_max(1, math_min(maxColumns, math.ceil(totalMembers / unitsPerColumn)))
-        local geometry = BuildGroupGeometry(settings, width, height, unitsPerColumn, maxColumns, 6, 6, "DOWN",
-            settings.columnAnchorPoint or "LEFT")
-        PositionContainer(raid, layout)
-        raid:SetSize(geometry.width, geometry.height)
-        for index = 1, totalMembers do
-            local raidMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
-            if not raid.rows[index] then
-                raid.rows[index] = self:CreatePreviewFrame(raid, width, height, "Raid " .. index, "raidMember",
-                    raidMockClass)
-            else
-                self:UpdatePreviewFrame(raid.rows[index], width, height, "Raid " .. index, "raidMember", raidMockClass)
-            end
-            local row = raid.rows[index]
-            local x, y = GetGroupGeometryOffset(geometry, index)
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", raid, "TOPLEFT", x, -y)
-            row:SetShown(index <= (unitsPerColumn * maxColumns))
-        end
-    end
-
-    local tank = EnsureContainer("tank")
-    do
-        local settings = self:GetGroupSettings("tank")
-        local layout = self:GetLayoutSettings("tank")
-        local width = Clamp(settings.width or 180, 80, 400)
-        local height = Clamp(settings.height or 32, 14, 80)
-        local totalMembers = 2
-        local unitsPerColumn, maxColumns = ResolveGroupHeaderCounts("tank", settings, 2, 1)
-        unitsPerColumn = math_min(totalMembers, unitsPerColumn)
-        maxColumns = math_max(1, math_min(maxColumns, math.ceil(totalMembers / unitsPerColumn)))
-        local geometry = BuildGroupGeometry(settings, width, height, unitsPerColumn, maxColumns, 6, 6, "DOWN",
-            settings.columnAnchorPoint or "LEFT")
-        PositionContainer(tank, layout)
-        tank:SetSize(geometry.width, geometry.height)
-        local tankClasses = { "WARRIOR", "PALADIN" }
-        for index = 1, totalMembers do
-            local tankMockClass = tankClasses[index] or "WARRIOR"
-            if not tank.rows[index] then
-                tank.rows[index] = self:CreatePreviewFrame(tank, width, height, "Tank " .. index, "tankMember",
-                    tankMockClass)
-            else
-                self:UpdatePreviewFrame(tank.rows[index], width, height, "Tank " .. index, "tankMember", tankMockClass)
-            end
-            local row = tank.rows[index]
-            local x, y = GetGroupGeometryOffset(geometry, index)
-            row:ClearAllPoints()
-            row:SetPoint("TOPLEFT", tank, "TOPLEFT", x, -y)
-            row:SetShown(index <= (unitsPerColumn * maxColumns))
-        end
-    end
-end
-
-function UnitFrames:RefreshPreviewVisibility()
-    self:BuildPreviewGroups()
-    self:BuildOrRefreshSinglePreviews()
-
-    local db = self:GetDB()
-    local showPreview = db.testMode == true
-
-    for key, container in pairs(self.previewFrames) do
-        if container then
-            local shouldShow = showPreview
-            if key == "castbar" then
-                shouldShow = shouldShow and ((db.castbar and db.castbar.enabled ~= false) ~= false)
-            elseif key:match("^bossPreview") then
-                shouldShow = shouldShow and (self:GetGroupSettings("boss").enabled ~= false)
-            elseif key == "bossAnchor" then
-                shouldShow = shouldShow and (self:GetGroupSettings("boss").enabled ~= false)
-            elseif key == "player" or key == "target" or key == "targettarget" or key == "focus" or key == "pet" then
-                shouldShow = shouldShow and (self:GetUnitSettings(key).enabled ~= false)
-            elseif key == "party" or key == "raid" or key == "tank" then
-                shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
-                if key == "party" then
-                    shouldShow = shouldShow and (db.testPreviewParty ~= false)
-                elseif key == "raid" then
-                    shouldShow = shouldShow and (db.testPreviewRaid ~= false)
+        for index = 1, math_max(#list, #element._previewIcons) do
+            local auraData = list[index]
+            local button = element._previewIcons[index]
+            if auraData then
+                if not button then
+                    button = CreateFrame("Frame", nil, element, "BackdropTemplate")
+                    button:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile =
+                    "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+                    button.icon = button:CreateTexture(nil, "ARTWORK")
+                    button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+                    button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+                    button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                    button.count = button:CreateFontString(nil, "OVERLAY")
+                    button.count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
+                    button.time = button:CreateFontString(nil, "OVERLAY")
+                    button.time:SetPoint("TOP", button, "BOTTOM", 0, -1)
+                    button:SetScript("OnUpdate", function(self)
+                        if self._expiry and self._duration and self.time then
+                            local remaining = math_max(0, self._expiry - GetTime())
+                            self.time:SetText(UnitFrames:FormatAuraRemainingTime(remaining))
+                            self.time:SetShown(remaining > 0)
+                        end
+                    end)
+                    element._previewIcons[index] = button
                 end
+
+                button:SetSize(iconSize, iconSize)
+                button:ClearAllPoints()
+                button:SetPoint("BOTTOMLEFT", element, "BOTTOMLEFT", (index - 1) * (iconSize + spacing), 0)
+                button:SetBackdropColor(0.04, 0.05, 0.07, 0.95)
+                button:SetBackdropBorderColor(0.16, 0.18, 0.24, 0.85)
+                button.icon:SetTexture(auraData.icon)
+                button._duration = auraData.duration
+                button._expiry = auraData.expirationTime
+                self:ApplyFontObject(button.count, Clamp(iconSize * 0.48, 6, 16), textStyle.fontName, textStyle)
+                self:ApplyFontObject(button.time, Clamp(iconSize * 0.44, 6, 16), textStyle.fontName, textStyle)
+                button.count:SetText((aura.showStacks ~= false and auraData.applications and auraData.applications > 1)
+                    and tostring(auraData.applications) or "")
+                button.count:SetShown(aura.showStacks ~= false and auraData.applications and auraData.applications > 1)
+                button.time:SetShown(aura.showTime ~= false and (auraData.duration or 0) > 0)
+                button:Show()
+            elseif button then
+                button:Hide()
             end
-            container:SetShown(shouldShow)
         end
-    end
-end
 
-function UnitFrames:ApplyTestModeToSingles()
-    local db = self:GetDB()
-    if not self._testModeHiddenRoot then
-        self._testModeHiddenRoot = CreateFrame("Frame", nil, UIParent)
-        self._testModeHiddenRoot:Hide()
+        element:SetWidth((iconSize * math_max(1, #list)) + (spacing * math_max(0, #list - 1)))
+        element:SetHeight(iconSize + ((aura.showTime ~= false and #list > 0) and 10 or 0))
     end
 
-    local hiddenRoot = self._testModeHiddenRoot
-    local useHiddenParent = db.testMode == true
-
-    local function ApplyHiddenParent(frame)
+    function UnitFrames:ApplyPreviewFrameData(frame, unitKey, label, mockClass)
         if not frame then return end
-        frame._testModeOriginalParent = frame._testModeOriginalParent or frame:GetParent() or UIParent
-        local targetParent = useHiddenParent and hiddenRoot or frame._testModeOriginalParent
-        if frame:GetParent() ~= targetParent then
-            frame:SetParent(targetParent)
+
+        local state = BuildPreviewUnitState(unitKey, label, mockClass)
+        frame._testState = state
+        frame._testRole = state.role
+        frame._testMockClass = mockClass
+        frame._testAuraList = BuildPreviewAuraList(state)
+        frame._testInCombat = state.inCombat == true
+        frame._testIsDead = state.isDead == true
+        frame._testIsResting = state.isResting == true and state.inCombat ~= true
+        frame._testReadyStatus = state.readyStatus or "ready"
+
+        self:ApplySingleFrameSettings(frame, unitKey)
+
+        if frame.Health then
+            self:ApplySmoothBarValue(frame.Health, state.healthCur, state.healthMax)
         end
-        if useHiddenParent then
-            frame:Hide()
+        if frame.Power then
+            self:ApplySmoothBarValue(frame.Power, state.powerCur, state.powerMax)
+        end
+        self:ApplyPreviewHealPrediction(frame, unitKey, state)
+
+        local textCfg = self:GetTextConfigFor(unitKey)
+        if frame.Name then
+            frame.Name:SetText(BuildPreviewTagText(BuildNameTag(textCfg.nameFormat, textCfg.customNameTag), state))
+        end
+        if frame.HealthValue then
+            frame.HealthValue:SetText(BuildPreviewTagText(BuildHealthTag(textCfg.healthFormat, textCfg.customHealthTag),
+                state))
+        end
+        if frame.PowerValue then
+            frame.PowerValue:SetText(BuildPreviewTagText(BuildPowerTag(textCfg.powerFormat, textCfg.customPowerTag),
+                state))
+        end
+
+        if frame.ClassPower and state.classPowerMax then
+            local cfg = self:GetDB().classBar or {}
+            local container = frame.ClassPower.container
+            local spacing = Clamp(cfg.spacing or 2, 0, 40)
+            local maxBars = math_max(1, math_min(state.classPowerMax or 0, #frame.ClassPower))
+            local width = container and container:GetWidth() or frame:GetWidth()
+            local height = container and container:GetHeight() or 10
+            local barWidth = math_max(4, (width - spacing * math_max(0, maxBars - 1)) / maxBars)
+            for i = 1, #frame.ClassPower do
+                local bar = frame.ClassPower[i]
+                if bar then
+                    bar:ClearAllPoints()
+                    if i <= maxBars then
+                        bar:SetSize(barWidth, height)
+                        if i == 1 then
+                            bar:SetPoint("LEFT", container, "LEFT", 0, 0)
+                        else
+                            bar:SetPoint("LEFT", frame.ClassPower[i - 1], "RIGHT", spacing, 0)
+                        end
+                        bar:SetShown(true)
+                        bar:SetMinMaxValues(0, 1)
+                        bar:SetValue(i <= (state.classPowerValue or 0) and 1 or 0.15)
+                    else
+                        bar:Hide()
+                    end
+                end
+            end
+        end
+
+        if frame.Castbar then
+            local castCfg = (self:GetDB().castbars and self:GetDB().castbars[ResolveCastbarScopeByUnitKey(unitKey)]) or
+            {}
+            if castCfg.enabled == false then
+                frame.Castbar:Hide()
+            else
+                frame.Castbar:Show()
+                self:ApplyCastbarValue(frame.Castbar, state.castProgress, state.castDuration)
+                if frame.Castbar.Text then frame.Castbar.Text:SetText(state.castName or "Casting") end
+                if frame.Castbar.Time then
+                    frame.Castbar.Time:SetText(string.format("%.1f",
+                        (state.castDuration or 0) - (state.castProgress or 0)))
+                end
+                if frame.Castbar.Icon then frame.Castbar.Icon:SetTexture(state.castIcon or 136243) end
+            end
+        end
+
+        self:UpdateRoleIcon(frame, unitKey)
+
+        if frame.TwichInfoBar and frame.TwichInfoBar.infoTexts then
+            local cfg = self:GetInfoBarConfig(unitKey)
+            for i = 1, 3 do
+                local fs = frame.TwichInfoBar.infoTexts[i]
+                local tc = cfg.texts[i]
+                if fs and tc and fs:IsShown() then
+                    if tc.tag and tc.tag ~= "" then
+                        fs:SetText(BuildPreviewTagText(tc.tag, state))
+                    else
+                        fs:SetText(state.infoTexts and state.infoTexts[i] or "")
+                    end
+                end
+            end
+        end
+
+        local auraCfg = self:GetAuraConfigFor(unitKey)
+        if auraCfg.enabled ~= false then
+            if auraCfg.barMode == true then
+                self:RefreshAuraBarsForFrame(frame, unitKey)
+            else
+                self:RefreshPreviewAuraIcons(frame, unitKey)
+            end
+        end
+
+        self:UpdateStateIndicator(frame, unitKey, "combatIndicator")
+        self:UpdateStateIndicator(frame, unitKey, "restingIndicator")
+        self:UpdateStateIndicator(frame, unitKey, "spiritIndicator")
+        self:UpdateReadyCheckIndicator(frame, unitKey)
+    end
+
+    function UnitFrames:CreatePreviewFrame(parent, width, height, label, scopeOrUnitKey, mockClass)
+        local frame = CreateFrame("Button", nil, parent, "BackdropTemplate")
+        frame._isTestPreview = true
+        frame._testMockClass = mockClass
+        self:StyleFrame(frame)
+        self:ApplyPreviewFrameData(frame, scopeOrUnitKey, label, mockClass)
+        return frame
+    end
+
+    function UnitFrames:UpdatePreviewFrame(frame, width, height, label, scopeOrUnitKey, mockClass)
+        if not frame then return end
+        frame:SetSize(width, height)
+        self:ApplyPreviewFrameData(frame, scopeOrUnitKey, label, mockClass or frame._testMockClass)
+    end
+
+    function UnitFrames:BuildOrRefreshSinglePreviews()
+        local preview = self.previewFrames
+        local db = self:GetDB()
+
+        for _, entry in ipairs(PREVIEW_SINGLE_UNITS) do
+            local settings = self:GetUnitSettings(entry.key)
+            local layout = self:GetLayoutSettings(entry.key)
+            local width = Clamp(settings.width or 220, 80, 600)
+            local height = Clamp(settings.height or 42, 16, 180)
+            local mockClass = PREVIEW_MOCK_CLASSES[entry.key]
+
+            if not preview[entry.key] then
+                preview[entry.key] = self:CreatePreviewFrame(UIParent, width, height, entry.label, entry.key, mockClass)
+            else
+                self:UpdatePreviewFrame(preview[entry.key], width, height, entry.label, entry.key, mockClass)
+            end
+
+            local frame = preview[entry.key]
+            frame:ClearAllPoints()
+            frame:SetPoint(
+                layout.point or "BOTTOM",
+                UIParent,
+                layout.relativePoint or "BOTTOM",
+                tonumber(layout.x) or 0,
+                tonumber(layout.y) or 0
+            )
+            frame:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
+            self:UpdateStateIndicator(frame, entry.key, "combatIndicator")
+            self:UpdateStateIndicator(frame, entry.key, "restingIndicator")
+            self:UpdateStateIndicator(frame, entry.key, "spiritIndicator")
+            self:UpdateReadyCheckIndicator(frame, entry.key)
+            frame:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
+        end
+
+        if not preview.castbar then
+            preview.castbar = CreateFrame("StatusBar", nil, UIParent, "BackdropTemplate")
+            preview.castbar:SetClipsChildren(false)
+            preview.castbar:SetBackdrop({
+                bgFile = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                edgeSize = 1,
+            })
+            preview.castbar.bg = preview.castbar:CreateTexture(nil, "BACKGROUND")
+            preview.castbar.bg:SetAllPoints(preview.castbar)
+            preview.castbar.bg:SetColorTexture(0.05, 0.06, 0.08, 0.9)
+
+            local iconButton = CreateFrame("Button", nil, preview.castbar)
+            iconButton:SetSize(20, 20)
+            iconButton:SetPoint("RIGHT", preview.castbar, "LEFT", -6, 0)
+            local iconTex = iconButton:CreateTexture(nil, "ARTWORK")
+            iconTex:SetAllPoints(iconButton)
+            iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            iconTex:SetTexture(136243)
+            preview.castbar.iconButton = iconButton
+            preview.castbar.icon = iconTex
+
+            preview.castbar.spellText = preview.castbar:CreateFontString(nil, "OVERLAY")
+            preview.castbar.spellText:SetPoint("LEFT", preview.castbar, "LEFT", 6, 0)
+            self:ApplyFontObject(preview.castbar.spellText, 11)
+
+            preview.castbar.timeText = preview.castbar:CreateFontString(nil, "OVERLAY")
+            preview.castbar.timeText:SetPoint("RIGHT", preview.castbar, "RIGHT", -6, 0)
+            self:ApplyFontObject(preview.castbar.timeText, 10)
+        end
+
+        do
+            local castSettings = db.castbar or {}
+            local layout = self:GetLayoutSettings("castbar")
+            local palette = self:GetPalette("player", "player")
+            local text = self:GetTextConfigFor("player")
+            local castPreview = preview.castbar
+            local previewStyle = castSettings.style or "modern"
+            local previewTheme = castSettings.fantasyTheme or "holy"
+            local texName = (castSettings.texture and castSettings.texture ~= "") and castSettings.texture
+                or ((db.texture and db.texture ~= "") and db.texture or nil)
+            local previewTexture = texName and GetLSMTexture(texName) or GetThemeTexture()
+            castPreview:ClearAllPoints()
+            castPreview:SetPoint(
+                layout.point or "BOTTOM",
+                UIParent,
+                layout.relativePoint or "BOTTOM",
+                tonumber(layout.x) or -260,
+                tonumber(layout.y) or 220
+            )
+            castPreview:SetSize(Clamp(castSettings.width or 260, 120, 600), Clamp(castSettings.height or 20, 10, 60))
+            castPreview:SetStatusBarTexture(previewTexture)
+            if castSettings.useThemeAccentFill == true then
+                local accent = GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })
+                castPreview:SetStatusBarColor(accent[1] or 1, accent[2] or 1, accent[3] or 1, accent[4] or 1)
+            elseif castSettings.useCustomColor == true and type(castSettings.color) == "table" then
+                castPreview:SetStatusBarColor(castSettings.color[1] or 1, castSettings.color[2] or 1,
+                    castSettings.color[3] or 1, castSettings.color[4] or 1)
+            else
+                castPreview:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 1)
+            end
+            castPreview._twichCastbarStyle = previewStyle
+            castPreview._twichFantasyTheme = previewTheme
+            castPreview._twichFantasyEffectScale = castSettings.fantasyEffectScale or 1
+            castPreview:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
+            castPreview:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
+            if castPreview.bg then
+                castPreview.bg:SetColorTexture(palette.background[1], palette.background[2], palette.background[3], 0.9)
+            end
+            castPreview:SetMinMaxValues(0, 100)
+            castPreview:SetValue(64)
+            castPreview.spellText:SetText("Shadow Bolt")
+            castPreview.timeText:SetText("1.4")
+            castPreview.spellText:SetShown(castSettings.showSpellText ~= false)
+            castPreview.timeText:SetShown(castSettings.showTimeText ~= false)
+            local castbarTextStyle = {
+                fontName = castSettings.fontName or text.fontName,
+                outlineMode = text.outlineMode,
+                shadowEnabled = text.shadowEnabled,
+                shadowOffsetX = text.shadowOffsetX,
+                shadowOffsetY = text.shadowOffsetY,
+            }
+            self:ApplyFontObject(castPreview.spellText, Clamp(castSettings.spellFontSize or 11, 6, 24),
+                castbarTextStyle.fontName, castbarTextStyle)
+            self:ApplyFontObject(castPreview.timeText, Clamp(castSettings.timeFontSize or 10, 6, 24),
+                castbarTextStyle.fontName, castbarTextStyle)
+            do
+                local iconSize = Clamp(castSettings.iconSize or castSettings.height or 20, 12, 50)
+                local showIcon = castSettings.showIcon ~= false
+                local iconPos  = castSettings.iconPosition or "outside"
+                local iconSide = castSettings.iconSide or "left"
+                if castPreview.iconButton then
+                    castPreview.iconButton:SetSize(iconSize, iconSize)
+                    castPreview.iconButton:SetShown(showIcon)
+                end
+                if castPreview.icon then
+                    castPreview.icon:SetShown(showIcon)
+                end
+                if castPreview.iconButton then
+                    castPreview.iconButton:ClearAllPoints()
+                    if iconPos == "inside" then
+                        if iconSide == "right" then
+                            castPreview.iconButton:SetPoint("RIGHT", castPreview, "RIGHT", -4, 0)
+                        else
+                            castPreview.iconButton:SetPoint("LEFT", castPreview, "LEFT", 4, 0)
+                        end
+                    else
+                        if iconSide == "right" then
+                            castPreview.iconButton:SetPoint("LEFT", castPreview, "RIGHT", 6, 0)
+                        else
+                            castPreview.iconButton:SetPoint("RIGHT", castPreview, "LEFT", -6, 0)
+                        end
+                    end
+                end
+            end
+            ApplyStandaloneCastbarTextAnchors(castPreview, castSettings)
+            castPreview:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
+            castPreview:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
+            self:SyncFantasyCastbarVisuals(castPreview, true)
+        end
+
+        if not preview.bossAnchor then
+            preview.bossAnchor = CreateFrame("Frame", nil, UIParent)
+        end
+
+        do
+            local bossLayout = self:GetLayoutSettings("boss")
+            local bossGroup = self:GetGroupSettings("boss")
+            local bossUnit = self:GetUnitSettings("boss")
+            local width = Clamp(bossUnit.width or 220, 120, 500)
+            local height = Clamp(bossUnit.height or 36, 16, 120)
+            local geometry = ResolveBossGeometry(bossGroup, width, height, MAX_BOSS_FRAMES)
+
+            preview.bossAnchor:ClearAllPoints()
+            preview.bossAnchor:SetPoint(
+                bossLayout.point or "RIGHT",
+                UIParent,
+                bossLayout.relativePoint or "RIGHT",
+                tonumber(bossLayout.x) or -60,
+                tonumber(bossLayout.y) or 520
+            )
+            preview.bossAnchor:SetSize(geometry.width, geometry.height)
+
+            local bossClasses = { "DEATHKNIGHT", "WARLOCK", "MAGE", "WARRIOR", "PRIEST" }
+            for index = 1, MAX_BOSS_FRAMES do
+                local key = "bossPreview" .. index
+                local bossMockClass = bossClasses[index] or "DEATHKNIGHT"
+                if not preview[key] then
+                    preview[key] = self:CreatePreviewFrame(preview.bossAnchor, width, height, "Boss " .. index, "boss",
+                        bossMockClass)
+                else
+                    self:UpdatePreviewFrame(preview[key], width, height, "Boss " .. index, "boss", bossMockClass)
+                end
+
+                preview[key]:ClearAllPoints()
+                local x, y = GetBossFrameOffset(geometry, index)
+                preview[key]:SetPoint("TOPLEFT", preview.bossAnchor, "TOPLEFT", x, -y)
+                preview[key]:SetScale(Clamp(db.scale or 1, 0.6, 1.6))
+                preview[key]:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
+            end
         end
     end
 
-    ApplyHiddenParent(self.frames and self.frames.player)
-    ApplyHiddenParent(self.frames and self.frames.castbar)
-end
+    function UnitFrames:BuildPreviewGroups()
+        local preview = self.previewFrames
 
+        local function EnsureContainer(key)
+            if not preview[key] then
+                preview[key] = CreateFrame("Frame", nil, UIParent)
+                preview[key].rows = {}
+            end
+            return preview[key]
+        end
+
+        local function PositionContainer(container, layout)
+            container:ClearAllPoints()
+            container:SetPoint(
+                layout.point or "CENTER",
+                UIParent,
+                layout.relativePoint or "CENTER",
+                tonumber(layout.x) or 0,
+                tonumber(layout.y) or 0
+            )
+        end
+
+        local party = EnsureContainer("party")
+        do
+            local settings = self:GetGroupSettings("party")
+            local layout = self:GetLayoutSettings("party")
+            local width = Clamp(settings.width or 180, 80, 500)
+            local height = Clamp(settings.height or 36, 14, 120)
+            local totalMembers = 5
+            local unitsPerColumn, maxColumns = ResolveGroupHeaderCounts("party", settings, 5, 1)
+            unitsPerColumn = math_min(totalMembers, unitsPerColumn)
+            maxColumns = math_max(1, math_min(maxColumns, math.ceil(totalMembers / unitsPerColumn)))
+            local geometry = BuildGroupGeometry(settings, width, height, unitsPerColumn, maxColumns, 6, 6, "DOWN",
+                settings.columnAnchorPoint or "LEFT")
+            PositionContainer(party, layout)
+            party:SetSize(geometry.width, geometry.height)
+            for index = 1, totalMembers do
+                local partyMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
+                if not party.rows[index] then
+                    party.rows[index] = self:CreatePreviewFrame(party, width, height, "Party " .. index, "partyMember",
+                        partyMockClass)
+                else
+                    self:UpdatePreviewFrame(party.rows[index], width, height, "Party " .. index, "partyMember",
+                        partyMockClass)
+                end
+                local row = party.rows[index]
+                local x, y = GetGroupGeometryOffset(geometry, index)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", party, "TOPLEFT", x, -y)
+                row:SetShown(index <= (unitsPerColumn * maxColumns))
+            end
+        end
+
+        local raid = EnsureContainer("raid")
+        do
+            local settings = self:GetGroupSettings("raid")
+            local layout = self:GetLayoutSettings("raid")
+            local width = Clamp(settings.width or 120, 70, 300)
+            local height = Clamp(settings.height or 30, 14, 80)
+            local totalMembers = 20
+            local unitsPerColumn, maxColumns = ResolveGroupHeaderCounts("raid", settings, 5, 4)
+            unitsPerColumn = math_min(totalMembers, unitsPerColumn)
+            maxColumns = math_max(1, math_min(maxColumns, math.ceil(totalMembers / unitsPerColumn)))
+            local geometry = BuildGroupGeometry(settings, width, height, unitsPerColumn, maxColumns, 6, 6, "DOWN",
+                settings.columnAnchorPoint or "LEFT")
+            PositionContainer(raid, layout)
+            raid:SetSize(geometry.width, geometry.height)
+            for index = 1, totalMembers do
+                local raidMockClass = PREVIEW_CLASS_TOKENS[((index - 1) % #PREVIEW_CLASS_TOKENS) + 1]
+                if not raid.rows[index] then
+                    raid.rows[index] = self:CreatePreviewFrame(raid, width, height, "Raid " .. index, "raidMember",
+                        raidMockClass)
+                else
+                    self:UpdatePreviewFrame(raid.rows[index], width, height, "Raid " .. index, "raidMember",
+                        raidMockClass)
+                end
+                local row = raid.rows[index]
+                local x, y = GetGroupGeometryOffset(geometry, index)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", raid, "TOPLEFT", x, -y)
+                row:SetShown(index <= (unitsPerColumn * maxColumns))
+            end
+        end
+
+        local tank = EnsureContainer("tank")
+        do
+            local settings = self:GetGroupSettings("tank")
+            local layout = self:GetLayoutSettings("tank")
+            local width = Clamp(settings.width or 180, 80, 400)
+            local height = Clamp(settings.height or 32, 14, 80)
+            local totalMembers = 2
+            local unitsPerColumn, maxColumns = ResolveGroupHeaderCounts("tank", settings, 2, 1)
+            unitsPerColumn = math_min(totalMembers, unitsPerColumn)
+            maxColumns = math_max(1, math_min(maxColumns, math.ceil(totalMembers / unitsPerColumn)))
+            local geometry = BuildGroupGeometry(settings, width, height, unitsPerColumn, maxColumns, 6, 6, "DOWN",
+                settings.columnAnchorPoint or "LEFT")
+            PositionContainer(tank, layout)
+            tank:SetSize(geometry.width, geometry.height)
+            local tankClasses = { "WARRIOR", "PALADIN" }
+            for index = 1, totalMembers do
+                local tankMockClass = tankClasses[index] or "WARRIOR"
+                if not tank.rows[index] then
+                    tank.rows[index] = self:CreatePreviewFrame(tank, width, height, "Tank " .. index, "tankMember",
+                        tankMockClass)
+                else
+                    self:UpdatePreviewFrame(tank.rows[index], width, height, "Tank " .. index, "tankMember",
+                        tankMockClass)
+                end
+                local row = tank.rows[index]
+                local x, y = GetGroupGeometryOffset(geometry, index)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", tank, "TOPLEFT", x, -y)
+                row:SetShown(index <= (unitsPerColumn * maxColumns))
+            end
+        end
+    end
+
+    function UnitFrames:RefreshPreviewVisibility()
+        self:BuildPreviewGroups()
+        self:BuildOrRefreshSinglePreviews()
+
+        local db = self:GetDB()
+        local showPreview = db.testMode == true
+
+        for key, container in pairs(self.previewFrames) do
+            if container then
+                local shouldShow = showPreview
+                if key == "castbar" then
+                    shouldShow = shouldShow and ((db.castbar and db.castbar.enabled ~= false) ~= false)
+                elseif key:match("^bossPreview") then
+                    shouldShow = shouldShow and (self:GetGroupSettings("boss").enabled ~= false)
+                elseif key == "bossAnchor" then
+                    shouldShow = shouldShow and (self:GetGroupSettings("boss").enabled ~= false)
+                elseif key == "player" or key == "target" or key == "targettarget" or key == "focus" or key == "pet" then
+                    shouldShow = shouldShow and (self:GetUnitSettings(key).enabled ~= false)
+                elseif key == "party" or key == "raid" or key == "tank" then
+                    shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
+                    if key == "party" then
+                        shouldShow = shouldShow and (db.testPreviewParty ~= false)
+                    elseif key == "raid" then
+                        shouldShow = shouldShow and (db.testPreviewRaid ~= false)
+                    end
+                end
+                container:SetShown(shouldShow)
+            end
+        end
+    end
+
+    function UnitFrames:ApplyTestModeToSingles()
+        local db = self:GetDB()
+        if not self._testModeHiddenRoot then
+            self._testModeHiddenRoot = CreateFrame("Frame", nil, UIParent)
+            self._testModeHiddenRoot:Hide()
+        end
+
+        local hiddenRoot = self._testModeHiddenRoot
+        local useHiddenParent = db.testMode == true
+
+        local function ApplyHiddenParent(frame)
+            if not frame then return end
+            frame._testModeOriginalParent = frame._testModeOriginalParent or frame:GetParent() or UIParent
+            local targetParent = useHiddenParent and hiddenRoot or frame._testModeOriginalParent
+            if frame:GetParent() ~= targetParent then
+                frame:SetParent(targetParent)
+            end
+            if useHiddenParent then
+                frame:Hide()
+            end
+        end
+
+        ApplyHiddenParent(self.frames and self.frames.player)
+        ApplyHiddenParent(self.frames and self.frames.castbar)
+    end
 end
 
 function UnitFrames:ApplyBlizzardPlayerCastbarVisibility()
@@ -9339,8 +9346,9 @@ function UnitFrames:StyleFrame(frame)
         classPower.PostVisibility = function(element, isVisible)
             local cfg = UnitFrames:GetDB().classBar or {}
             local shouldShow = cfg.enabled ~= false and isVisible
-            UFDebugVerbose(UnitFrames, string.format("ClassPower.PostVisibility: isVisible=%s enabled=%s → container shown=%s",
-                tostring(isVisible), tostring(cfg.enabled ~= false), tostring(shouldShow)))
+            UFDebugVerbose(UnitFrames,
+                string.format("ClassPower.PostVisibility: isVisible=%s enabled=%s → container shown=%s",
+                    tostring(isVisible), tostring(cfg.enabled ~= false), tostring(shouldShow)))
             element.container:SetShown(shouldShow)
         end
         classPower.PostUpdate = function(element, unit2, min2, max2, hasMaxChanged)
@@ -10479,5 +10487,3 @@ function UnitFrames:RefreshFromOptions()
         self:RefreshAllFrames()
     end
 end
-
-

@@ -1,20 +1,20 @@
 ---@diagnostic disable: undefined-field, inject-field
-local TwichRx                          = _G.TwichRx
+local TwichRx                           = _G.TwichRx
 ---@type TwichUI
-local T                                = unpack(TwichRx)
+local T                                 = unpack(TwichRx)
 
 ---@type ConfigurationModule
-local ConfigurationModule              = T:GetModule("Configuration")
-local Widgets                          = ConfigurationModule.Widgets
-local LibStub                          = _G.LibStub
+local ConfigurationModule               = T:GetModule("Configuration")
+local Widgets                           = ConfigurationModule.Widgets
+local LibStub                           = _G.LibStub
 
 ---@class UnitFramesConfigurationOptions
-local Options                          = ConfigurationModule.Options.UnitFrames or {}
-ConfigurationModule.Options.UnitFrames = Options
+local Options                           = ConfigurationModule.Options.UnitFrames or {}
+ConfigurationModule.Options.UnitFrames  = Options
 
-local DEFAULT_SENTINEL                 = "__default"
+local DEFAULT_SENTINEL                  = "__default"
 
-local POINT_VALUES                     = {
+local POINT_VALUES                      = {
     TOPLEFT = "Top Left",
     TOP = "Top",
     TOPRIGHT = "Top Right",
@@ -26,7 +26,7 @@ local POINT_VALUES                     = {
     BOTTOMRIGHT = "Bottom Right",
 }
 
-local OUTLINE_VALUES                   = {
+local OUTLINE_VALUES                    = {
     OUTLINE = "Outline",
     THICKOUTLINE = "Thick Outline",
     MONOCHROME = "Monochrome",
@@ -35,14 +35,14 @@ local OUTLINE_VALUES                   = {
     NONE = "None",
 }
 
-local NAME_FORMAT_VALUES               = {
+local NAME_FORMAT_VALUES                = {
     none = "None",
     full = "Full Name",
     short = "Short Name",
     custom = "Custom Tag",
 }
 
-local RESOURCE_FORMAT_VALUES           = {
+local RESOURCE_FORMAT_VALUES            = {
     none = "None",
     percent = "Percent",
     current = "Current Value",
@@ -51,7 +51,7 @@ local RESOURCE_FORMAT_VALUES           = {
     custom = "Custom Tag",
 }
 
-local AURA_FILTER_VALUES               = {
+local AURA_FILTER_VALUES                = {
     ALL = "All",
     HELPFUL = "Helpful",
     HARMFUL = "Harmful",
@@ -60,57 +60,57 @@ local AURA_FILTER_VALUES               = {
 }
 
 -- Aura Watcher constants
-local INDICATOR_TYPES                  = {
+local INDICATOR_TYPES                   = {
     icons  = "Icon Cluster",
     border = "Border Highlight",
 }
-local INDICATOR_SOURCES                = {
+local INDICATOR_SOURCES                 = {
     HELPFUL             = "Helpful",
     HARMFUL             = "Harmful",
     DISPELLABLE         = "Dispellable",
     DISPELLABLE_OR_BOSS = "Dispellable or Boss",
     ALL                 = "All",
 }
-local GROW_DIR_VALUES                  = {
+local GROW_DIR_VALUES                   = {
     RIGHT = "Right →",
     LEFT  = "← Left",
     UP    = "↑ Up",
     DOWN  = "↓ Down",
 }
-local MAX_INDICATORS                   = 6
+local MAX_INDICATORS                    = 6
 
-local HEALTH_MODE_VALUES               = {
+local HEALTH_MODE_VALUES                = {
     theme = "Theme",
     class = "Class",
     custom = "Custom",
 }
 
-local UNIT_HEALTH_MODE_VALUES          = {
+local UNIT_HEALTH_MODE_VALUES           = {
     inherit = "Inherit",
     theme = "Theme",
     class = "Class",
     custom = "Custom",
 }
 
-local POWER_COLOR_MODES                = {
+local POWER_COLOR_MODES                 = {
     custom    = "Custom",
     powertype = "Power Type",
 }
 
-local UNIT_POWER_COLOR_MODES           = {
+local UNIT_POWER_COLOR_MODES            = {
     inherit   = "Inherit",
     custom    = "Custom",
     powertype = "Power Type",
 }
 
-local ROLE_ICON_CORNER_VALUES          = {
+local ROLE_ICON_CORNER_VALUES           = {
     TOPLEFT     = "Top Left",
     TOPRIGHT    = "Top Right",
     BOTTOMLEFT  = "Bottom Left",
     BOTTOMRIGHT = "Bottom Right",
 }
 
-local ROLE_ICON_FILTER_VALUES          = {
+local ROLE_ICON_FILTER_VALUES           = {
     all      = "All (fallback to DPS)",
     assigned = "Assigned Roles Only",
     nonDps   = "Healers & Tanks",
@@ -118,30 +118,30 @@ local ROLE_ICON_FILTER_VALUES          = {
     tanks    = "Tanks Only",
 }
 
-local ROLE_ICON_TYPE_VALUES            = {
+local ROLE_ICON_TYPE_VALUES             = {
     standard = "Standard (Blizzard)",
     twich = "Twich Icons",
 }
 
-local ROLE_ICON_PREVIEW_TEXTURE        = "Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES"
-local ROLE_ICON_PREVIEW_TWICH          = {
+local ROLE_ICON_PREVIEW_TEXTURE         = "Interface\\LFGFrame\\UI-LFG-ICON-PORTRAITROLES"
+local ROLE_ICON_PREVIEW_TWICH           = {
     TANK = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Tank", width = 64, height = 74 },
     HEALER = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_Healer", width = 64, height = 68 },
     DAMAGER = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Role_DPS", width = 64, height = 74 },
 }
-local ROLE_ICON_PREVIEW_STANDARD       = {
+local ROLE_ICON_PREVIEW_STANDARD        = {
     TANK = { texture = ROLE_ICON_PREVIEW_TEXTURE, width = 19, height = 19, textureWidth = 64, textureHeight = 64, texCoord = { 0, 19 / 64, 22 / 64, 41 / 64 } },
     HEALER = { texture = ROLE_ICON_PREVIEW_TEXTURE, width = 19, height = 19, textureWidth = 64, textureHeight = 64, texCoord = { 20 / 64, 39 / 64, 1 / 64, 20 / 64 } },
     DAMAGER = { texture = ROLE_ICON_PREVIEW_TEXTURE, width = 19, height = 19, textureWidth = 64, textureHeight = 64, texCoord = { 20 / 64, 39 / 64, 22 / 64, 41 / 64 } },
 }
 
-local STATE_ICON_PREVIEW_TEXTURE       = "Interface\\CharacterFrame\\UI-StateIcon"
-local STATE_ICON_PREVIEW_TWICH         = {
+local STATE_ICON_PREVIEW_TEXTURE        = "Interface\\CharacterFrame\\UI-StateIcon"
+local STATE_ICON_PREVIEW_TWICH          = {
     combat = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Combat", width = 64, height = 70 },
     resting = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Resting", width = 64, height = 63 },
     spirit = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
 }
-local STATE_ICON_PREVIEW_STANDARD      = {
+local STATE_ICON_PREVIEW_STANDARD       = {
     combat = { texture = STATE_ICON_PREVIEW_TEXTURE, width = 32, height = 32, textureWidth = 64, textureHeight = 64, texCoord = { 0.5, 1, 0, 0.49 } },
     resting = { texture = STATE_ICON_PREVIEW_TEXTURE, width = 32, height = 27, textureWidth = 64, textureHeight = 64, texCoord = { 0, 0.5, 0, 0.421875 } },
     spirit = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
@@ -151,18 +151,18 @@ local READY_CHECK_ICON_PREVIEW_STANDARD = {
     ready = { texture = "Interface\\RaidFrame\\ReadyCheck-Ready", width = 32, height = 32 },
     notready = { texture = "Interface\\RaidFrame\\ReadyCheck-NotReady", width = 32, height = 32 },
 }
-local READY_CHECK_ICON_PREVIEW_LEGACY  = {
+local READY_CHECK_ICON_PREVIEW_LEGACY   = {
     ready = { texture = "Interface\\RaidFrame\\ReadyCheck-Ready", width = 32, height = 32 },
     notready = { texture = "Interface\\RaidFrame\\ReadyCheck-NotReady", width = 32, height = 32 },
 }
 
-local STATE_INDICATOR_DEFAULTS         = {
+local STATE_INDICATOR_DEFAULTS          = {
     combatIndicator = { point = "CENTER", relativePoint = "TOP", offsetX = 0, offsetY = 10, size = 20, alpha = 1 },
     restingIndicator = { point = "CENTER", relativePoint = "TOPLEFT", offsetX = -2, offsetY = 8, size = 18, alpha = 1 },
     spiritIndicator = { point = "CENTER", relativePoint = "CENTER", offsetX = 0, offsetY = 0, size = 24, alpha = 0.9 },
 }
 
-local READY_CHECK_INDICATOR_DEFAULTS   = {
+local READY_CHECK_INDICATOR_DEFAULTS    = {
     point = "TOP",
     relativePoint = "TOP",
     offsetX = 0,
@@ -171,26 +171,26 @@ local READY_CHECK_INDICATOR_DEFAULTS   = {
     alpha = 1,
 }
 
-local READY_CHECK_ICON_TYPE_VALUES     = {
+local READY_CHECK_ICON_TYPE_VALUES      = {
     standard = "Standard (Raid Mark)",
     legacy = "Legacy (RaidFrame)",
 }
 
 -- Default tag/justify for info bar text slots (mirrors INFO_BAR_TEXT_DEFAULTS in the engine)
-local INFO_BAR_SLOT_DEFAULTS           = {
+local INFO_BAR_SLOT_DEFAULTS            = {
     { tag = "[name]",     justify = "LEFT" },
     { tag = "[perhp<$%]", justify = "CENTER" },
     { tag = "",           justify = "RIGHT" },
 }
 
-local GROUP_BY_VALUES                  = {
+local GROUP_BY_VALUES                   = {
     GROUP = "Group",
     CLASS = "Class",
     ASSIGNEDROLE = "Assigned Role",
     ROLE = "Role",
 }
 
-local COLOR_DEFAULTS                   = {
+local COLOR_DEFAULTS                    = {
     health = { 0.34, 0.84, 0.54, 1 },
     power = { 0.10, 0.72, 0.74, 1 },
     powerBackground = { 0.05, 0.06, 0.08, 0.85 },
@@ -211,7 +211,7 @@ local COLOR_DEFAULTS                   = {
     powerText = { 1, 1, 1, 1 },
 }
 
-local ROOT_TEXT_DEFAULTS               = {
+local ROOT_TEXT_DEFAULTS                = {
     nameFormat = "full",
     healthFormat = "percent",
     powerFormat = "percent",
@@ -236,7 +236,7 @@ local ROOT_TEXT_DEFAULTS               = {
     powerOffsetY = 0,
 }
 
-local SINGLE_UNIT_DEFAULTS             = {
+local SINGLE_UNIT_DEFAULTS              = {
     player = {
         width = 260,
         height = 48,
@@ -256,7 +256,7 @@ local SINGLE_UNIT_DEFAULTS             = {
     boss = { width = 220, height = 36, showPower = true, powerHeight = 8, powerDetached = false, powerWidth = 220 },
 }
 
-local SINGLE_LAYOUT_DEFAULTS           = {
+local SINGLE_LAYOUT_DEFAULTS            = {
     player = { point = "BOTTOM", relativePoint = "BOTTOM", x = -260, y = 260 },
     target = { point = "BOTTOM", relativePoint = "BOTTOM", x = 260, y = 260 },
     targettarget = { point = "BOTTOM", relativePoint = "BOTTOM", x = 260, y = 212 },
@@ -266,7 +266,7 @@ local SINGLE_LAYOUT_DEFAULTS           = {
     castbar = { point = "BOTTOM", relativePoint = "BOTTOM", x = -260, y = 220 },
 }
 
-local GROUP_DEFAULTS                   = {
+local GROUP_DEFAULTS                    = {
     party = {
         enabled = true,
         width = 180,
@@ -322,14 +322,14 @@ local GROUP_DEFAULTS                   = {
     },
 }
 
-local GROUP_LAYOUT_DEFAULTS            = {
+local GROUP_LAYOUT_DEFAULTS             = {
     party = { point = "BOTTOMLEFT", relativePoint = "BOTTOM", x = 36, y = 360 },
     raid = { point = "BOTTOM", relativePoint = "BOTTOM", x = 0, y = 420 },
     tank = { point = "BOTTOMRIGHT", relativePoint = "BOTTOM", x = -36, y = 360 },
     boss = SINGLE_LAYOUT_DEFAULTS.boss,
 }
 
-local PLAYER_CASTBAR_DEFAULTS          = {
+local PLAYER_CASTBAR_DEFAULTS           = {
     enabled = true,
     style = "modern",
     fantasyTheme = "holy",
@@ -358,7 +358,7 @@ local PLAYER_CASTBAR_DEFAULTS          = {
     useCustomBackground = false,
 }
 
-local HEAL_PREDICTION_DEFAULTS         = {
+local HEAL_PREDICTION_DEFAULTS          = {
     enabled = true,
     showPlayer = true,
     showOthers = true,
@@ -370,19 +370,19 @@ local HEAL_PREDICTION_DEFAULTS         = {
     healAbsorbColor = { 0.06, 0.07, 0.09, 0.72 },
 }
 
-local EMBEDDED_CASTBAR_DEFAULTS        = {
+local EMBEDDED_CASTBAR_DEFAULTS         = {
     target = { enabled = true, style = "modern", fantasyTheme = "holy", fantasyEffectScale = 1, detached = false, width = 220, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
     party  = { enabled = true, style = "modern", fantasyTheme = "holy", fantasyEffectScale = 1, detached = false, width = 180, height = 12, iconSize = 16, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
     raid   = { enabled = true, style = "modern", fantasyTheme = "holy", fantasyEffectScale = 1, detached = false, width = 120, height = 12, iconSize = 14, showIcon = true, showText = true, showTimeText = true, fontSize = 8, timeFontSize = 8, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
     boss   = { enabled = true, style = "modern", fantasyTheme = "holy", fantasyEffectScale = 1, detached = false, width = 220, height = 12, iconSize = 18, showIcon = true, showText = true, showTimeText = true, fontSize = 9, timeFontSize = 9, yOffset = -2, iconPosition = "outside", iconSide = "left", useCustomBackground = false },
 }
 
-local CASTBAR_STYLE_VALUES             = {
+local CASTBAR_STYLE_VALUES              = {
     modern = "Simple Modern",
     fantasy = "Fantasy Cast Bar",
 }
 
-local CASTBAR_FANTASY_THEME_VALUES     = {
+local CASTBAR_FANTASY_THEME_VALUES      = {
     aim = "Hunt",
     alliance = "Blue Sparkle",
     arcane = "Arcane",
@@ -1825,7 +1825,8 @@ local function BuildHealPredictionGroup(order, basePath)
             "Color used to shade health lost to heal absorbs.",
             ExtendPath(basePath, "healAbsorbColor"), HEAL_PREDICTION_DEFAULTS.healAbsorbColor, true, {
                 disabled = DisabledWhenOff(function()
-                    return GetPathValue(ExtendPath(basePath, "showHealAbsorb"), HEAL_PREDICTION_DEFAULTS.showHealAbsorb) ~= true
+                    return GetPathValue(ExtendPath(basePath, "showHealAbsorb"), HEAL_PREDICTION_DEFAULTS.showHealAbsorb) ~=
+                    true
                 end),
             }),
     })
@@ -2229,25 +2230,25 @@ local function BuildGroupTab(groupKey, label)
         order = 1,
         childGroups = "tab",
         args = {
-            frame            = frameTab,
-            layout           = BuildLayoutGroup(2, "Layout", groupKey, layoutDefaults, {
+            frame               = frameTab,
+            layout              = BuildLayoutGroup(2, "Layout", groupKey, layoutDefaults, {
                 disabled = disabled,
             }),
-            text             = BuildTextGroup(3, "Text", textPath, groupKey .. "Member"),
-            auras            = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
-            watchers         = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
-            colors           = colorsTab,
-            roleIcon         = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"),
+            text                = BuildTextGroup(3, "Text", textPath, groupKey .. "Member"),
+            auras               = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
+            watchers            = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
+            colors              = colorsTab,
+            roleIcon            = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"),
                 groupKey == "party" or groupKey == "tank"),
-            combatIndicator  = BuildStateIndicatorGroup(7, "Combat Indicator",
+            combatIndicator     = BuildStateIndicatorGroup(7, "Combat Indicator",
                 ExtendPath(basePath, "combatIndicator"), "combatIndicator"),
-            restingIndicator = BuildStateIndicatorGroup(8, "Resting Indicator",
+            restingIndicator    = BuildStateIndicatorGroup(8, "Resting Indicator",
                 ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
-            spiritIndicator  = BuildStateIndicatorGroup(9, "Spirit Indicator",
+            spiritIndicator     = BuildStateIndicatorGroup(9, "Spirit Indicator",
                 ExtendPath(basePath, "spiritIndicator"), "spiritIndicator"),
             readyCheckIndicator = BuildReadyCheckIndicatorGroup(10,
                 ExtendPath(basePath, "readyCheckIndicator"), true),
-            infoBar          = BuildInfoBarTab(11, ExtendPath(basePath, "infoBar")),
+            infoBar             = BuildInfoBarTab(11, ExtendPath(basePath, "infoBar")),
         },
     }
 end
@@ -2797,7 +2798,8 @@ local function BuildGeneralTab()
                 enabled = {
                     type = "toggle",
                     name = "Enable Diagnostics",
-                    desc = "Record Unit Frames diagnostics for aura, castbar, and frame update paths in the shared debug console.",
+                    desc =
+                    "Record Unit Frames diagnostics for aura, castbar, and frame update paths in the shared debug console.",
                     order = 1,
                     width = "full",
                     get = function()

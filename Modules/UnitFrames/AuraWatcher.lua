@@ -59,15 +59,15 @@ local function SafeTableLookup(tbl, key) return tbl[key] end
 -- Anchor inset offsets so text sits just inside the icon border.
 -- Defined at module scope so UpdateIconIndicator never re-allocates them.
 local ANCHOR_OFS = {
-    TOPLEFT     = { 1,  -1 },
-    TOP         = { 0,  -1 },
+    TOPLEFT     = { 1, -1 },
+    TOP         = { 0, -1 },
     TOPRIGHT    = { -1, -1 },
-    LEFT        = { 1,   0 },
-    CENTER      = { 0,   0 },
-    RIGHT       = { -1,  0 },
-    BOTTOMLEFT  = { 1,   1 },
-    BOTTOM      = { 0,   1 },
-    BOTTOMRIGHT = { -1,  1 },
+    LEFT        = { 1, 0 },
+    CENTER      = { 0, 0 },
+    RIGHT       = { -1, 0 },
+    BOTTOMLEFT  = { 1, 1 },
+    BOTTOM      = { 0, 1 },
+    BOTTOMRIGHT = { -1, 1 },
 }
 
 local function ResolveFrameUnit(frame)
@@ -433,7 +433,8 @@ local function ScanByFilter(unit, source, onlyMine, result, auraElement)
                     slotScans = slotScans + 1
                     if not C_UnitAuras.IsAuraFilteredOutByInstanceID(unit, data.auraInstanceID, "HARMFUL|RAID") then
                         data.isHarmfulAura = true
-                        local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                        local passPlayer = not onlyMine or
+                            ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
                         if passPlayer then
                             if seen then seen[data.auraInstanceID] = true end
                             local timing = UnitFrames:ResolveAuraTiming(unit, data, "watcher", _scanTimingBuffer)
@@ -476,7 +477,8 @@ local function ScanByFilter(unit, source, onlyMine, result, auraElement)
                     if data and (not seen or not seen[data.auraInstanceID]) then
                         slotScans = slotScans + 1
                         data.isHarmfulAura = true
-                        local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                        local passPlayer = not onlyMine or
+                            ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
                         if passPlayer then
                             local rawBoss = data.isBossAura
                             local isBoss = not (issecretvalue and issecretvalue(rawBoss)) and rawBoss == true
@@ -497,7 +499,8 @@ local function ScanByFilter(unit, source, onlyMine, result, auraElement)
                     local data = C_UnitAuras.GetAuraDataBySlot(unit, slotsBuffer[i])
                     if data and (not seen or not seen[data.auraInstanceID]) then
                         data.isHarmfulAura = true
-                        local passPlayer = not onlyMine or ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
+                        local passPlayer = not onlyMine or
+                            ResolveIsPlayerAura(unit, data.auraInstanceID, "HARMFUL", data)
                         if passPlayer then
                             local rawBoss = data.isBossAura
                             local isBoss = not (issecretvalue and issecretvalue(rawBoss)) and rawBoss == true
@@ -604,12 +607,12 @@ local function ResolveAuras(frame, unit, cfg, resultKey, scanCache)
     -- Passing it to scan functions lets them skip GetAuraDataBySlot entirely.
     local auraElement = frame and frame.Auras or nil
 
-    local source   = cfg.source or "HARMFUL"
-    local onlyMine = cfg.onlyMine and true or false
+    local source      = cfg.source or "HARMFUL"
+    local onlyMine    = cfg.onlyMine and true or false
 
     -- Cache the cacheKey string on cfg — it never changes per cfg object once set
     -- (spell list keys invalidate when the spellIds array reference changes).
-    local cacheKey = cfg._resolvedCacheKey
+    local cacheKey    = cfg._resolvedCacheKey
     -- Invalidate cached spell-list key when the spellIds array is replaced (DB save).
     if cacheKey and source == "spell" and type(cfg.spellIds) == "table" and cfg._spellIdsSrc ~= cfg.spellIds then
         cfg._resolvedCacheKey = nil
@@ -621,11 +624,13 @@ local function ResolveAuras(frame, unit, cfg, resultKey, scanCache)
                 -- spellIds reference check: rebuild key if array was replaced
                 if cfg._spellIdsSrc ~= cfg.spellIds then
                     cfg._spellIdsSrc = cfg.spellIds
-                    cfg._resolvedCacheKey = "spell:list:" .. BuildSpellIdsSignature(cfg.spellIds) .. ":mine:" .. tostring(onlyMine)
+                    cfg._resolvedCacheKey = "spell:list:" ..
+                        BuildSpellIdsSignature(cfg.spellIds) .. ":mine:" .. tostring(onlyMine)
                 end
                 cacheKey = cfg._resolvedCacheKey
             elseif tonumber(cfg.spellId) then
-                cfg._resolvedCacheKey = "spell:single:" .. tostring(tonumber(cfg.spellId)) .. ":mine:" .. tostring(onlyMine)
+                cfg._resolvedCacheKey = "spell:single:" ..
+                    tostring(tonumber(cfg.spellId)) .. ":mine:" .. tostring(onlyMine)
                 cacheKey = cfg._resolvedCacheKey
             end
         elseif source ~= "group" then
