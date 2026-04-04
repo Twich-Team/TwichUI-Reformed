@@ -64,12 +64,13 @@ function MDT:GetMenuList()
 
     ---@param mountInfo {name: string, spellID: number, icon: string, mountID: number, isFavorite: boolean}
     local function AddMountEntry(mountInfo)
+        local mountID = tonumber(mountInfo.mountID) or 0
         tinsert(menuList, {
             text = T.Tools.Text.Icon(mountInfo.icon) .. " " .. mountInfo.name,
             notCheckable = true,
             spell = mountInfo.spellID,
-            func = (not mountInfo.spellID and mountInfo.mountID) and function()
-                SummonByID(mountInfo.mountID)
+            func = (mountID > 0) and function()
+                SummonByID(mountID)
             end or nil,
         })
     end

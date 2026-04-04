@@ -16,5 +16,7 @@
 - Added a new World Quest tab to the world map that shows available world quests as a filterable list
 - Added Ready check status indicators to party and raid frames
 - Added in-house action bars with glow customization, easy keybinding, and custom hover effects
+- Added spirit icon to unit frames of dead players
+- Added heal absorb indicators to bars
 
 #### Other
