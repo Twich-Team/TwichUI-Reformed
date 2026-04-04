@@ -2049,7 +2049,7 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
     local defaultHealthMode = useThemeAccentHealth
         and "theme"
         or (db.useClassColor == true and "class" or "theme")
-    local globalCustomHealthColor = CopyColor(db.colors.health or COLOR_DEFAULTS.health)
+    local globalCustomHealthColor = CopyColor(db.colors.health, { 0.34, 0.84, 0.54, 1 })
 
     local unitKey = nil
     local resolvedScope = scopeOrUnitKey or "singles"
@@ -9196,11 +9196,24 @@ do
                 elseif key == "player" or key == "target" or key == "targettarget" or key == "focus" or key == "pet" then
                     shouldShow = shouldShow and (self:GetUnitSettings(key).enabled ~= false)
                 elseif key == "party" or key == "raid" or key == "tank" then
-                    shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
                     if key == "party" then
-                        shouldShow = shouldShow and (db.testPreviewParty ~= false)
+                        if db.testPreviewParty == true then
+                            shouldShow = true  -- forced on: bypass testMode and enabled checks
+                        elseif db.testPreviewParty == false then
+                            shouldShow = false
+                        else
+                            shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
+                        end
                     elseif key == "raid" then
-                        shouldShow = shouldShow and (db.testPreviewRaid ~= false)
+                        if db.testPreviewRaid == true then
+                            shouldShow = true  -- forced on: bypass testMode and enabled checks
+                        elseif db.testPreviewRaid == false then
+                            shouldShow = false
+                        else
+                            shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
+                        end
+                    else
+                        shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
                     end
                 end
                 container:SetShown(shouldShow)

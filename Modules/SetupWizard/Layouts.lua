@@ -102,8 +102,9 @@ SetupWizardModule.AVAILABLE_LAYOUTS = {
     -- Captured: 2026-04-04  |  3440x1440  |  layout id: standard
     {
         id                  = "standard",
-        name                = "",
-        description         = "Add a description here.",
+        name                = "Standard",
+        description         =
+        "The original TwichUI layout, featuring a centered design, this layout is suitable for all roles and use in Mythic+ and raiding.",
         role                = "any", -- "any" | "dps" | "healer" | "tank"
         referenceResolution = { w = 3440, h = 1440 },
         frames              = {

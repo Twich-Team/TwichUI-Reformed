@@ -254,6 +254,13 @@ function SetupWizardModule:PrepareConfigSnapshotSection(sectionKey, sectionVal)
     end
 
     local prepared = CloneValue(sectionVal)
+    -- Always strip wizard-only debug flags so they never leak into live gameplay.
+    if sectionKey == "unitFrames" then
+        prepared.testMode         = nil
+        prepared.testPreviewParty = nil
+        prepared.testPreviewRaid  = nil
+        prepared.lockFrames       = nil
+    end
     if sectionKey ~= "unitFrames" then
         return prepared
     end
@@ -274,14 +281,24 @@ function SetupWizardModule:PrepareConfigSnapshotSection(sectionKey, sectionVal)
     if type(units) == "table" then
         for _, unitConfig in pairs(units) do
             if type(unitConfig) == "table" then
+                -- powerWidth is excluded from the xPixels list here and handled
+                -- below with height-biased scaling, matching ApplyLayoutData's
+                -- approach for single UF frame widths.
                 ScalePixelConfig(unitConfig,
-                    { "powerWidth" },
+                    {},
                     { "powerHeight", "powerOffsetY" },
                     { "width", "height" },
                     scales)
+                -- powerWidth: use max(scaleX, scaleY) so the detached power bar
+                -- widens proportionally with the frame height rather than compressing
+                -- to scaleX on narrower / lower-res monitors.
+                if type(unitConfig.powerWidth) == "number" then
+                    local hb = math.max(scales.width, scales.height)
+                    unitConfig.powerWidth = math.floor(unitConfig.powerWidth * hb + 0.5)
+                end
                 ScalePixelConfig(unitConfig,
                     { "powerOffsetX" },
-                    { "powerOffsetY" },
+                    nil,
                     nil,
                     scales)
                 ScalePixelConfig(unitConfig.classBar, { "xOffset" }, { "yOffset" }, { "width", "height", "spacing" },
@@ -297,11 +314,19 @@ function SetupWizardModule:PrepareConfigSnapshotSection(sectionKey, sectionVal)
     if type(groups) == "table" then
         for _, groupConfig in pairs(groups) do
             if type(groupConfig) == "table" then
+                -- Group member width/height/spacing: use height scale (scaleY) instead
+                -- of uniform=min(scaleX,scaleY) so frames stay readable at small or
+                -- non-ultrawide resolutions. The xOffset position still uses scaleX.
+                local groupScales = {
+                    width   = scales.width,
+                    height  = scales.height,
+                    uniform = scales.height,
+                }
                 ScalePixelConfig(groupConfig,
                     { "xOffset" },
                     { "yOffset" },
                     { "width", "height", "rowSpacing", "columnSpacing" },
-                    scales)
+                    groupScales)
                 ScalePixelConfig(groupConfig.roleIcon, { "insetX" }, { "insetY" }, { "size" }, scales)
                 ScalePixelConfig(groupConfig.combatIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
                 ScalePixelConfig(groupConfig.restingIndicator, { "offsetX" }, { "offsetY" }, { "size" }, scales)
@@ -426,6 +451,18 @@ function SetupWizardModule:ApplyLayoutData(layoutData)
             local absH = fd.h and fd.h * sh
             local scaleMode = fd.scaleMode
 
+            -- Single UF frames (player, target, etc.) get height-biased width so they
+            -- appear wider instead of squashing horizontally on narrower monitors.
+            -- Group frames (party/raid/tank/boss) are excluded; their member sizes are
+            -- set by the UF module and squashing them would break group indicators.
+            local isSingleUF = unitFrameKey and unitFrameKey ~= "party"
+                and unitFrameKey ~= "raid" and unitFrameKey ~= "tank"
+                and not (type(unitFrameKey) == "string" and unitFrameKey:match("^boss"))
+            if isSingleUF and hasRefResolution and fd.w and fd.h then
+                local heightBiasW = fd.w * refW * (sh / refH)
+                if absW and heightBiasW > absW then absW = heightBiasW end
+            end
+
             -- Backward-compatible chat behavior for older captures:
             -- if no scale metadata exists, preserve snapshot size from layout.apply()
             -- and only reposition the chat frame.
@@ -519,11 +556,165 @@ function SetupWizardModule:ApplyLayout(layoutId, options)
         layout.apply()
     end
     self._layoutApplyOptions = nil
+    -- 1.5. Scale action bar positions and button sizes from the capture resolution.
+    --   Center-intent bars (capture center in [35%,65%] of refW) are ALWAYS snapped
+    --   to sw/2 — even at the reference resolution — so minor off-center placement
+    --   in a capture is automatically corrected.
+    --   Scaling of buttonSize / spacing / y / non-centre x only happens when the
+    --   current resolution differs from the capture reference.
+    local _sw, _sh
+    local _centerClusterLeft  = math.huge
+    local _centerClusterRight = -math.huge
+    local _refRes = layout.referenceResolution
+    local _refW   = _refRes and tonumber(_refRes.w) or nil
+    local _refH   = _refRes and tonumber(_refRes.h) or nil
+    if _refW and _refW > 0 and _refH and _refH > 0 then
+        _sw, _sh      = GetScreenWidth(), GetScreenHeight()
+        local scaleX  = _sw / _refW
+        local scaleY  = _sh / _refH
+        local isScaled = math.abs(_sw - _refW) > 1 or math.abs(_sh - _refH) > 1
+        local gentleX = scaleX + 0.4 * (scaleY - scaleX)
+
+        local CM     = T:GetModule("Configuration", true)
+        local config = CM and type(CM.GetProfileDB) == "function" and CM:GetProfileDB() or nil
+
+        -- Scale global button spacing first so bar-width estimates below are correct.
+        local scaledSpacing = 4
+        if isScaled and config and type(config.actionBars) == "table" then
+            local sp = config.actionBars.buttonSpacing
+            if type(sp) == "number" then
+                scaledSpacing = math.max(0, math.floor(sp * scaleY + 0.5))
+                config.actionBars.buttonSpacing = scaledSpacing
+            end
+        end
+
+        local HOLDER_PAD = 6  -- must match DEFAULT_HOLDER_PADDING in ActionBars.lua
+        local abBars = config and type(config.actionBars) == "table" and
+                       type(config.actionBars.bars) == "table" and config.actionBars.bars or nil
+        if abBars then
+            for _, bs in pairs(abBars) do
+                if type(bs) == "table" and bs.enabled == true then
+                    local origX      = type(bs.x)             == "number" and bs.x             or 0
+                    local origBtnSz  = type(bs.buttonSize)    == "number" and bs.buttonSize    or 32
+                    local origPerRow = type(bs.buttonsPerRow) == "number" and bs.buttonsPerRow or 12
+                    local origCount  = type(bs.buttonCount)   == "number" and bs.buttonCount   or 12
+                    -- bs.scale applies a visual multiplier to the holder frame (SetScale).
+                    -- Use it when computing the true on-screen width for cluster bounds.
+                    local origScale  = type(bs.scale)         == "number" and bs.scale         or 1.0
+                    local perRow     = math.min(origPerRow, origCount)
+
+                    -- Scale button size by height ratio when resolution differs.
+                    -- Clamp to 22 minimum to match LayoutBar's ClampNumber(sz, 22, 64, …).
+                    local scaledBtnSz = isScaled
+                        and math.max(22, math.floor(origBtnSz * scaleY + 0.5))
+                        or  math.max(22, origBtnSz)
+                    if isScaled then bs.buttonSize = scaledBtnSz end
+
+                    -- barW is the logical holder size; visual width = barW * origScale.
+                    local barW    = perRow * scaledBtnSz
+                        + math.max(0, perRow - 1) * scaledSpacing + HOLDER_PAD * 2
+                    local refBarW = perRow * origBtnSz
+                        + math.max(0, perRow - 1) * 4 + HOLDER_PAD * 2
+
+                    -- Where was this bar's horizontal centre as a fraction of refW?
+                    local origCtrFrc = (origX + refBarW / 2) / _refW
+
+                    if origCtrFrc >= 0.35 and origCtrFrc <= 0.65 then
+                        -- Centre-intent: switch the anchor to BOTTOM with x=0 so WoW's
+                        -- own layout system guarantees perfect horizontal centering regardless
+                        -- of button size, scale, or rounding.  y is unchanged (vertical offset
+                        -- from UIParent bottom means the same for both BOTTOMLEFT and BOTTOM).
+                        bs.point = "BOTTOM"
+                        bs.relativePoint = "BOTTOM"
+                        bs.x = 0
+                        -- Track visual cluster bounds for step 2.5: bar spans ±barW*scale/2
+                        -- around sw/2 when BOTTOM-anchored.
+                        local halfVisual = barW * origScale / 2
+                        _centerClusterLeft  = math.min(_centerClusterLeft,  _sw / 2 - halfVisual)
+                        _centerClusterRight = math.max(_centerClusterRight, _sw / 2 + halfVisual)
+                    elseif isScaled then
+                        bs.x = math.floor(origX * gentleX + 0.5)
+                    end
+
+                    if isScaled and type(bs.y) == "number" then
+                        bs.y = math.floor(bs.y * scaleY + 0.5)
+                    end
+                end
+            end
+        end
+    end
+
     -- 2. Apply frame positions: persist callbacks now write into the new tables.
     self:ApplyLayoutData(layout)
     self:GetDB().appliedLayout = layoutId
 
-    -- 3. Refresh datatext panels immediately so they appear in the wizard
+    -- 2.5. Adapt UF frame positions around the centred action-bar cluster.
+    --      ApplyLayoutData persist callbacks have written current-screen pixel
+    --      positions into config.unitFrames.layout by this point, so nudging here
+    --      will take effect on the RefreshAllFrames call below.
+    local _hasCluster = _sw and _centerClusterLeft < _centerClusterRight
+    if _hasCluster then
+        local CM     = T:GetModule("Configuration", true)
+        local config = CM and type(CM.GetProfileDB) == "function" and CM:GetProfileDB() or nil
+        local ufDB   = config and type(config.unitFrames) == "table" and config.unitFrames or nil
+        if ufDB then
+            local ufLayout = type(ufDB.layout) == "table" and ufDB.layout or nil
+            local ufUnits  = type(ufDB.units)  == "table" and ufDB.units  or nil
+            local GAP      = 14  -- px gap between UF edge and nearest bar edge
+
+            -- Player: push left so its right edge clears the cluster
+            local pL = ufLayout and ufLayout["player"]
+            if pL and type(pL.x) == "number" then
+                local pw = ufUnits and ufUnits["player"] and tonumber(ufUnits["player"].width) or nil
+                if pw and pw > 0 then
+                    local maxRight = _centerClusterLeft - GAP
+                    if pL.x + pw > maxRight then
+                        pL.x = math.max(0, maxRight - pw)
+                    end
+                end
+            end
+
+            -- Target: push right so its left edge clears the cluster
+            local tL = ufLayout and ufLayout["target"]
+            if tL and type(tL.x) == "number" then
+                local desiredX = _centerClusterRight + GAP
+                if tL.x < desiredX then
+                    tL.x = desiredX
+                end
+            end
+
+            -- Target-of-Target: follow immediately right of target so it doesn't
+            -- end up overlapping the target frame after it was pushed right.
+            local totL = ufLayout and ufLayout["targettarget"]
+            if totL and tL and type(tL.x) == "number" then
+                local tw = ufUnits and ufUnits["target"] and tonumber(ufUnits["target"].width) or nil
+                if tw and tw > 0 then
+                    totL.x = tL.x + tw + 4  -- 4 px gap matching original layout spacing
+                end
+            end
+
+            -- Castbar: re-centre above the bar cluster
+            local cL = ufLayout and ufLayout["castbar"]
+            if cL and type(cL.x) == "number" and ufDB.castbar then
+                local cbW = tonumber(ufDB.castbar.width)
+                if cbW and cbW > 0 then
+                    cL.x = math.floor(_sw / 2 - cbW / 2 + 0.5)
+                end
+            end
+
+            -- Detached player power bar: also centre on screen so it sits
+            -- directly between the UF cluster and the action bar cluster.
+            local ppL = ufLayout and ufLayout["player_power"]
+            if ppL and type(ppL.x) == "number" then
+                local ppW = ufUnits and ufUnits["player"] and tonumber(ufUnits["player"].powerWidth) or nil
+                if ppW and ppW > 0 then
+                    ppL.x = math.floor(_sw / 2 - ppW / 2 + 0.5)
+                end
+            end
+        end
+    end
+
+    -- 3. Refresh all live modules so the wizard preview reflects the applied layout.
     local datatextModule = T:GetModule("Datatexts", true)
     if datatextModule and type(datatextModule.RefreshStandalonePanels) == "function" then
         pcall(datatextModule.RefreshStandalonePanels, datatextModule)
@@ -532,6 +723,13 @@ function SetupWizardModule:ApplyLayout(layoutId, options)
     local unitFramesModule = T:GetModule("UnitFrames", true)
     if unitFramesModule and type(unitFramesModule.RefreshAllFrames) == "function" then
         pcall(unitFramesModule.RefreshAllFrames, unitFramesModule)
+    end
+
+    -- Action bars: RequestRefresh re-runs LayoutBar for every enabled bar so
+    -- holders move to the newly-scaled x/y positions from step 1.5.
+    local actionBarsModule = T:GetModule("ActionBars", true)
+    if actionBarsModule and type(actionBarsModule.RequestRefresh) == "function" then
+        pcall(actionBarsModule.RequestRefresh, actionBarsModule)
     end
 
     self._activeLayoutData = nil

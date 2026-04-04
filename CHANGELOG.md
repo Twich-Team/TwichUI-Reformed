@@ -21,5 +21,6 @@
 - Added heal absorb indicators to bars
 - Added offline, summon, and ressurect indicators to unit frames
 - Added particle effects for power bars
+- Massively improved "smart scaling" when running the wizard. Currently, only the standard layout is supported. More formats will be coming soon after major development completes
 
 #### Other

@@ -58,15 +58,14 @@ local C                  = {
 }
 
 local STEP_DEFS          = {
-    { id = "welcome",    title = "Welcome" },
-    { id = "ui",         title = "UI & Chat" },
-    { id = "layout",     title = "Layout" },
-    { id = "unitframes", title = "Unit Frames" },
-    { id = "actionbars", title = "Action Bars" },
-    { id = "theme",      title = "Theme" },
-    { id = "fonts",      title = "Font Sizes" },
-    { id = "elvui",      title = "ElvUI" },
-    { id = "finish",     title = "Finish" },
+    { id = "welcome", title = "Welcome" },
+    { id = "ui",      title = "UI & Chat" },
+    { id = "frames",  title = "Frames & Bars" },
+    { id = "layout",  title = "Layout" },
+    { id = "theme",   title = "Theme" },
+    { id = "fonts",   title = "Font Sizes" },
+    { id = "elvui",   title = "ElvUI" },
+    { id = "finish",  title = "Finish" },
 }
 
 -- ─── UI namespace ───────────────────────────────────────────────────────────
@@ -364,6 +363,15 @@ function UI:_BuildHeader()
     local title = NewText(hdr, "|cff19c9c7Twich|r|cfffff4d6UI|r Reformed  |cff505468Setup Wizard|r", 15)
     title:SetPoint("LEFT", hdr, "LEFT", PAD, 0)
 
+    -- Draggable via header
+    hdr:EnableMouse(true)
+    hdr:SetScript("OnMouseDown", function(_, btn)
+        if btn == "LeftButton" then f:StartMoving() end
+    end)
+    hdr:SetScript("OnMouseUp", function() f:StopMovingOrSizing() end)
+    f:SetMovable(true)
+    f:SetClampedToScreen(true)
+
     local closeBtn = CreateFrame("Button", nil, hdr)
     closeBtn:SetSize(36, 36)
     closeBtn:SetPoint("RIGHT", hdr, "RIGHT", -10, 0)
@@ -595,9 +603,8 @@ function UI:_GoNext()
     if self.currentStep < #STEP_DEFS then
         local currentStepDef = STEP_DEFS[self.currentStep]
 
-        -- On the unit frames step: apply UF + AB choices together and reload once if needed.
-        -- (Action bars is the very next step, so its default state is already set.)
-        if currentStepDef and currentStepDef.id == "unitframes" and
+        -- On the frames step: apply UF + AB choices together and reload once if needed.
+        if currentStepDef and currentStepDef.id == "frames" and
             (self:_NeedsUnitFrameConflictReload() or self:_NeedsActionBarConflictReload()) then
             SetupWizardModule:ApplyUnitFrameWizardChoices({
                 useTwichUnitFrames = self.useTwichUnitFrames,
@@ -702,22 +709,23 @@ function UI:_RenderStep(n)
         self.stepBuilt[n] = true
         local builders = {
             welcome = UI._BuildWelcomeContent,
-            ui = UI._BuildUIScaleContent,
-            layout = UI._BuildLayoutContent,
-            unitframes = UI._BuildUnitFramesContent,
-            actionbars = UI._BuildActionBarsContent,
-            theme = UI._BuildThemeContent,
-            fonts = UI._BuildFontSizeContent,
-            elvui = UI._BuildElvUIContent,
-            finish = UI._BuildFinishContent,
+            ui      = UI._BuildUIScaleContent,
+            frames  = UI._BuildFramesContent,
+            layout  = UI._BuildLayoutContent,
+            theme   = UI._BuildThemeContent,
+            fonts   = UI._BuildFontSizeContent,
+            elvui   = UI._BuildElvUIContent,
+            finish  = UI._BuildFinishContent,
         }
         if stepId and builders[stepId] then builders[stepId](self, sf) end
     else
         -- Refresh live-selection state without a full rebuild
         if stepId == "ui" and self._RefreshUIScaleSummary then self:_RefreshUIScaleSummary() end
         if stepId == "layout" then self:_RefreshLayoutCards() end
-        if stepId == "unitframes" and self._RefreshUnitFrameSummary then self:_RefreshUnitFrameSummary() end
-        if stepId == "actionbars" and self._RefreshActionBarSummary then self:_RefreshActionBarSummary() end
+        if stepId == "frames" then
+            if self._RefreshUnitFrameSummary then self:_RefreshUnitFrameSummary() end
+            if self._RefreshActionBarSummary then self:_RefreshActionBarSummary() end
+        end
         if stepId == "theme" then self:_RefreshThemeCards() end
         if stepId == "fonts" then
             if self._SyncFontSizeStateFromConfig then
@@ -1168,6 +1176,74 @@ function UI:_BuildLayoutContent(sf)
     previewNote:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -7)
     previewNote:SetWidth(W - PAD * 2 - 2)
 
+    -- Party / Raid preview toggle buttons — party on by default, raid off
+    local partyPreviewOn, raidPreviewOn = true, false
+
+    local partyBtn, partyLabel = NewButton(sf, "Party Frames", 140, 28)
+    partyBtn:SetPoint("TOPLEFT", previewNote, "BOTTOMLEFT", 0, -10)
+    local raidBtn, raidLabel = NewButton(sf, "Raid Frames", 130, 28)
+    raidBtn:SetPoint("LEFT", partyBtn, "RIGHT", 10, 0)
+
+    local function RefreshLayoutToggleButtons()
+        if partyPreviewOn then
+            partyBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
+            partyBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
+        else
+            partyBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
+            partyBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+        end
+        if raidPreviewOn then
+            raidBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
+            raidBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
+        else
+            raidBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
+            raidBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+        end
+        partyLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
+        raidLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
+    end
+
+    -- Override NewButton's generic OnEnter/OnLeave so hover never resets the active highlight
+    partyBtn:SetScript("OnEnter", function()
+        partyBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], partyPreviewOn and 0.75 or 0.22)
+        partyBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 1)
+    end)
+    partyBtn:SetScript("OnLeave", function() RefreshLayoutToggleButtons() end)
+    raidBtn:SetScript("OnEnter", function()
+        raidBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], raidPreviewOn and 0.75 or 0.22)
+        raidBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 1)
+    end)
+    raidBtn:SetScript("OnLeave", function() RefreshLayoutToggleButtons() end)
+
+    partyBtn:SetScript("OnClick", function()
+        partyPreviewOn = not partyPreviewOn
+        local ufm = T:GetModule("UnitFrames", true)
+        if ufm and ufm.SetTestPreviewGroupEnabled then
+            pcall(ufm.SetTestPreviewGroupEnabled, ufm, "party", partyPreviewOn)
+        end
+        RefreshLayoutToggleButtons()
+    end)
+    raidBtn:SetScript("OnClick", function()
+        raidPreviewOn = not raidPreviewOn
+        local ufm = T:GetModule("UnitFrames", true)
+        if ufm and ufm.SetTestPreviewGroupEnabled then
+            pcall(ufm.SetTestPreviewGroupEnabled, ufm, "raid", raidPreviewOn)
+        end
+        RefreshLayoutToggleButtons()
+    end)
+    RefreshLayoutToggleButtons()
+
+    -- Helper used by card clicks and initial apply to reseed preview state.
+    -- ApplyLayout replaces the entire UF db via config snapshot, wiping testPreviewParty/Raid,
+    -- so we must re-set them after every ApplyLayout call.
+    local function ReseedPreview()
+        local ufm = T:GetModule("UnitFrames", true)
+        if ufm and ufm.SetTestPreviewGroupEnabled then
+            pcall(ufm.SetTestPreviewGroupEnabled, ufm, "party", partyPreviewOn)
+            pcall(ufm.SetTestPreviewGroupEnabled, ufm, "raid",  raidPreviewOn)
+        end
+    end
+
     local layouts       = SetupWizardModule:GetAvailableLayouts()
     local availW        = W - 2 - PAD * 2
     local cols          = math.min(2, #layouts)
@@ -1183,7 +1259,7 @@ function UI:_BuildLayoutContent(sf)
         card:SetSize(cardW, CARD_H_LYT)
         card:SetPoint("TOPLEFT", sf, "TOPLEFT",
             x + col * (cardW + CARD_GAP),
-            y - 82 - row * (CARD_H_LYT + CARD_GAP))
+            y - 120 - row * (CARD_H_LYT + CARD_GAP))
 
         local nameText = NewText(card, layout.name, 15, C.text[1], C.text[2], C.text[3])
         nameText:SetPoint("TOPLEFT", card, "TOPLEFT", 16, -16)
@@ -1210,6 +1286,7 @@ function UI:_BuildLayoutContent(sf)
             SetupWizardModule:ApplyLayout(layoutId, {
                 applyChat = self.applyChatSetup ~= false,
             })
+            ReseedPreview()  -- re-set preview flags wiped by config snapshot
             if self.selectedTheme then
                 SetupWizardModule:ApplyThemePreset(self.selectedTheme)
             end
@@ -1238,6 +1315,7 @@ function UI:_BuildLayoutContent(sf)
         SetupWizardModule:ApplyLayout(self.selectedLayout, {
             applyChat = self.applyChatSetup ~= false,
         })
+        ReseedPreview()  -- re-set preview flags wiped by config snapshot
         if self.selectedTheme then
             SetupWizardModule:ApplyThemePreset(self.selectedTheme)
         end
@@ -1324,145 +1402,185 @@ function UI:_RefreshUnitFrameSummary()
     if not refs then return end
 
     local info = self.elvuiConflictInfo or { available = false, unitFramesEnabled = false }
-    local ownerText = self.useTwichUnitFrames ~= false and "TwichUI" or "ElvUI"
+    local useTwich = self.useTwichUnitFrames ~= false
 
     if refs.infoText then
         if info.available then
-            local availability = info.unitFramesEnabled and "ElvUI unit frames are currently enabled." or
-                "ElvUI is installed, but its unit frames are already disabled."
-            local reloadText = self:_NeedsUnitFrameConflictReload() and
-                "Choosing TwichUI will reload once here, then resume the wizard on the next step." or
-                "No extra reload is needed for your current choice."
-            refs.infoText:SetText(string.format("%s\nOwner: %s\n%s", availability, ownerText, reloadText))
+            local statusLine = info.unitFramesEnabled and "ElvUI frames: enabled" or "ElvUI frames: disabled"
+            local reloadLine = self:_NeedsUnitFrameConflictReload() and "Reload required." or ""
+            refs.infoText:SetText(statusLine .. (reloadLine ~= "" and "\n" .. reloadLine or ""))
         else
-            refs.infoText:SetText("ElvUI unit frames were not detected. TwichUI unit frames will be configured here.")
+            refs.infoText:SetText("ElvUI not detected.")
         end
     end
 
     if refs.partyPlayer then
-        refs.partyPlayer:SetAlpha((self.useTwichUnitFrames ~= false) and 1 or 0.45)
-        refs.partyPlayer:EnableMouse(self.useTwichUnitFrames ~= false)
+        refs.partyPlayer:SetAlpha(useTwich and 1 or 0.45)
+        refs.partyPlayer:EnableMouse(useTwich)
     end
     if refs.partyCastbars then
-        refs.partyCastbars:SetAlpha((self.useTwichUnitFrames ~= false) and 1 or 0.45)
-        refs.partyCastbars:EnableMouse(self.useTwichUnitFrames ~= false)
+        refs.partyCastbars:SetAlpha(useTwich and 1 or 0.45)
+        refs.partyCastbars:EnableMouse(useTwich)
     end
 end
 
 function UI:_BuildUnitFramesContent(sf)
-    local x, y = PAD, -PAD
-    local info = self.elvuiConflictInfo or { available = false, unitFramesEnabled = false }
+    -- Legacy stub — content is now in _BuildFramesContent.
+    self:_BuildFramesContent(sf)
+end
 
-    local heading = NewText(sf, "Unit Frames", 20)
+-- ─── Step 3 — Frames & Bars ──────────────────────────────────────────────────
+
+function UI:_BuildFramesContent(sf)
+    local x, y   = PAD, -PAD
+    local info   = self.elvuiConflictInfo or { available = false, unitFramesEnabled = false, actionBarsEnabled = false }
+
+    -- ── Page heading ──────────────────────────────────────────────────────
+    local heading = NewText(sf, "Frames & Bars", 20)
     heading:SetPoint("TOPLEFT", sf, "TOPLEFT", x, y)
 
     local sub = NewText(sf,
-        "Choose who owns unit frames after your layout is applied, then set a couple of party-frame defaults.",
+        "Choose who manages your unit frames and action bars. Both choices are applied together with a single reload.",
         12, C.muted[1], C.muted[2], C.muted[3])
     sub:SetPoint("TOPLEFT", heading, "BOTTOMLEFT", 0, -5)
     sub:SetWidth(W - PAD * 2 - 2)
 
-    local infoText = NewText(sf, "", 12, C.text[1], C.text[2], C.text[3])
-    infoText:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -18)
-    infoText:SetWidth(W - PAD * 2 - 2)
+    -- ── Two-column owner cards ─────────────────────────────────────────────
+    local colGap  = 14
+    local colW    = math.floor((W - PAD * 2 - colGap) / 2)
+    local cardH   = 128
 
-    local ownerCard = CreateFrame("Frame", nil, sf, "BackdropTemplate")
-    ownerCard:SetSize(W - PAD * 2, 92)
-    ownerCard:SetPoint("TOPLEFT", infoText, "BOTTOMLEFT", 0, -16)
-    Backdrop(ownerCard, C.bg, C.border, 0.5, 0.6)
+    -- Left: Unit Frames
+    local ufCard = CreateFrame("Frame", nil, sf, "BackdropTemplate")
+    ufCard:SetSize(colW, cardH)
+    ufCard:SetPoint("TOPLEFT", sub, "BOTTOMLEFT", 0, -16)
+    Backdrop(ufCard, C.bg, C.border, 0.5, 0.6)
 
-    local ownerTitle = NewText(ownerCard, "Unit Frame Owner", 11, C.gold[1], C.gold[2], C.gold[3])
-    ownerTitle:SetPoint("TOPLEFT", ownerCard, "TOPLEFT", 10, -8)
+    local ufTitle = NewText(ufCard, "Unit Frames", 11, C.gold[1], C.gold[2], C.gold[3])
+    ufTitle:SetPoint("TOPLEFT", ufCard, "TOPLEFT", 10, -10)
 
-    local twichBtn, twichLabel = NewButton(ownerCard, "TwichUI", 140, 30)
-    twichBtn:SetPoint("TOPLEFT", ownerTitle, "BOTTOMLEFT", 0, -12)
-    local elvBtn, elvLabel = NewButton(ownerCard, "ElvUI", 120, 30)
-    elvBtn:SetPoint("LEFT", twichBtn, "RIGHT", 12, 0)
+    local ufInfoText = NewText(ufCard, "", 11, C.muted[1], C.muted[2], C.muted[3])
+    ufInfoText:SetPoint("TOPLEFT", ufTitle, "BOTTOMLEFT", 0, -5)
+    ufInfoText:SetWidth(colW - 20)
 
-    local function RefreshOwnerButtons()
+    local ufTwichBtn, ufTwichLabel = NewButton(ufCard, "TwichUI", 110, 28)
+    ufTwichBtn:SetPoint("BOTTOMLEFT", ufCard, "BOTTOMLEFT", 10, 10)
+    local ufElvBtn, ufElvLabel = NewButton(ufCard, "ElvUI", 90, 28)
+    ufElvBtn:SetPoint("LEFT", ufTwichBtn, "RIGHT", 8, 0)
+
+    -- Right: Action Bars
+    local abCard = CreateFrame("Frame", nil, sf, "BackdropTemplate")
+    abCard:SetSize(colW, cardH)
+    abCard:SetPoint("TOPLEFT", ufCard, "TOPRIGHT", colGap, 0)
+    Backdrop(abCard, C.bg, C.border, 0.5, 0.6)
+
+    local abTitle = NewText(abCard, "Action Bars", 11, C.gold[1], C.gold[2], C.gold[3])
+    abTitle:SetPoint("TOPLEFT", abCard, "TOPLEFT", 10, -10)
+
+    local abInfoText = NewText(abCard, "", 11, C.muted[1], C.muted[2], C.muted[3])
+    abInfoText:SetPoint("TOPLEFT", abTitle, "BOTTOMLEFT", 0, -5)
+    abInfoText:SetWidth(colW - 20)
+
+    local abTwichBtn, abTwichLabel = NewButton(abCard, "TwichUI", 110, 28)
+    abTwichBtn:SetPoint("BOTTOMLEFT", abCard, "BOTTOMLEFT", 10, 10)
+    local abElvBtn, abElvLabel = NewButton(abCard, "ElvUI", 90, 28)
+    abElvBtn:SetPoint("LEFT", abTwichBtn, "RIGHT", 8, 0)
+
+    -- ── Button refresh helpers ─────────────────────────────────────────────
+    local function RefreshUFOwnerButtons()
         local useTwich = self.useTwichUnitFrames ~= false
         if useTwich then
-            twichBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
-            twichBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
-            elvBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
-            elvBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+            ufTwichBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
+            ufTwichBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
+            ufElvBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
+            ufElvBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
         else
-            elvBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
-            elvBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
-            twichBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
-            twichBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+            ufElvBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
+            ufElvBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
+            ufTwichBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
+            ufTwichBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
         end
-        twichLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
-        elvLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
+        ufTwichLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
+        ufElvLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
         self:_RefreshUnitFrameSummary()
     end
 
-    twichBtn:SetScript("OnClick", function()
-        self.useTwichUnitFrames = true
-        RefreshOwnerButtons()
-    end)
-    elvBtn:SetScript("OnClick", function()
-        self.useTwichUnitFrames = false
-        RefreshOwnerButtons()
-    end)
-
-    if not info.available then
-        elvBtn:Disable()
-        elvBtn:SetAlpha(0.45)
-        self.useTwichUnitFrames = true
+    local function RefreshABOwnerButtons()
+        local useTwich = self.useTwichActionBars ~= false
+        if useTwich then
+            abTwichBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
+            abTwichBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
+            abElvBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
+            abElvBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+        else
+            abElvBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.55)
+            abElvBtn:SetBackdropBorderColor(C.teal[1], C.teal[2], C.teal[3], 0.9)
+            abTwichBtn:SetBackdropColor(C.teal[1], C.teal[2], C.teal[3], 0.12)
+            abTwichBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
+        end
+        abTwichLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
+        abElvLabel:SetTextColor(C.text[1], C.text[2], C.text[3])
+        self:_RefreshActionBarSummary()
     end
 
+    ufTwichBtn:SetScript("OnClick", function() self.useTwichUnitFrames = true;  RefreshUFOwnerButtons() end)
+    ufElvBtn:SetScript("OnClick",   function() self.useTwichUnitFrames = false; RefreshUFOwnerButtons() end)
+    abTwichBtn:SetScript("OnClick", function() self.useTwichActionBars = true;  RefreshABOwnerButtons() end)
+    abElvBtn:SetScript("OnClick",   function() self.useTwichActionBars = false; RefreshABOwnerButtons() end)
+
+    if not info.available then
+        ufElvBtn:Disable() ; ufElvBtn:SetAlpha(0.45) ; self.useTwichUnitFrames = true
+        abElvBtn:Disable() ; abElvBtn:SetAlpha(0.45) ; self.useTwichActionBars = true
+    end
+
+    -- ── Party Defaults card (full width, below columns) ───────────────────
     local optionsCard = CreateFrame("Frame", nil, sf, "BackdropTemplate")
-    optionsCard:SetSize(W - PAD * 2, 104)
-    optionsCard:SetPoint("TOPLEFT", ownerCard, "BOTTOMLEFT", 0, -10)
+    optionsCard:SetSize(W - PAD * 2, 100)
+    optionsCard:SetPoint("TOPLEFT", ufCard, "BOTTOMLEFT", 0, -12)
     Backdrop(optionsCard, C.bg, C.border, 0.5, 0.6)
 
     local optionsTitle = NewText(optionsCard, "Party Defaults", 11, C.gold[1], C.gold[2], C.gold[3])
-    optionsTitle:SetPoint("TOPLEFT", optionsCard, "TOPLEFT", 10, -8)
+    optionsTitle:SetPoint("TOPLEFT", optionsCard, "TOPLEFT", 10, -10)
 
     local partyPlayer = NewTwichCheckbox(optionsCard, "Show yourself in party frames", self.showPlayerInParty ~= false)
-    partyPlayer:SetPoint("TOPLEFT", optionsTitle, "BOTTOMLEFT", 0, -14)
-    partyPlayer:SetOnValueChanged(function(_, isChecked)
-        self.showPlayerInParty = isChecked == true
-    end)
+    partyPlayer:SetPoint("TOPLEFT", optionsTitle, "BOTTOMLEFT", 0, -12)
+    partyPlayer:SetOnValueChanged(function(_, isChecked) self.showPlayerInParty = isChecked == true end)
 
     local partyCastbars = NewTwichCheckbox(optionsCard, "Show party member cast bars", self.showPartyCastbars ~= false)
     partyCastbars:SetPoint("TOPLEFT", partyPlayer, "BOTTOMLEFT", 0, -10)
-    partyCastbars:SetOnValueChanged(function(_, isChecked)
-        self.showPartyCastbars = isChecked == true
-    end)
+    partyCastbars:SetOnValueChanged(function(_, isChecked) self.showPartyCastbars = isChecked == true end)
 
-    local note = NewText(optionsCard,
-        "These defaults apply to TwichUI unit frames. If you pick ElvUI here, the toggles are stored but stay inactive until you switch back.",
+    local ufNote = NewText(optionsCard,
+        "Applies to TwichUI unit frames. If you pick ElvUI above, these are stored but inactive until you switch back.",
         11, C.muted[1], C.muted[2], C.muted[3])
-    note:SetPoint("TOPLEFT", partyCastbars, "BOTTOMLEFT", 0, -8)
-    note:SetWidth(W - PAD * 2 - 26)
+    ufNote:SetPoint("TOPLEFT", partyCastbars, "BOTTOMLEFT", 0, -8)
+    ufNote:SetWidth(W - PAD * 2 - 26)
 
+    -- ── Persist refs for refresh functions ────────────────────────────────
     self.unitFrameRefs = {
-        infoText = infoText,
-        partyPlayer = partyPlayer,
+        infoText      = ufInfoText,
+        partyPlayer   = partyPlayer,
         partyCastbars = partyCastbars,
     }
+    self.actionBarRefs = { infoText = abInfoText }
 
-    RefreshOwnerButtons()
+    RefreshUFOwnerButtons()
+    RefreshABOwnerButtons()
 end
 
--- ─── Step 5 — Action Bars ────────────────────────────────────────────────────
+-- ─── Step 5 — Action Bars (merged into Frames & Bars; retained for legacy refs) ───
 
 function UI:_RefreshActionBarSummary()
     local refs = self.actionBarRefs
     if not refs then return end
 
-    local info     = self.elvuiConflictInfo or { available = false, actionBarsEnabled = false }
-    local useTwich = self.useTwichActionBars ~= false
+    local info = self.elvuiConflictInfo or { available = false, actionBarsEnabled = false }
 
     if refs.infoText then
         if info.available then
-            local availability = info.actionBarsEnabled and "ElvUI action bars are currently enabled." or
-                "ElvUI is installed, but its action bars are already disabled."
-            refs.infoText:SetText(string.format("%s\nOwner: %s", availability, useTwich and "TwichUI" or "ElvUI"))
+            refs.infoText:SetText(info.actionBarsEnabled and "ElvUI bars: enabled" or "ElvUI bars: disabled")
         else
-            refs.infoText:SetText("ElvUI action bars were not detected. TwichUI action bars will be used.")
+            refs.infoText:SetText("ElvUI not detected.")
         end
     end
 end
