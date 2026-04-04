@@ -8459,6 +8459,96 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             unitSettings.height = math.floor(absH + 0.5)
         end
     end)
+
+    -- ── Mover system registration ───────────────────────────────────────────
+    -- Also register with the central mover system so the frame appears as a
+    -- draggable handle when the user enters move mode (/tui movers).
+    local moversModule = _G.TwichMoverModule
+    if not moversModule or type(moversModule.RegisterMover) ~= "function" then
+        return
+    end
+
+    local isHeader = (layoutKey == "party" or layoutKey == "raid" or layoutKey == "tank" or layoutKey == "boss")
+
+    local LABELS = {
+        player       = "Player Frame",
+        target       = "Target Frame",
+        targettarget = "Target of Target",
+        focus        = "Focus Frame",
+        pet          = "Pet Frame",
+        castbar      = "Castbar",
+        boss         = "Boss Anchor",
+        party        = "Party Frames",
+        raid         = "Raid Frames",
+        tank         = "Tank Frames",
+    }
+
+    local function getSetSize()
+        if isHeader then return nil end
+        if layoutKey == "castbar" then
+            return function(w, h)
+                local db = UnitFrames:GetDB()
+                db.castbar = db.castbar or {}
+                if w and w > 20 then db.castbar.width = math.floor(w + 0.5) end
+                if h and h > 12 then db.castbar.height = math.floor(h + 0.5) end
+                if frame and frame.SetSize and frame:IsObjectType("Frame") then
+                    frame:SetSize(w or frame:GetWidth(), h or frame:GetHeight())
+                end
+            end
+        end
+        return function(w, h)
+            local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+            if w and w > 20 then unitSettings.width = math.floor(w + 0.5) end
+            if h and h > 12 then unitSettings.height = math.floor(h + 0.5) end
+            if frame and frame.SetSize and frame:IsObjectType("Frame") then
+                frame:SetSize(w or frame:GetWidth(), h or frame:GetHeight())
+            end
+        end
+    end
+
+    moversModule:RegisterMover("UF_" .. layoutKey, {
+        label    = LABELS[layoutKey] or layoutKey,
+        category = "Unit Frames",
+        getFrame = function() return frame end,
+        getX     = function()
+            return frame and frame.GetLeft and math.floor((frame:GetLeft() or 0) + 0.5) or 0
+        end,
+        getY     = function()
+            return frame and frame.GetBottom and math.floor((frame:GetBottom() or 0) + 0.5) or 0
+        end,
+        getW     = function()
+            return frame and frame.GetWidth and math.floor((frame:GetWidth() or 100) + 0.5) or 100
+        end,
+        getH     = function()
+            return frame and frame.GetHeight and math.floor((frame:GetHeight() or 50) + 0.5) or 50
+        end,
+        setPos   = function(x, y)
+            local layout = UnitFrames:GetLayoutSettings(layoutKey)
+            layout.point = "BOTTOMLEFT"
+            layout.relativePoint = "BOTTOMLEFT"
+            layout.x = math.floor((x or 0) + 0.5)
+            layout.y = math.floor((y or 0) + 0.5)
+            if frame and frame.ClearAllPoints then
+                frame:ClearAllPoints()
+                frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", layout.x, layout.y)
+            end
+        end,
+        setSize  = getSetSize(),
+        isEnabled = function()
+            if isHeader then
+                local groupKey = layoutKey == "boss" and "boss" or layoutKey
+                local gs = UnitFrames:GetGroupSettings(groupKey)
+                return gs and gs.enabled ~= false
+            end
+            if layoutKey == "castbar" then
+                local db = UnitFrames:GetDB()
+                return db and db.castbar and db.castbar.enabled ~= false
+            end
+            if layoutKey == "player" then return true end
+            local us = UnitFrames:GetUnitSettings(layoutKey)
+            return us and us.enabled ~= false
+        end,
+    })
 end
 
 do
