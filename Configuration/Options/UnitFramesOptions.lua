@@ -362,10 +362,12 @@ local HEAL_PREDICTION_DEFAULTS         = {
     enabled = true,
     showPlayer = true,
     showOthers = true,
+    showHealAbsorb = true,
     maxOverflow = 1.05,
     texture = nil,
     playerColor = { 0.34, 0.84, 0.54, 0.75 },
     otherColor = { 0.56, 0.92, 0.72, 0.45 },
+    healAbsorbColor = { 0.06, 0.07, 0.09, 0.72 },
 }
 
 local EMBEDDED_CASTBAR_DEFAULTS        = {
@@ -1788,29 +1790,42 @@ local function BuildHealPredictionGroup(order, basePath)
                 disabled = DisabledWhenOff(),
                 refreshConfig = true,
             }),
-        maxOverflow = BuildRange(4, "Max Overflow",
+        showHealAbsorb = BuildToggle(4, "Show Heal Absorb",
+            "Shade the portion of current health that is blocked by heal absorbs.",
+            ExtendPath(basePath, "showHealAbsorb"), HEAL_PREDICTION_DEFAULTS.showHealAbsorb, {
+                disabled = DisabledWhenOff(),
+                refreshConfig = true,
+            }),
+        maxOverflow = BuildRange(5, "Max Overflow",
             "How far predicted healing may extend past full health. 1.00 clamps to the frame width.",
             ExtendPath(basePath, "maxOverflow"), HEAL_PREDICTION_DEFAULTS.maxOverflow, 1, 1.5, 0.01, {
                 disabled = DisabledWhenOff(),
                 refreshConfig = true,
             }),
-        texture = BuildTextureSelect(5, "Texture",
+        texture = BuildTextureSelect(6, "Texture",
             "Optional texture override for heal prediction bars.",
             ExtendPath(basePath, "texture"), "Use Health Texture", {
                 disabled = DisabledWhenOff(),
             }),
-        playerColor = BuildColor(6, "Your Heals Color",
+        playerColor = BuildColor(7, "Your Heals Color",
             "Color for incoming heals cast by you.",
             ExtendPath(basePath, "playerColor"), HEAL_PREDICTION_DEFAULTS.playerColor, true, {
                 disabled = DisabledWhenOff(function()
                     return GetPathValue(ExtendPath(basePath, "showPlayer"), HEAL_PREDICTION_DEFAULTS.showPlayer) ~= true
                 end),
             }),
-        otherColor = BuildColor(7, "Other Heals Color",
+        otherColor = BuildColor(8, "Other Heals Color",
             "Color for incoming heals from other players.",
             ExtendPath(basePath, "otherColor"), HEAL_PREDICTION_DEFAULTS.otherColor, true, {
                 disabled = DisabledWhenOff(function()
                     return GetPathValue(ExtendPath(basePath, "showOthers"), HEAL_PREDICTION_DEFAULTS.showOthers) ~= true
+                end),
+            }),
+        healAbsorbColor = BuildColor(9, "Heal Absorb Color",
+            "Color used to shade health lost to heal absorbs.",
+            ExtendPath(basePath, "healAbsorbColor"), HEAL_PREDICTION_DEFAULTS.healAbsorbColor, true, {
+                disabled = DisabledWhenOff(function()
+                    return GetPathValue(ExtendPath(basePath, "showHealAbsorb"), HEAL_PREDICTION_DEFAULTS.showHealAbsorb) ~= true
                 end),
             }),
     })
