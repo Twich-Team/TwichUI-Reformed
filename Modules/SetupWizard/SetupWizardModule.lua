@@ -555,7 +555,7 @@ function SetupWizardModule:ApplyLayout(layoutId, options)
     if type(layout.apply) == "function" then
         layout.apply()
     end
-    self._layoutApplyOptions = nil
+    self._layoutApplyOptions  = nil
     -- 1.5. Scale action bar positions and button sizes from the capture resolution.
     --   Center-intent bars (capture center in [35%,65%] of refW) are ALWAYS snapped
     --   to sw/2 — even at the reference resolution — so minor off-center placement
@@ -565,18 +565,18 @@ function SetupWizardModule:ApplyLayout(layoutId, options)
     local _sw, _sh
     local _centerClusterLeft  = math.huge
     local _centerClusterRight = -math.huge
-    local _refRes = layout.referenceResolution
-    local _refW   = _refRes and tonumber(_refRes.w) or nil
-    local _refH   = _refRes and tonumber(_refRes.h) or nil
+    local _refRes             = layout.referenceResolution
+    local _refW               = _refRes and tonumber(_refRes.w) or nil
+    local _refH               = _refRes and tonumber(_refRes.h) or nil
     if _refW and _refW > 0 and _refH and _refH > 0 then
-        _sw, _sh      = GetScreenWidth(), GetScreenHeight()
-        local scaleX  = _sw / _refW
-        local scaleY  = _sh / _refH
-        local isScaled = math.abs(_sw - _refW) > 1 or math.abs(_sh - _refH) > 1
-        local gentleX = scaleX + 0.4 * (scaleY - scaleX)
+        _sw, _sh            = GetScreenWidth(), GetScreenHeight()
+        local scaleX        = _sw / _refW
+        local scaleY        = _sh / _refH
+        local isScaled      = math.abs(_sw - _refW) > 1 or math.abs(_sh - _refH) > 1
+        local gentleX       = scaleX + 0.4 * (scaleY - scaleX)
 
-        local CM     = T:GetModule("Configuration", true)
-        local config = CM and type(CM.GetProfileDB) == "function" and CM:GetProfileDB() or nil
+        local CM            = T:GetModule("Configuration", true)
+        local config        = CM and type(CM.GetProfileDB) == "function" and CM:GetProfileDB() or nil
 
         -- Scale global button spacing first so bar-width estimates below are correct.
         local scaledSpacing = 4
@@ -588,32 +588,32 @@ function SetupWizardModule:ApplyLayout(layoutId, options)
             end
         end
 
-        local HOLDER_PAD = 6  -- must match DEFAULT_HOLDER_PADDING in ActionBars.lua
+        local HOLDER_PAD = 6 -- must match DEFAULT_HOLDER_PADDING in ActionBars.lua
         local abBars = config and type(config.actionBars) == "table" and
-                       type(config.actionBars.bars) == "table" and config.actionBars.bars or nil
+            type(config.actionBars.bars) == "table" and config.actionBars.bars or nil
         if abBars then
             for _, bs in pairs(abBars) do
                 if type(bs) == "table" and bs.enabled == true then
-                    local origX      = type(bs.x)             == "number" and bs.x             or 0
-                    local origBtnSz  = type(bs.buttonSize)    == "number" and bs.buttonSize    or 32
-                    local origPerRow = type(bs.buttonsPerRow) == "number" and bs.buttonsPerRow or 12
-                    local origCount  = type(bs.buttonCount)   == "number" and bs.buttonCount   or 12
+                    local origX       = type(bs.x) == "number" and bs.x or 0
+                    local origBtnSz   = type(bs.buttonSize) == "number" and bs.buttonSize or 32
+                    local origPerRow  = type(bs.buttonsPerRow) == "number" and bs.buttonsPerRow or 12
+                    local origCount   = type(bs.buttonCount) == "number" and bs.buttonCount or 12
                     -- bs.scale applies a visual multiplier to the holder frame (SetScale).
                     -- Use it when computing the true on-screen width for cluster bounds.
-                    local origScale  = type(bs.scale)         == "number" and bs.scale         or 1.0
-                    local perRow     = math.min(origPerRow, origCount)
+                    local origScale   = type(bs.scale) == "number" and bs.scale or 1.0
+                    local perRow      = math.min(origPerRow, origCount)
 
                     -- Scale button size by height ratio when resolution differs.
                     -- Clamp to 22 minimum to match LayoutBar's ClampNumber(sz, 22, 64, …).
                     local scaledBtnSz = isScaled
                         and math.max(22, math.floor(origBtnSz * scaleY + 0.5))
-                        or  math.max(22, origBtnSz)
+                        or math.max(22, origBtnSz)
                     if isScaled then bs.buttonSize = scaledBtnSz end
 
                     -- barW is the logical holder size; visual width = barW * origScale.
-                    local barW    = perRow * scaledBtnSz
+                    local barW       = perRow * scaledBtnSz
                         + math.max(0, perRow - 1) * scaledSpacing + HOLDER_PAD * 2
-                    local refBarW = perRow * origBtnSz
+                    local refBarW    = perRow * origBtnSz
                         + math.max(0, perRow - 1) * 4 + HOLDER_PAD * 2
 
                     -- Where was this bar's horizontal centre as a fraction of refW?
@@ -624,13 +624,13 @@ function SetupWizardModule:ApplyLayout(layoutId, options)
                         -- own layout system guarantees perfect horizontal centering regardless
                         -- of button size, scale, or rounding.  y is unchanged (vertical offset
                         -- from UIParent bottom means the same for both BOTTOMLEFT and BOTTOM).
-                        bs.point = "BOTTOM"
-                        bs.relativePoint = "BOTTOM"
-                        bs.x = 0
+                        bs.point            = "BOTTOM"
+                        bs.relativePoint    = "BOTTOM"
+                        bs.x                = 0
                         -- Track visual cluster bounds for step 2.5: bar spans ±barW*scale/2
                         -- around sw/2 when BOTTOM-anchored.
-                        local halfVisual = barW * origScale / 2
-                        _centerClusterLeft  = math.min(_centerClusterLeft,  _sw / 2 - halfVisual)
+                        local halfVisual    = barW * origScale / 2
+                        _centerClusterLeft  = math.min(_centerClusterLeft, _sw / 2 - halfVisual)
                         _centerClusterRight = math.max(_centerClusterRight, _sw / 2 + halfVisual)
                     elseif isScaled then
                         bs.x = math.floor(origX * gentleX + 0.5)
@@ -659,11 +659,11 @@ function SetupWizardModule:ApplyLayout(layoutId, options)
         local ufDB   = config and type(config.unitFrames) == "table" and config.unitFrames or nil
         if ufDB then
             local ufLayout = type(ufDB.layout) == "table" and ufDB.layout or nil
-            local ufUnits  = type(ufDB.units)  == "table" and ufDB.units  or nil
-            local GAP      = 14  -- px gap between UF edge and nearest bar edge
+            local ufUnits  = type(ufDB.units) == "table" and ufDB.units or nil
+            local GAP      = 14 -- px gap between UF edge and nearest bar edge
 
             -- Player: push left so its right edge clears the cluster
-            local pL = ufLayout and ufLayout["player"]
+            local pL       = ufLayout and ufLayout["player"]
             if pL and type(pL.x) == "number" then
                 local pw = ufUnits and ufUnits["player"] and tonumber(ufUnits["player"].width) or nil
                 if pw and pw > 0 then
@@ -689,7 +689,7 @@ function SetupWizardModule:ApplyLayout(layoutId, options)
             if totL and tL and type(tL.x) == "number" then
                 local tw = ufUnits and ufUnits["target"] and tonumber(ufUnits["target"].width) or nil
                 if tw and tw > 0 then
-                    totL.x = tL.x + tw + 4  -- 4 px gap matching original layout spacing
+                    totL.x = tL.x + tw + 4 -- 4 px gap matching original layout spacing
                 end
             end
 

@@ -1240,7 +1240,7 @@ function UI:_BuildLayoutContent(sf)
         local ufm = T:GetModule("UnitFrames", true)
         if ufm and ufm.SetTestPreviewGroupEnabled then
             pcall(ufm.SetTestPreviewGroupEnabled, ufm, "party", partyPreviewOn)
-            pcall(ufm.SetTestPreviewGroupEnabled, ufm, "raid",  raidPreviewOn)
+            pcall(ufm.SetTestPreviewGroupEnabled, ufm, "raid", raidPreviewOn)
         end
     end
 
@@ -1286,7 +1286,7 @@ function UI:_BuildLayoutContent(sf)
             SetupWizardModule:ApplyLayout(layoutId, {
                 applyChat = self.applyChatSetup ~= false,
             })
-            ReseedPreview()  -- re-set preview flags wiped by config snapshot
+            ReseedPreview() -- re-set preview flags wiped by config snapshot
             if self.selectedTheme then
                 SetupWizardModule:ApplyThemePreset(self.selectedTheme)
             end
@@ -1315,7 +1315,7 @@ function UI:_BuildLayoutContent(sf)
         SetupWizardModule:ApplyLayout(self.selectedLayout, {
             applyChat = self.applyChatSetup ~= false,
         })
-        ReseedPreview()  -- re-set preview flags wiped by config snapshot
+        ReseedPreview() -- re-set preview flags wiped by config snapshot
         if self.selectedTheme then
             SetupWizardModule:ApplyThemePreset(self.selectedTheme)
         end
@@ -1432,8 +1432,8 @@ end
 -- ─── Step 3 — Frames & Bars ──────────────────────────────────────────────────
 
 function UI:_BuildFramesContent(sf)
-    local x, y   = PAD, -PAD
-    local info   = self.elvuiConflictInfo or { available = false, unitFramesEnabled = false, actionBarsEnabled = false }
+    local x, y    = PAD, -PAD
+    local info    = self.elvuiConflictInfo or { available = false, unitFramesEnabled = false, actionBarsEnabled = false }
 
     -- ── Page heading ──────────────────────────────────────────────────────
     local heading = NewText(sf, "Frames & Bars", 20)
@@ -1446,9 +1446,9 @@ function UI:_BuildFramesContent(sf)
     sub:SetWidth(W - PAD * 2 - 2)
 
     -- ── Two-column owner cards ─────────────────────────────────────────────
-    local colGap  = 14
-    local colW    = math.floor((W - PAD * 2 - colGap) / 2)
-    local cardH   = 128
+    local colGap = 14
+    local colW   = math.floor((W - PAD * 2 - colGap) / 2)
+    local cardH  = 128
 
     -- Left: Unit Frames
     local ufCard = CreateFrame("Frame", nil, sf, "BackdropTemplate")
@@ -1523,14 +1523,22 @@ function UI:_BuildFramesContent(sf)
         self:_RefreshActionBarSummary()
     end
 
-    ufTwichBtn:SetScript("OnClick", function() self.useTwichUnitFrames = true;  RefreshUFOwnerButtons() end)
-    ufElvBtn:SetScript("OnClick",   function() self.useTwichUnitFrames = false; RefreshUFOwnerButtons() end)
-    abTwichBtn:SetScript("OnClick", function() self.useTwichActionBars = true;  RefreshABOwnerButtons() end)
-    abElvBtn:SetScript("OnClick",   function() self.useTwichActionBars = false; RefreshABOwnerButtons() end)
+    ufTwichBtn:SetScript("OnClick", function()
+        self.useTwichUnitFrames = true; RefreshUFOwnerButtons()
+    end)
+    ufElvBtn:SetScript("OnClick", function()
+        self.useTwichUnitFrames = false; RefreshUFOwnerButtons()
+    end)
+    abTwichBtn:SetScript("OnClick", function()
+        self.useTwichActionBars = true; RefreshABOwnerButtons()
+    end)
+    abElvBtn:SetScript("OnClick", function()
+        self.useTwichActionBars = false; RefreshABOwnerButtons()
+    end)
 
     if not info.available then
-        ufElvBtn:Disable() ; ufElvBtn:SetAlpha(0.45) ; self.useTwichUnitFrames = true
-        abElvBtn:Disable() ; abElvBtn:SetAlpha(0.45) ; self.useTwichActionBars = true
+        ufElvBtn:Disable(); ufElvBtn:SetAlpha(0.45); self.useTwichUnitFrames = true
+        abElvBtn:Disable(); abElvBtn:SetAlpha(0.45); self.useTwichActionBars = true
     end
 
     -- ── Party Defaults card (full width, below columns) ───────────────────

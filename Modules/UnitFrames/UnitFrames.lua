@@ -9198,7 +9198,7 @@ do
                 elseif key == "party" or key == "raid" or key == "tank" then
                     if key == "party" then
                         if db.testPreviewParty == true then
-                            shouldShow = true  -- forced on: bypass testMode and enabled checks
+                            shouldShow = true -- forced on: bypass testMode and enabled checks
                         elseif db.testPreviewParty == false then
                             shouldShow = false
                         else
@@ -9206,7 +9206,7 @@ do
                         end
                     elseif key == "raid" then
                         if db.testPreviewRaid == true then
-                            shouldShow = true  -- forced on: bypass testMode and enabled checks
+                            shouldShow = true -- forced on: bypass testMode and enabled checks
                         elseif db.testPreviewRaid == false then
                             shouldShow = false
                         else
