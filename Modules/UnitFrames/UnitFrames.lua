@@ -2043,9 +2043,9 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
     db.healthColorByScope = db.healthColorByScope or {}
 
     local useThemeAccentHealth = db.useThemeAccentHealth == true
-    local themeHealthColor = useThemeAccentHealth
-        and GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })
-        or GetThemeColor("successColor", { 0.34, 0.84, 0.54, 1 })
+    -- "Theme" health color mode always maps to the theme's accentColor.
+    -- (Previously it used successColor as a default, which produced an unexpected green.)
+    local themeHealthColor = GetThemeColor("accentColor", { 0.10, 0.72, 0.74, 1 })
     local defaultHealthMode = useThemeAccentHealth
         and "theme"
         or (db.useClassColor == true and "class" or "theme")
@@ -9197,17 +9197,17 @@ do
                     shouldShow = shouldShow and (self:GetUnitSettings(key).enabled ~= false)
                 elseif key == "party" or key == "raid" or key == "tank" then
                     if key == "party" then
-                        if db.testPreviewParty == true then
-                            shouldShow = true -- forced on: bypass testMode and enabled checks
-                        elseif db.testPreviewParty == false then
+                        if showPreview and db.testPreviewParty == true then
+                            shouldShow = true -- forced on within test mode only
+                        elseif showPreview and db.testPreviewParty == false then
                             shouldShow = false
                         else
                             shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
                         end
                     elseif key == "raid" then
-                        if db.testPreviewRaid == true then
-                            shouldShow = true -- forced on: bypass testMode and enabled checks
-                        elseif db.testPreviewRaid == false then
+                        if showPreview and db.testPreviewRaid == true then
+                            shouldShow = true -- forced on within test mode only
+                        elseif showPreview and db.testPreviewRaid == false then
                             shouldShow = false
                         else
                             shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)

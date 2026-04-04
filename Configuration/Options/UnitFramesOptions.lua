@@ -3338,8 +3338,8 @@ function Options:GetDB()
     local db = profile.unitFrames
     if db.enabled == nil then db.enabled = true end
     if db.testMode == nil then db.testMode = false end
-    if db.testPreviewParty == nil then db.testPreviewParty = true end
-    if db.testPreviewRaid == nil then db.testPreviewRaid = true end
+    if db.testPreviewParty == nil then db.testPreviewParty = false end
+    if db.testPreviewRaid == nil then db.testPreviewRaid = false end
     if db.lockFrames == nil then db.lockFrames = true end
     if db.scale == nil then db.scale = 1 end
     if db.frameAlpha == nil then db.frameAlpha = 1 end
