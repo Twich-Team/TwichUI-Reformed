@@ -332,7 +332,7 @@ local function CreateRow(menu, index)
     end
 
     button:EnableMouse(true)
-    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp", "LeftButtonDown", "RightButtonDown")
     button:SetAttribute("pressAndHoldAction", true)
     SkinBackdrop(button)
 
@@ -806,7 +806,8 @@ local function ShowSecureDropdown(entries, anchor)
                 if e.isTitle then
                     rootDescription:CreateTitle(e.text or "")
                 elseif e.disabled then
-                    local btn = rootDescription:CreateButton(e.text or "")
+                    local btn = rootDescription:CreateButton(e.text or "", function()
+                    end)
                     if btn and btn.SetEnabled then btn:SetEnabled(false) end
                 else
                     rootDescription:CreateButton(e.text or "", function()

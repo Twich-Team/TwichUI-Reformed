@@ -7,7 +7,8 @@
 - Fixed a hidden error that ocurred when accessing the profiles section of the configuration.
 - Fixed an issue that prevented the keystone utility panel from appearing
 - Fixed an issue where players in your party or raid who became phased still showed as valid targets
-- Fixed an issue where frames not actively displayed could "flicker" on occasionally.
+- Fixed an issue where frames not actively displayed could "flicker" on occasionally
+- Fixed an issue where the mounts data panel would not properly summon the selected mount
 
 #### New
 

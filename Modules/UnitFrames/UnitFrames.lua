@@ -1494,15 +1494,21 @@ local TWICH_ROLE_TEXTURES = {
 local STATE_ICON_TEXTURE = "Interface\\CharacterFrame\\UI-StateIcon"
 
 local STANDARD_STATE_TEXTURES = {
-    combat = { texture = STATE_ICON_TEXTURE, texCoord = { 0.5, 1, 0, 0.49 }, width = 32, height = 32 },
-    resting = { texture = STATE_ICON_TEXTURE, texCoord = { 0, 0.5, 0, 0.421875 }, width = 32, height = 27 },
-    spirit = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
+    combat    = { texture = STATE_ICON_TEXTURE, texCoord = { 0.5, 1, 0, 0.49 }, width = 32, height = 32 },
+    resting   = { texture = STATE_ICON_TEXTURE, texCoord = { 0, 0.5, 0, 0.421875 }, width = 32, height = 27 },
+    spirit    = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
+    offline   = { atlas = "voicechat-icon-speaker-muted", width = 1, height = 1 },
+    resurrect = { atlas = "readycheck-waiting", width = 1, height = 1 },
+    summon    = { atlas = "SummonPending", width = 1, height = 1 },
 }
 
 local TWICH_STATE_TEXTURES = {
-    combat = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Combat", width = 64, height = 70 },
-    resting = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Resting", width = 64, height = 63 },
-    spirit = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
+    combat    = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Combat", width = 64, height = 70 },
+    resting   = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Resting", width = 64, height = 63 },
+    spirit    = { texture = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Spirit", width = 64, height = 64 },
+    offline   = { atlas = "voicechat-icon-speaker-muted", width = 1, height = 1 },
+    resurrect = { atlas = "readycheck-waiting", width = 1, height = 1 },
+    summon    = { atlas = "SummonPending", width = 1, height = 1 },
 }
 
 local READY_CHECK_ART = {
@@ -1551,6 +1557,39 @@ local STATE_INDICATOR_DEFS = {
         defaultOffsetY = 0,
         defaultSize = 24,
         defaultAlpha = 0.9,
+    },
+    offlineIndicator = {
+        stateKey = "offline",
+        hostKey = "TwichOfflineIndicatorHost",
+        textureKey = "TwichOfflineIndicator",
+        defaultPoint = "CENTER",
+        defaultRelativePoint = "CENTER",
+        defaultOffsetX = 0,
+        defaultOffsetY = 0,
+        defaultSize = 22,
+        defaultAlpha = 0.9,
+    },
+    resurrectIndicator = {
+        stateKey = "resurrect",
+        hostKey = "TwichResurrectIndicatorHost",
+        textureKey = "TwichResurrectIndicator",
+        defaultPoint = "CENTER",
+        defaultRelativePoint = "TOP",
+        defaultOffsetX = 0,
+        defaultOffsetY = 8,
+        defaultSize = 18,
+        defaultAlpha = 1,
+    },
+    summonIndicator = {
+        stateKey = "summon",
+        hostKey = "TwichSummonIndicatorHost",
+        textureKey = "TwichSummonIndicator",
+        defaultPoint = "CENTER",
+        defaultRelativePoint = "TOP",
+        defaultOffsetX = 0,
+        defaultOffsetY = 8,
+        defaultSize = 18,
+        defaultAlpha = 1,
     },
 }
 
@@ -2451,6 +2490,9 @@ function UnitFrames:ApplyStateIndicatorSettings(frame, unitKey, indicatorKey)
             UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "combatIndicator")
             UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "restingIndicator")
             UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "spiritIndicator")
+            UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "offlineIndicator")
+            UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "resurrectIndicator")
+            UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "summonIndicator")
         end)
     end
 
@@ -2461,6 +2503,9 @@ function UnitFrames:ApplyStateIndicatorSettings(frame, unitKey, indicatorKey)
                 UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "combatIndicator")
                 UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "restingIndicator")
                 UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "spiritIndicator")
+                UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "offlineIndicator")
+                UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "resurrectIndicator")
+                UnitFrames:UpdateStateIndicator(f, f._unitKey or unitKey, "summonIndicator")
             end
         end)
     end
@@ -2502,6 +2547,12 @@ function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
             shouldShow = frame._testIsResting == true
         elseif indicatorKey == "spiritIndicator" then
             shouldShow = frame._testIsDead == true
+        elseif indicatorKey == "offlineIndicator" then
+            shouldShow = false -- no preview for offline
+        elseif indicatorKey == "resurrectIndicator" then
+            shouldShow = false -- no preview for resurrect
+        elseif indicatorKey == "summonIndicator" then
+            shouldShow = false -- no preview for summon
         end
     elseif unit and UnitExists(unit) then
         if indicatorKey == "combatIndicator" then
@@ -2514,6 +2565,18 @@ function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
             local okPlayer, isPlayer = pcall(_G.UnitIsPlayer, unit)
             local okDead, isDead = pcall(_G.UnitIsDeadOrGhost, unit)
             shouldShow = okPlayer and isPlayer == true and okDead and isDead == true
+        elseif indicatorKey == "offlineIndicator" then
+            local okConn, isConn = pcall(_G.UnitIsConnected, unit)
+            shouldShow = okConn and isConn == false
+        elseif indicatorKey == "resurrectIndicator" then
+            local okRes, hasRes = pcall(_G.UnitHasIncomingResurrectSpell, unit)
+            shouldShow = okRes and hasRes == true
+        elseif indicatorKey == "summonIndicator" then
+            local okUnit, isPlayer = pcall(_G.UnitIsUnit, unit, "player")
+            if okUnit and isPlayer == true and _G.C_InboundSummon then
+                local okSummon, hasSummon = pcall(_G.C_InboundSummon.HasInboundSummon)
+                shouldShow = okSummon and hasSummon == true
+            end
         end
     end
 
@@ -2530,6 +2593,9 @@ function UnitFrames:RefreshStateIndicatorFrames()
             self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "combatIndicator")
             self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "restingIndicator")
             self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "spiritIndicator")
+            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "offlineIndicator")
+            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "resurrectIndicator")
+            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "summonIndicator")
         end
     end
 
@@ -2541,6 +2607,9 @@ function UnitFrames:RefreshStateIndicatorFrames()
                     self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "combatIndicator")
                     self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "restingIndicator")
                     self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "spiritIndicator")
+                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "offlineIndicator")
+                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "resurrectIndicator")
+                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "summonIndicator")
                 end
             end
         end
@@ -3648,7 +3717,7 @@ local function CollectAuraData(list, scratch, unit, unitKey, auraFilter, maxCoun
     local isHarmfulAura = auraFilter:find("HARMFUL") ~= nil
     local playerFilter = auraFilter .. "|PLAYER"
     local timingBuffer = scratch._timingBuffer or
-    { duration = 0, expirationTime = 0, applications = 0, durationObject = nil }
+        { duration = 0, expirationTime = 0, applications = 0, durationObject = nil }
     scratch._timingBuffer = timingBuffer
 
     local function TryAddAura(data)
@@ -7133,6 +7202,9 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     self:ApplyStateIndicatorSettings(frame, unitKey, "combatIndicator")
     self:ApplyStateIndicatorSettings(frame, unitKey, "restingIndicator")
     self:ApplyStateIndicatorSettings(frame, unitKey, "spiritIndicator")
+    self:ApplyStateIndicatorSettings(frame, unitKey, "offlineIndicator")
+    self:ApplyStateIndicatorSettings(frame, unitKey, "resurrectIndicator")
+    self:ApplyStateIndicatorSettings(frame, unitKey, "summonIndicator")
     self:ApplyReadyCheckIndicatorSettings(frame, unitKey)
     self:ApplyInfoBarSettings(frame, unitKey)
 end
@@ -8424,8 +8496,12 @@ do
             if auraData then
                 if not button then
                     button = CreateFrame("Frame", nil, element, "BackdropTemplate")
-                    button:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile =
-                    "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+                    button:SetBackdrop({
+                        bgFile = "Interface\\Buttons\\WHITE8x8",
+                        edgeFile =
+                        "Interface\\Buttons\\WHITE8x8",
+                        edgeSize = 1
+                    })
                     button.icon = button:CreateTexture(nil, "ARTWORK")
                     button.icon:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
                     button.icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -1, 1)
@@ -8535,7 +8611,7 @@ do
 
         if frame.Castbar then
             local castCfg = (self:GetDB().castbars and self:GetDB().castbars[ResolveCastbarScopeByUnitKey(unitKey)]) or
-            {}
+                {}
             if castCfg.enabled == false then
                 frame.Castbar:Hide()
             else
@@ -8579,6 +8655,9 @@ do
         self:UpdateStateIndicator(frame, unitKey, "combatIndicator")
         self:UpdateStateIndicator(frame, unitKey, "restingIndicator")
         self:UpdateStateIndicator(frame, unitKey, "spiritIndicator")
+        self:UpdateStateIndicator(frame, unitKey, "offlineIndicator")
+        self:UpdateStateIndicator(frame, unitKey, "resurrectIndicator")
+        self:UpdateStateIndicator(frame, unitKey, "summonIndicator")
         self:UpdateReadyCheckIndicator(frame, unitKey)
     end
 
@@ -8627,6 +8706,9 @@ do
             self:UpdateStateIndicator(frame, entry.key, "combatIndicator")
             self:UpdateStateIndicator(frame, entry.key, "restingIndicator")
             self:UpdateStateIndicator(frame, entry.key, "spiritIndicator")
+            self:UpdateStateIndicator(frame, entry.key, "offlineIndicator")
+            self:UpdateStateIndicator(frame, entry.key, "resurrectIndicator")
+            self:UpdateStateIndicator(frame, entry.key, "summonIndicator")
             self:UpdateReadyCheckIndicator(frame, entry.key)
             frame:SetAlpha(Clamp(db.frameAlpha or 1, 0.15, 1))
         end
@@ -10201,6 +10283,18 @@ function UnitFrames:OnUnitTargetChanged()
     self:RefreshHighlightFrames()
 end
 
+function UnitFrames:OnUnitConnectionChanged()
+    self:RefreshStateIndicatorFrames()
+end
+
+function UnitFrames:OnResurrectChanged()
+    self:RefreshStateIndicatorFrames()
+end
+
+function UnitFrames:OnSummonChanged()
+    self:RefreshStateIndicatorFrames()
+end
+
 function UnitFrames:OnUnitFlagsChanged()
     if self._pendingHeaderClickCastRefresh and not InCombatLockdown() then
         self:RefreshHeaderClickCastSupport()
@@ -10343,6 +10437,8 @@ function UnitFrames:OnEnable()
     self:RegisterEvent("PLAYER_UPDATE_RESTING", "OnPlayerRestingChanged")
     self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnUnitFlagsChanged")
     self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnUnitFlagsChanged")
+    self:RegisterEvent("UNIT_CONNECTION", "OnUnitConnectionChanged")
+    self:RegisterEvent("INCOMING_RESURRECT_CHANGED", "OnResurrectChanged")
     self:RegisterEvent("GROUP_ROSTER_UPDATE", "RefreshAllFrames")
     self:RegisterEvent("PLAYER_ROLES_ASSIGNED", "RefreshAllFrames")
     self:RegisterEvent("ROLE_CHANGED_INFORM", "RefreshAllFrames")

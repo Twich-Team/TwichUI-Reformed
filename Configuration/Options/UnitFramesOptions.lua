@@ -160,6 +160,9 @@ local STATE_INDICATOR_DEFAULTS          = {
     combatIndicator = { point = "CENTER", relativePoint = "TOP", offsetX = 0, offsetY = 10, size = 20, alpha = 1 },
     restingIndicator = { point = "CENTER", relativePoint = "TOPLEFT", offsetX = -2, offsetY = 8, size = 18, alpha = 1 },
     spiritIndicator = { point = "CENTER", relativePoint = "CENTER", offsetX = 0, offsetY = 0, size = 24, alpha = 0.9 },
+    offlineIndicator = { point = "CENTER", relativePoint = "CENTER", offsetX = 0, offsetY = 0, size = 22, alpha = 0.9 },
+    resurrectIndicator = { point = "CENTER", relativePoint = "TOP", offsetX = 0, offsetY = 8, size = 18, alpha = 1 },
+    summonIndicator = { point = "CENTER", relativePoint = "TOP", offsetX = 0, offsetY = 8, size = 18, alpha = 1 },
 }
 
 local READY_CHECK_INDICATOR_DEFAULTS    = {
@@ -1603,6 +1606,12 @@ local function BuildStateIndicatorGroup(order, label, basePath, indicatorKey)
         toggleDescription = "Display the resting icon on this frame when the represented unit is the player and resting."
     elseif isSpiritIndicator then
         toggleDescription = "Display the spirit icon on this frame when the represented unit is a dead or ghost player."
+    elseif indicatorKey == "offlineIndicator" then
+        toggleDescription = "Display an icon on this frame when the represented unit is disconnected."
+    elseif indicatorKey == "resurrectIndicator" then
+        toggleDescription = "Display an icon on this frame when the represented unit has an incoming resurrect."
+    elseif indicatorKey == "summonIndicator" then
+        toggleDescription = "Display an icon on this frame when the player has a pending summon request."
     end
 
     return Widgets.IGroup(order, label, {
@@ -1826,7 +1835,7 @@ local function BuildHealPredictionGroup(order, basePath)
             ExtendPath(basePath, "healAbsorbColor"), HEAL_PREDICTION_DEFAULTS.healAbsorbColor, true, {
                 disabled = DisabledWhenOff(function()
                     return GetPathValue(ExtendPath(basePath, "showHealAbsorb"), HEAL_PREDICTION_DEFAULTS.showHealAbsorb) ~=
-                    true
+                        true
                 end),
             }),
     })
@@ -1959,7 +1968,13 @@ local function BuildSingleUnitTab(unitKey, label)
                         ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
                     spiritIndicator = BuildStateIndicatorGroup(8, "Spirit Indicator",
                         ExtendPath(basePath, "spiritIndicator"), "spiritIndicator"),
-                    readyCheckIndicator = BuildReadyCheckIndicatorGroup(9,
+                    offlineIndicator = BuildStateIndicatorGroup(9, "Offline Indicator",
+                        ExtendPath(basePath, "offlineIndicator"), "offlineIndicator"),
+                    resurrectIndicator = BuildStateIndicatorGroup(10, "Resurrect Indicator",
+                        ExtendPath(basePath, "resurrectIndicator"), "resurrectIndicator"),
+                    summonIndicator = BuildStateIndicatorGroup(11, "Summon Indicator",
+                        ExtendPath(basePath, "summonIndicator"), "summonIndicator"),
+                    readyCheckIndicator = BuildReadyCheckIndicatorGroup(12,
                         ExtendPath(basePath, "readyCheckIndicator"), false),
                     copyFrom = BuildCopyFromSingle(unitKey),
                 },
@@ -2246,9 +2261,15 @@ local function BuildGroupTab(groupKey, label)
                 ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
             spiritIndicator     = BuildStateIndicatorGroup(9, "Spirit Indicator",
                 ExtendPath(basePath, "spiritIndicator"), "spiritIndicator"),
-            readyCheckIndicator = BuildReadyCheckIndicatorGroup(10,
+            offlineIndicator    = BuildStateIndicatorGroup(10, "Offline Indicator",
+                ExtendPath(basePath, "offlineIndicator"), "offlineIndicator"),
+            resurrectIndicator  = BuildStateIndicatorGroup(11, "Resurrect Indicator",
+                ExtendPath(basePath, "resurrectIndicator"), "resurrectIndicator"),
+            summonIndicator     = BuildStateIndicatorGroup(12, "Summon Indicator",
+                ExtendPath(basePath, "summonIndicator"), "summonIndicator"),
+            readyCheckIndicator = BuildReadyCheckIndicatorGroup(13,
                 ExtendPath(basePath, "readyCheckIndicator"), true),
-            infoBar             = BuildInfoBarTab(11, ExtendPath(basePath, "infoBar")),
+            infoBar             = BuildInfoBarTab(14, ExtendPath(basePath, "infoBar")),
         },
     }
 end
@@ -2346,7 +2367,13 @@ local function BuildBossTab()
                         { "units", "boss", "restingIndicator" }, "restingIndicator"),
                     spiritIndicator = BuildStateIndicatorGroup(6, "Spirit Indicator",
                         { "units", "boss", "spiritIndicator" }, "spiritIndicator"),
-                    readyCheckIndicator = BuildReadyCheckIndicatorGroup(7,
+                    offlineIndicator = BuildStateIndicatorGroup(7, "Offline Indicator",
+                        { "units", "boss", "offlineIndicator" }, "offlineIndicator"),
+                    resurrectIndicator = BuildStateIndicatorGroup(8, "Resurrect Indicator",
+                        { "units", "boss", "resurrectIndicator" }, "resurrectIndicator"),
+                    summonIndicator = BuildStateIndicatorGroup(9, "Summon Indicator",
+                        { "units", "boss", "summonIndicator" }, "summonIndicator"),
+                    readyCheckIndicator = BuildReadyCheckIndicatorGroup(10,
                         { "units", "boss", "readyCheckIndicator" }, false),
                 },
             },

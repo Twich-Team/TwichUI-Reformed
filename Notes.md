@@ -14,8 +14,4 @@
 
 ### General
 
-- Need an indicator for offline, ressurrected, and summoned players to appear on their unit frames.
-
 # Other
-
-- favorite mounts fix
