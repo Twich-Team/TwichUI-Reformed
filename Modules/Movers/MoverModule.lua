@@ -32,14 +32,14 @@
         })
 ]]
 
-local TwichRx = _G.TwichRx
+local TwichRx          = _G.TwichRx
 ---@type TwichUI
-local T = unpack(TwichRx)
+local T                = unpack(TwichRx)
 
 ---@class TwichMoverModule : AceModule, AceEvent-3.0
-local MoverModule = T:NewModule("Movers", "AceEvent-3.0")
+local MoverModule      = T:NewModule("Movers", "AceEvent-3.0")
 
-_G.TwichMoverModule = MoverModule
+_G.TwichMoverModule    = MoverModule
 
 local CreateFrame      = _G.CreateFrame
 local UIParent         = _G.UIParent
@@ -52,30 +52,30 @@ local math_min         = math.min
 local math_abs         = math.abs
 
 -- ── Colours (match the rest of TwichUI) ────────────────────────────────────
-local C_ACCENT   = { 0.10, 0.72, 0.74 }  -- teal
-local C_BG       = { 0.05, 0.06, 0.09 }
-local C_BORDER   = { 0.10, 0.72, 0.74 }
-local C_LABEL    = { 0.55, 0.58, 0.68 }
-local C_BTN_BG   = { 0.09, 0.11, 0.15 }
-local C_BTN_BD   = { 0.20, 0.22, 0.30 }
+local C_ACCENT         = { 0.10, 0.72, 0.74 } -- teal
+local C_BG             = { 0.05, 0.06, 0.09 }
+local C_BORDER         = { 0.10, 0.72, 0.74 }
+local C_LABEL          = { 0.55, 0.58, 0.68 }
+local C_BTN_BG         = { 0.09, 0.11, 0.15 }
+local C_BTN_BD         = { 0.20, 0.22, 0.30 }
 
 -- ── Per-category tint colours ────────────────────────────────────────────────
 -- Handles are tinted by category so the user can identify module groups at a glance.
-local CATEGORY_COLORS = {
-    ["Unit Frames"]  = { 0.32, 0.55, 0.98 },   -- blue
-    ["Action Bars"]  = { 0.98, 0.62, 0.22 },   -- orange
-    ["Data Panels"]  = { 0.32, 0.85, 0.45 },   -- green
-    ["Chat"]         = { 0.82, 0.48, 0.95 },   -- purple
-    ["Gathering"]    = { 0.95, 0.88, 0.28 },   -- yellow
+local CATEGORY_COLORS  = {
+    ["Unit Frames"] = { 0.32, 0.55, 0.98 },  -- blue
+    ["Action Bars"] = { 0.98, 0.62, 0.22 },  -- orange
+    ["Data Panels"] = { 0.32, 0.85, 0.45 },  -- green
+    ["Chat"]        = { 0.82, 0.48, 0.95 },  -- purple
+    ["Gathering"]   = { 0.95, 0.88, 0.28 },  -- yellow
     -- fallback: teal (C_ACCENT) for anything unrecognised
 }
 
-local OVERLAY_ALPHA  = 0.65  -- translucency of the full-screen backdrop
+local OVERLAY_ALPHA    = 0.65 -- translucency of the full-screen backdrop
 
 -- ── Registry ────────────────────────────────────────────────────────────────
-MoverModule._registry  = MoverModule._registry or {}   -- key → opts
-MoverModule._handles   = MoverModule._handles  or {}   -- key → handle frame
-MoverModule._hidden    = MoverModule._hidden   or {}   -- key → true  (temp-hidden)
+MoverModule._registry  = MoverModule._registry or {} -- key → opts
+MoverModule._handles   = MoverModule._handles or {}  -- key → handle frame
+MoverModule._hidden    = MoverModule._hidden or {}   -- key → true  (temp-hidden)
 MoverModule._active    = false
 
 -- ── Font helper ─────────────────────────────────────────────────────────────
@@ -139,25 +139,35 @@ end
 -- relative to any of the nine standard UIParent anchor points.  fw/fh are the
 -- frame's rendered width and height at the time of conversion.
 function MoverModule:_ConvertFromBL(blX, blY, targetPoint, fw, fh)
-    local sw  = UIParent:GetWidth()  or 1280
-    local sh  = UIParent:GetHeight() or 768
-    fw = fw or 0;  fh = fh or 0
-    local L   = blX
-    local B   = blY
-    local R   = blX + fw
-    local T_  = blY + fh
-    local CX  = blX + fw / 2
-    local CY  = blY + fh / 2
-    if     targetPoint == "BOTTOMLEFT"  then return math_floor(L        + 0.5), math_floor(B        + 0.5)
-    elseif targetPoint == "BOTTOM"      then return math_floor(CX-sw/2  + 0.5), math_floor(B        + 0.5)
-    elseif targetPoint == "BOTTOMRIGHT" then return math_floor(R -sw    + 0.5), math_floor(B        + 0.5)
-    elseif targetPoint == "LEFT"        then return math_floor(L        + 0.5), math_floor(CY-sh/2  + 0.5)
-    elseif targetPoint == "CENTER"      then return math_floor(CX-sw/2  + 0.5), math_floor(CY-sh/2  + 0.5)
-    elseif targetPoint == "RIGHT"       then return math_floor(R -sw    + 0.5), math_floor(CY-sh/2  + 0.5)
-    elseif targetPoint == "TOPLEFT"     then return math_floor(L        + 0.5), math_floor(T_-sh    + 0.5)
-    elseif targetPoint == "TOP"         then return math_floor(CX-sw/2  + 0.5), math_floor(T_-sh    + 0.5)
-    elseif targetPoint == "TOPRIGHT"    then return math_floor(R -sw    + 0.5), math_floor(T_-sh    + 0.5)
-    else   return math_floor(L + 0.5), math_floor(B + 0.5)
+    local sw = UIParent:GetWidth() or 1280
+    local sh = UIParent:GetHeight() or 768
+    fw       = fw or 0; fh = fh or 0
+    local L  = blX
+    local B  = blY
+    local R  = blX + fw
+    local T_ = blY + fh
+    local CX = blX + fw / 2
+    local CY = blY + fh / 2
+    if targetPoint == "BOTTOMLEFT" then
+        return math_floor(L + 0.5), math_floor(B + 0.5)
+    elseif targetPoint == "BOTTOM" then
+        return math_floor(CX - sw / 2 + 0.5), math_floor(B + 0.5)
+    elseif targetPoint == "BOTTOMRIGHT" then
+        return math_floor(R - sw + 0.5), math_floor(B + 0.5)
+    elseif targetPoint == "LEFT" then
+        return math_floor(L + 0.5), math_floor(CY - sh / 2 + 0.5)
+    elseif targetPoint == "CENTER" then
+        return math_floor(CX - sw / 2 + 0.5), math_floor(CY - sh / 2 + 0.5)
+    elseif targetPoint == "RIGHT" then
+        return math_floor(R - sw + 0.5), math_floor(CY - sh / 2 + 0.5)
+    elseif targetPoint == "TOPLEFT" then
+        return math_floor(L + 0.5), math_floor(T_ - sh + 0.5)
+    elseif targetPoint == "TOP" then
+        return math_floor(CX - sw / 2 + 0.5), math_floor(T_ - sh + 0.5)
+    elseif targetPoint == "TOPRIGHT" then
+        return math_floor(R - sw + 0.5), math_floor(T_ - sh + 0.5)
+    else
+        return math_floor(L + 0.5), math_floor(B + 0.5)
     end
 end
 
@@ -172,7 +182,7 @@ function MoverModule:_GetInspector()
     panel:SetFrameLevel(9999)
     panel:SetClampedToScreen(true)
     ApplyBackdrop(panel, C_BG[1], C_BG[2], C_BG[3], 0.97,
-                         C_BORDER[1], C_BORDER[2], C_BORDER[3], 1)
+        C_BORDER[1], C_BORDER[2], C_BORDER[3], 1)
     panel:EnableMouse(true)
     panel:Hide()
 
@@ -181,7 +191,9 @@ function MoverModule:_GetInspector()
 
     -- Hover-delay hide
     local function CancelHide()
-        if panel._hideTimer then panel._hideTimer:Cancel(); panel._hideTimer = nil end
+        if panel._hideTimer then
+            panel._hideTimer:Cancel(); panel._hideTimer = nil
+        end
     end
     local function ScheduleHide()
         CancelHide()
@@ -233,7 +245,7 @@ function MoverModule:_GetInspector()
     local function MakeDiv(yOff, alpha)
         local d = panel:CreateTexture(nil, "ARTWORK")
         d:SetHeight(1)
-        d:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, yOff)
+        d:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, yOff)
         d:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, yOff)
         d:SetColorTexture(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], alpha or 0.35)
         return d
@@ -244,7 +256,7 @@ function MoverModule:_GetInspector()
         btn:SetSize(w or 80, h or 20)
         btn:SetPoint("TOPLEFT", panel, "TOPLEFT", xOff, yOff)
         ApplyBackdrop(btn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
-                           C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+            C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
         local fs = btn:CreateFontString(nil, "OVERLAY")
         fs:SetAllPoints(btn)
         fs:SetJustifyH("CENTER")
@@ -284,20 +296,20 @@ function MoverModule:_GetInspector()
     MakeDiv(-22)
 
     -- ── X / Y row ────────────────────────────────────────────────────────
-    MakeFS("X", 8,  -35, 10)
-    MakeFS("Y", W/2 + 4, -35, 10)
-    local xBox = MakeEB(19,      -30, W/2 - 22)
-    local yBox = MakeEB(W/2 + 15, -30, W/2 - 18)
+    MakeFS("X", 8, -35, 10)
+    MakeFS("Y", W / 2 + 4, -35, 10)
+    local xBox = MakeEB(19, -30, W / 2 - 22)
+    local yBox = MakeEB(W / 2 + 15, -30, W / 2 - 18)
     panel.xBox = xBox
     panel.yBox = yBox
 
     MakeDiv(-55, 0.18)
 
     -- ── W / H row ────────────────────────────────────────────────────────
-    MakeFS("W", 8,  -63, 10)
-    MakeFS("H", W/2 + 4, -63, 10)
-    local wBox = MakeEB(19,      -58, W/2 - 22)
-    local hBox = MakeEB(W/2 + 15, -58, W/2 - 18)
+    MakeFS("W", 8, -63, 10)
+    MakeFS("H", W / 2 + 4, -63, 10)
+    local wBox = MakeEB(19, -58, W / 2 - 22)
+    local hBox = MakeEB(W / 2 + 15, -58, W / 2 - 18)
     panel.wBox = wBox
     panel.hBox = hBox
 
@@ -311,7 +323,7 @@ function MoverModule:_GetInspector()
         local btn = CreateFrame("Button", nil, panel, "BackdropTemplate")
         btn:SetSize(S, S)
         ApplyBackdrop(btn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
-                          C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+            C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
         local fs = btn:CreateFontString(nil, "OVERLAY")
         fs:SetAllPoints(btn); fs:SetJustifyH("CENTER"); fs:SetJustifyV("MIDDLE")
         SetFont(fs, 11); fs:SetText(label)
@@ -336,31 +348,31 @@ function MoverModule:_GetInspector()
     end
 
     local r1y = -91
-    local btnU = MakeNudge("\226\134\145",  0,  1)
-    local btnL = MakeNudge("\226\134\144", -1,  0)
-    local btnR = MakeNudge("\226\134\146",  1,  0)
-    local btnD = MakeNudge("\226\134\147",  0, -1)
-    btnU:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S/2, r1y)
-    btnL:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S/2 - S - G, r1y - S - G)
-    btnR:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S/2 + S + G, r1y - S - G)
-    btnD:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S/2, r1y - 2*(S + G))
+    local btnU = MakeNudge("\226\134\145", 0, 1)
+    local btnL = MakeNudge("\226\134\144", -1, 0)
+    local btnR = MakeNudge("\226\134\146", 1, 0)
+    local btnD = MakeNudge("\226\134\147", 0, -1)
+    btnU:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2, r1y)
+    btnL:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2 - S - G, r1y - S - G)
+    btnR:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2 + S + G, r1y - S - G)
+    btnD:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2, r1y - 2 * (S + G))
     local ctr = CreateFrame("Frame", nil, panel, "BackdropTemplate")
     ctr:SetSize(S, S)
-    ctr:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S/2, r1y - S - G)
+    ctr:SetPoint("TOPLEFT", panel, "TOPLEFT", CX - S / 2, r1y - S - G)
     ctr:EnableMouse(false)
     ApplyBackdrop(ctr, 0.05, 0.06, 0.09, 0.7, 0.15, 0.17, 0.22, 0.6)
     local ctrFS = ctr:CreateFontString(nil, "OVERLAY")
     ctrFS:SetAllPoints(ctr); ctrFS:SetJustifyH("CENTER"); ctrFS:SetJustifyV("MIDDLE")
     SetFont(ctrFS, 8); ctrFS:SetText("XY"); ctrFS:SetTextColor(0.38, 0.40, 0.50)
 
-    MakeDiv(-91 - 3*(S + G) - 4, 0.18)
+    MakeDiv(-91 - 3 * (S + G) - 4, 0.18)
 
     -- ── Anchor picker (3×3 grid) ──────────────────────────────────────────
     -- Shows which anchor is active; clicking any cell converts and saves the anchor.
-    local anchorSectionY = -91 - 3*(S + G) - 14
+    local anchorSectionY = -91 - 3 * (S + G) - 14
 
     local anchorHdrFS = panel:CreateFontString(nil, "OVERLAY")
-    anchorHdrFS:SetPoint("TOPLEFT",  panel, "TOPLEFT",  0, anchorSectionY)
+    anchorHdrFS:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, anchorSectionY)
     anchorHdrFS:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, anchorSectionY)
     SetFont(anchorHdrFS, 9)
     anchorHdrFS:SetJustifyH("CENTER")
@@ -368,27 +380,27 @@ function MoverModule:_GetInspector()
     anchorHdrFS:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3])
 
     local ANCHOR_GRID = {
-        { "TOPLEFT",    "TL" }, { "TOP",    "T" }, { "TOPRIGHT",    "TR" },
-        { "LEFT",       "L"  }, { "CENTER", "C" }, { "RIGHT",       "R"  },
+        { "TOPLEFT", "TL" }, { "TOP", "T" }, { "TOPRIGHT", "TR" },
+        { "LEFT",    "L" }, { "CENTER", "C" }, { "RIGHT", "R" },
         { "BOTTOMLEFT", "BL" }, { "BOTTOM", "B" }, { "BOTTOMRIGHT", "BR" },
     }
     -- 3 buttons span the full usable panel width (8px padding each side)
-    local BW, BH, BG = math_floor((W - 16 - 2*2) / 3), 18, 2
+    local BW, BH, BG  = math_floor((W - 16 - 2 * 2) / 3), 18, 2
     local gridStartY  = anchorSectionY - 12
     panel._anchorBtns = {}
 
     for i, ag in ipairs(ANCHOR_GRID) do
         local gPoint, gLabel = ag[1], ag[2]
-        local col = (i - 1) % 3
-        local row = math_floor((i - 1) / 3)
-        local bx  = 8 + col * (BW + BG)
-        local by  = gridStartY - row * (BH + BG)
+        local col            = (i - 1) % 3
+        local row            = math_floor((i - 1) / 3)
+        local bx             = 8 + col * (BW + BG)
+        local by             = gridStartY - row * (BH + BG)
 
-        local abtn = CreateFrame("Button", nil, panel, "BackdropTemplate")
+        local abtn           = CreateFrame("Button", nil, panel, "BackdropTemplate")
         abtn:SetSize(BW, BH)
         abtn:SetPoint("TOPLEFT", panel, "TOPLEFT", bx, by)
         ApplyBackdrop(abtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
-                           C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+            C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
         local abtnFS = abtn:CreateFontString(nil, "OVERLAY")
         abtnFS:SetAllPoints(abtn)
         abtnFS:SetJustifyH("CENTER")
@@ -402,7 +414,7 @@ function MoverModule:_GetInspector()
 
         abtn:SetScript("OnEnter", function(self)
             if not self._active then
-                self:SetBackdropColor(C_ACCENT[1]*0.18, C_ACCENT[2]*0.18, C_ACCENT[3]*0.18, 0.7)
+                self:SetBackdropColor(C_ACCENT[1] * 0.18, C_ACCENT[2] * 0.18, C_ACCENT[3] * 0.18, 0.7)
                 self:SetBackdropBorderColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.65)
             end
             CancelHide()
@@ -419,16 +431,16 @@ function MoverModule:_GetInspector()
             local opts = MoverModule._registry[panel._activeKey]
             if not opts then return end
             -- Use handle's current absolute BOTTOMLEFT position for coordinate conversion
-            local hndl = MoverModule._handles[panel._activeKey]
-            local blX  = hndl and hndl:GetLeft()    or (type(opts.getX) == "function" and opts.getX() or 0)
-            local blY  = hndl and hndl:GetBottom()   or (type(opts.getY) == "function" and opts.getY() or 0)
-            local hfw  = hndl and hndl:GetWidth()   or 0
-            local hfh  = hndl and hndl:GetHeight()  or 0
+            local hndl   = MoverModule._handles[panel._activeKey]
+            local blX    = hndl and hndl:GetLeft() or (type(opts.getX) == "function" and opts.getX() or 0)
+            local blY    = hndl and hndl:GetBottom() or (type(opts.getY) == "function" and opts.getY() or 0)
+            local hfw    = hndl and hndl:GetWidth() or 0
+            local hfh    = hndl and hndl:GetHeight() or 0
             local nx, ny = MoverModule:_ConvertFromBL(blX, blY, self._pt, hfw, hfh)
             if type(opts.setAnchor) == "function" then
                 opts.setAnchor(self._pt, nx, ny)
             elseif type(opts.setPos) == "function" then
-                opts.setPos(blX, blY)   -- no anchor support: at least commit position
+                opts.setPos(blX, blY) -- no anchor support: at least commit position
             end
             C_Timer.After(0, function()
                 panel.RefreshBoxes()
@@ -456,13 +468,13 @@ function MoverModule:_GetInspector()
 
     -- ── Extra controls placeholder (rebuilt on Show) ─────────────────────
     panel._extrasContainer = CreateFrame("Frame", nil, panel)
-    panel._extrasContainer:SetPoint("TOPLEFT",  panel, "TOPLEFT", 0, 0)
+    panel._extrasContainer:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
     panel._extrasContainer:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, 0)
     panel._extrasContainer:SetHeight(0)
-    panel._extrasContainer:Hide()  -- shown only when extras exist
+    panel._extrasContainer:Hide() -- shown only when extras exist
 
     -- Dynamic height is recalculated in panel.Activate().
-    panel._baseHeight = math_abs(hideY) + 20 + 8  -- extra margin below hide btn
+    panel._baseHeight = math_abs(hideY) + 20 + 8 -- extra margin below hide btn
 
     -- ── Logic ────────────────────────────────────────────────────────────
     local function RefreshBoxes()
@@ -503,7 +515,7 @@ function MoverModule:_GetInspector()
                 abtn:EnableMouse(hasAnch or type(opts.setPos) == "function")
                 if abtn._active then
                     ApplyBackdrop(abtn,
-                        C_ACCENT[1]*0.20, C_ACCENT[2]*0.20, C_ACCENT[3]*0.20, 0.85,
+                        C_ACCENT[1] * 0.20, C_ACCENT[2] * 0.20, C_ACCENT[3] * 0.20, 0.85,
                         C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 1)
                     abtn._fs:SetTextColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3])
                 else
@@ -536,7 +548,7 @@ function MoverModule:_GetInspector()
         local opts = MoverModule._registry[panel._activeKey]
         if not opts or type(opts.setSize) ~= "function" then return end
         local nw = math_max(20, math_floor((tonumber(w) or 20) + 0.5))
-        local nh = math_max(4,  math_floor((tonumber(h) or 4)  + 0.5))
+        local nh = math_max(4, math_floor((tonumber(h) or 4) + 0.5))
         opts.setSize(nw, nh)
         wBox:SetText(tostring(nw)); hBox:SetText(tostring(nh))
         wBox:SetCursorPosition(0); hBox:SetCursorPosition(0)
@@ -544,19 +556,41 @@ function MoverModule:_GetInspector()
     end
 
     -- EditBox scripts
-    xBox:SetScript("OnEnterPressed", function(eb) ApplyPos(eb:GetText(), tonumber(yBox:GetText()) or 0); eb:ClearFocus() end)
-    xBox:SetScript("OnEscapePressed", function(eb) RefreshBoxes(); eb:ClearFocus() end)
-    yBox:SetScript("OnEnterPressed", function(eb) ApplyPos(tonumber(xBox:GetText()) or 0, eb:GetText()); eb:ClearFocus() end)
-    yBox:SetScript("OnEscapePressed", function(eb) RefreshBoxes(); eb:ClearFocus() end)
-    wBox:SetScript("OnEnterPressed", function(eb) ApplySize(eb:GetText(), tonumber(hBox:GetText()) or 0); eb:ClearFocus() end)
-    wBox:SetScript("OnEscapePressed", function(eb) RefreshBoxes(); eb:ClearFocus() end)
-    hBox:SetScript("OnEnterPressed", function(eb) ApplySize(tonumber(wBox:GetText()) or 0, eb:GetText()); eb:ClearFocus() end)
-    hBox:SetScript("OnEscapePressed", function(eb) RefreshBoxes(); eb:ClearFocus() end)
+    xBox:SetScript("OnEnterPressed",
+        function(eb)
+            ApplyPos(eb:GetText(), tonumber(yBox:GetText()) or 0); eb:ClearFocus()
+        end)
+    xBox:SetScript("OnEscapePressed", function(eb)
+        RefreshBoxes(); eb:ClearFocus()
+    end)
+    yBox:SetScript("OnEnterPressed",
+        function(eb)
+            ApplyPos(tonumber(xBox:GetText()) or 0, eb:GetText()); eb:ClearFocus()
+        end)
+    yBox:SetScript("OnEscapePressed", function(eb)
+        RefreshBoxes(); eb:ClearFocus()
+    end)
+    wBox:SetScript("OnEnterPressed",
+        function(eb)
+            ApplySize(eb:GetText(), tonumber(hBox:GetText()) or 0); eb:ClearFocus()
+        end)
+    wBox:SetScript("OnEscapePressed", function(eb)
+        RefreshBoxes(); eb:ClearFocus()
+    end)
+    hBox:SetScript("OnEnterPressed",
+        function(eb)
+            ApplySize(tonumber(wBox:GetText()) or 0, eb:GetText()); eb:ClearFocus()
+        end)
+    hBox:SetScript("OnEscapePressed", function(eb)
+        RefreshBoxes(); eb:ClearFocus()
+    end)
 
     -- ── Activate for a given key ─────────────────────────────────────────
     function panel.Activate(key, anchorHandle)
         local opts = MoverModule._registry[key]
-        if not opts then panel:Hide(); return end
+        if not opts then
+            panel:Hide(); return
+        end
         panel._activeKey = key
         panel.titleFS:SetText(opts.label or key)
 
@@ -574,7 +608,7 @@ function MoverModule:_GetInspector()
         if type(extras) == "table" and #extras > 0 then
             ec:Show()
             -- Position the container below the hide button
-            ec:SetPoint("TOPLEFT",  panel, "TOPLEFT",  1, -(panel._baseHeight))
+            ec:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -(panel._baseHeight))
             ec:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -(panel._baseHeight))
             MakeDiv(-(panel._baseHeight + 1))
             local curY = -4
@@ -623,11 +657,11 @@ function MoverModule:_GetInspector()
         -- Position near anchor handle
         panel:ClearAllPoints()
         if anchorHandle then
-            local sw = UIParent:GetWidth()  or 1280
+            local sw = UIParent:GetWidth() or 1280
             local sh = UIParent:GetHeight() or 768
-            local hT = anchorHandle:GetTop()    or 0
-            local hL = anchorHandle:GetLeft()   or 0
-            local hR = anchorHandle:GetRight()  or 0
+            local hT = anchorHandle:GetTop() or 0
+            local hL = anchorHandle:GetLeft() or 0
+            local hR = anchorHandle:GetRight() or 0
             -- Prefer showing below; swap if near top
             if hT > sh * 0.6 then
                 panel:SetPoint("TOP", anchorHandle, "BOTTOM", 0, -6)
@@ -638,8 +672,11 @@ function MoverModule:_GetInspector()
             C_Timer.After(0, function()
                 local pl = panel:GetLeft() or 0
                 local pr = panel:GetRight() or sw
-                if pl < 4 then panel:SetPoint("LEFT", UIParent, "LEFT", 4, 0)
-                elseif pr > sw - 4 then panel:SetPoint("RIGHT", UIParent, "RIGHT", -4, 0) end
+                if pl < 4 then
+                    panel:SetPoint("LEFT", UIParent, "LEFT", 4, 0)
+                elseif pr > sw - 4 then
+                    panel:SetPoint("RIGHT", UIParent, "RIGHT", -4, 0)
+                end
             end)
         else
             panel:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
@@ -675,7 +712,7 @@ function MoverModule:_EnsureHandle(key)
     local catCol = CATEGORY_COLORS[opts.category or ""] or C_ACCENT
     h._catColor  = catCol
     ApplyBackdrop(h, catCol[1] * 0.15, catCol[2] * 0.15, catCol[3] * 0.15, 0.78,
-                     catCol[1], catCol[2], catCol[3], 0.9)
+        catCol[1], catCol[2], catCol[3], 0.9)
 
     -- Label
     local lbl = h:CreateFontString(nil, "OVERLAY")
@@ -713,6 +750,17 @@ function MoverModule:_EnsureHandle(key)
     -- Store original position on drag start
     h:SetScript("OnDragStart", function(self)
         if InCombatLockdown() then return end
+        -- When positioned via two-anchor live-frame approach, StartMoving() needs a
+        -- single BOTTOMLEFT anchor first.  Read h's current screen coords (h is always
+        -- scale-1 so GetLeft/GetBottom are reliable in UIParent space), then collapse to
+        -- a single anchor before calling StartMoving.
+        local blX = math_floor((self:GetLeft() or 0) + 0.5)
+        local blY = math_floor((self:GetBottom() or 0) + 0.5)
+        local vw  = math_floor((self:GetWidth() or 40) + 0.5)
+        local vh  = math_floor((self:GetHeight() or 16) + 0.5)
+        self:ClearAllPoints()
+        self:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", blX, blY)
+        self:SetSize(math_max(40, vw), math_max(16, vh))
         self:StartMoving()
         self._dragging = true
         local inspector = MoverModule._inspector
@@ -724,9 +772,9 @@ function MoverModule:_EnsureHandle(key)
     h:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         self._dragging = false
-        local blX = math_floor((self:GetLeft()   or 0) + 0.5)
-        local blY = math_floor((self:GetBottom()  or 0) + 0.5)
-        local o   = MoverModule._registry[key]
+        local blX      = math_floor((self:GetLeft() or 0) + 0.5)
+        local blY      = math_floor((self:GetBottom() or 0) + 0.5)
+        local o        = MoverModule._registry[key]
         if o then
             if type(o.setAnchor) == "function" then
                 -- Preserve whatever anchor is currently stored: convert the dragged
@@ -791,53 +839,55 @@ function MoverModule:_PositionHandle(key)
         h:Hide(); return
     end
 
+    -- ── Live-frame path ─────────────────────────────────────────────────────
+    -- Anchor the handle directly to the live frame using two opposing corners.
+    -- WoW's layout engine resolves all coordinate-space and scale conversions
+    -- internally, so this is correct regardless of SetScale(), anchor type, or
+    -- button count.  GetLeft()/GetWidth() are NOT used here because they return
+    -- values in the frame's own (pre-scale) coordinate space which diverges from
+    -- UIParent space whenever the frame has a non-1 scale.
+    if type(opts.getFrame) == "function" then
+        local liveFrame = opts.getFrame()
+        if liveFrame and liveFrame.IsShown and liveFrame:IsShown() then
+            h:ClearAllPoints()
+            h:SetPoint("BOTTOMLEFT", liveFrame, "BOTTOMLEFT", 0, 0)
+            h:SetPoint("TOPRIGHT", liveFrame, "TOPRIGHT", 0, 0)
+            if h._label then h._label:SetText(BuildHandleLabel(opts)) end
+            if h._cat then h._cat:SetText(opts.category or "") end
+            local insp = self._inspector
+            if insp and insp._activeKey == key and insp:IsShown() then
+                insp.RefreshBoxes()
+            end
+            return
+        end
+    end
+
+    -- ── Fallback: frame hidden / not yet shown ───────────────────────────────
+    -- Use DB position + logical dimensions (best-effort; scale not applied).
     local x  = type(opts.getX) == "function" and opts.getX() or 0
     local y  = type(opts.getY) == "function" and opts.getY() or 0
     local w  = type(opts.getW) == "function" and opts.getW() or nil
     local hh = type(opts.getH) == "function" and opts.getH() or nil
     local fw = math_max(40, w or 80)
     local fh = math_max(16, hh or 24)
-
-    -- Prefer actual live frame dimensions AND position when the frame is on screen.
-    -- Using GetLeft/GetBottom directly guarantees the handle covers the real frame
-    -- regardless of what anchor (BOTTOM, CENTER, etc.) the DB stores.
-    local usedLivePosition = false
     if type(opts.getFrame) == "function" then
         local liveFrame = opts.getFrame()
-        if liveFrame then
-            -- Always try size from live frame — oUF/holder frames retain their layout
-            -- dimensions even when hidden, giving us a better fallback than DB per-unit w/h.
-            if liveFrame.GetWidth and liveFrame.GetHeight then
-                local lw = liveFrame:GetWidth()
-                local lh = liveFrame:GetHeight()
-                if lw and lw > 4 then fw = lw end
-                if lh and lh > 4 then fh = math_max(16, lh) end
-            end
-            -- When the frame is actually visible, use its on-screen BOTTOMLEFT position
-            -- so the handle is always directly over the rendered frame.
-            if liveFrame.IsShown and liveFrame:IsShown()
-                and liveFrame.GetLeft and liveFrame.GetBottom then
-                local ll = liveFrame:GetLeft()
-                local lb = liveFrame:GetBottom()
-                if ll and lb then
-                    h:ClearAllPoints()
-                    h:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", ll, lb)
-                    usedLivePosition = true
-                end
-            end
+        if liveFrame and liveFrame.GetWidth and liveFrame.GetHeight then
+            local lw = liveFrame:GetWidth()
+            local lh = liveFrame:GetHeight()
+            if lw and lw > 4 then fw = lw end
+            if lh and lh > 4 then fh = math_max(16, lh) end
         end
     end
 
-    if not usedLivePosition then
-        local point    = type(opts.getPoint)         == "function" and opts.getPoint()         or "BOTTOMLEFT"
-        local relPoint = type(opts.getRelativePoint) == "function" and opts.getRelativePoint() or point
-        h:ClearAllPoints()
-        h:SetPoint(point, UIParent, relPoint, x, y)
-    end
+    local point    = type(opts.getPoint) == "function" and opts.getPoint() or "BOTTOMLEFT"
+    local relPoint = type(opts.getRelativePoint) == "function" and opts.getRelativePoint() or point
+    h:ClearAllPoints()
+    h:SetPoint(point, UIParent, relPoint, x, y)
     h:SetSize(fw, fh)
 
     if h._label then h._label:SetText(BuildHandleLabel(opts)) end
-    if h._cat   then h._cat:SetText(opts.category or "") end
+    if h._cat then h._cat:SetText(opts.category or "") end
 
     -- Update inspector boxes if this handle is currently active
     local insp = self._inspector
@@ -869,7 +919,7 @@ function MoverModule:_BuildOverlay()
     ov:SetFrameStrata("HIGH")
     ov:SetFrameLevel(200)
     ApplyBackdrop(ov, 0, 0, 0, OVERLAY_ALPHA, 0, 0, 0, 0)
-    ov:EnableMouse(true)  -- Blocks clicks to game world, passes to handles above
+    ov:EnableMouse(true) -- Blocks clicks to game world, passes to handles above
     ov:Hide()
 
     -- Click on overlay (behind handles) dismisses the inspector
@@ -882,8 +932,8 @@ function MoverModule:_BuildOverlay()
     local hud = CreateFrame("Frame", "TwichUIMoverHUD", UIParent, "BackdropTemplate")
     hud:SetFrameStrata("TOOLTIP")
     hud:SetFrameLevel(500)
-    hud:SetPoint("TOPLEFT",  UIParent, "TOPLEFT",  0, 0)
-    hud:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT",  0, 0)
+    hud:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+    hud:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", 0, 0)
     hud:SetHeight(36)
     ApplyBackdrop(hud, 0.04, 0.05, 0.08, 0.97, C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.9)
     hud:EnableMouse(true)
@@ -908,7 +958,7 @@ function MoverModule:_BuildOverlay()
     showAllBtn:SetSize(110, 22)
     showAllBtn:SetPoint("RIGHT", hud, "RIGHT", -120, 0)
     ApplyBackdrop(showAllBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
-                              C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
     local showAllFS = showAllBtn:CreateFontString(nil, "OVERLAY")
     showAllFS:SetAllPoints(showAllBtn); showAllFS:SetJustifyH("CENTER"); showAllFS:SetJustifyV("MIDDLE")
     SetFont(showAllFS, 10); showAllFS:SetText("Show All Movers")
@@ -955,8 +1005,8 @@ function MoverModule:_BuildOverlay()
     ov:SetPropagateKeyboardInput(false)
 
     hud._showAllBtn = showAllBtn
-    self._overlay = ov
-    self._hud     = hud
+    self._overlay   = ov
+    self._hud       = hud
     return ov
 end
 
@@ -985,7 +1035,8 @@ function MoverModule:Activate()
         end
     end
 
-    T:Print("|cff19c9c7[TwichUI]|r Move Mode active — drag handles or click for inspector. |cffff6060ESC|r or Exit button to close.")
+    T:Print(
+    "|cff19c9c7[TwichUI]|r Move Mode active — drag handles or click for inspector. |cffff6060ESC|r or Exit button to close.")
 end
 
 function MoverModule:Deactivate()
@@ -1001,7 +1052,7 @@ function MoverModule:Deactivate()
 
     -- Hide overlay / HUD
     if self._overlay then self._overlay:Hide() end
-    if self._hud     then self._hud:Hide() end
+    if self._hud then self._hud:Hide() end
 
     T:Print("|cff19c9c7[TwichUI]|r Move Mode closed.")
 end
@@ -1022,12 +1073,13 @@ end
 
 function MoverModule:OnInitialize()
     self._registry = self._registry or {}
-    self._handles  = self._handles  or {}
-    self._hidden   = self._hidden   or {}
+    self._handles  = self._handles or {}
+    self._hidden   = self._hidden or {}
     self._active   = false
 end
 
 function MoverModule:OnEnable() end
+
 function MoverModule:OnDisable()
     if self._active then self:Deactivate() end
 end

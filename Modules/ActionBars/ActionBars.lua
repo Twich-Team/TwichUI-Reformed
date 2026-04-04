@@ -456,7 +456,8 @@ local function RestoreFont(fontString, fontState)
         fontString:SetShadowOffset(fontState.shadowX or 0, fontState.shadowY or 0)
     end
     if fontString.SetShadowColor then
-        fontString:SetShadowColor(fontState.shadowR or 0, fontState.shadowG or 0, fontState.shadowB or 0, fontState.shadowA or 0)
+        fontString:SetShadowColor(fontState.shadowR or 0, fontState.shadowG or 0, fontState.shadowB or 0,
+            fontState.shadowA or 0)
     end
 
     if fontState.shown == true then
@@ -599,7 +600,8 @@ local function GetButtonArtTextures(button)
         floatingBG = button.FloatingBG or (buttonName and _G[buttonName .. "FloatingBG"]) or nil,
         flash = button.Flash or (buttonName and _G[buttonName .. "Flash"]) or nil,
         newAction = button.NewActionTexture or (buttonName and _G[buttonName .. "NewActionTexture"]) or nil,
-        spellHighlight = button.SpellHighlightTexture or (buttonName and _G[buttonName .. "SpellHighlightTexture"]) or nil,
+        spellHighlight = button.SpellHighlightTexture or (buttonName and _G[buttonName .. "SpellHighlightTexture"]) or
+        nil,
         flyoutBorder = button.FlyoutBorder or (buttonName and _G[buttonName .. "FlyoutBorder"]) or nil,
         flyoutShadow = button.FlyoutBorderShadow or (buttonName and _G[buttonName .. "FlyoutBorderShadow"]) or nil,
     }
@@ -665,7 +667,8 @@ local function SuppressButtonAnimationEffects(button)
 
     local buttonName = button.GetName and button:GetName() or nil
     local flash = button.Flash or (buttonName and _G[buttonName .. "Flash"]) or nil
-    local spellHighlight = button.SpellHighlightTexture or (buttonName and _G[buttonName .. "SpellHighlightTexture"]) or nil
+    local spellHighlight = button.SpellHighlightTexture or (buttonName and _G[buttonName .. "SpellHighlightTexture"]) or
+    nil
     local pushed = button.GetPushedTexture and button:GetPushedTexture() or nil
     local checked = button.GetCheckedTexture and button:GetCheckedTexture() or nil
 
@@ -902,7 +905,6 @@ end
 
 function ActionBars:OnInitialize()
     self.holders = {}
-    self.movers = {}
     self.barButtons = {}
     self.customButtons = {}
     self.activeAlertSpells = {}
@@ -1001,7 +1003,6 @@ function ActionBars:OnDisable()
     self.pendingRefresh = false
     self:ClearMasqueGroups()
     self:RestoreOriginalLayout()
-    self:UpdateMovers()
     RefreshBlizzardLayout()
     LogDebug("action bars disabled and original layout restored", false)
 end
@@ -1047,7 +1048,6 @@ function ActionBars:RefreshModuleState()
             self:Disable()
         else
             self:RestoreOriginalLayout()
-            self:UpdateMovers()
         end
         return
     end
@@ -1070,9 +1070,6 @@ function ActionBars:SetLockState(locked)
     end
 
     db.lockBars = locked == true
-    if locked and self._moverInspector then
-        self._moverInspector:Hide()
-    end
     self:RequestRefresh()
 end
 
@@ -1205,26 +1202,26 @@ function ActionBars:RegisterWithMoverModule()
         local barLabel = definition.label
 
         moversModule:RegisterMover("AB_" .. barKey, {
-            label    = barLabel,
-            category = "Action Bars",
-            getFrame = function() return ActionBars.holders[barKey] end,
-            getX     = function()
+            label     = barLabel,
+            category  = "Action Bars",
+            getFrame  = function() return ActionBars.holders[barKey] end,
+            getX      = function()
                 local s = ActionBars:GetBarSettings(barKey)
                 return s and (s.x or 0) or 0
             end,
-            getY     = function()
+            getY      = function()
                 local s = ActionBars:GetBarSettings(barKey)
                 return s and (s.y or 0) or 0
             end,
-            getW     = function()
+            getW      = function()
                 local h = ActionBars.holders[barKey]
                 return h and h:GetWidth() or nil
             end,
-            getH     = function()
+            getH      = function()
                 local h = ActionBars.holders[barKey]
                 return h and h:GetHeight() or nil
             end,
-            setPos   = function(x, y)
+            setPos    = function(x, y)
                 ActionBars:PersistBarLayout(barKey, x, y)
                 local holder = ActionBars.holders[barKey]
                 if holder then
@@ -1233,12 +1230,12 @@ function ActionBars:RegisterWithMoverModule()
                 end
                 ActionBars:RefreshAll()
             end,
-            setSize  = nil,  -- bar dimensions are governed by button size/count settings
+            setSize   = nil, -- bar dimensions are governed by button size/count settings
             isEnabled = function()
                 local s = ActionBars:GetBarSettings(barKey)
                 return not s or s.enabled ~= false
             end,
-            extras   = {
+            extras    = {
                 {
                     label = "Bar Enabled",
                     type  = "toggle",
@@ -1259,291 +1256,6 @@ function ActionBars:RegisterWithMoverModule()
     end
 end
 
-function ActionBars:GetMoverInspector()
-    if self._moverInspector then
-        return self._moverInspector
-    end
-
-    local function ResolveAddonFont(size)
-        local path = STANDARD_TEXT_FONT
-        local theme = T:GetModule("Theme", true)
-        if LSM and theme then
-            local name = theme.Get and theme:Get("globalFont")
-            if name and name ~= "" and name ~= "__default" then
-                local ok, fetched = pcall(LSM.Fetch, LSM, "font", name)
-                if ok and type(fetched) == "string" and fetched ~= "" then
-                    path = fetched
-                end
-            end
-        end
-        return path, size or 11
-    end
-
-    local panel = CreateFrame("Frame", "TwichUIActionBarMoverInspector", UIParent, "BackdropTemplate")
-    panel:SetFrameStrata("TOOLTIP")
-    panel:SetFrameLevel(9998)
-    panel:SetSize(220, 118)
-    panel:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-    })
-    panel:SetBackdropColor(0.06, 0.07, 0.10, 0.97)
-    panel:SetBackdropBorderColor(0.10, 0.72, 0.74, 1.0)
-    panel:EnableMouse(true)
-    panel:Hide()
-
-    local function CancelHide()
-        if panel._hideTimer then
-            panel._hideTimer:Cancel()
-            panel._hideTimer = nil
-        end
-    end
-
-    local function ScheduleHide()
-        CancelHide()
-        panel._hideTimer = C_Timer.NewTimer(0.15, function()
-            panel._hideTimer = nil
-            if (panel.xBox and panel.xBox:HasFocus()) or (panel.yBox and panel.yBox:HasFocus()) then
-                return
-            end
-            panel:Hide()
-        end)
-    end
-
-    panel.CancelHide = CancelHide
-    panel.ScheduleHide = ScheduleHide
-    panel:SetScript("OnEnter", CancelHide)
-    panel:SetScript("OnLeave", ScheduleHide)
-
-    local function ApplyFont(widget, size)
-        local path, resolvedSize = ResolveAddonFont(size)
-        widget:SetFont(path, resolvedSize, "")
-    end
-
-    local title = panel:CreateFontString(nil, "OVERLAY")
-    title:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -8)
-    title:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -8)
-    title:SetJustifyH("LEFT")
-    ApplyFont(title, 11)
-    title:SetTextColor(0.10, 0.72, 0.74, 1)
-    panel.title = title
-
-    local shiftHint = panel:CreateFontString(nil, "OVERLAY")
-    shiftHint:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -8)
-    shiftHint:SetJustifyH("RIGHT")
-    ApplyFont(shiftHint, 8)
-    shiftHint:SetText("Shift = 10 px")
-    shiftHint:SetTextColor(0.40, 0.40, 0.52)
-
-    local div1 = panel:CreateTexture(nil, "ARTWORK")
-    div1:SetHeight(1)
-    div1:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -22)
-    div1:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -22)
-    div1:SetColorTexture(0.10, 0.72, 0.74, 0.35)
-
-    local function MakeLabel(text, xOffset, yOffset)
-        local label = panel:CreateFontString(nil, "OVERLAY")
-        label:SetPoint("TOPLEFT", panel, "TOPLEFT", xOffset, yOffset)
-        ApplyFont(label, 10)
-        label:SetText(text)
-        label:SetTextColor(0.55, 0.58, 0.68)
-        return label
-    end
-
-    local function MakeEditBox(xOffset, yOffset, width)
-        local editBox = CreateFrame("EditBox", nil, panel, "BackdropTemplate")
-        editBox:SetSize(width, 20)
-        editBox:SetPoint("TOPLEFT", panel, "TOPLEFT", xOffset, yOffset)
-        editBox:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
-        editBox:SetBackdropColor(0.04, 0.05, 0.08, 1)
-        editBox:SetBackdropBorderColor(0.20, 0.22, 0.30, 1)
-        editBox:SetTextInsets(5, 5, 2, 2)
-        editBox:SetMaxLetters(7)
-        editBox:SetAutoFocus(false)
-        ApplyFont(editBox, 10)
-        editBox:SetTextColor(1, 1, 1)
-        editBox:SetJustifyH("RIGHT")
-        editBox:EnableMouse(true)
-        editBox:SetScript("OnEnter", CancelHide)
-        editBox:SetScript("OnLeave", ScheduleHide)
-        editBox:SetScript("OnEditFocusGained", CancelHide)
-        return editBox
-    end
-
-    MakeLabel("X", 8, -35)
-    MakeLabel("Y", 116, -35)
-    panel.xBox = MakeEditBox(19, -30, 86)
-    panel.yBox = MakeEditBox(127, -30, 82)
-
-    local div2 = panel:CreateTexture(nil, "ARTWORK")
-    div2:SetHeight(1)
-    div2:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -55)
-    div2:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -55)
-    div2:SetColorTexture(0.14, 0.16, 0.22, 1)
-
-    local function RepositionPanel(mover)
-        panel:ClearAllPoints()
-        local moverTop = mover:GetTop() or 0
-        local screenHeight = UIParent:GetHeight() or 768
-        if moverTop > screenHeight * 0.55 then
-            panel:SetPoint("TOP", mover, "BOTTOM", 0, -6)
-        else
-            panel:SetPoint("BOTTOM", mover, "TOP", 0, 6)
-        end
-    end
-
-    local function ApplyPosition(x, y)
-        local active = panel._active
-        if not active or InCombatLockdown() then
-            return
-        end
-
-        local mover = active.mover
-        local barKey = mover and mover.barKey or nil
-        local holder = barKey and ActionBars.holders[barKey] or nil
-        local newX = floor((tonumber(x) or 0) + 0.5)
-        local newY = floor((tonumber(y) or 0) + 0.5)
-        if not mover or not barKey or not holder then
-            return
-        end
-
-        ActionBars:PersistBarLayout(barKey, newX, newY)
-
-        holder:ClearAllPoints()
-        holder:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", newX, newY)
-        mover:ClearAllPoints()
-        mover:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", newX, newY)
-
-        panel.xBox:SetText(tostring(newX))
-        panel.yBox:SetText(tostring(newY))
-        panel.xBox:SetCursorPosition(0)
-        panel.yBox:SetCursorPosition(0)
-        RepositionPanel(mover)
-    end
-
-    local function RefreshBoxes()
-        local active = panel._active
-        if not active then
-            return
-        end
-
-        local mover = active.mover
-        panel.xBox:SetText(tostring(floor((mover:GetLeft() or 0) + 0.5)))
-        panel.yBox:SetText(tostring(floor((mover:GetBottom() or 0) + 0.5)))
-        panel.xBox:SetCursorPosition(0)
-        panel.yBox:SetCursorPosition(0)
-    end
-
-    panel.RefreshBoxes = RefreshBoxes
-
-    panel.xBox:SetScript("OnEnterPressed", function(editBox)
-        local y = tonumber(panel.yBox:GetText()) or 0
-        ApplyPosition(editBox:GetText(), y)
-        editBox:ClearFocus()
-    end)
-    panel.xBox:SetScript("OnEscapePressed", function(editBox)
-        RefreshBoxes()
-        editBox:ClearFocus()
-    end)
-    panel.yBox:SetScript("OnEnterPressed", function(editBox)
-        local x = tonumber(panel.xBox:GetText()) or 0
-        ApplyPosition(x, editBox:GetText())
-        editBox:ClearFocus()
-    end)
-    panel.yBox:SetScript("OnEscapePressed", function(editBox)
-        RefreshBoxes()
-        editBox:ClearFocus()
-    end)
-
-    local buttonSize = 20
-    local gap = 3
-    local centerX = 110
-
-    local function MakeNudgeButton(label, dx, dy)
-        local button = CreateFrame("Button", nil, panel, "BackdropTemplate")
-        button:SetSize(buttonSize, buttonSize)
-        button:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8X8",
-            edgeFile = "Interface\\Buttons\\WHITE8X8",
-            edgeSize = 1,
-        })
-        button:SetBackdropColor(0.09, 0.11, 0.15, 1)
-        button:SetBackdropBorderColor(0.20, 0.22, 0.30, 1)
-
-        local fontString = button:CreateFontString(nil, "OVERLAY")
-        fontString:SetAllPoints(button)
-        fontString:SetJustifyH("CENTER")
-        fontString:SetJustifyV("MIDDLE")
-        ApplyFont(fontString, 11)
-        fontString:SetText(label)
-
-        button:SetScript("OnEnter", function()
-            button:SetBackdropColor(0.10, 0.72, 0.74, 0.22)
-            button:SetBackdropBorderColor(0.10, 0.72, 0.74, 1)
-            CancelHide()
-        end)
-        button:SetScript("OnLeave", function()
-            button:SetBackdropColor(0.09, 0.11, 0.15, 1)
-            button:SetBackdropBorderColor(0.20, 0.22, 0.30, 1)
-            ScheduleHide()
-        end)
-        button:SetScript("OnClick", function()
-            if not panel._active or InCombatLockdown() then
-                return
-            end
-
-            local step = IsShiftKeyDown() and 10 or 1
-            local curX = tonumber(panel.xBox:GetText()) or 0
-            local curY = tonumber(panel.yBox:GetText()) or 0
-            ApplyPosition(curX + (dx * step), curY + (dy * step))
-        end)
-
-        return button
-    end
-
-    local row1Y = -63
-    local row2Y = row1Y - buttonSize - gap
-    local row3Y = row2Y - buttonSize - gap
-
-    local buttonUp = MakeNudgeButton("^", 0, 1)
-    local buttonLeft = MakeNudgeButton("<", -1, 0)
-    local buttonRight = MakeNudgeButton(">", 1, 0)
-    local buttonDown = MakeNudgeButton("v", 0, -1)
-
-    buttonUp:SetPoint("TOPLEFT", panel, "TOPLEFT", centerX - (buttonSize / 2), row1Y)
-    buttonLeft:SetPoint("TOPLEFT", panel, "TOPLEFT", centerX - (buttonSize / 2) - buttonSize - gap, row2Y)
-    buttonRight:SetPoint("TOPLEFT", panel, "TOPLEFT", centerX - (buttonSize / 2) + buttonSize + gap, row2Y)
-    buttonDown:SetPoint("TOPLEFT", panel, "TOPLEFT", centerX - (buttonSize / 2), row3Y)
-
-    local center = CreateFrame("Frame", nil, panel, "BackdropTemplate")
-    center:SetSize(buttonSize, buttonSize)
-    center:SetPoint("TOPLEFT", panel, "TOPLEFT", centerX - (buttonSize / 2), row2Y)
-    center:EnableMouse(false)
-    center:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-    })
-    center:SetBackdropColor(0.05, 0.06, 0.09, 0.7)
-    center:SetBackdropBorderColor(0.15, 0.17, 0.22, 0.6)
-
-    local centerFont = center:CreateFontString(nil, "OVERLAY")
-    centerFont:SetAllPoints(center)
-    centerFont:SetJustifyH("CENTER")
-    centerFont:SetJustifyV("MIDDLE")
-    ApplyFont(centerFont, 8)
-    centerFont:SetText("XY")
-    centerFont:SetTextColor(0.38, 0.40, 0.50)
-
-    self._moverInspector = panel
-    return panel
-end
-
 function ActionBars:CreateInfrastructure()
     for _, definition in ipairs(BAR_DEFINITIONS) do
         local barKey = definition.key
@@ -1556,80 +1268,7 @@ function ActionBars:CreateInfrastructure()
         holder:EnableMouse(true)
         holder.barKey = barKey
 
-        local mover = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-        mover:SetFrameStrata("TOOLTIP")
-        mover:SetFrameLevel(200)
-        mover:SetMovable(true)
-        mover:EnableMouse(true)
-        mover:RegisterForDrag("LeftButton")
-        mover.barKey = barKey
-
-        mover.label = mover:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        mover.label:SetPoint("CENTER", mover, "CENTER", 0, 0)
-        mover.label:SetText(barLabel)
-        mover.holder = holder
-
-        mover:SetScript("OnDragStart", function(frame)
-            if InCombatLockdown() then
-                return
-            end
-
-            frame:StartMoving()
-            frame.isMoving = true
-        end)
-
-        mover:SetScript("OnDragStop", function(frame)
-            if not frame.isMoving then
-                return
-            end
-
-            frame:StopMovingOrSizing()
-            frame.isMoving = false
-
-            local x = frame:GetLeft() or 0
-            local y = frame:GetBottom() or 0
-            local inspector = ActionBars:GetMoverInspector()
-
-            ActionBars:PersistBarLayout(frame.barKey, x, y)
-
-            if frame.holder then
-                frame.holder:ClearAllPoints()
-                frame.holder:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
-            end
-
-            if inspector and inspector:IsShown() and inspector._active and inspector._active.mover == frame then
-                inspector:ClearAllPoints()
-                if (frame:GetTop() or 0) > ((UIParent:GetHeight() or 768) * 0.55) then
-                    inspector:SetPoint("TOP", frame, "BOTTOM", 0, -6)
-                else
-                    inspector:SetPoint("BOTTOM", frame, "TOP", 0, 6)
-                end
-                inspector:RefreshBoxes()
-            end
-
-            self:RefreshAll()
-        end)
-
-        mover:SetScript("OnEnter", function(selfMover)
-            local inspector = ActionBars:GetMoverInspector()
-            inspector.CancelHide()
-            inspector._active = { mover = selfMover }
-            inspector.title:SetText(barLabel)
-            inspector.RefreshBoxes()
-            inspector:ClearAllPoints()
-            if (selfMover:GetTop() or 0) > ((UIParent:GetHeight() or 768) * 0.55) then
-                inspector:SetPoint("TOP", selfMover, "BOTTOM", 0, -6)
-            else
-                inspector:SetPoint("BOTTOM", selfMover, "TOP", 0, 6)
-            end
-            inspector:Show()
-        end)
-        mover:SetScript("OnLeave", function()
-            ActionBars:GetMoverInspector().ScheduleHide()
-        end)
-
         self.holders[barKey] = holder
-        self.movers[barKey] = mover
     end
 end
 
@@ -2002,7 +1641,8 @@ function ActionBars:GetBindPopup()
     popup.desc:SetJustifyV("TOP")
     popup.desc:SetFont(STANDARD_TEXT_FONT, 10, "")
     popup.desc:SetTextColor(0.82, 0.84, 0.90, 1)
-    popup.desc:SetText("Hover any action and press a key or mouse combo to bind it. Press Escape on an action to clear its bindings.")
+    popup.desc:SetText(
+    "Hover any action and press a key or mouse combo to bind it. Press Escape on an action to clear its bindings.")
 
     local function CreatePopupButton(text, point, relativeTo, relativePoint, xOffset)
         local button = CreateFrame("Button", nil, popup, "BackdropTemplate")
@@ -2592,12 +2232,6 @@ function ActionBars:RestoreOriginalLayout()
         end
     end
 
-    for _, mover in pairs(self.movers) do
-        if mover then
-            mover:Hide()
-        end
-    end
-
     for button, state in pairs(self.originalButtons) do
         if button and state then
             if state.parent then
@@ -2976,26 +2610,6 @@ function ActionBars:ApplyHolderStyle(holder, barSettings)
         (barSettings.backdrop == false or barSettings.showAccent == false) and 0 or 0.9)
 end
 
-function ActionBars:ApplyMoverStyle(mover)
-    if not mover or not mover.SetBackdrop then
-        return
-    end
-
-    local theme = T:GetModule("Theme", true)
-    local primaryR, primaryG, primaryB = FetchThemeColor(theme, "primaryColor", { 0.10, 0.72, 0.74 })
-    local bgR, bgG, bgB = FetchThemeColor(theme, "backgroundColor", { 0.05, 0.06, 0.08 })
-
-    mover:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
-    })
-    mover:SetBackdropColor(bgR, bgG, bgB, 0.78)
-    mover:SetBackdropBorderColor(primaryR, primaryG, primaryB, 0.9)
-    mover.label:SetTextColor(1, 0.95, 0.85)
-end
-
 function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
     if not button then
         return
@@ -3144,7 +2758,8 @@ function ActionBars:ApplyCooldownSettingsToButton(button, actionBarDB, barSettin
         return
     end
 
-    local showSwipe = actionBarDB.showCooldownSwipe == true and (not barSettings or barSettings.showCooldownSwipe ~= false)
+    local showSwipe = actionBarDB.showCooldownSwipe == true and
+    (not barSettings or barSettings.showCooldownSwipe ~= false)
     local icon = self:GetButtonIcon(button)
 
     if icon then
@@ -3303,39 +2918,6 @@ function ActionBars:ApplyVisibility(holder, barSettings)
     local ok = pcall(RegisterStateDriver, holder, "visibility", visibility)
     if not ok then
         pcall(RegisterStateDriver, holder, "visibility", DEFAULT_VISIBILITY)
-    end
-end
-
-function ActionBars:UpdateMovers()
-    local db = self:GetDB()
-    local showMovers = db and db.lockBars == false
-    local inspector = self._moverInspector
-
-    for _, mover in pairs(self.movers) do
-        self:ApplyMoverStyle(mover)
-        mover:SetShown(false)
-    end
-
-    if not showMovers then
-        if inspector then
-            inspector:Hide()
-        end
-        return
-    end
-
-    for _, definition in ipairs(BAR_DEFINITIONS) do
-        local holder = self.holders[definition.key]
-        local mover = self.movers[definition.key]
-        local settings = self:GetBarSettings(definition.key)
-        if holder and mover and settings and holder:IsShown() then
-            mover:ClearAllPoints()
-            mover:SetPoint(settings.point or "BOTTOM", UIParent, settings.relativePoint or settings.point or "BOTTOM",
-                settings.x or 0, settings.y or 0)
-            mover:SetScale(holder:GetScale())
-            mover:SetSize(max(holder:GetWidth(), 24), max(holder:GetHeight(), 24))
-            mover.label:SetText(definition.label)
-            mover:Show()
-        end
     end
 end
 
@@ -3581,5 +3163,4 @@ function ActionBars:RefreshAll()
     self:RefreshButtonStates()
     self:UpdateAllButtonGlows()
     self:ScheduleGlowSync(0.15)
-    self:UpdateMovers()
 end
