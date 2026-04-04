@@ -1863,10 +1863,12 @@ local HEAL_PREDICTION_DEFAULTS = {
     enabled = true,
     showPlayer = true,
     showOthers = true,
+    showHealAbsorb = true,
     maxOverflow = 1.05,
     texture = nil,
     playerColor = { 0.34, 0.84, 0.54, 0.75 },
     otherColor = { 0.56, 0.92, 0.72, 0.45 },
+    healAbsorbColor = { 0.06, 0.07, 0.09, 0.72 },
 }
 
 local function ResolveHealPredictionUnitKey(unitKey)
@@ -1886,11 +1888,14 @@ function UnitFrames:GetHealPredictionConfig(unitKey)
         enabled = cfg.enabled ~= false,
         showPlayer = cfg.showPlayer ~= false,
         showOthers = cfg.showOthers ~= false,
+        showHealAbsorb = cfg.showHealAbsorb ~= false,
         maxOverflow = Clamp(tonumber(cfg.maxOverflow) or HEAL_PREDICTION_DEFAULTS.maxOverflow, 1, 1.5),
         texture = cfg.texture,
         playerColor = CopyColor(type(cfg.playerColor) == "table" and cfg.playerColor or
             HEAL_PREDICTION_DEFAULTS.playerColor),
         otherColor = CopyColor(type(cfg.otherColor) == "table" and cfg.otherColor or HEAL_PREDICTION_DEFAULTS.otherColor),
+        healAbsorbColor = CopyColor(type(cfg.healAbsorbColor) == "table" and cfg.healAbsorbColor or
+            HEAL_PREDICTION_DEFAULTS.healAbsorbColor),
     }
 end
 
@@ -1923,6 +1928,13 @@ function UnitFrames:ApplyHealPredictionSettings(frame, unitKey)
         element.healingOther:SetShown(cfg.enabled and cfg.showOthers)
     end
 
+    if element.healAbsorb then
+        element.healAbsorb:SetStatusBarTexture(texture)
+        element.healAbsorb:SetStatusBarColor(cfg.healAbsorbColor[1] or 0.06, cfg.healAbsorbColor[2] or 0.07,
+            cfg.healAbsorbColor[3] or 0.09, cfg.healAbsorbColor[4] or 0.72)
+        element.healAbsorb:SetShown(cfg.enabled and cfg.showHealAbsorb)
+    end
+
     if health then
         local anchorTexture = health.GetStatusBarTexture and health:GetStatusBarTexture() or nil
         if element.healingPlayer then
@@ -1943,6 +1955,14 @@ function UnitFrames:ApplyHealPredictionSettings(frame, unitKey)
             element.healingOther:SetPoint("BOTTOM", health, "BOTTOM", 0, 0)
             element.healingOther:SetPoint("LEFT", otherAnchor, otherPoint, 0, 0)
             element.healingOther:SetWidth(math_max(1, health:GetWidth()))
+        end
+        if element.healAbsorb then
+            element.healAbsorb:ClearAllPoints()
+            element.healAbsorb:SetPoint("TOP", health, "TOP", 0, 0)
+            element.healAbsorb:SetPoint("BOTTOM", health, "BOTTOM", 0, 0)
+            element.healAbsorb:SetPoint("RIGHT", anchorTexture or health, anchorTexture and "RIGHT" or "LEFT", 0, 0)
+            element.healAbsorb:SetWidth(math_max(1, health:GetWidth()))
+            element.healAbsorb:SetReverseFill(true)
         end
     end
 end
@@ -1968,6 +1988,12 @@ function UnitFrames:ApplyPreviewHealPrediction(frame, unitKey, state)
         element.healingOther:SetMinMaxValues(0, maxHealth)
         element.healingOther:SetValue(otherHeal)
         element.healingOther:SetShown(cfg.enabled and cfg.showOthers and otherHeal > 0)
+    end
+
+    if element.healAbsorb then
+        element.healAbsorb:SetMinMaxValues(0, maxHealth)
+        element.healAbsorb:SetValue(0)
+        element.healAbsorb:SetShown(cfg.enabled and cfg.showHealAbsorb)
     end
 end
 
@@ -9218,9 +9244,20 @@ function UnitFrames:StyleFrame(frame)
     healingOther:SetPoint("LEFT", health, "LEFT", 0, 0)
     healingOther:SetWidth(math_max(1, health:GetWidth()))
 
+    local healAbsorb = CreateFrame("StatusBar", nil, health)
+    healAbsorb:SetFrameLevel(health:GetFrameLevel() + 2)
+    healAbsorb:SetMinMaxValues(0, 1)
+    healAbsorb:SetValue(0)
+    healAbsorb:SetPoint("TOP", health, "TOP", 0, 0)
+    healAbsorb:SetPoint("BOTTOM", health, "BOTTOM", 0, 0)
+    healAbsorb:SetPoint("RIGHT", health, "RIGHT", 0, 0)
+    healAbsorb:SetWidth(math_max(1, health:GetWidth()))
+    healAbsorb:SetReverseFill(true)
+
     frame.HealthPrediction = {
         healingPlayer = healingPlayer,
         healingOther = healingOther,
+        healAbsorb = healAbsorb,
         incomingHealOverflow = HEAL_PREDICTION_DEFAULTS.maxOverflow,
         PostUpdate = function(element)
             UnitFrames:ApplyHealPredictionSettings(element.__owner, capturedUnitKey)
