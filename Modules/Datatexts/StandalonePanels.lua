@@ -735,6 +735,82 @@ function DataTextModule:RefreshStandalonePanels()
             frame:Hide()
         end
     end
+
+    -- (Re-)register visible panels with the central mover system.
+    C_Timer.After(0, function() DataTextModule:RegisterStandalonePanelsWithMoverModule() end)
+end
+
+-- ── Central Mover System registration ────────────────────────────────────────
+-- Called from RefreshStandalonePanels so the registry stays in sync whenever
+-- the user adds, removes, or reconfigures panels.
+function DataTextModule:RegisterStandalonePanelsWithMoverModule()
+    local moversModule = _G.TwichMoverModule
+    if not moversModule or type(moversModule.RegisterMover) ~= "function" then return end
+
+    local db = GetStandaloneDB()
+    if not db or not db.panels then return end
+
+    for panelID, panelDefinition in pairs(db.panels) do
+        if not panelDefinition then
+        else
+            local pid = panelID  -- capture for closure
+            moversModule:RegisterMover("SP_" .. pid, {
+                label    = "Panel: " .. tostring(pid),
+                category = "Datatexts",
+                getX     = function()
+                    local xdb = GetStandaloneDB()
+                    local pd  = xdb and xdb.panels and xdb.panels[pid]
+                    return pd and (pd.x or 0) or 0
+                end,
+                getY     = function()
+                    local xdb = GetStandaloneDB()
+                    local pd  = xdb and xdb.panels and xdb.panels[pid]
+                    return pd and (pd.y or 0) or 0
+                end,
+                getPoint = function()
+                    local xdb = GetStandaloneDB()
+                    local pd  = xdb and xdb.panels and xdb.panels[pid]
+                    return pd and pd.point or "BOTTOMLEFT"
+                end,
+                getRelativePoint = function()
+                    local xdb = GetStandaloneDB()
+                    local pd  = xdb and xdb.panels and xdb.panels[pid]
+                    return pd and (pd.relativePoint or pd.point) or "BOTTOMLEFT"
+                end,
+                getW     = function()
+                    local xdb = GetStandaloneDB()
+                    local pd  = xdb and xdb.panels and xdb.panels[pid]
+                    return pd and pd.width or nil
+                end,
+                getH     = function()
+                    local xdb = GetStandaloneDB()
+                    local pd  = xdb and xdb.panels and xdb.panels[pid]
+                    return pd and pd.height or nil
+                end,
+                setPos   = function(x, y)
+                    local xdb = GetStandaloneDB()
+                    local pd  = xdb and xdb.panels and xdb.panels[pid]
+                    if pd then
+                        pd.point         = "BOTTOMLEFT"
+                        pd.relativePoint = "BOTTOMLEFT"
+                        pd.x             = x
+                        pd.y             = y
+                        local frame = DataTextModule.standalonePanels and DataTextModule.standalonePanels[pid]
+                        if frame then
+                            frame:ClearAllPoints()
+                            frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
+                        end
+                    end
+                end,
+                setSize  = nil,   -- panel width/height managed in configuration panel
+                isEnabled = function()
+                    local xdb = GetStandaloneDB()
+                    local pd  = xdb and xdb.panels and xdb.panels[pid]
+                    return not pd or pd.enabled ~= false
+                end,
+            })
+        end
+    end
 end
 
 function DataTextModule:HideStandalonePanels()

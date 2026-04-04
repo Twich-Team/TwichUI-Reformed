@@ -10438,6 +10438,481 @@ function UnitFrames:BuildDebugReport()
     return table.concat(lines, "\n")
 end
 
+-- ── Central Mover System registration ────────────────────────────────────────
+-- Registers all UnitFrame layout keys with the TwichUI central mover module so
+-- they appear as draggable handles when the player opens /tui movers.
+function UnitFrames:RegisterWithMoverModule()
+    local moversModule = _G.TwichMoverModule
+    if not moversModule or type(moversModule.RegisterMover) ~= "function" then return end
+
+    -- ── Single unit frames ───────────────────────────────────────────────
+    local singleUnits = {
+        { key = "player",       label = "Player Frame" },
+        { key = "target",       label = "Target Frame" },
+        { key = "targettarget", label = "Target of Target" },
+        { key = "focus",        label = "Focus Frame" },
+        { key = "pet",          label = "Pet Frame" },
+    }
+    for _, entry in ipairs(singleUnits) do
+        local uKey, uLabel = entry.key, entry.label
+        moversModule:RegisterMover("UF_" .. uKey, {
+            label    = uLabel,
+            category = "Unit Frames",
+            getFrame = function() return UnitFrames.frames[uKey] end,
+            getX     = function()
+                local l = UnitFrames:GetLayoutSettings(uKey)
+                return l.x or 0
+            end,
+            getY     = function()
+                local l = UnitFrames:GetLayoutSettings(uKey)
+                return l.y or 0
+            end,
+            getPoint = function()
+                local l = UnitFrames:GetLayoutSettings(uKey)
+                return l.point or "BOTTOMLEFT"
+            end,
+            getRelativePoint = function()
+                local l = UnitFrames:GetLayoutSettings(uKey)
+                return l.relativePoint or l.point or "BOTTOMLEFT"
+            end,
+            getW     = function()
+                local s = UnitFrames:GetUnitSettings(uKey)
+                return s.width
+            end,
+            getH     = function()
+                local s = UnitFrames:GetUnitSettings(uKey)
+                return s.height
+            end,
+            setPos   = function(x, y)
+                local l = UnitFrames:GetLayoutSettings(uKey)
+                l.point = "BOTTOMLEFT"; l.relativePoint = "BOTTOMLEFT"
+                l.x = x; l.y = y
+                UnitFrames:RefreshAllFrames()
+            end,
+            setSize  = function(w, h)
+                local s = UnitFrames:GetUnitSettings(uKey)
+                s.width  = math.max(40, w)
+                s.height = math.max(8,  h)
+                UnitFrames:RefreshAllFrames()
+            end,
+            isEnabled = function()
+                local s = UnitFrames:GetUnitSettings(uKey)
+                return s.enabled ~= false
+            end,
+            -- Convert current anchoring back to a BOTTOM-relative (centered) anchor.
+            -- Preserves the frame's on-screen position but expresses it as BOTTOM x=offset
+            -- so the frame scales/centers correctly at different resolutions.
+            resetAnchor = function()
+                local l      = UnitFrames:GetLayoutSettings(uKey)
+                local frame  = UnitFrames.frames[uKey]
+                local sw     = UIParent:GetWidth()  or 1280
+                local s      = UnitFrames:GetUnitSettings(uKey)
+                local fw2    = (frame and frame:GetWidth())  or s.width  or 220
+                local fh2    = (frame and frame:GetHeight()) or s.height or 42
+                local fl     = frame and frame:IsShown() and frame:GetLeft()   or nil
+                local fb     = frame and frame:IsShown() and frame:GetBottom() or nil
+                -- Absolute screen center of the frame
+                local absCX  = fl and (fl + fw2 / 2) or (sw / 2)
+                local absBy  = fb or (tonumber(l.y) or 0)
+                -- BOTTOM anchor: x = offset from screen horizontal center, y = from screen bottom
+                l.point         = "BOTTOM"
+                l.relativePoint = "BOTTOM"
+                l.x = math.floor(absCX - sw / 2 + 0.5)
+                l.y = math.floor(absBy + 0.5)
+                if frame then
+                    frame:ClearAllPoints()
+                    frame:SetPoint("BOTTOM", UIParent, "BOTTOM", l.x, l.y)
+                end
+                UnitFrames:RefreshAllFrames()
+            end,
+            -- Allow the inspector anchor picker to set any anchor point.
+            setAnchor = function(pt, x, y)
+                local l = UnitFrames:GetLayoutSettings(uKey)
+                l.point = pt; l.relativePoint = pt; l.x = x; l.y = y
+                local frame = UnitFrames.frames[uKey]
+                if frame then
+                    frame:ClearAllPoints()
+                    frame:SetPoint(pt, UIParent, pt, x, y)
+                end
+                UnitFrames:RefreshAllFrames()
+            end,
+            extras = {
+                {
+                    label = "Enabled",
+                    type  = "toggle",
+                    get   = function()
+                        local s = UnitFrames:GetUnitSettings(uKey)
+                        return s.enabled ~= false
+                    end,
+                    set   = function(v)
+                        local s = UnitFrames:GetUnitSettings(uKey)
+                        s.enabled = v == true
+                        UnitFrames:RefreshAllFrames()
+                    end,
+                },
+            },
+        })
+    end
+
+    -- ── Detached power bars ──────────────────────────────────────────────
+    local powerUnits = {
+        { key = "player",       label = "Player Power Bar"        },
+        { key = "target",       label = "Target Power Bar"        },
+        { key = "targettarget", label = "Target of Target Power"  },
+        { key = "focus",        label = "Focus Power Bar"         },
+        { key = "pet",          label = "Pet Power Bar"           },
+    }
+    for _, entry in ipairs(powerUnits) do
+        local unitKey    = entry.key
+        local powerKey   = unitKey .. "_power"
+        local powerLabel = entry.label
+        moversModule:RegisterMover("UF_" .. powerKey, {
+            label    = powerLabel,
+            category = "Unit Frames",
+            getFrame = function()
+                local f = UnitFrames.frames[unitKey]
+                return f and f.Power or nil
+            end,
+            getX     = function()
+                local l = UnitFrames:GetLayoutSettings(powerKey)
+                return l.x or 0
+            end,
+            getY     = function()
+                local l = UnitFrames:GetLayoutSettings(powerKey)
+                return l.y or 0
+            end,
+            getW     = function()
+                local s = UnitFrames:GetUnitSettings(unitKey)
+                return s.powerWidth
+            end,
+            getH     = function()
+                local s = UnitFrames:GetUnitSettings(unitKey)
+                return s.powerHeight
+            end,
+            setPos   = function(x, y)
+                local l = UnitFrames:GetLayoutSettings(powerKey)
+                l.point = "BOTTOMLEFT"; l.relativePoint = "BOTTOMLEFT"
+                l.x = x; l.y = y
+                UnitFrames:RefreshAllFrames()
+            end,
+            setSize  = function(w, h)
+                local s = UnitFrames:GetUnitSettings(unitKey)
+                s.powerWidth  = math.max(40, w)
+                s.powerHeight = math.max(4,  h)
+                UnitFrames:RefreshAllFrames()
+            end,
+            isEnabled = function()
+                local s = UnitFrames:GetUnitSettings(unitKey)
+                return s.enabled ~= false and s.powerDetached == true
+            end,
+        })
+    end
+
+    -- ── Castbar ──────────────────────────────────────────────────────────
+    moversModule:RegisterMover("UF_castbar", {
+        label    = "Castbar",
+        category = "Unit Frames",
+        getFrame = function() return UnitFrames.frames.castbar end,
+        getX     = function()
+            local l = UnitFrames:GetLayoutSettings("castbar")
+            return l.x or -260
+        end,
+        getY     = function()
+            local l = UnitFrames:GetLayoutSettings("castbar")
+            return l.y or 220
+        end,
+        getPoint = function()
+            local l = UnitFrames:GetLayoutSettings("castbar")
+            return l.point or "BOTTOM"
+        end,
+        getRelativePoint = function()
+            local l = UnitFrames:GetLayoutSettings("castbar")
+            return l.relativePoint or l.point or "BOTTOM"
+        end,
+        getW     = function()
+            local db = UnitFrames:GetDB()
+            local cs = db.castbar or {}
+            return cs.width or 260
+        end,
+        getH     = function()
+            local db = UnitFrames:GetDB()
+            local cs = db.castbar or {}
+            return cs.height or 20
+        end,
+        setPos   = function(x, y)
+            local l = UnitFrames:GetLayoutSettings("castbar")
+            l.point = "BOTTOMLEFT"; l.relativePoint = "BOTTOMLEFT"
+            l.x = x; l.y = y
+            UnitFrames:RefreshAllFrames()
+        end,
+        setSize  = function(w, h)
+            local db = UnitFrames:GetDB()
+            db.castbar        = db.castbar or {}
+            db.castbar.width  = math.max(120, w)
+            db.castbar.height = math.max(10,  h)
+            UnitFrames:RefreshAllFrames()
+        end,
+        isEnabled = function()
+            local db = UnitFrames:GetDB()
+            local cs = db.castbar or {}
+            return cs.enabled ~= false
+        end,
+        -- Restore BOTTOM-centered anchor (preserves current Y offset)
+        resetAnchor = function()
+            local l     = UnitFrames:GetLayoutSettings("castbar")
+            local frame = UnitFrames.frames.castbar
+            local sw    = UIParent:GetWidth() or 1280
+            local db    = UnitFrames:GetDB()
+            local cs    = db.castbar or {}
+            local fw2   = (frame and frame:GetWidth())  or cs.width  or 260
+            local fl    = frame and frame:IsShown() and frame:GetLeft() or nil
+            local absCX = fl and (fl + fw2 / 2) or (sw / 2)
+            local absBy = (frame and frame:IsShown() and frame:GetBottom()) or (tonumber(l.y) or 220)
+            l.point         = "BOTTOM"
+            l.relativePoint = "BOTTOM"
+            l.x = math.floor(absCX - sw / 2 + 0.5)
+            l.y = math.floor(absBy + 0.5)
+            if frame then
+                frame:ClearAllPoints()
+                frame:SetPoint("BOTTOM", UIParent, "BOTTOM", l.x, l.y)
+            end
+            UnitFrames:RefreshAllFrames()
+        end,
+        -- Allow the inspector anchor picker to set any anchor point.
+        setAnchor = function(pt, x, y)
+            local l = UnitFrames:GetLayoutSettings("castbar")
+            l.point = pt; l.relativePoint = pt; l.x = x; l.y = y
+            local frame = UnitFrames.frames.castbar
+            if frame then
+                frame:ClearAllPoints()
+                frame:SetPoint(pt, UIParent, pt, x, y)
+            end
+            UnitFrames:RefreshAllFrames()
+        end,
+        extras = {
+            {
+                label = "Enabled",
+                type  = "toggle",
+                get   = function()
+                    local db = UnitFrames:GetDB()
+                    local cs = db.castbar or {}
+                    return cs.enabled ~= false
+                end,
+                set   = function(v)
+                    local db = UnitFrames:GetDB()
+                    db.castbar         = db.castbar or {}
+                    db.castbar.enabled = v == true
+                    UnitFrames:RefreshAllFrames()
+                end,
+            },
+        },
+    })
+
+    -- ── Group frames ─────────────────────────────────────────────────────
+    local groupEntries = {
+        { key = "party", label = "Party Frames" },
+        { key = "raid",  label = "Raid Frames"  },
+        { key = "tank",  label = "Tank Frames"  },
+    }
+    for _, entry in ipairs(groupEntries) do
+        local gKey, gLabel = entry.key, entry.label
+        moversModule:RegisterMover("UF_" .. gKey, {
+            label    = gLabel,
+            category = "Unit Frames",
+            getFrame = function() return UnitFrames.headers[gKey] end,
+            getX     = function()
+                local l = UnitFrames:GetLayoutSettings(gKey)
+                return l.x or 0
+            end,
+            getY     = function()
+                local l = UnitFrames:GetLayoutSettings(gKey)
+                return l.y or 0
+            end,
+            getPoint = function()
+                local l = UnitFrames:GetLayoutSettings(gKey)
+                return l.point or "CENTER"
+            end,
+            getRelativePoint = function()
+                local l = UnitFrames:GetLayoutSettings(gKey)
+                return l.relativePoint or l.point or "CENTER"
+            end,
+            getW     = function()
+                local gs = UnitFrames:GetGroupSettings(gKey)
+                return gs.width
+            end,
+            getH     = function()
+                local gs = UnitFrames:GetGroupSettings(gKey)
+                return gs.height
+            end,
+            setPos   = function(x, y)
+                local l = UnitFrames:GetLayoutSettings(gKey)
+                l.point = "BOTTOMLEFT"; l.relativePoint = "BOTTOMLEFT"
+                l.x = x; l.y = y
+                -- Also reposition the actual header so it follows
+                local header = UnitFrames.headers[gKey]
+                if header then
+                    header:ClearAllPoints()
+                    header:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
+                end
+                UnitFrames:RefreshAllFrames()
+            end,
+            setSize  = function(w, h)
+                local gs = UnitFrames:GetGroupSettings(gKey)
+                gs.width  = math.max(70, w)
+                gs.height = math.max(14, h)
+                UnitFrames:RefreshAllFrames()
+            end,
+            isEnabled = function()
+                local gs = UnitFrames:GetGroupSettings(gKey)
+                return gs.enabled ~= false
+            end,
+            -- Convert current on-screen position back to a CENTER-relative anchor,
+            -- so the group stays at the same spot but loses the BOTTOMLEFT fixed offset.
+            resetAnchor = function()
+                local l      = UnitFrames:GetLayoutSettings(gKey)
+                local header = UnitFrames.headers[gKey]
+                local sw     = UIParent:GetWidth()  or 1280
+                local sh     = UIParent:GetHeight() or 768
+                local fl     = header and header:IsShown() and header:GetLeft()   or nil
+                local fb     = header and header:IsShown() and header:GetBottom() or nil
+                local fw2    = (header and header:GetWidth())  or 180
+                local fh2    = (header and header:GetHeight()) or 36
+                local absCX  = fl and (fl + fw2 / 2) or (sw / 2)
+                local absCY  = fb and (fb + fh2 / 2) or (sh / 2)
+                l.point         = "CENTER"
+                l.relativePoint = "CENTER"
+                l.x = math.floor(absCX - sw / 2 + 0.5)
+                l.y = math.floor(absCY - sh / 2 + 0.5)
+                if header then
+                    header:ClearAllPoints()
+                    header:SetPoint("CENTER", UIParent, "CENTER", l.x, l.y)
+                end
+                UnitFrames:RefreshAllFrames()
+            end,
+            -- Allow the inspector anchor picker to set any anchor point.
+            setAnchor = function(pt, x, y)
+                local l = UnitFrames:GetLayoutSettings(gKey)
+                l.point = pt; l.relativePoint = pt; l.x = x; l.y = y
+                local header = UnitFrames.headers[gKey]
+                if header then
+                    header:ClearAllPoints()
+                    header:SetPoint(pt, UIParent, pt, x, y)
+                end
+                UnitFrames:RefreshAllFrames()
+            end,
+            extras = {
+                {
+                    label = "Enabled",
+                    type  = "toggle",
+                    get   = function()
+                        local gs = UnitFrames:GetGroupSettings(gKey)
+                        return gs.enabled ~= false
+                    end,
+                    set   = function(v)
+                        local gs = UnitFrames:GetGroupSettings(gKey)
+                        gs.enabled = v == true
+                        UnitFrames:RefreshAllFrames()
+                    end,
+                },
+            },
+        })
+    end
+
+    -- ── Boss frames ──────────────────────────────────────────────────────
+    moversModule:RegisterMover("UF_boss", {
+        label    = "Boss Frames",
+        category = "Unit Frames",
+        getFrame = function() return UnitFrames.bossAnchor end,
+        getX     = function()
+            local l = UnitFrames:GetLayoutSettings("boss")
+            return l.x or -300
+        end,
+        getY     = function()
+            local l = UnitFrames:GetLayoutSettings("boss")
+            return l.y or 0
+        end,
+        getPoint = function()
+            local l = UnitFrames:GetLayoutSettings("boss")
+            return l.point or "RIGHT"
+        end,
+        getRelativePoint = function()
+            local l = UnitFrames:GetLayoutSettings("boss")
+            return l.relativePoint or l.point or "RIGHT"
+        end,
+        getW     = function()
+            local bs = UnitFrames:GetUnitSettings("boss")
+            return bs.width or 220
+        end,
+        getH     = function()
+            local bs = UnitFrames:GetUnitSettings("boss")
+            return bs.height or 36
+        end,
+        setPos   = function(x, y)
+            local l = UnitFrames:GetLayoutSettings("boss")
+            l.point = "BOTTOMLEFT"; l.relativePoint = "BOTTOMLEFT"
+            l.x = x; l.y = y
+            UnitFrames:RefreshAllFrames()
+        end,
+        setSize  = function(w, h)
+            local bs = UnitFrames:GetUnitSettings("boss")
+            bs.width  = math.max(120, w)
+            bs.height = math.max(16,  h)
+            UnitFrames:RefreshAllFrames()
+        end,
+        isEnabled = function()
+            local gs = UnitFrames:GetGroupSettings("boss")
+            return not gs or gs.enabled ~= false
+        end,
+        -- Restore RIGHT-side anchor
+        resetAnchor = function()
+            local l      = UnitFrames:GetLayoutSettings("boss")
+            local anchor = UnitFrames.bossAnchor
+            local sh     = UIParent:GetHeight() or 768
+            local fh2    = (anchor and anchor:GetHeight()) or 36
+            local fb     = anchor and anchor:IsShown() and anchor:GetBottom() or nil
+            local absCY  = fb and (fb + fh2 / 2) or (sh / 2)
+            local r      = anchor and anchor:IsShown() and anchor:GetRight() or nil
+            local sw     = UIParent:GetWidth() or 1280
+            local newX   = r and math.floor(r - sw + 0.5) or -300
+            l.point         = "RIGHT"
+            l.relativePoint = "RIGHT"
+            l.x = newX
+            l.y = math.floor(absCY - sh / 2 + 0.5)
+            if anchor then
+                anchor:ClearAllPoints()
+                anchor:SetPoint("RIGHT", UIParent, "RIGHT", l.x, l.y)
+            end
+            UnitFrames:RefreshAllFrames()
+        end,
+        -- Allow the inspector anchor picker to set any anchor point.
+        setAnchor = function(pt, x, y)
+            local l = UnitFrames:GetLayoutSettings("boss")
+            l.point = pt; l.relativePoint = pt; l.x = x; l.y = y
+            local anchor = UnitFrames.bossAnchor
+            if anchor then
+                anchor:ClearAllPoints()
+                anchor:SetPoint(pt, UIParent, pt, x, y)
+            end
+            UnitFrames:RefreshAllFrames()
+        end,
+        extras = {
+            {
+                label = "Enabled",
+                type  = "toggle",
+                get   = function()
+                    local gs = UnitFrames:GetGroupSettings("boss")
+                    return not gs or gs.enabled ~= false
+                end,
+                set   = function(v)
+                    local gs = UnitFrames:GetGroupSettings("boss")
+                    gs.enabled = v == true
+                    UnitFrames:RefreshAllFrames()
+                end,
+            },
+        },
+    })
+end
+
 function UnitFrames:OnInitialize()
     local db = self:GetDB()
     db.enabled = db.enabled ~= false
@@ -10653,6 +11128,10 @@ function UnitFrames:OnEnable()
     -- ApplyMasqueSettings is also called from RefreshAllFrames so toggling the
     -- option takes effect without a UI reload.
     self:ApplyMasqueSettings()
+
+    -- Register unit frame movers with the central mover system (deferred so
+    -- all modules finish OnEnable first).
+    C_Timer.After(0, function() UnitFrames:RegisterWithMoverModule() end)
 end
 
 --- Applies or tears down Masque skinning for the standalone castbar icon.

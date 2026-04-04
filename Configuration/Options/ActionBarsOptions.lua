@@ -697,15 +697,15 @@ function Options:BuildConfiguration()
             unlock = {
                 type = "toggle",
                 name = "Unlock Movers",
-                desc = "Show drag handles over each enabled bar so positions can be adjusted directly.",
+                desc = "Open the TwichUI central mover overlay to reposition all bars and frames simultaneously.",
                 order = 2,
                 width = "half",
                 get = function()
-                    return db.lockBars ~= true
+                    return _G.TwichMoverModule and _G.TwichMoverModule:IsActive() or false
                 end,
-                set = function(_, value)
-                    db.lockBars = value ~= true
-                    RequestRefresh(false)
+                set = function()
+                    local m = _G.TwichMoverModule
+                    if m then m:Toggle() end
                 end,
             },
             useMasque = {

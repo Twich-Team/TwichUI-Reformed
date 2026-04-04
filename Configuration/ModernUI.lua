@@ -1440,7 +1440,22 @@ function UI:EnsureFrame()
     AttachTooltip(frame.DebuggerButton, "Debugger",
         "Open the TwichUI Debug Console to inspect live module state and logs.")
 
-    frame.Subtitle:SetPoint("RIGHT", frame.DebuggerButton, "LEFT", -12, 0)
+    frame.MoverButton = CreateFrame("Button", nil, frame.TitleBar, "BackdropTemplate")
+    frame.MoverButton:SetSize(96, 24)
+    frame.MoverButton:SetPoint("RIGHT", frame.DebuggerButton, "LEFT", -6, 0)
+    SkinActionButton(frame.MoverButton, { 0.10, 0.72, 0.74 })
+    SetButtonText(frame.MoverButton, "Move Mode")
+    frame.MoverButton:SetScript("OnClick", function()
+        local movers = _G.TwichMoverModule
+        if movers then
+            movers:Toggle()
+            frame:Hide()
+        end
+    end)
+    AttachTooltip(frame.MoverButton, "Move Mode",
+        "Open the central mover overlay to drag and reposition all UI elements at once.\nThe config panel closes so handles are accessible.")
+
+    frame.Subtitle:SetPoint("RIGHT", frame.MoverButton, "LEFT", -12, 0)
 
     frame.Sidebar = CreatePanel(frame, 0.055, 0.055, 0.08, 0.985, 0.18)
     frame.Sidebar:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -68)
@@ -2078,10 +2093,10 @@ function UI:RenderUnitFramePanel(parent, width)
         local db       = m and m.GetDB and m:GetDB()
         local enabled  = db == nil or db.enabled ~= false
         local testMode = db and db.testMode == true
-        local locked   = db == nil or db.lockFrames ~= false
+        local moversActive = _G.TwichMoverModule and _G.TwichMoverModule:IsActive() or false
         SetButtonText(enableBtn, enabled and "Disable UF" or "Enable UF")
         SetButtonText(testBtn, testMode and "Exit Test" or "Test Mode")
-        SetButtonText(moversBtn, locked and "Unlock Movers" or "Lock Movers")
+        SetButtonText(moversBtn, moversActive and "Exit Move Mode" or "Move Mode")
     end
     RefreshButtonStates()
 
@@ -2108,14 +2123,13 @@ function UI:RenderUnitFramePanel(parent, width)
     AttachTooltip(testBtn, "Test Mode", "Show unit frame placeholders with sample health, power, and cast data.")
 
     moversBtn:SetScript("OnClick", function()
-        local m = GetUFModule()
-        if not m then return end
-        local db = m:GetDB()
-        -- lockFrames ~= false means currently locked; toggle by passing the opposite
-        m:SetFrameLock(not (db.lockFrames ~= false))
-        RefreshButtonStates()
+        local movers = _G.TwichMoverModule
+        if movers then
+            movers:Toggle()
+            RefreshButtonStates()
+        end
     end)
-    AttachTooltip(moversBtn, "Movers", "Show or hide the drag handles for repositioning unit frames.")
+    AttachTooltip(moversBtn, "Move Mode", "Open the central mover overlay to reposition all UI elements simultaneously.")
 
     -- ── Divider ───────────────────────────────────────────────────────────────
     local divider = parent:CreateTexture(nil, "ARTWORK")

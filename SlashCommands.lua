@@ -212,6 +212,22 @@ local function OpenConfigurationPanel(input)
         return
     end
 
+    if primaryCommand == "movers" then
+        local moversModule = T:GetModule("Movers", true)
+        if not moversModule then
+            T:Print("[TwichUI] Mover system is unavailable")
+            return
+        end
+        if remainder == "on" then
+            moversModule:Activate()
+        elseif remainder == "off" then
+            moversModule:Deactivate()
+        else
+            moversModule:Toggle()
+        end
+        return
+    end
+
     ---@type ConfigurationModule
     local ConfigurationModule = T:GetModule("Configuration")
     ConfigurationModule:ToggleOptionsUI()

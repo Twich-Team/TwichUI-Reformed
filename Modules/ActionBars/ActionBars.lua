@@ -963,6 +963,9 @@ function ActionBars:OnEnable()
     self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
 
     self:RequestRefresh()
+    -- Register action bar movers with the central mover system (deferred so
+    -- all modules finish OnEnable first).
+    C_Timer.After(0, function() ActionBars:RegisterWithMoverModule() end)
 end
 
 function ActionBars:HandlePlayerEnteringWorld()
@@ -1190,6 +1193,70 @@ function ActionBars:PersistBarLayout(barKey, absX, absY)
     settings.relativePoint = "BOTTOMLEFT"
     settings.x = floor((absX or 0) + 0.5)
     settings.y = floor((absY or 0) + 0.5)
+end
+
+-- ── Central Mover System registration ────────────────────────────────────────
+function ActionBars:RegisterWithMoverModule()
+    local moversModule = _G.TwichMoverModule
+    if not moversModule or type(moversModule.RegisterMover) ~= "function" then return end
+
+    for _, definition in ipairs(BAR_DEFINITIONS) do
+        local barKey = definition.key
+        local barLabel = definition.label
+
+        moversModule:RegisterMover("AB_" .. barKey, {
+            label    = barLabel,
+            category = "Action Bars",
+            getFrame = function() return ActionBars.holders[barKey] end,
+            getX     = function()
+                local s = ActionBars:GetBarSettings(barKey)
+                return s and (s.x or 0) or 0
+            end,
+            getY     = function()
+                local s = ActionBars:GetBarSettings(barKey)
+                return s and (s.y or 0) or 0
+            end,
+            getW     = function()
+                local h = ActionBars.holders[barKey]
+                return h and h:GetWidth() or nil
+            end,
+            getH     = function()
+                local h = ActionBars.holders[barKey]
+                return h and h:GetHeight() or nil
+            end,
+            setPos   = function(x, y)
+                ActionBars:PersistBarLayout(barKey, x, y)
+                local holder = ActionBars.holders[barKey]
+                if holder then
+                    holder:ClearAllPoints()
+                    holder:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
+                end
+                ActionBars:RefreshAll()
+            end,
+            setSize  = nil,  -- bar dimensions are governed by button size/count settings
+            isEnabled = function()
+                local s = ActionBars:GetBarSettings(barKey)
+                return not s or s.enabled ~= false
+            end,
+            extras   = {
+                {
+                    label = "Bar Enabled",
+                    type  = "toggle",
+                    get   = function()
+                        local s = ActionBars:GetBarSettings(barKey)
+                        return s and s.enabled == true or false
+                    end,
+                    set   = function(value)
+                        local s = ActionBars:GetBarSettings(barKey)
+                        if s then
+                            s.enabled = value == true
+                            ActionBars:RequestRefresh()
+                        end
+                    end,
+                },
+            },
+        })
+    end
 end
 
 function ActionBars:GetMoverInspector()

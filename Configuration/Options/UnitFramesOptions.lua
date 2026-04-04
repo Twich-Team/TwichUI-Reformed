@@ -2785,19 +2785,15 @@ local function BuildGeneralTab()
                             end
                         end,
                     }),
-                unlockMovers = BuildToggle(5, "Unlock Movers", "Show layout movers so frames can be repositioned.",
-                    { "lockFrames" }, db.lockFrames ~= true, {
+                unlockMovers = BuildToggle(5, "Unlock Movers", "Open the TwichUI central mover overlay to reposition all frames simultaneously.",
+                    { "lockFrames" }, false, {
                         refreshConfig = true,
                         get = function()
-                            return GetPathValue({ "lockFrames" }, true) ~= true
+                            return _G.TwichMoverModule and _G.TwichMoverModule:IsActive() or false
                         end,
-                        set = function(value)
-                            local module = GetModule()
-                            if module and type(module.SetFrameLock) == "function" then
-                                module:SetFrameLock(value ~= true)
-                            else
-                                SetPathValue({ "lockFrames" }, value ~= true, true)
-                            end
+                        set = function()
+                            local m = _G.TwichMoverModule
+                            if m then m:Toggle() end
                         end,
                     }),
                 refreshNow = BuildExecute(6, "Refresh Frames", "Re-apply the current Unit Frames settings.", function()

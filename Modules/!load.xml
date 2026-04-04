@@ -1,5 +1,6 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Include file='SetupWizard\!load.xml' />
+    <Include file='Movers\!load.xml' />
     <Include file='Theme\!load.xml' />
     <Include file='Media\!load.xml' />
     <Include file='Data\!load.xml' />
