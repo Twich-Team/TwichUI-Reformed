@@ -2785,15 +2785,19 @@ local function BuildGeneralTab()
                             end
                         end,
                     }),
-                unlockMovers = BuildToggle(5, "Unlock Movers", "Open the TwichUI central mover overlay to reposition all frames simultaneously.",
-                    { "lockFrames" }, false, {
+                unlockMovers = BuildToggle(5, "Unlock Movers", "Show layout movers so frames can be repositioned.",
+                    { "lockFrames" }, db.lockFrames ~= true, {
                         refreshConfig = true,
                         get = function()
-                            return _G.TwichMoverModule and _G.TwichMoverModule:IsActive() or false
+                            return GetPathValue({ "lockFrames" }, true) ~= true
                         end,
-                        set = function()
-                            local m = _G.TwichMoverModule
-                            if m then m:Toggle() end
+                        set = function(value)
+                            local module = GetModule()
+                            if module and type(module.SetFrameLock) == "function" then
+                                module:SetFrameLock(value ~= true)
+                            else
+                                SetPathValue({ "lockFrames" }, value ~= true, true)
+                            end
                         end,
                     }),
                 refreshNow = BuildExecute(6, "Refresh Frames", "Re-apply the current Unit Frames settings.", function()
@@ -3338,8 +3342,8 @@ function Options:GetDB()
     local db = profile.unitFrames
     if db.enabled == nil then db.enabled = true end
     if db.testMode == nil then db.testMode = false end
-    if db.testPreviewParty == nil then db.testPreviewParty = false end
-    if db.testPreviewRaid == nil then db.testPreviewRaid = false end
+    if db.testPreviewParty == nil then db.testPreviewParty = true end
+    if db.testPreviewRaid == nil then db.testPreviewRaid = true end
     if db.lockFrames == nil then db.lockFrames = true end
     if db.scale == nil then db.scale = 1 end
     if db.frameAlpha == nil then db.frameAlpha = 1 end
