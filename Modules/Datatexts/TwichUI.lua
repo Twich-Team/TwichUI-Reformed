@@ -36,7 +36,7 @@ function BrandDT:OnEnter(panel)
     tooltip:ClearLines()
     tooltip:AddLine("TwichUI Reformed")
     tooltip:AddLine(" ")
-    tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Left-click  — Open configuration"))
+    tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Left-click  — Open menu"))
     tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "Right-click — Reload UI"))
     DataTextModule:ShowDatatextTooltip(tooltip)
 end
@@ -52,10 +52,30 @@ function BrandDT:OnClick(panel, button)
         return
     end
 
-    -- Left-click (default): open config
-    if ConfigurationModule and ConfigurationModule.OpenOptionsUI then
-        ConfigurationModule:OpenOptionsUI()
-    end
+    -- Left-click: show quick-access menu
+    local moversModule = _G.TwichMoverModule
+    local moversActive = moversModule and moversModule:IsActive() or false
+
+    local menuList = {
+        {
+            text   = "Open Settings",
+            func   = function()
+                if ConfigurationModule and ConfigurationModule.OpenOptionsUI then
+                    ConfigurationModule:OpenOptionsUI()
+                end
+            end,
+        },
+        {
+            text   = moversActive and "Lock Movers" or "Unlock Movers",
+            func   = function()
+                if moversModule then
+                    moversModule:Toggle()
+                end
+            end,
+        },
+    }
+
+    DataTextModule:ShowMenu(panel, menuList)
 end
 
 function BrandDT:OnInitialize()

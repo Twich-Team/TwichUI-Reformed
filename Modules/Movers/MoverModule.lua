@@ -1014,8 +1014,18 @@ end
 
 function MoverModule:Activate()
     if InCombatLockdown() then
-        T:Print("|cff19c9c7[TwichUI]|r Cannot enter Move Mode in combat.")
+        print("|cff19c9c7[TwichUI]|r Cannot enter Move Mode in combat.")
         return
+    end
+
+    -- Remember whether the config UI was open so we can restore it on exit.
+    self._configWasOpen = false
+    local cfg = T:GetModule("Configuration", true)
+    if cfg and cfg.StandaloneUI and type(cfg.StandaloneUI.GetFrame) == "function" then
+        local cfgFrame = cfg.StandaloneUI:GetFrame()
+        if cfgFrame and cfgFrame.IsShown and cfgFrame:IsShown() then
+            self._configWasOpen = true
+        end
     end
 
     self._active = true
@@ -1035,8 +1045,7 @@ function MoverModule:Activate()
         end
     end
 
-    T:Print(
-    "|cff19c9c7[TwichUI]|r Move Mode active — drag handles or click for inspector. |cffff6060ESC|r or Exit button to close.")
+    print("|cff19c9c7[TwichUI]|r Move Mode active — drag handles or click for inspector. |cffff6060ESC|r or Exit button to close.")
 end
 
 function MoverModule:Deactivate()
@@ -1054,10 +1063,23 @@ function MoverModule:Deactivate()
     if self._overlay then self._overlay:Hide() end
     if self._hud then self._hud:Hide() end
 
-    T:Print("|cff19c9c7[TwichUI]|r Move Mode closed.")
+    print("|cff19c9c7[TwichUI]|r Move Mode closed.")
+
+    -- Re-open config UI if it was visible when Move Mode started.
+    if self._configWasOpen then
+        self._configWasOpen = false
+        local cfg = T:GetModule("Configuration", true)
+        if cfg and type(cfg.OpenOptionsUI) == "function" then
+            C_Timer.After(0, function() cfg:OpenOptionsUI() end)
+        end
+    end
 end
 
 function MoverModule:Toggle()
+    if self._toggleLocked then return end
+    self._toggleLocked = true
+    C_Timer.After(0.3, function() self._toggleLocked = false end)
+
     if self._active then
         self:Deactivate()
     else
