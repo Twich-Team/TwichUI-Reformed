@@ -51,6 +51,11 @@ local math_max         = math.max
 local math_min         = math.min
 local math_abs         = math.abs
 
+-- ── Snapping constants ───────────────────────────────────────────────────────
+-- Frames snap when a dragged edge comes within SNAP_THRESHOLD px of a target.
+-- Hold Shift while dragging to bypass snapping for pixel-perfect placement.
+local SNAP_THRESHOLD   = 16
+
 -- ── Colours (match the rest of TwichUI) ────────────────────────────────────
 local C_ACCENT         = { 0.10, 0.72, 0.74 } -- teal
 local C_BG             = { 0.05, 0.06, 0.09 }
@@ -691,6 +696,148 @@ end
 
 -- ── Handle creation & positioning ───────────────────────────────────────────
 
+-- ── Snap guide lines ─────────────────────────────────────────────────────────
+-- Two full-screen 1-px lines (H + V) that appear at snap targets during drag.
+
+local function GetOrCreateSnapLines()
+    local self = MoverModule
+    if not self._snapLineH then
+        local lh = CreateFrame("Frame", "TwichUIMoverSnapLineH", UIParent)
+        lh:SetFrameStrata("TOOLTIP")
+        lh:SetFrameLevel(500)
+        lh:SetHeight(1)
+        local t = lh:CreateTexture(nil, "OVERLAY")
+        t:SetAllPoints(lh)
+        t:SetColorTexture(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.80)
+        lh:Hide()
+        self._snapLineH = lh
+    end
+    if not self._snapLineV then
+        local lv = CreateFrame("Frame", "TwichUIMoverSnapLineV", UIParent)
+        lv:SetFrameStrata("TOOLTIP")
+        lv:SetFrameLevel(500)
+        lv:SetWidth(1)
+        local t = lv:CreateTexture(nil, "OVERLAY")
+        t:SetAllPoints(lv)
+        t:SetColorTexture(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.80)
+        lv:Hide()
+        self._snapLineV = lv
+    end
+    return self._snapLineH, self._snapLineV
+end
+
+function MoverModule:_ShowSnapLines(snapX, snapY)
+    local lh, lv = GetOrCreateSnapLines()
+    if snapY then
+        lh:ClearAllPoints()
+        lh:SetPoint("LEFT",  UIParent, "BOTTOMLEFT",  0, snapY)
+        lh:SetPoint("RIGHT", UIParent, "BOTTOMRIGHT", 0, snapY)
+        lh:Show()
+    else
+        lh:Hide()
+    end
+    if snapX then
+        lv:ClearAllPoints()
+        lv:SetPoint("TOP",    UIParent, "TOPLEFT",    snapX, 0)
+        lv:SetPoint("BOTTOM", UIParent, "BOTTOMLEFT", snapX, 0)
+        lv:Show()
+    else
+        lv:Hide()
+    end
+end
+
+function MoverModule:_HideSnapLines()
+    if self._snapLineH then self._snapLineH:Hide() end
+    if self._snapLineV then self._snapLineV:Hide() end
+end
+
+-- ── Snap computation ──────────────────────────────────────────────────────────
+-- Returns snappedBlX, snappedBlY, guideLineX, guideLineY.
+-- guideLineX/Y are screen-space positions for snap guide lines (nil = no snap on that axis).
+-- Hold Shift during drag to bypass snap entirely.
+
+function MoverModule:_SnapPosition(dragKey, rawBlX, rawBlY, fw, fh)
+    if _G.IsShiftKeyDown and _G.IsShiftKeyDown() then
+        return rawBlX, rawBlY, nil, nil
+    end
+
+    local sw = UIParent:GetWidth()  or 1280
+    local sh = UIParent:GetHeight() or 768
+
+    -- Edges of the dragged frame at the raw (un-snapped) BOTTOMLEFT.
+    local L  = rawBlX
+    local R  = rawBlX + fw
+    local B  = rawBlY
+    local T  = rawBlY + fh
+    local CX = rawBlX + fw * 0.5
+    local CY = rawBlY + fh * 0.5
+
+    -- ── X-axis candidates  { targetBlX, guideLine_X_screen } ────────────────
+    local xCands = {
+        { L = 0,              line = 0              }, -- frame L → screen L
+        { L = sw - fw,        line = sw             }, -- frame R → screen R
+        { L = sw * 0.5 - fw * 0.5, line = sw * 0.5 }, -- frame CX → screen CX
+    }
+    -- snap against every other visible handle
+    for otherKey, oh in pairs(self._handles) do
+        if otherKey ~= dragKey and oh:IsShown() then
+            local oL = oh:GetLeft()   or 0
+            local oR = oh:GetRight()  or (oL + 80)
+            local oCX = (oL + oR) * 0.5
+            xCands[#xCands+1] = { L = oL,          line = oL  } -- L-edge align
+            xCands[#xCands+1] = { L = oR - fw,     line = oR  } -- R-edge align
+            xCands[#xCands+1] = { L = oR,           line = oR  } -- frame L sticks to other R
+            xCands[#xCands+1] = { L = oL - fw,     line = oL  } -- frame R sticks to other L
+            xCands[#xCands+1] = { L = oCX - fw*0.5, line = oCX } -- centre-X align
+        end
+    end
+
+    -- ── Y-axis candidates  { targetBlY, guideLine_Y_screen } ────────────────
+    local yCands = {
+        { B = 0,              line = 0              }, -- frame B → screen B
+        { B = sh - fh,        line = sh             }, -- frame T → screen T
+        { B = sh * 0.5 - fh * 0.5, line = sh * 0.5 }, -- frame CY → screen CY
+    }
+    for otherKey, oh in pairs(self._handles) do
+        if otherKey ~= dragKey and oh:IsShown() then
+            local oB = oh:GetBottom() or 0
+            local oT = oh:GetTop()    or (oB + 24)
+            local oCY = (oB + oT) * 0.5
+            yCands[#yCands+1] = { B = oB,          line = oB  } -- B-edge align
+            yCands[#yCands+1] = { B = oT - fh,     line = oT  } -- T-edge align
+            yCands[#yCands+1] = { B = oT,           line = oT  } -- frame B sticks to other T
+            yCands[#yCands+1] = { B = oB - fh,     line = oB  } -- frame T sticks to other B
+            yCands[#yCands+1] = { B = oCY - fh*0.5, line = oCY } -- centre-Y align
+        end
+    end
+
+    -- Find best X snap within threshold
+    local bestX, bestXLine = rawBlX, nil
+    local bestXDist = SNAP_THRESHOLD + 1
+    for _, c in ipairs(xCands) do
+        local d = math_abs(L - c.L)
+        if d < bestXDist then
+            bestXDist = d
+            bestX     = math_floor(c.L + 0.5)
+            bestXLine = math_floor(c.line + 0.5)
+        end
+    end
+
+    -- Find best Y snap within threshold
+    local bestY, bestYLine = rawBlY, nil
+    local bestYDist = SNAP_THRESHOLD + 1
+    for _, c in ipairs(yCands) do
+        local d = math_abs(B - c.B)
+        if d < bestYDist then
+            bestYDist = d
+            bestY     = math_floor(c.B + 0.5)
+            bestYLine = math_floor(c.line + 0.5)
+        end
+    end
+
+    return bestX, bestY, bestXLine, bestYLine
+end
+
 local function BuildHandleLabel(opts)
     return opts and opts.label or "?"
 end
@@ -763,6 +910,16 @@ function MoverModule:_EnsureHandle(key)
         self:SetSize(math_max(40, vw), math_max(16, vh))
         self:StartMoving()
         self._dragging = true
+        -- Live snap-line preview: show guide lines as the frame approaches snap targets.
+        self:SetScript("OnUpdate", function(dragFrame)
+            if not dragFrame._dragging then return end
+            local rX = dragFrame:GetLeft()   or 0
+            local rY = dragFrame:GetBottom() or 0
+            local rW = dragFrame:GetWidth()  or 40
+            local rH = dragFrame:GetHeight() or 16
+            local _, _, snapX, snapY = MoverModule:_SnapPosition(key, rX, rY, rW, rH)
+            MoverModule:_ShowSnapLines(snapX, snapY)
+        end)
         local inspector = MoverModule._inspector
         if inspector and inspector._activeKey == key then
             inspector:Hide()
@@ -772,15 +929,27 @@ function MoverModule:_EnsureHandle(key)
     h:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         self._dragging = false
-        local blX      = math_floor((self:GetLeft() or 0) + 0.5)
-        local blY      = math_floor((self:GetBottom() or 0) + 0.5)
-        local o        = MoverModule._registry[key]
+        self:SetScript("OnUpdate", nil) -- stop live-snap preview
+
+        -- Compute snapped BOTTOMLEFT position and reposition handle before saving.
+        local rawX = self:GetLeft()   or 0
+        local rawY = self:GetBottom() or 0
+        local fw   = self:GetWidth()  or 40
+        local fh   = self:GetHeight() or 16
+        local blX, blY = MoverModule:_SnapPosition(key, rawX, rawY, fw, fh)
+        MoverModule:_HideSnapLines()
+
+        -- Commit handle to its final (snapped) screen position.
+        self:ClearAllPoints()
+        self:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", blX, blY)
+
+        local o = MoverModule._registry[key]
         if o then
             if type(o.setAnchor) == "function" then
-                -- Preserve whatever anchor is currently stored: convert the dragged
+                -- Preserve whatever anchor is currently stored: convert the snapped
                 -- BOTTOMLEFT screen position back to an offset relative to that anchor.
                 local curPt  = type(o.getPoint) == "function" and o.getPoint() or "BOTTOMLEFT"
-                local nx, ny = MoverModule:_ConvertFromBL(blX, blY, curPt, self:GetWidth(), self:GetHeight())
+                local nx, ny = MoverModule:_ConvertFromBL(blX, blY, curPt, fw, fh)
                 o.setAnchor(curPt, nx, ny)
             elseif type(o.setPos) == "function" then
                 o.setPos(blX, blY)
@@ -950,7 +1119,7 @@ function MoverModule:_BuildOverlay()
     local hudHint = hud:CreateFontString(nil, "OVERLAY")
     hudHint:SetPoint("CENTER", hud, "CENTER", 0, 0)
     SetFont(hudHint, 10)
-    hudHint:SetText("Drag handles to reposition · Left-click for inspector · Right-click to hide · Shift+nudge = 10 px")
+    hudHint:SetText("Drag to reposition · snaps to edges & other frames · |cffffcc00Shift|r: bypass snap · Left-click: inspector · Right-click: hide")
     hudHint:SetTextColor(0.55, 0.58, 0.68)
 
     -- Show Hidden button (reveals all temp-hidden)
@@ -1054,8 +1223,14 @@ function MoverModule:Deactivate()
 
     -- Hide all handles
     for _, h in pairs(self._handles) do
-        if h then h:Hide() end
+        if h then
+            h:SetScript("OnUpdate", nil)
+            h:Hide()
+        end
     end
+
+    -- Hide snap guide lines
+    self:_HideSnapLines()
 
     -- Hide inspector
     if self._inspector then self._inspector:Hide() end
