@@ -3254,6 +3254,14 @@ local function BuildCastbarTab()
                         end),
                         refreshConfig = true,
                     }),
+                spellDesigner = BuildExecute(1.95, "Open Spell Style Designer",
+                    "Open the spell template designer for the player castbar. Drag spells from your spellbook onto templates and tune their color and particle style.",
+                    function()
+                        local UF = T:GetModule("UnitFrames")
+                        if UF and type(UF.OpenCastbarSpellStyleDesigner) == "function" then
+                            UF:OpenCastbarSpellStyleDesigner()
+                        end
+                    end),
                 width = BuildRange(2, "Width", "Standalone castbar width.", { "castbar", "width" },
                     PLAYER_CASTBAR_DEFAULTS.width, 120, 600, 1),
                 height = BuildRange(3, "Height", "Standalone castbar height.", { "castbar", "height" },
@@ -3519,6 +3527,10 @@ function Options:GetDB()
     if type(db.auras) ~= "table" then db.auras = {} end
     if type(db.auras.scopes) ~= "table" then db.auras.scopes = {} end
     if type(db.castbar) ~= "table" then db.castbar = {} end
+    if type(db.castbar.spellStyles) ~= "table" then db.castbar.spellStyles = {} end
+    if type(db.castbar.spellStyles.templates) ~= "table" then db.castbar.spellStyles.templates = {} end
+    if type(db.castbar.spellStyles.assignments) ~= "table" then db.castbar.spellStyles.assignments = {} end
+    if db.castbar.spellStyles.nextTemplateID == nil then db.castbar.spellStyles.nextTemplateID = 1 end
     if type(db.castbars) ~= "table" then db.castbars = {} end
     if type(db.classBar) ~= "table" then db.classBar = {} end
     if type(db.highlights) ~= "table" then db.highlights = {} end

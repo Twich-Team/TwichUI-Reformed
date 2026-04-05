@@ -20,6 +20,8 @@ local InCombatLockdown = _G.InCombatLockdown
 local SecureHandlerSetFrameRef = _G.SecureHandlerSetFrameRef
 local UIParent = _G.UIParent
 local CheckInteractDistance = _G.CheckInteractDistance
+local UnitCastingInfo = _G.UnitCastingInfo
+local UnitChannelInfo = _G.UnitChannelInfo
 local UnitExists = _G.UnitExists
 local UnitClass = _G.UnitClass
 local UnitInRange = _G.UnitInRange
@@ -1760,6 +1762,74 @@ local CUSTOM_FRAME_DEFAULTS = {
     extraHeight = 0,
 }
 
+local CASTBAR_SPELL_TEMPLATE_DEFAULTS = {
+    name = "New Template",
+    useParticles = true,
+    fantasyTheme = "holy",
+    fantasyEffectScale = 1,
+    color = { 0.96, 0.76, 0.24, 1 },
+}
+
+local CASTBAR_SPELL_TEMPLATE_THEME_LABELS = {
+    aim = "Hunt",
+    alliance = "Blue Sparkle",
+    arcane = "Arcane",
+    arctic = "Frost",
+    bronze = "Gold Sparkle",
+    chaos = "Green Gas",
+    chiji = "Soft Leaves",
+    earth = "Earth",
+    felfire = "Green Fire",
+    fire = "Fire",
+    fishing = "Water",
+    fists = "Green & Blue Leaves",
+    frostfire = "Purple Glow",
+    herbalism = "Leaves",
+    holy = "Holy",
+    horde = "Red Sparkle",
+    lumber = "Wood",
+    mining = "Rock",
+    mistweaver = "Green Mist",
+    moon = "Lunar",
+    mossystone = "Celestial Green",
+    neutral = "Sparkle",
+    sacred = "Holy 2",
+    shadow = "Shadow",
+    thunder = "Blue Sparkle",
+    void = "Void",
+}
+
+local CASTBAR_SPELL_TEMPLATE_THEME_ORDER = {
+    "holy",
+    "moon",
+    "fire",
+    "nature",
+    "water",
+    "arctic",
+    "arcane",
+    "void",
+    "shadow",
+    "thunder",
+    "earth",
+    "felfire",
+    "mistweaver",
+    "mossystone",
+    "aim",
+    "alliance",
+    "bronze",
+    "chaos",
+    "chiji",
+    "fishing",
+    "fists",
+    "frostfire",
+    "herbalism",
+    "horde",
+    "lumber",
+    "mining",
+    "neutral",
+    "sacred",
+}
+
 local function NormalizeBlendMode(value)
     if value == "ADD" or value == "MOD" or value == "ALPHAKEY" then
         return value
@@ -1941,6 +2011,332 @@ function UnitFrames:GetDB()
     end
 
     return {}
+end
+
+local function ResolveCastbarSpellTemplateTheme(theme)
+    if type(theme) == "string" and theme ~= "" and CASTBAR_SPELL_TEMPLATE_THEME_LABELS[theme] then
+        return theme
+    end
+
+    return CASTBAR_SPELL_TEMPLATE_DEFAULTS.fantasyTheme
+end
+
+local function NormalizeCastbarSpellTemplate(templateID, template)
+    local source = type(template) == "table" and template or {}
+    local name = type(source.name) == "string" and source.name:match("^%s*(.-)%s*$") or nil
+    if not name or name == "" then
+        name = CASTBAR_SPELL_TEMPLATE_DEFAULTS.name
+    end
+
+    return {
+        id = tostring(templateID or ""),
+        name = name,
+        useParticles = source.useParticles ~= false,
+        fantasyTheme = ResolveCastbarSpellTemplateTheme(source.fantasyTheme),
+        fantasyEffectScale = Clamp(
+            tonumber(source.fantasyEffectScale) or CASTBAR_SPELL_TEMPLATE_DEFAULTS.fantasyEffectScale,
+            0.5, 3),
+        color = CopyColor(source.color, CASTBAR_SPELL_TEMPLATE_DEFAULTS.color),
+    }
+end
+
+function UnitFrames:GetCastbarSpellStyleDB()
+    local db = self:GetDB()
+    db.castbar = type(db.castbar) == "table" and db.castbar or {}
+    db.castbar.spellStyles = type(db.castbar.spellStyles) == "table" and db.castbar.spellStyles or {}
+
+    local spellStyles = db.castbar.spellStyles
+    spellStyles.templates = type(spellStyles.templates) == "table" and spellStyles.templates or {}
+    spellStyles.assignments = type(spellStyles.assignments) == "table" and spellStyles.assignments or {}
+    spellStyles.nextTemplateID = math_max(1, math_floor(tonumber(spellStyles.nextTemplateID) or 1))
+
+    return spellStyles
+end
+
+function UnitFrames:GetCastbarSpellTemplates()
+    local spellStyles = self:GetCastbarSpellStyleDB()
+    local list = {}
+
+    for templateID, template in pairs(spellStyles.templates) do
+        list[#list + 1] = NormalizeCastbarSpellTemplate(templateID, template)
+    end
+
+    table.sort(list, function(left, right)
+        local leftName = string.lower(left.name or "")
+        local rightName = string.lower(right.name or "")
+        if leftName == rightName then
+            return tostring(left.id) < tostring(right.id)
+        end
+        return leftName < rightName
+    end)
+
+    return list
+end
+
+function UnitFrames:GetCastbarSpellTemplate(templateID)
+    if type(templateID) ~= "string" or templateID == "" then
+        return nil
+    end
+
+    local spellStyles = self:GetCastbarSpellStyleDB()
+    local template = spellStyles.templates[templateID]
+    if type(template) ~= "table" then
+        return nil
+    end
+
+    return NormalizeCastbarSpellTemplate(templateID, template)
+end
+
+function UnitFrames:CreateCastbarSpellTemplate()
+    local spellStyles = self:GetCastbarSpellStyleDB()
+    local templateID = string.format("template_%d", spellStyles.nextTemplateID)
+    local templateName = string.format("Template %d", spellStyles.nextTemplateID)
+    spellStyles.nextTemplateID = spellStyles.nextTemplateID + 1
+    spellStyles.templates[templateID] = {
+        name = templateName,
+        useParticles = CASTBAR_SPELL_TEMPLATE_DEFAULTS.useParticles,
+        fantasyTheme = CASTBAR_SPELL_TEMPLATE_DEFAULTS.fantasyTheme,
+        fantasyEffectScale = CASTBAR_SPELL_TEMPLATE_DEFAULTS.fantasyEffectScale,
+        color = CopyColor(CASTBAR_SPELL_TEMPLATE_DEFAULTS.color),
+    }
+
+    return templateID
+end
+
+function UnitFrames:DeleteCastbarSpellTemplate(templateID)
+    local spellStyles = self:GetCastbarSpellStyleDB()
+    if type(templateID) ~= "string" or type(spellStyles.templates[templateID]) ~= "table" then
+        return
+    end
+
+    spellStyles.templates[templateID] = nil
+    for spellID, assignedTemplateID in pairs(spellStyles.assignments) do
+        if assignedTemplateID == templateID then
+            spellStyles.assignments[spellID] = nil
+        end
+    end
+end
+
+function UnitFrames:SetCastbarSpellTemplateValue(templateID, field, value)
+    local spellStyles = self:GetCastbarSpellStyleDB()
+    local template = spellStyles.templates[templateID]
+    if type(template) ~= "table" then
+        return
+    end
+
+    if field == "name" then
+        local nextName = type(value) == "string" and value:match("^%s*(.-)%s*$") or nil
+        template.name = (nextName and nextName ~= "") and nextName or template.name or
+            CASTBAR_SPELL_TEMPLATE_DEFAULTS.name
+    elseif field == "useParticles" then
+        template.useParticles = value == true
+    elseif field == "fantasyTheme" then
+        template.fantasyTheme = ResolveCastbarSpellTemplateTheme(value)
+    elseif field == "fantasyEffectScale" then
+        template.fantasyEffectScale = Clamp(tonumber(value) or CASTBAR_SPELL_TEMPLATE_DEFAULTS.fantasyEffectScale, 0.5, 3)
+    elseif field == "color" and type(value) == "table" then
+        template.color = CopyColor(value, CASTBAR_SPELL_TEMPLATE_DEFAULTS.color)
+    end
+end
+
+function UnitFrames:AssignSpellToCastbarTemplate(spellID, templateID)
+    local resolvedSpellID = tonumber(spellID)
+    if not resolvedSpellID or resolvedSpellID <= 0 then
+        return
+    end
+
+    local spellStyles = self:GetCastbarSpellStyleDB()
+    if templateID == nil then
+        spellStyles.assignments[resolvedSpellID] = nil
+        return
+    end
+
+    if type(spellStyles.templates[templateID]) ~= "table" then
+        return
+    end
+
+    spellStyles.assignments[resolvedSpellID] = templateID
+end
+
+function UnitFrames:GetCastbarTemplateIDForSpell(spellID)
+    local resolvedSpellID = tonumber(spellID)
+    if not resolvedSpellID or resolvedSpellID <= 0 then
+        return nil
+    end
+
+    local spellStyles = self:GetCastbarSpellStyleDB()
+    local templateID = spellStyles.assignments[resolvedSpellID]
+    if type(templateID) ~= "string" or type(spellStyles.templates[templateID]) ~= "table" then
+        return nil
+    end
+
+    return templateID
+end
+
+function UnitFrames:GetCastbarSpellTemplateForSpell(spellID)
+    local templateID = self:GetCastbarTemplateIDForSpell(spellID)
+    if not templateID then
+        return nil
+    end
+
+    return self:GetCastbarSpellTemplate(templateID)
+end
+
+function UnitFrames:GetCastbarAssignedSpellCount(templateID)
+    local spellStyles = self:GetCastbarSpellStyleDB()
+    local count = 0
+    for _, assignedTemplateID in pairs(spellStyles.assignments) do
+        if assignedTemplateID == templateID then
+            count = count + 1
+        end
+    end
+
+    return count
+end
+
+function UnitFrames:GetAssignedSpellEntriesForCastbarTemplate(templateID, spellEntries, assignments)
+    local results = {}
+    if type(templateID) ~= "string" or templateID == "" then
+        return results
+    end
+
+    local assignmentMap = type(assignments) == "table" and assignments or self:GetCastbarSpellStyleDB().assignments
+    local sourceEntries = type(spellEntries) == "table" and spellEntries or self:GetPlayerSpellbookEntries()
+    for _, spellEntry in ipairs(sourceEntries) do
+        if assignmentMap[spellEntry.spellID] == templateID then
+            results[#results + 1] = spellEntry
+        end
+    end
+
+    return results
+end
+
+function UnitFrames:GetPlayerSpellbookEntries()
+    local entries = {}
+    local seen = {}
+
+    if _G.C_SpellBook and type(_G.C_SpellBook.GetNumSpellBookSkillLines) == "function" and type(_G.C_SpellBook.GetSpellBookSkillLineInfo) == "function" and type(_G.C_SpellBook.GetSpellBookItemInfo) == "function" then
+        local spellBank = (_G.Enum and _G.Enum.SpellBookSpellBank and _G.Enum.SpellBookSpellBank.Player) or 0
+        local spellType = (_G.Enum and _G.Enum.SpellBookItemType and _G.Enum.SpellBookItemType.Spell) or 1
+        local skillLineCount = tonumber(_G.C_SpellBook.GetNumSpellBookSkillLines()) or 0
+
+        for skillLineIndex = 1, skillLineCount do
+            local skillLineInfo = _G.C_SpellBook.GetSpellBookSkillLineInfo(skillLineIndex)
+            if skillLineInfo and skillLineInfo.shouldHide ~= true then
+                local startIndex = (tonumber(skillLineInfo.itemIndexOffset) or 0) + 1
+                local endIndex = (tonumber(skillLineInfo.itemIndexOffset) or 0) +
+                    (tonumber(skillLineInfo.numSpellBookItems) or 0)
+
+                for slotIndex = startIndex, endIndex do
+                    local info = _G.C_SpellBook.GetSpellBookItemInfo(slotIndex, spellBank)
+                    local resolvedSpellID = tonumber(info and info.spellID)
+                    if info and info.itemType == spellType and resolvedSpellID and resolvedSpellID > 0 and info.isPassive ~= true and not seen[resolvedSpellID] then
+                        local name = info.name
+                        if (type(name) ~= "string" or name == "") and _G.C_Spell and type(_G.C_Spell.GetSpellName) == "function" then
+                            local okSpellName, resolvedSpellName = pcall(_G.C_Spell.GetSpellName, resolvedSpellID)
+                            if okSpellName then
+                                name = resolvedSpellName
+                            end
+                        end
+
+                        if type(name) == "string" and name ~= "" then
+                            entries[#entries + 1] = {
+                                spellID = resolvedSpellID,
+                                name = name,
+                                icon = info.iconID or GetSpellTextureCompat(resolvedSpellID),
+                                tabIndex = skillLineIndex,
+                                tabName = skillLineInfo.name or "Spellbook",
+                            }
+                            seen[resolvedSpellID] = true
+                        end
+                    end
+                end
+            end
+        end
+
+        table.sort(entries, function(left, right)
+            if left.tabIndex ~= right.tabIndex then
+                return left.tabIndex < right.tabIndex
+            end
+            local leftName = string.lower(left.name or "")
+            local rightName = string.lower(right.name or "")
+            if leftName == rightName then
+                return (left.spellID or 0) < (right.spellID or 0)
+            end
+            return leftName < rightName
+        end)
+
+        if #entries > 0 then
+            return entries
+        end
+    end
+
+    if type(_G.GetNumSpellTabs) ~= "function" or type(_G.GetSpellTabInfo) ~= "function" or type(_G.GetSpellBookItemInfo) ~= "function" then
+        return entries
+    end
+
+    local tabCount = tonumber(_G.GetNumSpellTabs()) or 0
+    for tabIndex = 1, tabCount do
+        local tabName, _, offset, numSlots = _G.GetSpellTabInfo(tabIndex)
+        local startIndex = (tonumber(offset) or 0) + 1
+        local endIndex = (tonumber(offset) or 0) + (tonumber(numSlots) or 0)
+        for spellBookIndex = startIndex, endIndex do
+            local spellType, spellID = _G.GetSpellBookItemInfo(spellBookIndex, _G.BOOKTYPE_SPELL or "spell")
+            local resolvedSpellID = tonumber(spellID)
+            local passive = false
+            if type(_G.IsPassiveSpell) == "function" then
+                local okPassive, result = pcall(_G.IsPassiveSpell, spellBookIndex, _G.BOOKTYPE_SPELL or "spell")
+                passive = okPassive and result == true
+            end
+
+            if spellType == "SPELL" and resolvedSpellID and resolvedSpellID > 0 and not passive and not seen[resolvedSpellID] then
+                local name = nil
+                if type(_G.GetSpellBookItemName) == "function" then
+                    local okName, resolvedName = pcall(_G.GetSpellBookItemName, spellBookIndex,
+                        _G.BOOKTYPE_SPELL or "spell")
+                    if okName then
+                        name = resolvedName
+                    end
+                end
+                if (type(name) ~= "string" or name == "") and _G.C_Spell and type(_G.C_Spell.GetSpellName) == "function" then
+                    local okSpellName, resolvedSpellName = pcall(_G.C_Spell.GetSpellName, resolvedSpellID)
+                    if okSpellName then
+                        name = resolvedSpellName
+                    end
+                end
+
+                if type(name) == "string" and name ~= "" then
+                    entries[#entries + 1] = {
+                        spellID = resolvedSpellID,
+                        name = name,
+                        icon = GetSpellTextureCompat(resolvedSpellID),
+                        tabIndex = tabIndex,
+                        tabName = tabName or "Spellbook",
+                    }
+                    seen[resolvedSpellID] = true
+                end
+            end
+        end
+    end
+
+    table.sort(entries, function(left, right)
+        if left.tabIndex ~= right.tabIndex then
+            return left.tabIndex < right.tabIndex
+        end
+        local leftName = string.lower(left.name or "")
+        local rightName = string.lower(right.name or "")
+        if leftName == rightName then
+            return (left.spellID or 0) < (right.spellID or 0)
+        end
+        return leftName < rightName
+    end)
+
+    return entries
+end
+
+local function ResolveCastbarTemplateThemeLabel(theme)
+    local resolvedTheme = ResolveCastbarSpellTemplateTheme(theme)
+    return CASTBAR_SPELL_TEMPLATE_THEME_LABELS[resolvedTheme] or resolvedTheme
 end
 
 function UnitFrames:GetUnitSettings(unit)
@@ -6973,6 +7369,81 @@ function UnitFrames:ApplyCastbarValue(bar, value, maxValue)
     self:SyncFantasyCastbarVisuals(bar)
 end
 
+function UnitFrames:ResolveStandaloneCastbarAppearance(settings, palette, spellTemplate)
+    local appearance = {
+        style = settings.style or "modern",
+        fantasyTheme = settings.fantasyTheme or "holy",
+        fantasyEffectScale = settings.fantasyEffectScale or 1,
+        fillColor = CopyColor(palette.cast, { 0.96, 0.76, 0.24, 1 }),
+        backgroundColor = CopyColor(palette.background, { 0.05, 0.06, 0.08, 1 }),
+        backgroundAlpha = 0.9,
+    }
+
+    if settings.useThemeAccentFill == true then
+        appearance.fillColor = GetThemeColor("accentColor", appearance.fillColor)
+    elseif settings.useCustomColor == true and type(settings.color) == "table" then
+        appearance.fillColor = CopyColor(settings.color, appearance.fillColor)
+    end
+
+    if settings.useCustomBackground == true and type(settings.backgroundColor) == "table" then
+        appearance.backgroundColor = CopyColor(settings.backgroundColor, appearance.backgroundColor)
+        appearance.backgroundAlpha = appearance.backgroundColor[4] or 1
+    end
+
+    if spellTemplate then
+        appearance.style = spellTemplate.useParticles == true and "fantasy" or "modern"
+        appearance.fantasyTheme = ResolveCastbarSpellTemplateTheme(spellTemplate.fantasyTheme)
+        appearance.fantasyEffectScale = Clamp(
+            tonumber(spellTemplate.fantasyEffectScale) or appearance.fantasyEffectScale,
+            0.5, 3)
+        appearance.fillColor = CopyColor(spellTemplate.color, appearance.fillColor)
+    end
+
+    return appearance
+end
+
+function UnitFrames:ApplyStandaloneCastbarAppearance(castbar, settings, palette, text)
+    if not castbar then
+        return
+    end
+
+    local activeSpellID = self._castbarState and self._castbarState.spellID or nil
+    local activeTemplate = activeSpellID and self:GetCastbarSpellTemplateForSpell(activeSpellID) or nil
+    local appearance = self:ResolveStandaloneCastbarAppearance(settings, palette, activeTemplate)
+    local castbarTextStyle = {
+        fontName = settings.fontName or text.fontName,
+        outlineMode = text.outlineMode,
+        shadowEnabled = text.shadowEnabled,
+        shadowOffsetX = text.shadowOffsetX,
+        shadowOffsetY = text.shadowOffsetY,
+    }
+    local db = self:GetDB()
+    local texName = (settings.texture and settings.texture ~= "") and settings.texture
+        or ((db.texture and db.texture ~= "") and db.texture or nil)
+    local castbarTexture = texName and GetLSMTexture(texName) or GetThemeTexture()
+
+    castbar._twichCastbarStyle = appearance.style
+    castbar._twichFantasyTheme = appearance.fantasyTheme
+    castbar._twichFantasyEffectScale = appearance.fantasyEffectScale
+    castbar:SetStatusBarTexture(castbarTexture)
+    castbar.smoothing = self:GetCastbarSmoothingMethod()
+    castbar:SetStatusBarColor(appearance.fillColor[1] or 1, appearance.fillColor[2] or 1, appearance.fillColor[3] or 1,
+        appearance.fillColor[4] or 1)
+    castbar:SetBackdropColor(appearance.backgroundColor[1], appearance.backgroundColor[2], appearance.backgroundColor[3],
+        appearance.backgroundAlpha)
+    castbar:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
+    if castbar.bg then
+        castbar.bg:SetColorTexture(appearance.backgroundColor[1], appearance.backgroundColor[2],
+            appearance.backgroundColor[3], appearance.backgroundAlpha)
+    end
+    castbar.spellText:SetShown(settings.showSpellText ~= false)
+    castbar.timeText:SetShown(settings.showTimeText ~= false)
+    self:ApplyFontObject(castbar.spellText, Clamp(settings.spellFontSize or 11, 6, 24), castbarTextStyle.fontName,
+        castbarTextStyle)
+    self:ApplyFontObject(castbar.timeText, Clamp(settings.timeFontSize or 10, 6, 24), castbarTextStyle.fontName,
+        castbarTextStyle)
+end
+
 function UnitFrames:ApplyUnitCastbarSettings(frame, unitKey)
     if not frame.Castbar then return end
     local db              = self:GetDB()
@@ -9628,6 +10099,17 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
             disabled = function()
                 return (GetCastbarConfig().style or castbarDefaults.style) ~= "fantasy"
+            end,
+        })
+        AddExtra({
+            label = "Spell Style Designer",
+            type = "execute",
+            tab = "effects",
+            tabLabel = "Effects",
+            buttonLabel = "Open Castbar Spell Designer",
+            desc = "Open the spell template designer for spell-specific castbar colors and particle themes.",
+            func = function()
+                UnitFrames:OpenCastbarSpellStyleDesigner()
             end,
         })
         AddExtra({
@@ -13367,43 +13849,7 @@ function UnitFrames:RefreshCastbarStyle()
     local settings = db.castbar or {}
     local palette = self:GetPalette("player", "player")
     local text = self:GetTextConfigFor("player")
-    local castbarTextStyle = {
-        fontName = settings.fontName or text.fontName,
-        outlineMode = text.outlineMode,
-        shadowEnabled = text.shadowEnabled,
-        shadowOffsetX = text.shadowOffsetX,
-        shadowOffsetY = text.shadowOffsetY,
-    }
-    local texName = (settings.texture and settings.texture ~= "") and settings.texture
-        or ((db.texture and db.texture ~= "") and db.texture or nil)
-    local style = settings.style or "modern"
-    local fantasyTheme = settings.fantasyTheme or "holy"
-    local castbarTexture = texName and GetLSMTexture(texName) or GetThemeTexture()
-    castbar._twichCastbarStyle = style
-    castbar._twichFantasyTheme = fantasyTheme
-    castbar._twichFantasyEffectScale = settings.fantasyEffectScale or 1
-    castbar:SetStatusBarTexture(castbarTexture)
-    castbar.smoothing = self:GetCastbarSmoothingMethod()
-    if settings.useThemeAccentFill == true then
-        local accent = GetThemeColor("accentColor", { 0.96, 0.76, 0.24, 1 })
-        castbar:SetStatusBarColor(accent[1] or 1, accent[2] or 1, accent[3] or 1, accent[4] or 1)
-    elseif settings.useCustomColor == true and type(settings.color) == "table" then
-        castbar:SetStatusBarColor(settings.color[1] or 1, settings.color[2] or 1, settings.color[3] or 1,
-            settings.color[4] or 1)
-    else
-        castbar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 1)
-    end
-    castbar:SetBackdropColor(palette.background[1], palette.background[2], palette.background[3], 0.9)
-    castbar:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
-    if castbar.bg then
-        castbar.bg:SetColorTexture(palette.background[1], palette.background[2], palette.background[3], 0.9)
-    end
-    castbar.spellText:SetShown(settings.showSpellText ~= false)
-    castbar.timeText:SetShown(settings.showTimeText ~= false)
-    self:ApplyFontObject(castbar.spellText, Clamp(settings.spellFontSize or 11, 6, 24), castbarTextStyle.fontName,
-        castbarTextStyle)
-    self:ApplyFontObject(castbar.timeText, Clamp(settings.timeFontSize or 10, 6, 24), castbarTextStyle.fontName,
-        castbarTextStyle)
+    self:ApplyStandaloneCastbarAppearance(castbar, settings, palette, text)
     self:SyncFantasyCastbarVisuals(castbar, true)
 end
 
@@ -13433,7 +13879,7 @@ function UnitFrames:UpdateCastbarElapsed()
     end
 end
 
-function UnitFrames:BeginCastbar(name, icon, startMS, endMS, reverse)
+function UnitFrames:BeginCastbar(name, icon, startMS, endMS, reverse, spellID)
     self:UFDiagBump("castStarts", 1)
     local castbar = self.frames.castbar
     if not castbar then return end
@@ -13444,10 +13890,17 @@ function UnitFrames:BeginCastbar(name, icon, startMS, endMS, reverse)
     if castbar.icon then castbar.icon:SetTexture(icon or 136243) end
     local duration = math_max(0.001, endSec - startSec)
     castbar._twichReverse = reverse == true
+    self._castbarState = {
+        startTime = startSec,
+        endTime = endSec,
+        reverse = reverse == true,
+        spellID = tonumber(spellID),
+    }
+    self:ApplyStandaloneCastbarAppearance(castbar, self:GetDB().castbar or {}, self:GetPalette("player", "player"),
+        self:GetTextConfigFor("player"))
     self:ResetFantasyCastbarVisuals(castbar)
     self:ApplyCastbarValue(castbar, reverse and duration or 0, duration)
     castbar:Show()
-    self._castbarState = { startTime = startSec, endTime = endSec, reverse = reverse == true }
     self:StartStandaloneCastbarUpdates()
 end
 
@@ -13458,6 +13911,8 @@ function UnitFrames:StopCastbar()
         castbar._twichReverse = nil
         self:StopStandaloneCastbarUpdates()
         castbar:Hide()
+        self._castbarState = nil
+        self:RefreshCastbarStyle()
     end
     self._castbarState = nil
 end
@@ -13469,17 +13924,17 @@ function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
     end
 
     if event == "UNIT_SPELLCAST_START" then
-        local name, _, texture, startMS, endMS = UnitCastingInfo("player")
+        local name, _, texture, startMS, endMS, _, _, _, activeSpellID = UnitCastingInfo("player")
         if name then
-            self:BeginCastbar(name, texture, startMS, endMS, false)
+            self:BeginCastbar(name, texture, startMS, endMS, false, spellID or activeSpellID)
         end
         return
     end
 
     if event == "UNIT_SPELLCAST_CHANNEL_START" then
-        local name, _, texture, startMS, endMS = UnitChannelInfo("player")
+        local name, _, texture, startMS, endMS, _, _, activeSpellID = UnitChannelInfo("player")
         if name then
-            self:BeginCastbar(name, texture, startMS, endMS, true)
+            self:BeginCastbar(name, texture, startMS, endMS, true, spellID or activeSpellID)
         end
         return
     end
@@ -13492,6 +13947,1174 @@ function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
         self:StopCastbar()
         return
     end
+end
+
+local function ApplySpellStyleEditorBackdrop(frame, bgAlpha)
+    if not frame or type(frame.SetBackdrop) ~= "function" then
+        return
+    end
+
+    frame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+    frame:SetBackdropColor(0.04, 0.04, 0.06, bgAlpha or 0.96)
+    frame:SetBackdropBorderColor(0.98, 0.76, 0.22, 0.18)
+end
+
+local function ApplySpellStyleEditorPanelBackdrop(frame, bgAlpha)
+    if not frame or type(frame.SetBackdrop) ~= "function" then
+        return
+    end
+
+    frame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    frame:SetBackdropColor(0.06, 0.06, 0.08, bgAlpha or 0.94)
+    frame:SetBackdropBorderColor(0, 0, 0, 0.18)
+end
+
+local function AddSpellStyleAccent(frame, red, green, blue, width)
+    if not frame then
+        return nil
+    end
+
+    local accent = frame:CreateTexture(nil, "BORDER")
+    accent:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+    accent:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 1, 1)
+    accent:SetWidth(width or 3)
+    accent:SetColorTexture(red or 0.98, green or 0.76, blue or 0.22, 1)
+    return accent
+end
+
+local function StyleSpellStyleListRow(row, height)
+    if row.__twichStyled then
+        return
+    end
+
+    row:SetHeight(height or 44)
+    row:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    row:SetBackdropColor(0, 0, 0, 0)
+    row:SetBackdropBorderColor(0, 0, 0, 0)
+
+    row.hover = row:CreateTexture(nil, "HIGHLIGHT")
+    row.hover:SetPoint("TOPLEFT", row, "TOPLEFT", 1, -1)
+    row.hover:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -1, 1)
+    row.hover:SetColorTexture(1, 1, 1, 0.04)
+
+    row.accentBar = AddSpellStyleAccent(row, 0.10, 0.79, 0.77, 3)
+    row.accentBar:SetAlpha(0)
+    row.__twichStyled = true
+end
+
+local function SetSpellStyleListRowSelected(row, selected, accentColor)
+    if not row then
+        return
+    end
+
+    local accent = accentColor or { 0.10, 0.79, 0.77 }
+    if selected then
+        row:SetBackdropColor(accent[1] * 0.12, accent[2] * 0.12, accent[3] * 0.14, 0.95)
+        row:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.38)
+        if row.accentBar then
+            row.accentBar:SetColorTexture(accent[1], accent[2], accent[3], 1)
+            row.accentBar:SetAlpha(1)
+        end
+    else
+        row:SetBackdropColor(0, 0, 0, 0)
+        row:SetBackdropBorderColor(0, 0, 0, 0)
+        if row.accentBar then
+            row.accentBar:SetAlpha(0)
+        end
+    end
+end
+
+local function UpdateSpellStyleTemplateRowIcons(row, spellEntries)
+    if not row then
+        return
+    end
+
+    row.spellIcons = row.spellIcons or {}
+    local previewCount = math_min(4, type(spellEntries) == "table" and #spellEntries or 0)
+    local iconSize = 18
+    local rightInset = 12
+
+    for index = 1, previewCount do
+        local icon = row.spellIcons[index]
+        if not icon then
+            icon = row:CreateTexture(nil, "ARTWORK")
+            icon:SetSize(iconSize, iconSize)
+            icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            row.spellIcons[index] = icon
+        end
+
+        icon:ClearAllPoints()
+        icon:SetPoint("RIGHT", row, "RIGHT", -(rightInset + ((previewCount - index) * (iconSize + 4))), 0)
+        icon:SetTexture((spellEntries[index] and spellEntries[index].icon) or 136243)
+        icon:Show()
+    end
+
+    for index = previewCount + 1, #row.spellIcons do
+        row.spellIcons[index]:Hide()
+    end
+
+    if not row.overflowText then
+        row.overflowText = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        row.overflowText:SetJustifyH("RIGHT")
+        row.overflowText:SetTextColor(0.55, 0.60, 0.68)
+    end
+
+    local totalCount = type(spellEntries) == "table" and #spellEntries or 0
+    if totalCount > previewCount then
+        row.overflowText:ClearAllPoints()
+        row.overflowText:SetPoint("RIGHT", row, "RIGHT", -12, -12)
+        row.overflowText:SetText("+" .. tostring(totalCount - previewCount))
+        row.overflowText:Show()
+    else
+        row.overflowText:Hide()
+    end
+
+    local reservedWidth = ((previewCount > 0) and ((previewCount * (iconSize + 4)) + 14) or 0)
+    if row.name then
+        row.name:ClearAllPoints()
+        row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -8)
+        row.name:SetPoint("RIGHT", row, "RIGHT", -(14 + reservedWidth), -8)
+    end
+    if row.meta then
+        row.meta:ClearAllPoints()
+        row.meta:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 12, 8)
+        row.meta:SetPoint("RIGHT", row, "RIGHT", -(14 + reservedWidth), 8)
+    end
+end
+
+function UnitFrames:UpdateCastbarSpellStylePreview(frame, template, assignedSpells)
+    local preview = frame and frame.templatePreview or nil
+    if not preview or not preview.castbar then
+        return
+    end
+
+    if not template then
+        preview:Hide()
+        return
+    end
+
+    local castbar = preview.castbar
+    local db = self:GetDB()
+    local settings = db.castbar or {}
+    local palette = self:GetPalette("player", "player")
+    local text = self:GetTextConfigFor("player")
+    local previewSpell = type(assignedSpells) == "table" and assignedSpells[1] or nil
+    local appearance = self:ResolveStandaloneCastbarAppearance(settings, palette, template)
+    local previewWidth = math_max(240, (preview.GetWidth and preview:GetWidth() or 360) - 24)
+    local iconSize = Clamp(settings.iconSize or settings.height or 20, 12, 50)
+    local showIcon = settings.showIcon ~= false
+    local iconPosition = settings.iconPosition or "outside"
+    local iconSide = settings.iconSide or "left"
+    local outsideReserve = (showIcon and iconPosition == "outside") and (iconSize + 8) or 0
+    local barWidth = Clamp(math_min(tonumber(settings.width) or 260, previewWidth - outsideReserve), 160,
+        math_max(160, previewWidth - outsideReserve))
+    local barCenterOffset = 0
+    if outsideReserve > 0 then
+        if iconSide == "left" then
+            barCenterOffset = outsideReserve * 0.5
+        else
+            barCenterOffset = -(outsideReserve * 0.5)
+        end
+    end
+
+    preview:Show()
+    castbar:ClearAllPoints()
+    castbar:SetPoint("BOTTOM", preview, "BOTTOM", barCenterOffset, 16)
+    castbar:SetSize(barWidth, 24)
+    castbar:SetMinMaxValues(0, 100)
+    castbar:SetValue(68)
+    castbar._twichCastbarStyle = appearance.style
+    castbar._twichFantasyTheme = appearance.fantasyTheme
+    castbar._twichFantasyEffectScale = appearance.fantasyEffectScale
+    castbar:SetStatusBarTexture((settings.texture and settings.texture ~= "" and GetLSMTexture(settings.texture)) or
+        GetThemeTexture())
+    castbar:SetStatusBarColor(appearance.fillColor[1] or 1, appearance.fillColor[2] or 1, appearance.fillColor[3] or 1,
+        appearance.fillColor[4] or 1)
+    castbar:SetBackdropColor(appearance.backgroundColor[1], appearance.backgroundColor[2], appearance.backgroundColor[3],
+        appearance.backgroundAlpha or 0.9)
+    castbar:SetBackdropBorderColor(palette.border[1], palette.border[2], palette.border[3], 0.9)
+    if castbar.bg then
+        castbar.bg:SetColorTexture(appearance.backgroundColor[1], appearance.backgroundColor[2],
+            appearance.backgroundColor[3],
+            appearance.backgroundAlpha or 0.9)
+    end
+
+    local castbarTextStyle = {
+        fontName = settings.fontName or text.fontName,
+        outlineMode = text.outlineMode,
+        shadowEnabled = text.shadowEnabled,
+        shadowOffsetX = text.shadowOffsetX,
+        shadowOffsetY = text.shadowOffsetY,
+    }
+    self:ApplyFontObject(castbar.spellText, Clamp(settings.spellFontSize or 11, 6, 24), castbarTextStyle.fontName,
+        castbarTextStyle)
+    self:ApplyFontObject(castbar.timeText, Clamp(settings.timeFontSize or 10, 6, 24), castbarTextStyle.fontName,
+        castbarTextStyle)
+    castbar.spellText:SetText((previewSpell and previewSpell.name) or template.name)
+    castbar.timeText:SetText("1.4")
+
+    if castbar.icon then
+        castbar.icon:SetTexture((previewSpell and previewSpell.icon) or 136243)
+        castbar.icon:Show()
+    end
+    if castbar.iconButton then
+        castbar.iconButton:SetSize(iconSize, iconSize)
+        castbar.iconButton:Show()
+        castbar.iconButton:ClearAllPoints()
+        if iconPosition == "inside" then
+            if iconSide == "right" then
+                castbar.iconButton:SetPoint("RIGHT", castbar, "RIGHT", -4, 0)
+            else
+                castbar.iconButton:SetPoint("LEFT", castbar, "LEFT", 4, 0)
+            end
+        else
+            if iconSide == "right" then
+                castbar.iconButton:SetPoint("LEFT", castbar, "RIGHT", 8, 0)
+            else
+                castbar.iconButton:SetPoint("RIGHT", castbar, "LEFT", -8, 0)
+            end
+        end
+    end
+
+    ApplyStandaloneCastbarTextAnchors(castbar, settings)
+
+    if preview.caption then
+        preview.caption:SetText(string.format("%s  ·  %s  ·  %d assigned",
+            template.useParticles == true and "Particles" or "Flat Fill",
+            ResolveCastbarTemplateThemeLabel(template.fantasyTheme),
+            type(assignedSpells) == "table" and #assignedSpells or 0))
+    end
+
+    self:ResetFantasyCastbarVisuals(castbar)
+    self:SyncFantasyCastbarVisuals(castbar, true)
+end
+
+function UnitFrames:OpenCastbarSpellThemeSelector(anchorButton, templateID)
+    if not anchorButton or type(templateID) ~= "string" or templateID == "" then
+        return
+    end
+
+    local ui = T.Tools and T.Tools.UI
+    if not ui or type(ui.CreateSearchSelector) ~= "function" then
+        return
+    end
+
+    if not self._castbarSpellThemeSelector then
+        self._castbarSpellThemeSelector = ui.CreateSearchSelector("TwichUICastbarSpellThemeSelector", {
+            hint = "Search themes",
+            width = 320,
+            height = 360,
+        })
+    end
+
+    local candidates = {}
+    local selectedValue = 1
+    local currentTemplate = self:GetCastbarSpellTemplate(templateID)
+    for index, theme in ipairs(CASTBAR_SPELL_TEMPLATE_THEME_ORDER) do
+        if currentTemplate and currentTemplate.fantasyTheme == theme then
+            selectedValue = index
+        end
+        candidates[#candidates + 1] = {
+            value = index,
+            name = CASTBAR_SPELL_TEMPLATE_THEME_LABELS[theme] or theme,
+            desc = theme,
+            search = string.format("%s %s", tostring(CASTBAR_SPELL_TEMPLATE_THEME_LABELS[theme] or theme),
+                tostring(theme)),
+            theme = theme,
+        }
+    end
+
+    self._castbarSpellThemeSelector:Open({
+        title = "Select Particle Theme",
+        relativeTo = anchorButton,
+        point = "TOPLEFT",
+        relativePoint = "BOTTOMLEFT",
+        x = 0,
+        y = -6,
+        candidates = candidates,
+        selectedValue = selectedValue,
+        onSelect = function(_, candidate)
+            if candidate and candidate.theme then
+                self:SetCastbarSpellTemplateValue(templateID, "fantasyTheme", candidate.theme)
+                self:RefreshCastbarStyle()
+                self:RefreshCastbarSpellStyleDesigner()
+            end
+        end,
+    })
+end
+
+local function CreateSpellStyleButton(parent, width, height, text)
+    local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    button:SetSize(width, height)
+    ApplySpellStyleEditorBackdrop(button, 0.98)
+
+    local fs = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    fs:SetPoint("CENTER", button, "CENTER", 0, 0)
+    fs:SetText(text or "")
+    button._fs = fs
+
+    button:SetScript("OnEnter", function(self)
+        self:SetBackdropBorderColor(0.96, 0.76, 0.24, 1)
+    end)
+    button:SetScript("OnLeave", function(self)
+        self:SetBackdropBorderColor(0.24, 0.26, 0.32, 0.96)
+    end)
+
+    return button
+end
+
+function UnitFrames:UpdateCastbarSpellStyleDragGhost()
+    local frame = self._castbarSpellStyleDesigner
+    local ghost = frame and frame.dragGhost or nil
+    local dragState = self._castbarSpellStyleDrag
+    if not frame or not ghost then
+        return
+    end
+
+    if not dragState then
+        ghost:Hide()
+        return
+    end
+
+    local cursorX, cursorY = _G.GetCursorPosition()
+    local scale = UIParent:GetEffectiveScale()
+    ghost:ClearAllPoints()
+    ghost:SetPoint("CENTER", UIParent, "BOTTOMLEFT", cursorX / scale, cursorY / scale)
+    ghost:Show()
+end
+
+function UnitFrames:ClearCastbarSpellStyleDrag()
+    self._castbarSpellStyleDrag = nil
+    local frame = self._castbarSpellStyleDesigner
+    if frame and frame.dragGhost then
+        frame.dragGhost:Hide()
+    end
+end
+
+function UnitFrames:BeginCastbarSpellStyleDrag(spellEntry)
+    if type(spellEntry) ~= "table" or not spellEntry.spellID then
+        return
+    end
+
+    self._castbarSpellStyleDrag = {
+        spellID = tonumber(spellEntry.spellID),
+        name = spellEntry.name,
+        icon = spellEntry.icon,
+    }
+
+    local frame = self._castbarSpellStyleDesigner
+    if frame and frame.dragGhost then
+        frame.dragGhost.icon:SetTexture(spellEntry.icon or 136243)
+        frame.dragGhost.text:SetText(spellEntry.name or "Spell")
+    end
+
+    self:UpdateCastbarSpellStyleDragGhost()
+end
+
+function UnitFrames:OpenCastbarSpellTemplateColorPicker(templateID)
+    local template = self:GetCastbarSpellTemplate(templateID)
+    local picker = _G.ColorPickerFrame
+    if not template or not picker then
+        return
+    end
+
+    local original = CopyColor(template.color, CASTBAR_SPELL_TEMPLATE_DEFAULTS.color)
+    local function ApplyColor(red, green, blue, alpha)
+        self:SetCastbarSpellTemplateValue(templateID, "color", { red, green, blue, alpha })
+        self:RefreshCastbarStyle()
+        self:RefreshCastbarSpellStyleDesigner()
+    end
+
+    if picker.SetupColorPickerAndShow then
+        local info = {
+            r = original[1],
+            g = original[2],
+            b = original[3],
+            opacity = 1 - (original[4] or 1),
+            hasOpacity = true,
+            swatchFunc = function()
+                local red, green, blue = picker:GetColorRGB()
+                local alpha = 1 - (OpacitySliderFrame and OpacitySliderFrame:GetValue() or 0)
+                ApplyColor(red, green, blue, alpha)
+            end,
+            opacityFunc = function()
+                local red, green, blue = picker:GetColorRGB()
+                local alpha = 1 - (OpacitySliderFrame and OpacitySliderFrame:GetValue() or 0)
+                ApplyColor(red, green, blue, alpha)
+            end,
+            cancelFunc = function(previous)
+                if type(previous) == "table" then
+                    ApplyColor(previous.r or original[1], previous.g or original[2], previous.b or original[3],
+                        1 - (previous.opacity or (1 - (original[4] or 1))))
+                else
+                    ApplyColor(original[1], original[2], original[3], original[4])
+                end
+            end,
+        }
+        picker:SetupColorPickerAndShow(info)
+        return
+    end
+
+    picker.func = function()
+        local red, green, blue = picker:GetColorRGB()
+        local alpha = 1 - (OpacitySliderFrame and OpacitySliderFrame:GetValue() or 0)
+        ApplyColor(red, green, blue, alpha)
+    end
+    picker.opacityFunc = picker.func
+    picker.cancelFunc = function()
+        ApplyColor(original[1], original[2], original[3], original[4])
+    end
+    picker.hasOpacity = true
+    picker.opacity = 1 - (original[4] or 1)
+    picker:SetColorRGB(original[1], original[2], original[3])
+    picker:Hide()
+    picker:Show()
+end
+
+function UnitFrames:EnsureCastbarSpellStyleDesigner()
+    if self._castbarSpellStyleDesigner then
+        return self._castbarSpellStyleDesigner
+    end
+
+    local frame = CreateFrame("Frame", "TwichUICastbarSpellStyleDesigner", UIParent, "BackdropTemplate")
+    frame:SetSize(1140, 800)
+    frame:SetPoint("CENTER")
+    frame:SetFrameStrata("DIALOG")
+    frame:SetFrameLevel(40)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    ApplySpellStyleEditorBackdrop(frame, 0.985)
+    frame:SetClampedToScreen(true)
+    frame:SetScript("OnDragStart", function(self)
+        self:StartMoving()
+    end)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+    end)
+    frame:SetScript("OnMouseUp", function()
+        UnitFrames:ClearCastbarSpellStyleDrag()
+    end)
+    frame:SetScript("OnUpdate", function()
+        UnitFrames:UpdateCastbarSpellStyleDragGhost()
+    end)
+    frame:Hide()
+
+    do
+        local titleBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        titleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -6)
+        titleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
+        titleBar:SetHeight(50)
+        ApplySpellStyleEditorPanelBackdrop(titleBar, 0.98)
+        AddSpellStyleAccent(titleBar, 0.98, 0.76, 0.22, 4)
+        titleBar:EnableMouse(true)
+        titleBar:RegisterForDrag("LeftButton")
+        titleBar:SetScript("OnDragStart", function()
+            frame:StartMoving()
+        end)
+        titleBar:SetScript("OnDragStop", function()
+            frame:StopMovingOrSizing()
+        end)
+        frame.titleBar = titleBar
+
+        local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        title:SetPoint("TOPLEFT", titleBar, "TOPLEFT", 16, -9)
+        title:SetText("Castbar Spell Styles")
+        title:SetTextColor(1, 0.95, 0.82)
+        frame.title = title
+
+        local subtitle = titleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+        subtitle:SetText(
+            "Drag spells onto a template to control the player castbar's color and particle look for that cast.")
+        subtitle:SetTextColor(0.55, 0.60, 0.68)
+
+        local closeButton = CreateSpellStyleButton(titleBar, 72, 24, "Close")
+        closeButton:SetPoint("RIGHT", titleBar, "RIGHT", -8, 0)
+        closeButton:SetScript("OnClick", function()
+            frame:Hide()
+        end)
+    end
+
+    do
+        local leftPane = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        leftPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -68)
+        leftPane:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 14, 14)
+        leftPane:SetWidth(410)
+        ApplySpellStyleEditorPanelBackdrop(leftPane, 0.94)
+        AddSpellStyleAccent(leftPane, 0.10, 0.79, 0.77, 3)
+        frame.leftPane = leftPane
+
+        local spellHeader = leftPane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        spellHeader:SetPoint("TOPLEFT", leftPane, "TOPLEFT", 14, -14)
+        spellHeader:SetText("Spellbook")
+
+        local searchBox = CreateFrame("EditBox", nil, leftPane, "BackdropTemplate")
+        searchBox:SetPoint("TOPLEFT", spellHeader, "BOTTOMLEFT", 0, -10)
+        searchBox:SetPoint("TOPRIGHT", leftPane, "TOPRIGHT", -14, -36)
+        searchBox:SetHeight(24)
+        ApplySpellStyleEditorBackdrop(searchBox, 0.98)
+        searchBox:SetAutoFocus(false)
+        searchBox:SetFontObject(GameFontHighlightSmall)
+        searchBox:SetTextInsets(8, 8, 0, 0)
+        searchBox:SetScript("OnTextChanged", function(self)
+            frame.searchText = string.lower(self:GetText() or "")
+            UnitFrames:RefreshCastbarSpellStyleDesigner()
+        end)
+        searchBox:SetScript("OnEscapePressed", function(self)
+            self:ClearFocus()
+        end)
+        frame.searchBox = searchBox
+
+        local searchHint = leftPane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        searchHint:SetPoint("LEFT", searchBox, "LEFT", 8, 0)
+        searchHint:SetText("Search spells")
+        searchBox:HookScript("OnEditFocusGained", function()
+            searchHint:Hide()
+        end)
+        searchBox:HookScript("OnEditFocusLost", function(self)
+            if (self:GetText() or "") == "" then
+                searchHint:Show()
+            end
+        end)
+
+        local spellsScroll = CreateFrame("ScrollFrame", nil, leftPane, "UIPanelScrollFrameTemplate")
+        spellsScroll:SetPoint("TOPLEFT", searchBox, "BOTTOMLEFT", 0, -10)
+        spellsScroll:SetPoint("BOTTOMRIGHT", leftPane, "BOTTOMRIGHT", -28, 14)
+        if T.Tools and T.Tools.UI and type(T.Tools.UI.SkinScrollBar) == "function" then
+            T.Tools.UI.SkinScrollBar(spellsScroll, { 0.10, 0.79, 0.77 }, true, false)
+        end
+        local spellsContent = CreateFrame("Frame", nil, spellsScroll)
+        spellsContent:SetSize(360, 1)
+        spellsScroll:SetScrollChild(spellsContent)
+        spellsScroll:HookScript("OnSizeChanged", function(scroll)
+            local availableWidth = math.max(1, (scroll:GetWidth() or 1) - 8)
+            spellsContent:SetWidth(availableWidth)
+        end)
+        frame.spellsContent = spellsContent
+    end
+
+    do
+        local rightPane = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        rightPane:SetPoint("TOPLEFT", frame.leftPane, "TOPRIGHT", 12, 0)
+        rightPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
+        ApplySpellStyleEditorPanelBackdrop(rightPane, 0.94)
+        AddSpellStyleAccent(rightPane, 0.10, 0.79, 0.77, 3)
+        frame.rightPane = rightPane
+
+        local templatesHeader = rightPane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        templatesHeader:SetPoint("TOPLEFT", rightPane, "TOPLEFT", 14, -14)
+        templatesHeader:SetText("Templates")
+
+        local addTemplate = CreateSpellStyleButton(rightPane, 108, 24, "Add Template")
+        addTemplate:SetPoint("TOPRIGHT", rightPane, "TOPRIGHT", -132, -12)
+        addTemplate:SetScript("OnClick", function()
+            local templateID = UnitFrames:CreateCastbarSpellTemplate()
+            frame.selectedTemplateID = templateID
+            UnitFrames:RefreshCastbarStyle()
+            UnitFrames:RefreshCastbarSpellStyleDesigner()
+        end)
+
+        local deleteTemplate = CreateSpellStyleButton(rightPane, 108, 24, "Delete")
+        deleteTemplate:SetPoint("LEFT", addTemplate, "RIGHT", 8, 0)
+        deleteTemplate:SetScript("OnClick", function()
+            if frame.selectedTemplateID then
+                UnitFrames:DeleteCastbarSpellTemplate(frame.selectedTemplateID)
+                frame.selectedTemplateID = nil
+                UnitFrames:RefreshCastbarStyle()
+                UnitFrames:RefreshCastbarSpellStyleDesigner()
+            end
+        end)
+        frame.deleteTemplateButton = deleteTemplate
+
+        local templateList = CreateFrame("Frame", nil, rightPane, "BackdropTemplate")
+        templateList:SetPoint("TOPLEFT", templatesHeader, "BOTTOMLEFT", 0, -10)
+        templateList:SetPoint("TOPRIGHT", rightPane, "TOPRIGHT", -14, -46)
+        templateList:SetHeight(148)
+        ApplySpellStyleEditorPanelBackdrop(templateList, 0.92)
+        local templateListScroll = CreateFrame("ScrollFrame", nil, templateList, "UIPanelScrollFrameTemplate")
+        templateListScroll:SetPoint("TOPLEFT", templateList, "TOPLEFT", 8, -8)
+        templateListScroll:SetPoint("BOTTOMRIGHT", templateList, "BOTTOMRIGHT", -28, 8)
+        if T.Tools and T.Tools.UI and type(T.Tools.UI.SkinScrollBar) == "function" then
+            T.Tools.UI.SkinScrollBar(templateListScroll, { 0.98, 0.76, 0.22 }, true, false)
+        end
+        local templateListContent = CreateFrame("Frame", nil, templateListScroll)
+        templateListContent:SetSize(560, 1)
+        templateListScroll:SetScrollChild(templateListContent)
+        templateListScroll:HookScript("OnSizeChanged", function(scroll)
+            local availableWidth = math.max(1, (scroll:GetWidth() or 1) - 8)
+            templateListContent:SetWidth(availableWidth)
+        end)
+        frame.templateListContent = templateListContent
+
+        local detailPane = CreateFrame("Frame", nil, rightPane, "BackdropTemplate")
+        detailPane:SetPoint("TOPLEFT", templateList, "BOTTOMLEFT", 0, -12)
+        detailPane:SetPoint("BOTTOMRIGHT", rightPane, "BOTTOMRIGHT", -14, 0)
+        ApplySpellStyleEditorPanelBackdrop(detailPane, 0.92)
+        frame.detailPane = detailPane
+
+        local detailTitle = detailPane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        detailTitle:SetPoint("TOPLEFT", detailPane, "TOPLEFT", 14, -14)
+        detailTitle:SetText("Template Details")
+        frame.detailTitle = detailTitle
+
+        local previewPanel = CreateFrame("Frame", nil, detailPane, "BackdropTemplate")
+        previewPanel:SetPoint("TOPLEFT", detailTitle, "BOTTOMLEFT", 0, -10)
+        previewPanel:SetPoint("TOPRIGHT", detailPane, "TOPRIGHT", -14, -36)
+        previewPanel:SetHeight(76)
+        ApplySpellStyleEditorBackdrop(previewPanel, 0.98)
+        previewPanel:SetBackdropBorderColor(0.10, 0.79, 0.77, 0.28)
+        local previewAccent = AddSpellStyleAccent(previewPanel, 0.10, 0.79, 0.77, 3)
+        previewPanel.accent = previewAccent
+
+        local previewLabel = previewPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        previewLabel:SetPoint("TOPLEFT", previewPanel, "TOPLEFT", 12, -8)
+        previewLabel:SetText("Live Preview")
+        previewLabel:SetTextColor(0.10, 0.79, 0.77)
+
+        local previewCaption = previewPanel:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        previewCaption:SetPoint("TOPLEFT", previewLabel, "BOTTOMLEFT", 0, -4)
+        previewCaption:SetPoint("RIGHT", previewPanel, "RIGHT", -12, 0)
+        previewCaption:SetJustifyH("LEFT")
+        previewCaption:SetText("Select a template to preview its castbar treatment.")
+
+        local previewCastbar = CreateFrame("StatusBar", nil, previewPanel, "BackdropTemplate")
+        previewCastbar:SetClipsChildren(false)
+        previewCastbar:SetPoint("BOTTOM", previewPanel, "BOTTOM", 0, 14)
+        previewCastbar:SetSize(300, 24)
+        previewCastbar:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8x8",
+            edgeFile = "Interface\\Buttons\\WHITE8x8",
+            edgeSize = 1,
+        })
+        previewCastbar.bg = previewCastbar:CreateTexture(nil, "BACKGROUND")
+        previewCastbar.bg:SetAllPoints(previewCastbar)
+        previewCastbar.bg:SetColorTexture(0.05, 0.06, 0.08, 0.9)
+
+        local previewIconButton = CreateFrame("Button", nil, previewCastbar)
+        previewIconButton:SetSize(24, 24)
+        previewIconButton:SetPoint("RIGHT", previewCastbar, "LEFT", -6, 0)
+        local previewIcon = previewIconButton:CreateTexture(nil, "ARTWORK")
+        previewIcon:SetAllPoints(previewIconButton)
+        previewIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        previewIconButton:EnableMouse(false)
+        previewCastbar.iconButton = previewIconButton
+        previewCastbar.icon = previewIcon
+
+        previewCastbar.spellText = previewCastbar:CreateFontString(nil, "OVERLAY")
+        previewCastbar.spellText:SetPoint("LEFT", previewCastbar, "LEFT", 8, 0)
+        previewCastbar.timeText = previewCastbar:CreateFontString(nil, "OVERLAY")
+        previewCastbar.timeText:SetPoint("RIGHT", previewCastbar, "RIGHT", -8, 0)
+        self:ApplyFontObject(previewCastbar.spellText, 11)
+        self:ApplyFontObject(previewCastbar.timeText, 10)
+
+        previewPanel.castbar = previewCastbar
+        previewPanel.caption = previewCaption
+        frame.templatePreview = previewPanel
+
+        local templateNameLabel = detailPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        templateNameLabel:SetPoint("TOPLEFT", previewPanel, "BOTTOMLEFT", 0, -14)
+        templateNameLabel:SetText("Name")
+
+        local templateNameInput = CreateFrame("EditBox", nil, detailPane, "BackdropTemplate")
+        templateNameInput:SetPoint("TOPLEFT", templateNameLabel, "BOTTOMLEFT", 0, -6)
+        templateNameInput:SetSize(260, 24)
+        templateNameInput:SetAutoFocus(false)
+        templateNameInput:SetFontObject(GameFontHighlightSmall)
+        templateNameInput:SetTextInsets(8, 8, 0, 0)
+        ApplySpellStyleEditorBackdrop(templateNameInput, 0.98)
+        templateNameInput:SetScript("OnEnterPressed", function(self)
+            self:ClearFocus()
+        end)
+        templateNameInput:SetScript("OnEscapePressed", function(self)
+            self:ClearFocus()
+        end)
+        templateNameInput:SetScript("OnEditFocusLost", function(self)
+            if frame.selectedTemplateID then
+                UnitFrames:SetCastbarSpellTemplateValue(frame.selectedTemplateID, "name", self:GetText())
+                UnitFrames:RefreshCastbarSpellStyleDesigner()
+            end
+        end)
+        frame.templateNameInput = templateNameInput
+
+        local colorLabel = detailPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        colorLabel:SetPoint("TOPLEFT", templateNameInput, "BOTTOMLEFT", 0, -14)
+        colorLabel:SetText("Fill Color")
+
+        local colorButton = CreateFrame("Button", nil, detailPane, "BackdropTemplate")
+        colorButton:SetPoint("TOPLEFT", colorLabel, "BOTTOMLEFT", 0, -6)
+        colorButton:SetSize(48, 22)
+        ApplySpellStyleEditorBackdrop(colorButton, 1)
+        colorButton:SetScript("OnClick", function()
+            if frame.selectedTemplateID then
+                UnitFrames:OpenCastbarSpellTemplateColorPicker(frame.selectedTemplateID)
+            end
+        end)
+        local colorPreview = colorButton:CreateTexture(nil, "ARTWORK")
+        colorPreview:SetPoint("TOPLEFT", colorButton, "TOPLEFT", 3, -3)
+        colorPreview:SetPoint("BOTTOMRIGHT", colorButton, "BOTTOMRIGHT", -3, 3)
+        colorButton.preview = colorPreview
+        frame.colorButton = colorButton
+
+        local particlesToggle = CreateSpellStyleButton(detailPane, 160, 24, "Particles: On")
+        particlesToggle:SetPoint("LEFT", colorButton, "RIGHT", 18, 0)
+        particlesToggle:SetScript("OnClick", function()
+            if not frame.selectedTemplateID then
+                return
+            end
+            local template = UnitFrames:GetCastbarSpellTemplate(frame.selectedTemplateID)
+            if not template then
+                return
+            end
+            UnitFrames:SetCastbarSpellTemplateValue(frame.selectedTemplateID, "useParticles",
+                template.useParticles ~= true)
+            UnitFrames:RefreshCastbarStyle()
+            UnitFrames:RefreshCastbarSpellStyleDesigner()
+        end)
+        frame.particlesToggle = particlesToggle
+
+        local themeLabel = detailPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        themeLabel:SetPoint("TOPLEFT", colorButton, "BOTTOMLEFT", 0, -16)
+        themeLabel:SetText("Particle Theme")
+
+        local themeMenuButton = CreateSpellStyleButton(detailPane, 250, 24, "Choose Theme")
+        themeMenuButton:SetPoint("TOPLEFT", themeLabel, "BOTTOMLEFT", 0, -6)
+        themeMenuButton:SetScript("OnClick", function(self)
+            if frame.selectedTemplateID then
+                UnitFrames:OpenCastbarSpellThemeSelector(self, frame.selectedTemplateID)
+            end
+        end)
+        frame.themeMenuButton = themeMenuButton
+
+        local effectLabel = detailPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        effectLabel:SetPoint("TOPLEFT", themeMenuButton, "BOTTOMLEFT", 0, -16)
+        effectLabel:SetText("Effect Size")
+
+        local effectShell = CreateFrame("Frame", nil, detailPane, "BackdropTemplate")
+        effectShell:SetPoint("TOPLEFT", effectLabel, "BOTTOMLEFT", 0, -6)
+        effectShell:SetPoint("TOPRIGHT", detailPane, "TOPRIGHT", -14, 0)
+        effectShell:SetHeight(56)
+        ApplySpellStyleEditorPanelBackdrop(effectShell, 0.96)
+        effectShell:SetBackdropBorderColor(0.98, 0.76, 0.22, 0.14)
+        frame.effectShell = effectShell
+
+        local effectValueShell = CreateFrame("Frame", nil, effectShell, "BackdropTemplate")
+        effectValueShell:SetPoint("TOPRIGHT", effectShell, "TOPRIGHT", -8, -7)
+        effectValueShell:SetSize(72, 24)
+        ApplySpellStyleEditorBackdrop(effectValueShell, 0.98)
+        frame.effectValueShell = effectValueShell
+
+        local effectValueEdit = CreateFrame("EditBox", nil, effectValueShell)
+        effectValueEdit:SetAutoFocus(false)
+        effectValueEdit:SetPoint("TOPLEFT", effectValueShell, "TOPLEFT", 6, -1)
+        effectValueEdit:SetPoint("BOTTOMRIGHT", effectValueShell, "BOTTOMRIGHT", -6, 1)
+        effectValueEdit:SetFontObject(ChatFontNormal)
+        effectValueEdit:SetJustifyH("CENTER")
+        effectValueEdit:SetTextColor(0.96, 0.94, 0.90)
+        effectValueEdit:SetMaxLetters(8)
+        effectValueEdit:SetTextInsets(2, 2, 0, 0)
+        effectValueEdit:SetText("1.00")
+        frame.effectValueEdit = effectValueEdit
+
+        local effectSlider = CreateFrame("Slider", nil, effectShell)
+        effectSlider:SetOrientation("HORIZONTAL")
+        effectSlider:SetPoint("TOPLEFT", effectShell, "TOPLEFT", 12, -12)
+        effectSlider:SetPoint("RIGHT", effectValueShell, "LEFT", -12, 0)
+        effectSlider:SetHeight(18)
+        effectSlider:SetMinMaxValues(0.5, 3)
+        effectSlider:SetObeyStepOnDrag(true)
+        effectSlider:SetValueStep(0.05)
+        effectSlider:SetThumbTexture("Interface\\Buttons\\WHITE8x8")
+        local effectThumb = effectSlider:GetThumbTexture()
+        if effectThumb then
+            effectThumb:SetSize(10, 18)
+            effectThumb:SetVertexColor(0.98, 0.76, 0.22, 0.98)
+        end
+        effectSlider.Track = effectShell:CreateTexture(nil, "BACKGROUND")
+        effectSlider.Track:SetPoint("LEFT", effectSlider, "LEFT", 0, 0)
+        effectSlider.Track:SetPoint("RIGHT", effectSlider, "RIGHT", 0, 0)
+        effectSlider.Track:SetPoint("CENTER", effectSlider, "CENTER", 0, 0)
+        effectSlider.Track:SetHeight(4)
+        effectSlider.Track:SetColorTexture(0.18, 0.20, 0.26, 0.95)
+        effectSlider.Fill = effectShell:CreateTexture(nil, "ARTWORK")
+        effectSlider.Fill:SetPoint("LEFT", effectSlider.Track, "LEFT", 0, 0)
+        effectSlider.Fill:SetPoint("CENTER", effectSlider.Track, "LEFT", 0, 0)
+        effectSlider.Fill:SetHeight(4)
+        effectSlider.Fill:SetColorTexture(0.98, 0.76, 0.22, 0.95)
+        effectSlider.ValueText = effectShell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        effectSlider.ValueText:SetPoint("TOPLEFT", effectShell, "TOPLEFT", 12, -6)
+        effectSlider.ValueText:SetPoint("RIGHT", effectValueShell, "LEFT", -10, 0)
+        effectSlider.ValueText:SetJustifyH("LEFT")
+        effectSlider.ValueText:SetText("Effect Size: 1.00")
+        effectSlider.Low = effectShell:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        effectSlider.Low:SetPoint("BOTTOMLEFT", effectShell, "BOTTOMLEFT", 12, 6)
+        effectSlider.High = effectShell:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        effectSlider.High:SetPoint("BOTTOMRIGHT", effectValueShell, "BOTTOMLEFT", -10, 6)
+
+        local function NormalizeEffectSliderValue(value)
+            local step = 0.05
+            local numericValue = tonumber(value) or 1
+            numericValue = math.max(0.5, math.min(3, numericValue))
+            return math.floor((numericValue / step) + 0.5) * step
+        end
+
+        local function UpdateEffectSliderVisual(self, value)
+            local minValue, maxValue = self:GetMinMaxValues()
+            local range = maxValue - minValue
+            local width = self:GetWidth() or 0
+            local percent = 0
+            if range > 0 then
+                percent = (value - minValue) / range
+            end
+            percent = math.max(0, math.min(1, percent))
+            self.Fill:SetWidth(width * percent)
+            if self.ValueText then
+                self.ValueText:SetText(string.format("Effect Size: %.2f", value))
+            end
+            if frame.effectValueEdit and not frame.effectValueEdit:HasFocus() then
+                frame.effectValueEdit:SetText(string.format("%.2f", value))
+            end
+        end
+
+        effectSlider:SetScript("OnValueChanged", function(self, value)
+            value = NormalizeEffectSliderValue(value)
+            UpdateEffectSliderVisual(self, value)
+            if frame._suspendEffectSlider == true or not frame.selectedTemplateID then
+                return
+            end
+            UnitFrames:SetCastbarSpellTemplateValue(frame.selectedTemplateID, "fantasyEffectScale", value)
+            UnitFrames:RefreshCastbarStyle()
+        end)
+        effectSlider:SetScript("OnSizeChanged", function(self)
+            UpdateEffectSliderVisual(self, self:GetValue())
+        end)
+        if effectSlider.Low then effectSlider.Low:SetText("0.5") end
+        if effectSlider.High then effectSlider.High:SetText("3.0") end
+        effectValueEdit:SetScript("OnEnterPressed", function(self)
+            effectSlider:SetValue(NormalizeEffectSliderValue(self:GetText()))
+            self:ClearFocus()
+        end)
+        effectValueEdit:SetScript("OnEscapePressed", function(self)
+            self:SetText(string.format("%.2f", effectSlider:GetValue() or 1))
+            self:ClearFocus()
+        end)
+        effectValueEdit:SetScript("OnEditFocusGained", function(self)
+            effectValueShell:SetBackdropBorderColor(0.98, 0.76, 0.22, 0.45)
+            self:HighlightText()
+        end)
+        effectValueEdit:SetScript("OnEditFocusLost", function(self)
+            effectValueShell:SetBackdropBorderColor(0.98, 0.76, 0.22, 0.18)
+            self:SetText(string.format("%.2f", effectSlider:GetValue() or 1))
+        end)
+        effectSlider:SetValue(1)
+        frame.effectSlider = effectSlider
+
+        local assignedHeader = detailPane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        assignedHeader:SetPoint("TOPLEFT", effectShell, "BOTTOMLEFT", 0, -18)
+        assignedHeader:SetText("Assigned Spells")
+        frame.assignedHeader = assignedHeader
+
+        local assignedHint = detailPane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        assignedHint:SetPoint("TOPLEFT", assignedHeader, "BOTTOMLEFT", 0, -4)
+        assignedHint:SetText("Right-click to clear a spell, or drag it onto another template.")
+
+        local assignedScroll = CreateFrame("ScrollFrame", nil, detailPane, "UIPanelScrollFrameTemplate")
+        assignedScroll:SetPoint("TOPLEFT", assignedHint, "BOTTOMLEFT", 0, -8)
+        assignedScroll:SetPoint("BOTTOMRIGHT", detailPane, "BOTTOMRIGHT", -28, 12)
+        if T.Tools and T.Tools.UI and type(T.Tools.UI.SkinScrollBar) == "function" then
+            T.Tools.UI.SkinScrollBar(assignedScroll, { 0.10, 0.79, 0.77 }, true, false)
+        end
+        local assignedContent = CreateFrame("Frame", nil, assignedScroll)
+        assignedContent:SetSize(520, 1)
+        assignedScroll:SetScrollChild(assignedContent)
+        assignedScroll:HookScript("OnSizeChanged", function(scroll)
+            local availableWidth = math.max(1, (scroll:GetWidth() or 1) - 8)
+            assignedContent:SetWidth(availableWidth)
+        end)
+        frame.assignedContent = assignedContent
+
+        local emptyTemplates = detailPane:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+        emptyTemplates:SetPoint("CENTER", detailPane, "CENTER", 0, 40)
+        emptyTemplates:SetText("Create a template to start assigning spells.")
+        frame.emptyTemplates = emptyTemplates
+    end
+
+    do
+        local dragGhost = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        dragGhost:SetSize(220, 28)
+        dragGhost:SetFrameStrata("TOOLTIP")
+        ApplySpellStyleEditorBackdrop(dragGhost, 0.98)
+        local dragIcon = dragGhost:CreateTexture(nil, "ARTWORK")
+        dragIcon:SetPoint("LEFT", dragGhost, "LEFT", 4, 0)
+        dragIcon:SetSize(20, 20)
+        local dragText = dragGhost:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        dragText:SetPoint("LEFT", dragIcon, "RIGHT", 6, 0)
+        dragText:SetPoint("RIGHT", dragGhost, "RIGHT", -8, 0)
+        dragText:SetJustifyH("LEFT")
+        dragGhost.icon = dragIcon
+        dragGhost.text = dragText
+        dragGhost:Hide()
+        frame.dragGhost = dragGhost
+    end
+
+    frame:RegisterEvent("SPELLS_CHANGED")
+    frame:RegisterEvent("PLAYER_TALENT_UPDATE")
+    frame:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+    frame:SetScript("OnEvent", function(self)
+        if self:IsShown() then
+            UnitFrames:RefreshCastbarSpellStyleDesigner()
+        end
+    end)
+
+    self._castbarSpellStyleDesigner = frame
+    return frame
+end
+
+function UnitFrames:RefreshCastbarSpellStyleDesigner()
+    local frame = self:EnsureCastbarSpellStyleDesigner()
+    if not frame or not frame:IsShown() then
+        return
+    end
+
+    local templates = self:GetCastbarSpellTemplates()
+    if frame.selectedTemplateID and not self:GetCastbarSpellTemplate(frame.selectedTemplateID) then
+        frame.selectedTemplateID = nil
+    end
+    if not frame.selectedTemplateID and templates[1] then
+        frame.selectedTemplateID = templates[1].id
+    end
+
+    local assignments = self:GetCastbarSpellStyleDB().assignments
+    local searchText = frame.searchText or ""
+    local spellEntries = self:GetPlayerSpellbookEntries()
+    local filteredSpells = {}
+    for _, spellEntry in ipairs(spellEntries) do
+        if searchText == "" or string.find(string.lower(spellEntry.name or ""), searchText, 1, true) then
+            filteredSpells[#filteredSpells + 1] = spellEntry
+        end
+    end
+
+    frame._spellButtons = frame._spellButtons or {}
+    local spellY = -2
+    for index, spellEntry in ipairs(filteredSpells) do
+        local row = frame._spellButtons[index]
+        if not row then
+            row = CreateFrame("Button", nil, frame.spellsContent, "BackdropTemplate")
+            StyleSpellStyleListRow(row, 42)
+            row:RegisterForDrag("LeftButton")
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetPoint("LEFT", row, "LEFT", 10, 0)
+            row.icon:SetSize(24, 24)
+            row.title = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.title:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 10, -1)
+            row.title:SetPoint("TOPRIGHT", row, "TOPRIGHT", -14, -8)
+            row.title:SetJustifyH("LEFT")
+            row.title:SetJustifyV("TOP")
+            row.title:SetWordWrap(false)
+            row.title:SetMaxLines(1)
+            row.title:SetTextColor(1, 0.95, 0.82)
+            row.meta = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            row.meta:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 10, 2)
+            row.meta:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -14, 8)
+            row.meta:SetJustifyH("LEFT")
+            row.meta:SetJustifyV("BOTTOM")
+            row.meta:SetWordWrap(false)
+            row.meta:SetMaxLines(1)
+            row.meta:SetTextColor(0.55, 0.60, 0.68)
+            row:SetScript("OnDragStart", function(self)
+                UnitFrames:BeginCastbarSpellStyleDrag(self.spellEntry)
+            end)
+            row:SetScript("OnMouseUp", function()
+                UnitFrames:ClearCastbarSpellStyleDrag()
+            end)
+            frame._spellButtons[index] = row
+        end
+
+        row:SetPoint("TOPLEFT", frame.spellsContent, "TOPLEFT", 0, spellY)
+        row:SetPoint("TOPRIGHT", frame.spellsContent, "TOPRIGHT", -6, spellY)
+        row.spellEntry = spellEntry
+        row.icon:SetTexture(spellEntry.icon or 136243)
+        row.title:SetText(spellEntry.name or ("Spell " .. tostring(spellEntry.spellID)))
+        local assignedTemplateID = assignments[spellEntry.spellID]
+        local assignedTemplate = assignedTemplateID and self:GetCastbarSpellTemplate(assignedTemplateID) or nil
+        row.meta:SetText(assignedTemplate and
+            (assignedTemplate.name .. "  ·  " .. ResolveCastbarTemplateThemeLabel(assignedTemplate.fantasyTheme)) or
+            spellEntry.tabName or "Unassigned")
+        SetSpellStyleListRowSelected(row, assignedTemplate ~= nil, { 0.10, 0.79, 0.77 })
+        row:Show()
+        spellY = spellY - 34
+    end
+    for index = #filteredSpells + 1, #frame._spellButtons do
+        frame._spellButtons[index]:Hide()
+    end
+    frame.spellsContent:SetHeight(math_max(1, -spellY + 6))
+
+    frame._templateRows = frame._templateRows or {}
+    local templateY = -2
+    for index, template in ipairs(templates) do
+        local templateAssignedSpells = self:GetAssignedSpellEntriesForCastbarTemplate(template.id, spellEntries,
+            assignments)
+        local row = frame._templateRows[index]
+        if not row then
+            row = CreateFrame("Button", nil, frame.templateListContent, "BackdropTemplate")
+            StyleSpellStyleListRow(row, 46)
+            row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -8)
+            row.name:SetPoint("RIGHT", row, "RIGHT", -14, -8)
+            row.name:SetJustifyH("LEFT")
+            row.name:SetTextColor(1, 0.95, 0.82)
+            row.meta = row:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+            row.meta:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 12, 8)
+            row.meta:SetPoint("RIGHT", row, "RIGHT", -14, 8)
+            row.meta:SetJustifyH("LEFT")
+            row.meta:SetTextColor(0.55, 0.60, 0.68)
+            row:SetScript("OnClick", function(self)
+                frame.selectedTemplateID = self.templateID
+                UnitFrames:RefreshCastbarSpellStyleDesigner()
+            end)
+            row:SetScript("OnMouseUp", function(self)
+                local dragState = UnitFrames._castbarSpellStyleDrag
+                if dragState and dragState.spellID then
+                    UnitFrames:AssignSpellToCastbarTemplate(dragState.spellID, self.templateID)
+                    frame.selectedTemplateID = self.templateID
+                    UnitFrames:RefreshCastbarStyle()
+                    UnitFrames:RefreshCastbarSpellStyleDesigner()
+                end
+                UnitFrames:ClearCastbarSpellStyleDrag()
+            end)
+            frame._templateRows[index] = row
+        end
+
+        row:SetPoint("TOPLEFT", frame.templateListContent, "TOPLEFT", 0, templateY)
+        row:SetPoint("TOPRIGHT", frame.templateListContent, "TOPRIGHT", -6, templateY)
+        row.templateID = template.id
+        row.name:SetText(template.name)
+        row.meta:SetText(string.format("%s  ·  %.2fx  ·  %d spells",
+            ResolveCastbarTemplateThemeLabel(template.fantasyTheme),
+            template.fantasyEffectScale or 1, self:GetCastbarAssignedSpellCount(template.id)))
+        UpdateSpellStyleTemplateRowIcons(row, templateAssignedSpells)
+        SetSpellStyleListRowSelected(row, frame.selectedTemplateID == template.id, { 0.98, 0.76, 0.22 })
+        row:Show()
+        templateY = templateY - 46
+    end
+    for index = #templates + 1, #frame._templateRows do
+        frame._templateRows[index]:Hide()
+    end
+    frame.templateListContent:SetHeight(math_max(1, -templateY + 6))
+
+    local selectedTemplate = frame.selectedTemplateID and self:GetCastbarSpellTemplate(frame.selectedTemplateID) or nil
+    frame.deleteTemplateButton:SetEnabled(selectedTemplate ~= nil)
+    frame.emptyTemplates:SetShown(selectedTemplate == nil)
+    frame.templateNameInput:SetEnabled(selectedTemplate ~= nil)
+    frame.colorButton:SetEnabled(selectedTemplate ~= nil)
+    frame.particlesToggle:SetEnabled(selectedTemplate ~= nil)
+    frame.themeMenuButton:SetEnabled(selectedTemplate ~= nil and selectedTemplate.useParticles == true)
+    frame.effectSlider:SetEnabled(selectedTemplate ~= nil and selectedTemplate.useParticles == true)
+    if frame.effectValueEdit then
+        frame.effectValueEdit:SetEnabled(selectedTemplate ~= nil and selectedTemplate.useParticles == true)
+    end
+    if frame.effectShell then
+        frame.effectShell:SetAlpha((selectedTemplate ~= nil and selectedTemplate.useParticles == true) and 1 or 0.65)
+    end
+
+    if selectedTemplate then
+        frame.detailTitle:SetText(selectedTemplate.name)
+        frame.templateNameInput:SetText(selectedTemplate.name)
+        frame.colorButton.preview:SetColorTexture(selectedTemplate.color[1], selectedTemplate.color[2],
+            selectedTemplate.color[3],
+            selectedTemplate.color[4] or 1)
+        frame.particlesToggle._fs:SetText(selectedTemplate.useParticles == true and "Particles: On" or "Particles: Off")
+        frame.themeMenuButton._fs:SetText(ResolveCastbarTemplateThemeLabel(selectedTemplate.fantasyTheme))
+        frame._suspendEffectSlider = true
+        frame.effectSlider:SetValue(selectedTemplate.fantasyEffectScale or 1)
+        frame._suspendEffectSlider = false
+        if frame.effectSlider.ValueText then
+            frame.effectSlider.ValueText:SetText(string.format("Effect Size: %.2f",
+                selectedTemplate.fantasyEffectScale or 1))
+        end
+    else
+        frame.detailTitle:SetText("Template Details")
+        frame.templateNameInput:SetText("")
+        frame.themeMenuButton._fs:SetText("Choose Theme")
+        if frame.effectSlider.ValueText then
+            frame.effectSlider.ValueText:SetText("Effect Size")
+        end
+        if frame.effectValueEdit then
+            frame.effectValueEdit:SetText("1.00")
+        end
+        frame.colorButton.preview:SetColorTexture(0.08, 0.09, 0.11, 1)
+        frame.particlesToggle._fs:SetText("Particles: Off")
+    end
+
+    local assignedSpells = selectedTemplate and
+        self:GetAssignedSpellEntriesForCastbarTemplate(selectedTemplate.id, spellEntries, assignments) or {}
+    self:UpdateCastbarSpellStylePreview(frame, selectedTemplate, assignedSpells)
+
+    frame._assignedButtons = frame._assignedButtons or {}
+    local assignedY = -2
+    for index, spellEntry in ipairs(assignedSpells) do
+        local row = frame._assignedButtons[index]
+        if not row then
+            row = CreateFrame("Button", nil, frame.assignedContent, "BackdropTemplate")
+            StyleSpellStyleListRow(row, 34)
+            row:RegisterForDrag("LeftButton")
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetPoint("LEFT", row, "LEFT", 10, 0)
+            row.icon:SetSize(18, 18)
+            row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.name:SetPoint("LEFT", row.icon, "RIGHT", 10, 0)
+            row.name:SetPoint("RIGHT", row, "RIGHT", -14, 0)
+            row.name:SetJustifyH("LEFT")
+            row.name:SetTextColor(1, 0.95, 0.82)
+            row:SetScript("OnDragStart", function(self)
+                UnitFrames:BeginCastbarSpellStyleDrag(self.spellEntry)
+            end)
+            row:SetScript("OnMouseUp", function(self, button)
+                if button == "RightButton" and self.spellEntry and self.spellEntry.spellID then
+                    UnitFrames:AssignSpellToCastbarTemplate(self.spellEntry.spellID, nil)
+                    UnitFrames:RefreshCastbarStyle()
+                    UnitFrames:RefreshCastbarSpellStyleDesigner()
+                    return
+                end
+                UnitFrames:ClearCastbarSpellStyleDrag()
+            end)
+            frame._assignedButtons[index] = row
+        end
+
+        row:SetPoint("TOPLEFT", frame.assignedContent, "TOPLEFT", 0, assignedY)
+        row:SetPoint("TOPRIGHT", frame.assignedContent, "TOPRIGHT", -6, assignedY)
+        row.spellEntry = spellEntry
+        row.icon:SetTexture(spellEntry.icon or 136243)
+        row.name:SetText(spellEntry.name or ("Spell " .. tostring(spellEntry.spellID)))
+        SetSpellStyleListRowSelected(row, false, { 0.10, 0.79, 0.77 })
+        row:Show()
+        assignedY = assignedY - 32
+    end
+    for index = #assignedSpells + 1, #frame._assignedButtons do
+        frame._assignedButtons[index]:Hide()
+    end
+    frame.assignedContent:SetHeight(math_max(1, -assignedY + 6))
+end
+
+function UnitFrames:OpenCastbarSpellStyleDesigner()
+    local frame = self:EnsureCastbarSpellStyleDesigner()
+    frame:Show()
+    frame:Raise()
+    self:RefreshCastbarSpellStyleDesigner()
 end
 
 function UnitFrames:SpawnSingleFrame(oUF, unit, key)
