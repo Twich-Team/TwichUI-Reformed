@@ -1204,6 +1204,216 @@ function ActionBars:PersistBarLayout(barKey, absX, absY)
     return settings.x, settings.y
 end
 
+local function DeepCopyDesignerValue(value)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    local copy = {}
+    for key, child in pairs(value) do
+        copy[key] = DeepCopyDesignerValue(child)
+    end
+
+    return copy
+end
+
+local function ClampDesignerNumber(value, minimum, maximum, fallback)
+    value = tonumber(value)
+    if value == nil then
+        value = fallback
+    end
+    if minimum ~= nil and value < minimum then
+        value = minimum
+    end
+    if maximum ~= nil and value > maximum then
+        value = maximum
+    end
+    return value
+end
+
+function ActionBars:GetBarDefinition(barKey)
+    for _, definition in ipairs(BAR_DEFINITIONS) do
+        if definition.key == barKey then
+            return definition
+        end
+    end
+
+    return nil
+end
+
+function ActionBars:IsPrimaryBarKey(barKey)
+    return type(barKey) == "string" and barKey:match("^bar%d+$") ~= nil
+end
+
+function ActionBars:GetPrimaryBarOrder(barKey)
+    if not self:IsPrimaryBarKey(barKey) then
+        return nil
+    end
+
+    return tonumber(barKey:match("^bar(%d+)$"))
+end
+
+function ActionBars:NormalizeDesignerBarSettings(barKey, settings)
+    local definition = self:GetBarDefinition(barKey)
+    if not definition or type(settings) ~= "table" then
+        return settings
+    end
+
+    local maxButtons = definition.maxButtons or 12
+    local fallbackSize = definition.fallbackButtonSize or 36
+    local fallbackRows = definition.fallbackButtonsPerRow or maxButtons
+    local buttonCount = ClampDesignerNumber(settings.buttonCount, 1, maxButtons, maxButtons)
+
+    settings.enabled = settings.enabled == true
+    settings.buttonCount = math.floor(buttonCount + 0.5)
+    settings.buttonsPerRow = math.floor(ClampDesignerNumber(settings.buttonsPerRow, 1, settings.buttonCount, fallbackRows) +
+    0.5)
+    settings.buttonSize = math.floor(ClampDesignerNumber(settings.buttonSize, 20, 72, fallbackSize) + 0.5)
+    settings.spacing = ClampDesignerNumber(settings.spacing, 0, 24, 6)
+    settings.scale = ClampDesignerNumber(settings.scale, 0.5, 2, 1)
+    settings.alpha = ClampDesignerNumber(settings.alpha, 0.05, 1, 1)
+    settings.mouseover = settings.mouseover == true
+    settings.showCooldownSwipe = settings.showCooldownSwipe ~= false
+
+    return settings
+end
+
+function ActionBars:FindDesignerSiblingBar(sourceBarKey, direction)
+    local sourceOrder = self:GetPrimaryBarOrder(sourceBarKey)
+    if not sourceOrder then
+        return nil
+    end
+
+    local ordered = {}
+    for _, definition in ipairs(BAR_DEFINITIONS) do
+        local order = self:GetPrimaryBarOrder(definition.key)
+        if order and definition.key ~= sourceBarKey then
+            ordered[#ordered + 1] = {
+                key = definition.key,
+                order = order,
+            }
+        end
+    end
+
+    table.sort(ordered, function(a, b)
+        return a.order < b.order
+    end)
+
+    local function FindCandidate(predicate)
+        for _, entry in ipairs(ordered) do
+            if predicate(entry.order) then
+                local settings = self:GetBarSettings(entry.key)
+                if settings and settings.enabled ~= true then
+                    return entry.key
+                end
+            end
+        end
+        return nil
+    end
+
+    if direction == "above" then
+        return FindCandidate(function(order)
+            return order < sourceOrder
+        end) or FindCandidate(function(order)
+            return order > sourceOrder
+        end)
+    elseif direction == "below" then
+        return FindCandidate(function(order)
+            return order > sourceOrder
+        end) or FindCandidate(function(order)
+            return order < sourceOrder
+        end)
+    end
+
+    return FindCandidate(function()
+        return true
+    end)
+end
+
+function ActionBars:CreateSiblingBarFromSource(sourceBarKey, direction)
+    if InCombatLockdown() then
+        print("|cff19c9c7[TwichUI]|r Action bars cannot be added in combat.")
+        return false
+    end
+
+    local targetBarKey = self:FindDesignerSiblingBar(sourceBarKey, direction)
+    if not targetBarKey then
+        print("|cff19c9c7[TwichUI]|r No disabled action bars are available to clone.")
+        return false
+    end
+
+    local sourceSettings = self:GetBarSettings(sourceBarKey)
+    local targetSettings = self:GetBarSettings(targetBarKey)
+    if not sourceSettings or not targetSettings then
+        return false
+    end
+
+    for key in pairs(targetSettings) do
+        targetSettings[key] = nil
+    end
+    for key, value in pairs(sourceSettings) do
+        targetSettings[key] = DeepCopyDesignerValue(value)
+    end
+
+    self:NormalizeDesignerBarSettings(targetBarKey, targetSettings)
+    targetSettings.enabled = true
+
+    local sourceHolder = self.holders[sourceBarKey]
+    local sourceX = sourceSettings.x or 0
+    local sourceY = sourceSettings.y or 0
+
+    if sourceHolder and sourceHolder.GetLeft and sourceHolder.GetBottom then
+        sourceX = math.floor(((sourceHolder:GetLeft() or sourceX) + 0.5))
+        sourceY = math.floor(((sourceHolder:GetBottom() or sourceY) + 0.5))
+    end
+
+    targetSettings.point = "BOTTOMLEFT"
+    targetSettings.relativePoint = "BOTTOMLEFT"
+    targetSettings.x = sourceX
+    targetSettings.y = sourceY
+
+    self:RequestRefresh()
+
+    local moversModule = _G.TwichMoverModule
+    C_Timer.After(0, function()
+        C_Timer.After(0, function()
+            local refreshedSourceHolder = ActionBars.holders[sourceBarKey] or sourceHolder
+            local targetHolder = ActionBars.holders[targetBarKey]
+            local anchorX = sourceX
+            local anchorY = sourceY
+
+            if refreshedSourceHolder and refreshedSourceHolder.GetLeft and refreshedSourceHolder.GetBottom then
+                anchorX = math.floor(((refreshedSourceHolder:GetLeft() or anchorX) + 0.5))
+                anchorY = math.floor(((refreshedSourceHolder:GetBottom() or anchorY) + 0.5))
+            end
+
+            local sourceHeight = refreshedSourceHolder and refreshedSourceHolder.GetHeight and
+            refreshedSourceHolder:GetHeight() or nil
+            local targetHeight = targetHolder and targetHolder.GetHeight and targetHolder:GetHeight() or nil
+            local offsetHeight = math.max(sourceHeight or 0, targetHeight or 0, targetSettings.buttonSize or 36)
+            local offset = math.floor(offsetHeight + 0.5)
+            local finalY = anchorY + ((direction == "below") and -offset or offset)
+            local persistedX, persistedY = ActionBars:PersistBarLayout(targetBarKey, anchorX, finalY)
+
+            if targetHolder then
+                targetHolder:ClearAllPoints()
+                targetHolder:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", persistedX or anchorX, persistedY or finalY)
+            end
+
+            ActionBars:RefreshAll()
+
+            if moversModule and moversModule._RefreshHandleVisibility then
+                moversModule:_RefreshHandleVisibility("AB_" .. targetBarKey)
+            end
+            if moversModule and moversModule._PositionHandle then
+                moversModule:_PositionHandle("AB_" .. targetBarKey)
+            end
+        end)
+    end)
+
+    return true
+end
+
 -- ── Central Mover System registration ────────────────────────────────────────
 function ActionBars:RegisterWithMoverModule()
     local moversModule = _G.TwichMoverModule
@@ -1212,6 +1422,166 @@ function ActionBars:RegisterWithMoverModule()
     for _, definition in ipairs(BAR_DEFINITIONS) do
         local barKey = definition.key
         local barLabel = definition.label
+        local extras = {
+            {
+                label = "Bar Enabled",
+                type = "toggle",
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return s and s.enabled == true or false
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.enabled = value == true
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+            },
+            {
+                label = "Mouseover Visibility",
+                type = "toggle",
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return s and s.mouseover == true or false
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.mouseover = value == true
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+            {
+                label = "Cooldown Swipe",
+                type = "toggle",
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.showCooldownSwipe ~= false
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.showCooldownSwipe = value == true
+                        ActionBars:ApplyCooldownSettings()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+            {
+                label = "Visible Buttons",
+                type = "range",
+                min = 1,
+                max = definition.maxButtons or 12,
+                step = 1,
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return s and s.buttonCount or definition.maxButtons or 12
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.buttonCount = math.floor(ClampDesignerNumber(value, 1, definition.maxButtons or 12,
+                            definition.maxButtons or 12) + 0.5)
+                        if (s.buttonsPerRow or 1) > s.buttonCount then
+                            s.buttonsPerRow = s.buttonCount
+                        end
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+            {
+                label = "Buttons Per Row",
+                type = "range",
+                min = 1,
+                max = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return math.max(1, math.floor((s and s.buttonCount or definition.maxButtons or 12) + 0.5))
+                end,
+                step = 1,
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return s and s.buttonsPerRow or definition.fallbackButtonsPerRow or definition.maxButtons or 12
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        local maxButtons = math.max(1, math.floor((s.buttonCount or definition.maxButtons or 12) + 0.5))
+                        s.buttonsPerRow = math.floor(ClampDesignerNumber(value, 1, maxButtons,
+                            definition.fallbackButtonsPerRow or maxButtons) + 0.5)
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+            {
+                label = "Button Size",
+                type = "range",
+                min = 20,
+                max = 72,
+                step = 2,
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return s and s.buttonSize or definition.fallbackButtonSize or 36
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.buttonSize = math.floor(ClampDesignerNumber(value, 20, 72, definition.fallbackButtonSize or 36) +
+                        0.5)
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+        }
+
+        if ActionBars:IsPrimaryBarKey(barKey) then
+            extras[#extras + 1] = {
+                type = "label",
+                text = "Clone this layout into the next disabled action bar.",
+            }
+            extras[#extras + 1] = {
+                label = "Add Bar Above",
+                type = "execute",
+                buttonLabel = "Add Bar Above",
+                func = function()
+                    ActionBars:CreateSiblingBarFromSource(barKey, "above")
+                end,
+                disabled = function()
+                    return ActionBars:FindDesignerSiblingBar(barKey, "above") == nil
+                end,
+            }
+            extras[#extras + 1] = {
+                label = "Add Bar Below",
+                type = "execute",
+                buttonLabel = "Add Bar Below",
+                func = function()
+                    ActionBars:CreateSiblingBarFromSource(barKey, "below")
+                end,
+                disabled = function()
+                    return ActionBars:FindDesignerSiblingBar(barKey, "below") == nil
+                end,
+            }
+        end
 
         moversModule:RegisterMover("AB_" .. barKey, {
             label     = barLabel,
@@ -1255,23 +1625,7 @@ function ActionBars:RegisterWithMoverModule()
                 local s = ActionBars:GetBarSettings(barKey)
                 return not s or s.enabled ~= false
             end,
-            extras    = {
-                {
-                    label = "Bar Enabled",
-                    type  = "toggle",
-                    get   = function()
-                        local s = ActionBars:GetBarSettings(barKey)
-                        return s and s.enabled == true or false
-                    end,
-                    set   = function(value)
-                        local s = ActionBars:GetBarSettings(barKey)
-                        if s then
-                            s.enabled = value == true
-                            ActionBars:RequestRefresh()
-                        end
-                    end,
-                },
-            },
+            extras    = extras,
         })
     end
 end

@@ -8782,6 +8782,166 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         return math.floor((tonumber(unitSettings and unitSettings.height) or 48) + 0.5)
     end
 
+    local extras = {}
+    local function AddExtra(extra)
+        extras[#extras + 1] = extra
+    end
+
+    if layoutKey == "castbar" then
+        AddExtra({
+            label = "Frame Enabled",
+            type = "toggle",
+            get = function()
+                local db = UnitFrames:GetDB()
+                return db and db.castbar and db.castbar.enabled ~= false
+            end,
+            set = function(value)
+                local db = UnitFrames:GetDB()
+                if db and db.castbar then
+                    db.castbar.enabled = value == true
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+        })
+    elseif isHeader then
+        local groupKey = layoutKey == "boss" and "boss" or layoutKey
+        AddExtra({
+            label = "Frame Enabled",
+            type = "toggle",
+            get = function()
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                return group and group.enabled ~= false
+            end,
+            set = function(value)
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                if group then
+                    group.enabled = value == true
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+        })
+
+        if layoutKey ~= "boss" then
+            AddExtra({
+                label = "Show Power",
+                type = "toggle",
+                get = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return not group or group.showPower ~= false
+                end,
+                set = function(value)
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    if group then
+                        group.showPower = value == true
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+                disabled = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return not group or group.enabled == false
+                end,
+            })
+        end
+
+        if layoutKey == "party" or layoutKey == "raid" then
+            AddExtra({
+                type = "label",
+                text = "Preview controls stay close to the selected group mover.",
+            })
+            AddExtra({
+                label = "Test Mode",
+                type = "toggle",
+                get = function()
+                    local db = UnitFrames:GetDB()
+                    return db and db.testMode == true
+                end,
+                set = function(value)
+                    UnitFrames:SetTestMode(value == true)
+                end,
+            })
+            AddExtra({
+                label = "Show Party Preview",
+                type = "toggle",
+                get = function()
+                    local db = UnitFrames:GetDB()
+                    return db and db.testPreviewParty ~= false
+                end,
+                set = function(value)
+                    UnitFrames:SetTestPreviewGroupEnabled("party", value == true)
+                end,
+                disabled = function()
+                    local db = UnitFrames:GetDB()
+                    return not db or db.testMode ~= true
+                end,
+            })
+            AddExtra({
+                label = "Show Raid Preview",
+                type = "toggle",
+                get = function()
+                    local db = UnitFrames:GetDB()
+                    return db and db.testPreviewRaid ~= false
+                end,
+                set = function(value)
+                    UnitFrames:SetTestPreviewGroupEnabled("raid", value == true)
+                end,
+                disabled = function()
+                    local db = UnitFrames:GetDB()
+                    return not db or db.testMode ~= true
+                end,
+            })
+        end
+    elseif powerBase then
+        AddExtra({
+            label = "Show Power",
+            type = "toggle",
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                return not unitSettings or unitSettings.showPower ~= false
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                if unitSettings then
+                    unitSettings.showPower = value == true
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+        })
+    else
+        if layoutKey ~= "player" then
+            AddExtra({
+                label = "Frame Enabled",
+                type = "toggle",
+                get = function()
+                    local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                    return unitSettings and unitSettings.enabled ~= false
+                end,
+                set = function(value)
+                    local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                    if unitSettings then
+                        unitSettings.enabled = value == true
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+            })
+        end
+
+        AddExtra({
+            label = "Show Power",
+            type = "toggle",
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return not unitSettings or unitSettings.showPower ~= false
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                if unitSettings then
+                    unitSettings.showPower = value == true
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+        })
+    end
+
     moversModule:RegisterMover("UF_" .. layoutKey, {
         label     = LABELS[layoutKey] or BuildFrameName(layoutKey),
         category  = "Unit Frames",
@@ -8828,6 +8988,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             local us = UnitFrames:GetUnitSettings(layoutKey)
             return us and us.enabled ~= false
         end,
+        extras    = extras,
     })
 end
 

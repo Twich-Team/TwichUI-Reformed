@@ -32,43 +32,52 @@
         })
 ]]
 
-local TwichRx          = _G.TwichRx
+local TwichRx                     = _G.TwichRx
 ---@type TwichUI
-local T                = unpack(TwichRx)
+local T                           = unpack(TwichRx)
 
 ---@class TwichMoverModule : AceModule, AceEvent-3.0
 ---@field _snapLineH Frame|nil
 ---@field _snapLineV Frame|nil
-local MoverModule      = T:NewModule("Movers", "AceEvent-3.0")
+local MoverModule                 = T:NewModule("Movers", "AceEvent-3.0")
 
-_G.TwichMoverModule    = MoverModule
+_G.TwichMoverModule               = MoverModule
 
-local CreateFrame      = _G.CreateFrame
-local UIParent         = _G.UIParent
-local InCombatLockdown = _G.InCombatLockdown
-local IsShiftKeyDown   = _G.IsShiftKeyDown
-local C_Timer          = _G.C_Timer
-local math_floor       = math.floor
-local math_max         = math.max
-local math_min         = math.min
-local math_abs         = math.abs
+local CreateFrame                 = _G.CreateFrame
+local UIParent                    = _G.UIParent
+local InCombatLockdown            = _G.InCombatLockdown
+local IsShiftKeyDown              = _G.IsShiftKeyDown
+local C_Timer                     = _G.C_Timer
+local math_floor                  = math.floor
+local math_max                    = math.max
+local math_min                    = math.min
+local math_abs                    = math.abs
+
+local DESIGNER_DOCK_WIDTH         = 360
+local DESIGNER_DOCK_INSET         = 16
+local DESIGNER_DOCK_CONTENT_WIDTH = DESIGNER_DOCK_WIDTH - (DESIGNER_DOCK_INSET * 2)
 
 -- ── Snapping constants ───────────────────────────────────────────────────────
 -- Frames snap when a dragged edge comes within SNAP_THRESHOLD px of a target.
 -- Hold Shift while dragging to bypass snapping for pixel-perfect placement.
-local SNAP_THRESHOLD   = 16
+local SNAP_THRESHOLD              = 16
 
 -- ── Colours (match the rest of TwichUI) ────────────────────────────────────
-local C_ACCENT         = { 0.10, 0.72, 0.74 } -- teal
-local C_BG             = { 0.05, 0.06, 0.09 }
-local C_BORDER         = { 0.10, 0.72, 0.74 }
-local C_LABEL          = { 0.55, 0.58, 0.68 }
-local C_BTN_BG         = { 0.09, 0.11, 0.15 }
-local C_BTN_BD         = { 0.20, 0.22, 0.30 }
+local C_ACCENT                    = { 0.10, 0.72, 0.74 } -- teal
+local C_BG                        = { 0.05, 0.06, 0.09 }
+local C_BORDER                    = { 0.10, 0.72, 0.74 }
+local C_LABEL                     = { 0.55, 0.58, 0.68 }
+local C_BTN_BG                    = { 0.09, 0.11, 0.15 }
+local C_BTN_BD                    = { 0.20, 0.22, 0.30 }
+local C_DOCK_BORDER               = { 0.32, 0.78, 0.96 }
+local C_DOCK_GLOW                 = { 0.24, 0.62, 0.92 }
+local C_DOCK_TEXT                 = { 0.70, 0.90, 0.98 }
+local C_DOCK_PILL                 = { 0.11, 0.18, 0.24 }
+local C_DOCK_PILL_TEXT            = { 0.58, 0.88, 1.00 }
 
 -- ── Per-category tint colours ────────────────────────────────────────────────
 -- Handles are tinted by category so the user can identify module groups at a glance.
-local CATEGORY_COLORS  = {
+local CATEGORY_COLORS             = {
     ["Unit Frames"] = { 0.32, 0.55, 0.98 }, -- blue
     ["Action Bars"] = { 0.98, 0.62, 0.22 }, -- orange
     ["Data Panels"] = { 0.32, 0.85, 0.45 }, -- green
@@ -77,13 +86,13 @@ local CATEGORY_COLORS  = {
     -- fallback: teal (C_ACCENT) for anything unrecognised
 }
 
-local OVERLAY_ALPHA    = 0.65 -- translucency of the full-screen backdrop
+local OVERLAY_ALPHA               = 0.65 -- translucency of the full-screen backdrop
 
 -- ── Registry ────────────────────────────────────────────────────────────────
-MoverModule._registry  = MoverModule._registry or {} -- key → opts
-MoverModule._handles   = MoverModule._handles or {}  -- key → handle frame
-MoverModule._hidden    = MoverModule._hidden or {}   -- key → true  (temp-hidden)
-MoverModule._active    = false
+MoverModule._registry             = MoverModule._registry or {} -- key → opts
+MoverModule._handles              = MoverModule._handles or {} -- key → handle frame
+MoverModule._hidden               = MoverModule._hidden or {} -- key → true  (temp-hidden)
+MoverModule._active               = false
 
 -- ── Font helper ─────────────────────────────────────────────────────────────
 local function ResolveFont(size)
@@ -224,31 +233,202 @@ function MoverModule:_GetInspector()
         C_BORDER[1], C_BORDER[2], C_BORDER[3], 1)
     panel:EnableMouse(true)
     panel:Hide()
+    panel._dockOverrides = {}
+    panel._activeDockSide = "RIGHT"
+
+    local dock = CreateFrame("Frame", "TwichUIInterfaceDesignerDock", UIParent, "BackdropTemplate")
+    dock:SetFrameStrata("TOOLTIP")
+    dock:SetFrameLevel(9998)
+    dock:SetClampedToScreen(true)
+    dock:SetWidth(DESIGNER_DOCK_WIDTH)
+    dock:EnableMouse(true)
+    dock:Hide()
+    ApplyBackdrop(dock, 0.05, 0.055, 0.07, 0.985, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 1)
+    panel._dock = dock
+
+    local dockInner = CreateFrame("Frame", nil, dock, "BackdropTemplate")
+    dockInner:SetPoint("TOPLEFT", dock, "TOPLEFT", 1, -1)
+    dockInner:SetPoint("BOTTOMRIGHT", dock, "BOTTOMRIGHT", -1, 1)
+    ApplyBackdrop(dockInner, 0.05, 0.035, 0.025, 0.82, 0.27, 0.16, 0.09, 0.55)
 
     -- Hide on click-outside via overlay script (see _BuildOverlay)
     panel._activeKey = nil
 
-    -- Hover-delay hide
     local function CancelHide()
-        if panel._hideTimer then
-            panel._hideTimer:Cancel(); panel._hideTimer = nil
-        end
     end
     local function ScheduleHide()
-        CancelHide()
-        panel._hideTimer = C_Timer.NewTimer(0.1, function()
-            panel._hideTimer = nil
-            -- Keep open if any editbox has focus
-            for _, eb in ipairs(panel._editBoxes or {}) do
-                if eb:HasFocus() then return end
-            end
-            panel:Hide()
-        end)
     end
     panel.CancelHide   = CancelHide
     panel.ScheduleHide = ScheduleHide
     panel:SetScript("OnEnter", CancelHide)
     panel:SetScript("OnLeave", ScheduleHide)
+    panel:SetScript("OnHide", function(self)
+        if self._dock then
+            self._dock:Hide()
+        end
+        self._dockSessionSide = nil
+        self._activeKey = nil
+    end)
+
+    local dockHeaderFrame = CreateFrame("Frame", nil, dock, "BackdropTemplate")
+    dockHeaderFrame:SetPoint("TOPLEFT", dock, "TOPLEFT", 6, -6)
+    dockHeaderFrame:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -6, -6)
+    dockHeaderFrame:SetHeight(78)
+    ApplyBackdrop(dockHeaderFrame, 0.07, 0.10, 0.14, 0.98, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.72)
+    dockHeaderFrame:SetFrameLevel(dock:GetFrameLevel() + 2)
+
+    local dockHeaderContent = CreateFrame("Frame", nil, dockHeaderFrame)
+    dockHeaderContent:SetAllPoints(dockHeaderFrame)
+    dockHeaderContent:SetFrameLevel(dockHeaderFrame:GetFrameLevel() + 3)
+
+    local dockHeader = dockHeaderFrame:CreateTexture(nil, "ARTWORK")
+    dockHeader:SetPoint("TOPLEFT", dockHeaderFrame, "TOPLEFT", 1, -1)
+    dockHeader:SetPoint("TOPRIGHT", dockHeaderFrame, "TOPRIGHT", -1, -1)
+    dockHeader:SetHeight(75)
+    dockHeader:SetColorTexture(0.08, 0.12, 0.16, 0.96)
+
+    local dockHeaderGlow = dockHeaderFrame:CreateTexture(nil, "ARTWORK")
+    dockHeaderGlow:SetPoint("TOPLEFT", dockHeaderFrame, "TOPLEFT", 1, -1)
+    dockHeaderGlow:SetPoint("TOPRIGHT", dockHeaderFrame, "TOPRIGHT", -1, -1)
+    dockHeaderGlow:SetHeight(22)
+    dockHeaderGlow:SetColorTexture(C_DOCK_GLOW[1], C_DOCK_GLOW[2], C_DOCK_GLOW[3], 0.10)
+
+    local dockHeaderBottom = dockHeaderFrame:CreateTexture(nil, "BORDER")
+    dockHeaderBottom:SetHeight(1)
+    dockHeaderBottom:SetPoint("BOTTOMLEFT", dockHeaderFrame, "BOTTOMLEFT", 10, 0)
+    dockHeaderBottom:SetPoint("BOTTOMRIGHT", dockHeaderFrame, "BOTTOMRIGHT", -10, 0)
+    dockHeaderBottom:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.55)
+
+    local dockGlow = dock:CreateTexture(nil, "BACKGROUND")
+    dockGlow:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, -76)
+    dockGlow:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, -76)
+    dockGlow:SetHeight(140)
+    dockGlow:SetColorTexture(C_DOCK_GLOW[1], C_DOCK_GLOW[2], C_DOCK_GLOW[3], 0.08)
+
+    local dockSpotlight = dock:CreateTexture(nil, "BACKGROUND")
+    dockSpotlight:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, -76)
+    dockSpotlight:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, -76)
+    dockSpotlight:SetHeight(220)
+    dockSpotlight:SetColorTexture(C_DOCK_TEXT[1], C_DOCK_TEXT[2], C_DOCK_TEXT[3], 0.03)
+
+    local dockAccent = dock:CreateTexture(nil, "BORDER")
+    dockAccent:SetWidth(5)
+    dockAccent:SetPoint("TOP", dock, "TOP", 0, 0)
+    dockAccent:SetPoint("BOTTOM", dock, "BOTTOM", 0, 0)
+    dockAccent:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.95)
+    dock._accent = dockAccent
+
+    local dockBadge = dockHeaderContent:CreateFontString(nil, "OVERLAY")
+    dockBadge:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 12, -10)
+    dockBadge:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -100, -10)
+    dockBadge:SetJustifyH("LEFT")
+    SetFont(dockBadge, 9)
+    dockBadge:SetText("DESIGNER DOCK")
+    dockBadge:SetTextColor(C_DOCK_TEXT[1], C_DOCK_TEXT[2], C_DOCK_TEXT[3])
+
+    local dockPill = dockHeaderContent:CreateTexture(nil, "ARTWORK")
+    dockPill:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 12, -24)
+    dockPill:SetSize(74, 14)
+    dockPill:SetColorTexture(C_DOCK_PILL[1], C_DOCK_PILL[2], C_DOCK_PILL[3], 0.92)
+
+    local dockPillText = dockHeaderContent:CreateFontString(nil, "OVERLAY")
+    dockPillText:SetPoint("CENTER", dockPill, "CENTER", 0, 0)
+    SetFont(dockPillText, 8)
+    dockPillText:SetText("SELECTED")
+    dockPillText:SetTextColor(C_DOCK_PILL_TEXT[1], C_DOCK_PILL_TEXT[2], C_DOCK_PILL_TEXT[3])
+
+    local dockTitle = dockHeaderContent:CreateFontString(nil, "OVERLAY")
+    dockTitle:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 12, -42)
+    dockTitle:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -108, -42)
+    dockTitle:SetJustifyH("LEFT")
+    SetFont(dockTitle, 13)
+    dockTitle:SetTextColor(0.96, 0.92, 0.86)
+    dock._title = dockTitle
+
+    local dockSubtitle = dockHeaderContent:CreateFontString(nil, "OVERLAY")
+    dockSubtitle:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 12, -59)
+    dockSubtitle:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -108, -59)
+    dockSubtitle:SetJustifyH("LEFT")
+    SetFont(dockSubtitle, 9)
+    dockSubtitle:SetTextColor(0.64, 0.76, 0.84)
+    dock._subtitle = dockSubtitle
+
+    local dockStatusDot = dockHeaderContent:CreateTexture(nil, "OVERLAY")
+    dockStatusDot:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -90, -36)
+    dockStatusDot:SetSize(6, 6)
+    dockStatusDot:SetColorTexture(0.14, 0.84, 0.78, 1)
+
+    local dockStatusText = dockHeaderContent:CreateFontString(nil, "OVERLAY")
+    dockStatusText:SetPoint("LEFT", dockStatusDot, "RIGHT", 6, 0)
+    dockStatusText:SetPoint("RIGHT", dockHeaderContent, "RIGHT", -12, -36)
+    dockStatusText:SetJustifyH("RIGHT")
+    SetFont(dockStatusText, 8)
+    dockStatusText:SetText("LIVE CONTROLS")
+    dockStatusText:SetTextColor(C_DOCK_TEXT[1], C_DOCK_TEXT[2], C_DOCK_TEXT[3])
+
+    local dockBtn = CreateFrame("Button", nil, dockHeaderContent, "BackdropTemplate")
+    dockBtn:SetSize(74, 20)
+    dockBtn:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -10, -10)
+    dockBtn:SetFrameStrata(dockHeaderFrame:GetFrameStrata())
+    dockBtn:SetFrameLevel(dockHeaderContent:GetFrameLevel() + 4)
+    ApplyBackdrop(dockBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
+        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+    local dockBtnFS = dockBtn:CreateFontString(nil, "OVERLAY")
+    dockBtnFS:SetAllPoints(dockBtn)
+    dockBtnFS:SetJustifyH("CENTER")
+    dockBtnFS:SetJustifyV("MIDDLE")
+    SetFont(dockBtnFS, 10)
+    dockBtnFS:SetText("Dock Left")
+    dockBtn._fs = dockBtnFS
+    dockBtn:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.22)
+        self:SetBackdropBorderColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 1)
+    end)
+    dockBtn:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
+        self:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+    end)
+    dock._dockBtn = dockBtn
+
+    local dockDivider = dock:CreateTexture(nil, "ARTWORK")
+    dockDivider:SetHeight(1)
+    dockDivider:SetPoint("TOPLEFT", dock, "TOPLEFT", DESIGNER_DOCK_INSET, -100)
+    dockDivider:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -DESIGNER_DOCK_INSET, -100)
+    dockDivider:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.40)
+
+    local dockTopEdge = dock:CreateTexture(nil, "BORDER")
+    dockTopEdge:SetTexture("Interface\\Buttons\\WHITE8x8")
+    dockTopEdge:SetHeight(1)
+    dockTopEdge:SetVertexColor(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.65)
+    dock._topEdge = dockTopEdge
+
+    local dockBottomEdge = dock:CreateTexture(nil, "BORDER")
+    dockBottomEdge:SetTexture("Interface\\Buttons\\WHITE8x8")
+    dockBottomEdge:SetHeight(1)
+    dockBottomEdge:SetVertexColor(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.45)
+    dock._bottomEdge = dockBottomEdge
+
+    local function StyleDockSide(side)
+        dockAccent:ClearAllPoints()
+        dockTopEdge:ClearAllPoints()
+        dockBottomEdge:ClearAllPoints()
+
+        if side == "LEFT" then
+            dockAccent:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, 0)
+            dockAccent:SetPoint("BOTTOMRIGHT", dock, "BOTTOMRIGHT", 0, 0)
+            dockTopEdge:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, 0)
+            dockTopEdge:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, 0)
+            dockBottomEdge:SetPoint("BOTTOMLEFT", dock, "BOTTOMLEFT", 0, 0)
+            dockBottomEdge:SetPoint("BOTTOMRIGHT", dock, "BOTTOMRIGHT", 0, 0)
+        else
+            dockAccent:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, 0)
+            dockAccent:SetPoint("BOTTOMLEFT", dock, "BOTTOMLEFT", 0, 0)
+            dockTopEdge:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, 0)
+            dockTopEdge:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, 0)
+            dockBottomEdge:SetPoint("BOTTOMLEFT", dock, "BOTTOMLEFT", 0, 0)
+            dockBottomEdge:SetPoint("BOTTOMRIGHT", dock, "BOTTOMRIGHT", 0, 0)
+        end
+    end
 
     -- ── Shared widget builders ───────────────────────────────────────────
     panel._editBoxes = {}
@@ -317,42 +497,120 @@ function MoverModule:_GetInspector()
         return btn
     end
 
+    local function ResolveExtraNumeric(value, fallback)
+        if type(value) == "function" then
+            value = value()
+        end
+
+        value = tonumber(value)
+        if value == nil then
+            return fallback
+        end
+
+        return value
+    end
+
+    local function ResolveExtraDisabled(extra)
+        return type(extra.disabled) == "function" and extra.disabled() == true
+    end
+
+    local function FormatExtraValue(extra, value)
+        if type(extra.format) == "function" then
+            return tostring(extra.format(value))
+        end
+
+        local step = ResolveExtraNumeric(extra.step, 1)
+        if step >= 1 then
+            return tostring(math_floor((tonumber(value) or 0) + 0.5))
+        end
+
+        return string.format("%.2f", tonumber(value) or 0)
+    end
+
+    local function StyleExtraState(frame, enabled)
+        if not frame or not frame.SetBackdropColor then
+            return
+        end
+
+        if enabled then
+            frame:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
+            frame:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+            if frame._fs and frame._fs.SetTextColor then
+                frame._fs:SetTextColor(0.92, 0.94, 0.96)
+            end
+            if frame.SetTextColor then
+                frame:SetTextColor(0.92, 0.94, 0.96)
+            end
+        else
+            frame:SetBackdropColor(0.03, 0.03, 0.05, 0.9)
+            frame:SetBackdropBorderColor(0.12, 0.13, 0.18, 0.9)
+            if frame._fs and frame._fs.SetTextColor then
+                frame._fs:SetTextColor(0.46, 0.48, 0.56)
+            end
+            if frame.SetTextColor then
+                frame:SetTextColor(0.46, 0.48, 0.56)
+            end
+        end
+    end
+
     -- ── Title row ────────────────────────────────────────────────────────
-    local W = 240
+    local W = 282
     panel:SetWidth(W)
 
-    local titleFS = MakeFS("", 8, -8, 11, C_ACCENT[1], C_ACCENT[2], C_ACCENT[3])
-    titleFS:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -8)
-    titleFS:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -8)
+    local badgeFS = MakeFS("POSITION", 8, -8, 9, C_ACCENT[1], C_ACCENT[2], C_ACCENT[3])
+    badgeFS:SetTextColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3])
+    panel.badgeFS = badgeFS
+
+    local titleFS = MakeFS("", 8, -24, 12, 0.96, 0.92, 0.86)
+    titleFS:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -24)
+    titleFS:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -88, -24)
     titleFS:SetJustifyH("LEFT")
     panel.titleFS = titleFS
 
-    local hintFS = MakeFS("Shift=10px", W - 8, -8, 8, 0.40, 0.40, 0.52)
+    local subtitleFS = MakeFS("", 8, -39, 9, 0.78, 0.64, 0.52)
+    subtitleFS:SetPoint("TOPLEFT", panel, "TOPLEFT", 8, -39)
+    subtitleFS:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -88, -39)
+    subtitleFS:SetJustifyH("LEFT")
+    panel.subtitleFS = subtitleFS
+
+    local dockBtn = MakeBtn("Dock Left", W - 78, -18, 70, 18, function()
+        local key = panel._activeKey
+        if not key then
+            return
+        end
+        local current = panel._activeDockSide == "LEFT" and "LEFT" or "RIGHT"
+        panel._dockOverrides[key] = current == "LEFT" and "RIGHT" or "LEFT"
+        panel.Activate(key, MoverModule._handles[key])
+    end)
+    panel.dockBtn = dockBtn
+    panel.dockBtn:Hide()
+
+    local hintFS = MakeFS("Shift=10px", W - 8, -40, 8, 0.50, 0.44, 0.40)
     hintFS:ClearAllPoints()
-    hintFS:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -8)
+    hintFS:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -8, -40)
     hintFS:SetJustifyH("RIGHT")
 
-    MakeDiv(-22)
+    MakeDiv(-54)
 
     -- ── X / Y row ────────────────────────────────────────────────────────
-    MakeFS("X", 8, -35, 10)
-    MakeFS("Y", W / 2 + 4, -35, 10)
-    local xBox = MakeEB(19, -30, W / 2 - 22)
-    local yBox = MakeEB(W / 2 + 15, -30, W / 2 - 18)
+    MakeFS("X", 8, -67, 10)
+    MakeFS("Y", W / 2 + 4, -67, 10)
+    local xBox = MakeEB(19, -62, W / 2 - 22)
+    local yBox = MakeEB(W / 2 + 15, -62, W / 2 - 18)
     panel.xBox = xBox
     panel.yBox = yBox
 
-    MakeDiv(-55, 0.18)
+    MakeDiv(-87, 0.18)
 
     -- ── W / H row ────────────────────────────────────────────────────────
-    MakeFS("W", 8, -63, 10)
-    MakeFS("H", W / 2 + 4, -63, 10)
-    local wBox = MakeEB(19, -58, W / 2 - 22)
-    local hBox = MakeEB(W / 2 + 15, -58, W / 2 - 18)
+    MakeFS("W", 8, -95, 10)
+    MakeFS("H", W / 2 + 4, -95, 10)
+    local wBox = MakeEB(19, -90, W / 2 - 22)
+    local hBox = MakeEB(W / 2 + 15, -90, W / 2 - 18)
     panel.wBox = wBox
     panel.hBox = hBox
 
-    MakeDiv(-83, 0.18)
+    MakeDiv(-115, 0.18)
 
     -- ── Nudge buttons (arrow cross) ──────────────────────────────────────
     local S, G = 20, 3
@@ -386,7 +644,7 @@ function MoverModule:_GetInspector()
         return btn
     end
 
-    local r1y = -91
+    local r1y = -123
     local btnU = MakeNudge("\226\134\145", 0, 1)
     local btnL = MakeNudge("\226\134\144", -1, 0)
     local btnR = MakeNudge("\226\134\146", 1, 0)
@@ -404,11 +662,11 @@ function MoverModule:_GetInspector()
     ctrFS:SetAllPoints(ctr); ctrFS:SetJustifyH("CENTER"); ctrFS:SetJustifyV("MIDDLE")
     SetFont(ctrFS, 8); ctrFS:SetText("XY"); ctrFS:SetTextColor(0.38, 0.40, 0.50)
 
-    MakeDiv(-91 - 3 * (S + G) - 4, 0.18)
+    MakeDiv(-123 - 3 * (S + G) - 4, 0.18)
 
     -- ── Anchor picker (3×3 grid) ──────────────────────────────────────────
     -- Shows which anchor is active; clicking any cell converts and saves the anchor.
-    local anchorSectionY = -91 - 3 * (S + G) - 14
+    local anchorSectionY = -123 - 3 * (S + G) - 14
 
     local anchorHdrFS = panel:CreateFontString(nil, "OVERLAY")
     anchorHdrFS:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, anchorSectionY)
@@ -509,11 +767,11 @@ function MoverModule:_GetInspector()
     panel.hideBtn = hideBtn
 
     -- ── Extra controls placeholder (rebuilt on Show) ─────────────────────
-    panel._extrasContainer = CreateFrame("Frame", nil, panel)
-    panel._extrasContainer:SetPoint("TOPLEFT", panel, "TOPLEFT", 0, 0)
-    panel._extrasContainer:SetPoint("TOPRIGHT", panel, "TOPRIGHT", 0, 0)
-    panel._extrasContainer:SetHeight(0)
-    panel._extrasContainer:Hide() -- shown only when extras exist
+    dock._extrasContainer = CreateFrame("Frame", nil, dock)
+    dock._extrasContainer:SetPoint("TOPLEFT", dock, "TOPLEFT", DESIGNER_DOCK_INSET, -118)
+    dock._extrasContainer:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -DESIGNER_DOCK_INSET, -118)
+    dock._extrasContainer:SetHeight(0)
+    dock._extrasContainer:Hide()
 
     -- Dynamic height is recalculated in panel.Activate().
     panel._baseHeight = math_abs(hideY) + 20 + 8 -- extra margin below hide btn
@@ -635,27 +893,65 @@ function MoverModule:_GetInspector()
         end
         panel._activeKey = key
         panel.titleFS:SetText(opts.label or key)
+        panel.subtitleFS:SetText(opts.category or "Designer Control")
 
-        -- Rebuild extra controls
-        local ec = panel._extrasContainer
+        -- Rebuild extra controls in dock
+        local ec = dock._extrasContainer
         -- Remove any previous extra children by hiding them
         if ec._extraWidgets then
             for _, w in ipairs(ec._extraWidgets) do w:Hide() end
         end
         ec._extraWidgets = {}
         ec:Hide()
+        dock:Hide()
 
         local extraH = 0
         local extras = opts.extras
         if type(extras) == "table" and #extras > 0 then
             ec:Show()
-            -- Position the container below the hide button
-            ec:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -(panel._baseHeight))
-            ec:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -(panel._baseHeight))
-            MakeDiv(-(panel._baseHeight + 1))
+            dock._title:SetText(opts.label or key)
+            dock._subtitle:SetText(opts.category or "Designer Control")
             local curY = -4
+            local function QueueRefresh()
+                C_Timer.After(0, function()
+                    if panel._activeKey == key then
+                        panel.Activate(key, MoverModule._handles[key] or anchorHandle)
+                    end
+                    MoverModule:_PositionHandle(key)
+                end)
+            end
+
+            local function MakeExtraBtn(parent, text, xOff, yOff, width, height, onClick)
+                local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
+                btn:SetSize(width or 80, height or 20)
+                btn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, yOff)
+                ApplyBackdrop(btn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
+                    C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+                local fs = btn:CreateFontString(nil, "OVERLAY")
+                fs:SetAllPoints(btn)
+                fs:SetJustifyH("CENTER")
+                fs:SetJustifyV("MIDDLE")
+                SetFont(fs, 10)
+                fs:SetText(text or "")
+                btn._fs = fs
+                btn:SetScript("OnEnter", function(self)
+                    if self:IsEnabled() then
+                        self:SetBackdropColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.22)
+                        self:SetBackdropBorderColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 1)
+                    end
+                    CancelHide()
+                end)
+                btn:SetScript("OnLeave", function(self)
+                    StyleExtraState(self, self:IsEnabled())
+                    ScheduleHide()
+                end)
+                btn:SetScript("OnClick", onClick)
+                return btn
+            end
+
             for _, extra in ipairs(extras) do
-                if extra.type == "toggle" then
+                local hidden = type(extra.hidden) == "function" and extra.hidden() == true
+                if not hidden and extra.type == "toggle" then
                     local cur = type(extra.get) == "function" and extra.get() or false
                     local lbl = ec:CreateFontString(nil, "OVERLAY")
                     lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 8, curY)
@@ -675,42 +971,204 @@ function MoverModule:_GetInspector()
                     chk._dot = dot
                     chk._extra = extra
                     chk:SetScript("OnClick", function(self)
+                        if ResolveExtraDisabled(self._extra) then
+                            return
+                        end
                         local nv = not (type(self._extra.get) == "function" and self._extra.get() or false)
                         if type(self._extra.set) == "function" then self._extra.set(nv) end
                         self._dot:SetShown(nv)
-                        MoverModule:_PositionHandle(key)
+                        QueueRefresh()
                     end)
                     chk:SetScript("OnEnter", CancelHide)
                     chk:SetScript("OnLeave", ScheduleHide)
+                    chk:SetEnabled(not ResolveExtraDisabled(extra))
+                    StyleExtraState(chk, chk:IsEnabled())
                     ec._extraWidgets[#ec._extraWidgets + 1] = chk
 
                     curY = curY - 22
                     extraH = extraH + 22
+                elseif not hidden and extra.type == "execute" then
+                    local btn = MakeExtraBtn(ec, extra.buttonLabel or extra.label or "Action", 0, curY,
+                        DESIGNER_DOCK_CONTENT_WIDTH, 22,
+                        function()
+                            if ResolveExtraDisabled(extra) then
+                                return
+                            end
+                            if type(extra.func) == "function" then
+                                extra.func()
+                                QueueRefresh()
+                            end
+                        end)
+                    btn:SetEnabled(not ResolveExtraDisabled(extra))
+                    StyleExtraState(btn, btn:IsEnabled())
+                    ec._extraWidgets[#ec._extraWidgets + 1] = btn
+
+                    curY = curY - 24
+                    extraH = extraH + 24
+                elseif not hidden and extra.type == "range" then
+                    local lbl = ec:CreateFontString(nil, "OVERLAY")
+                    lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY)
+                    lbl:SetPoint("TOPRIGHT", ec, "TOPRIGHT", 0, curY)
+                    SetFont(lbl, 10)
+                    lbl:SetText(extra.label or "")
+                    lbl:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3])
+                    ec._extraWidgets[#ec._extraWidgets + 1] = lbl
+
+                    local disabled = ResolveExtraDisabled(extra)
+                    local currentValue = type(extra.get) == "function" and extra.get() or
+                    ResolveExtraNumeric(extra.min, 0)
+                    local rowY = curY - 14
+                    local minus = MakeExtraBtn(ec, "-", 0, rowY, 24, 18, function()
+                        if ResolveExtraDisabled(extra) then
+                            return
+                        end
+                        local current = tonumber(type(extra.get) == "function" and extra.get() or 0) or 0
+                        local step = ResolveExtraNumeric(extra.step, 1)
+                        local minimum = ResolveExtraNumeric(extra.min, current)
+                        local maximum = ResolveExtraNumeric(extra.max, current)
+                        local factor = IsShiftKeyDown() and 10 or 1
+                        local nextValue = math.max(minimum, math.min(maximum, current - (step * factor)))
+                        if type(extra.set) == "function" then
+                            extra.set(nextValue)
+                            QueueRefresh()
+                        end
+                    end)
+                    local plus = MakeExtraBtn(ec, "+", DESIGNER_DOCK_CONTENT_WIDTH - 24, rowY, 24, 18, function()
+                        if ResolveExtraDisabled(extra) then
+                            return
+                        end
+                        local current = tonumber(type(extra.get) == "function" and extra.get() or 0) or 0
+                        local step = ResolveExtraNumeric(extra.step, 1)
+                        local minimum = ResolveExtraNumeric(extra.min, current)
+                        local maximum = ResolveExtraNumeric(extra.max, current)
+                        local factor = IsShiftKeyDown() and 10 or 1
+                        local nextValue = math.max(minimum, math.min(maximum, current + (step * factor)))
+                        if type(extra.set) == "function" then
+                            extra.set(nextValue)
+                            QueueRefresh()
+                        end
+                    end)
+                    local valueBox = CreateFrame("EditBox", nil, ec, "BackdropTemplate")
+                    valueBox:SetSize(DESIGNER_DOCK_CONTENT_WIDTH - 56, 18)
+                    valueBox:SetPoint("TOPLEFT", ec, "TOPLEFT", 28, rowY)
+                    ApplyBackdrop(valueBox, 0.04, 0.05, 0.08, 1, 0.20, 0.22, 0.30, 1)
+                    valueBox:SetTextInsets(5, 5, 2, 2)
+                    valueBox:SetAutoFocus(false)
+                    valueBox:SetMaxLetters(8)
+                    valueBox:SetJustifyH("CENTER")
+                    SetFont(valueBox, 10)
+                    valueBox:SetText(FormatExtraValue(extra, currentValue))
+                    valueBox:SetScript("OnEnter", CancelHide)
+                    valueBox:SetScript("OnLeave", ScheduleHide)
+                    valueBox:SetScript("OnEditFocusGained", function(self)
+                        CancelHide()
+                        self:HighlightText()
+                    end)
+                    valueBox:SetScript("OnEscapePressed", function(self)
+                        local refreshedValue = type(extra.get) == "function" and extra.get() or
+                        ResolveExtraNumeric(extra.min, 0)
+                        self:SetText(FormatExtraValue(extra, refreshedValue))
+                        self:HighlightText(0, 0)
+                        self:ClearFocus()
+                    end)
+                    valueBox:SetScript("OnEnterPressed", function(self)
+                        if ResolveExtraDisabled(extra) then
+                            local refreshedValue = type(extra.get) == "function" and extra.get() or
+                            ResolveExtraNumeric(extra.min, 0)
+                            self:SetText(FormatExtraValue(extra, refreshedValue))
+                            self:ClearFocus()
+                            return
+                        end
+
+                        local entered = tonumber(self:GetText())
+                        local current = tonumber(type(extra.get) == "function" and extra.get() or 0) or 0
+                        local minimum = ResolveExtraNumeric(extra.min, current)
+                        local maximum = ResolveExtraNumeric(extra.max, current)
+                        local nextValue = entered or current
+                        nextValue = math.max(minimum, math.min(maximum, nextValue))
+
+                        if type(extra.set) == "function" then
+                            extra.set(nextValue)
+                        end
+
+                        self:SetText(FormatExtraValue(extra, nextValue))
+                        self:HighlightText(0, 0)
+                        self:ClearFocus()
+                        QueueRefresh()
+                    end)
+
+                    minus:SetEnabled(not disabled)
+                    plus:SetEnabled(not disabled)
+                    valueBox:SetEnabled(not disabled)
+                    StyleExtraState(minus, minus:IsEnabled())
+                    StyleExtraState(plus, plus:IsEnabled())
+                    StyleExtraState(valueBox, valueBox:IsEnabled())
+
+                    ec._extraWidgets[#ec._extraWidgets + 1] = minus
+                    ec._extraWidgets[#ec._extraWidgets + 1] = plus
+                    ec._extraWidgets[#ec._extraWidgets + 1] = valueBox
+
+                    curY = curY - 38
+                    extraH = extraH + 38
+                elseif not hidden and extra.type == "label" then
+                    local lbl = ec:CreateFontString(nil, "OVERLAY")
+                    lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY)
+                    lbl:SetPoint("TOPRIGHT", ec, "TOPRIGHT", 0, curY)
+                    lbl:SetJustifyH("LEFT")
+                    lbl:SetJustifyV("TOP")
+                    SetFont(lbl, 9)
+                    lbl:SetText(extra.text or extra.label or "")
+                    lbl:SetTextColor(0.62, 0.66, 0.74)
+                    ec._extraWidgets[#ec._extraWidgets + 1] = lbl
+
+                    curY = curY - 18
+                    extraH = extraH + 18
                 end
             end
             ec:SetHeight(extraH + 4)
         end
 
-        local totalH = panel._baseHeight + (extraH > 0 and extraH + 12 or 0)
-        panel:SetHeight(totalH)
+        panel:SetHeight(panel._baseHeight)
 
         RefreshBoxes()
 
-        -- Position near anchor handle
+        local function GetDockSide()
+            if panel._dockSessionSide == "LEFT" or panel._dockSessionSide == "RIGHT" then
+                return panel._dockSessionSide
+            end
+
+            if anchorHandle then
+                local left, _, right = GetFrameScreenRect(anchorHandle)
+                local centerX = ((left or 0) + (right or left or 0)) * 0.5
+                local screenMid = (UIParent:GetWidth() or 1280) * 0.5
+                if centerX < screenMid then
+                    return "RIGHT"
+                end
+            end
+
+            return "LEFT"
+        end
+
+        local dockSide = GetDockSide()
+        panel._dockSessionSide = dockSide
+        panel._activeDockSide = dockSide
+        dock._dockBtn._fs:SetText(dockSide == "LEFT" and "Dock Right" or "Dock Left")
+        dock._dockBtn:SetScript("OnClick", function()
+            panel._dockSessionSide = dockSide == "LEFT" and "RIGHT" or "LEFT"
+            panel.Activate(key, MoverModule._handles[key] or anchorHandle)
+        end)
+        StyleDockSide(dockSide)
+
         panel:ClearAllPoints()
         if anchorHandle then
             local sw = UIParent:GetWidth() or 1280
             local sh = UIParent:GetHeight() or 768
             local hT = anchorHandle:GetTop() or 0
-            local hL = anchorHandle:GetLeft() or 0
-            local hR = anchorHandle:GetRight() or 0
-            -- Prefer showing below; swap if near top
             if hT > sh * 0.6 then
                 panel:SetPoint("TOP", anchorHandle, "BOTTOM", 0, -6)
             else
                 panel:SetPoint("BOTTOM", anchorHandle, "TOP", 0, 6)
             end
-            -- Clamp horizontally
             C_Timer.After(0, function()
                 local pl = panel:GetLeft() or 0
                 local pr = panel:GetRight() or sw
@@ -722,6 +1180,18 @@ function MoverModule:_GetInspector()
             end)
         else
             panel:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        end
+
+        if type(extras) == "table" and #extras > 0 then
+            local dockHeight = math.floor(math_max(420, math_min((UIParent:GetHeight() or 768) * 0.72, 760)) + 0.5)
+            dock:SetHeight(dockHeight)
+            dock:ClearAllPoints()
+            if dockSide == "LEFT" then
+                dock:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, -42)
+            else
+                dock:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", 0, -42)
+            end
+            dock:Show()
         end
         panel:Show()
         panel:SetFrameLevel(9999)
@@ -1213,7 +1683,7 @@ function MoverModule:_BuildOverlay()
     local hudTitle = hud:CreateFontString(nil, "OVERLAY")
     hudTitle:SetPoint("LEFT", hud, "LEFT", 16, 0)
     SetFont(hudTitle, 13)
-    hudTitle:SetText("|cff19c9c7TwichUI|r  Move Mode")
+    hudTitle:SetText("|cff19c9c7TwichUI|r  Interface Designer")
     hudTitle:SetTextColor(0.92, 0.94, 0.96)
 
     -- Instruction text
@@ -1285,7 +1755,7 @@ end
 
 function MoverModule:Activate()
     if InCombatLockdown() then
-        print("|cff19c9c7[TwichUI]|r Cannot enter Move Mode in combat.")
+        print("|cff19c9c7[TwichUI]|r Cannot enter Interface Designer in combat.")
         return
     end
 
@@ -1317,7 +1787,7 @@ function MoverModule:Activate()
     end
 
     print(
-        "|cff19c9c7[TwichUI]|r Move Mode active — drag handles or click for inspector. |cffff6060ESC|r or Exit button to close.")
+        "|cff19c9c7[TwichUI]|r Interface Designer active — drag handles or click for quick controls. |cffff6060ESC|r or Exit button to close.")
 end
 
 function MoverModule:Deactivate()
@@ -1341,7 +1811,7 @@ function MoverModule:Deactivate()
     if self._overlay then self._overlay:Hide() end
     if self._hud then self._hud:Hide() end
 
-    print("|cff19c9c7[TwichUI]|r Move Mode closed.")
+    print("|cff19c9c7[TwichUI]|r Interface Designer closed.")
 
     -- Re-open config UI if it was visible when Move Mode started.
     if self._configWasOpen then
