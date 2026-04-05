@@ -6758,6 +6758,8 @@ function UnitFrames:LayoutPowerBarFx(powerBar)
 
     fx.width          = width
     fx.height         = height
+    fx.fillLeftX      = 0
+    fx.fillWidth      = width
     fx.particleInsetX = math_max(10, height * 1.2) * effectScale
     fx.particleInsetY = math_max(8, height * 1.0) * effectScale
 
@@ -6779,6 +6781,8 @@ function UnitFrames:ResetPowerBarFx(powerBar)
     fx.clock              = 0
     fx.ambientAccumulator = 0
     fx.streamAccumulator  = 0
+    fx.glowAccumulator    = 0
+    fx.rippleAccumulator  = 0
 end
 
 function UnitFrames:SyncPowerBarFx(powerBar, force)
@@ -6822,29 +6826,101 @@ function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
     local fx = powerBar and powerBar.TwichPowerFx
     if not fx or not fx.enabled then return end
 
-    local effectScale     = fx.effectScale or 1
-    local family          = GetFantasyThemeEffectFamily(fx.theme)
-
-    -- Ambient floating particles at a fixed rate scaled by effectScale.
-    -- No current-power reads: UnitPower is protected in combat and always
-    -- produces a tainted value that cannot be used in arithmetic.
-    fx.ambientAccumulator = (fx.ambientAccumulator or 0) + elapsed
-    local ambientInterval = 0.18 / math_max(0.5, effectScale)
-    if fx.ambientAccumulator >= ambientInterval then
-        fx.ambientAccumulator = 0
-        SpawnFantasyAmbientParticle(fx)
+    local effectScale = fx.effectScale or 1
+    local family = GetFantasyThemeEffectFamily(fx.theme)
+    local densityScale = 1 + ((effectScale - 1) * 0.8)
+    local width = fx.width or math_max(1, powerBar:GetWidth() or 1)
+    local centerX = (fx.fillLeftX or 0) + ((fx.fillWidth or width) * 0.5)
+    local roamX = function()
+        return (fx.fillLeftX or 0) + RandomRange(width * 0.18, width * 0.82)
     end
 
-    -- Stream for nature/monk themes
-    if family == "nature" or family == "monk" then
-        fx.streamAccumulator = (fx.streamAccumulator or 0) + elapsed
-        local streamInterval = 0.22 / math_max(0.5, effectScale)
-        if fx.streamAccumulator >= streamInterval then
+    fx.ambientAccumulator = (fx.ambientAccumulator or 0) + elapsed
+    fx.streamAccumulator = (fx.streamAccumulator or 0) + elapsed
+    fx.glowAccumulator = (fx.glowAccumulator or 0) + elapsed
+    fx.rippleAccumulator = (fx.rippleAccumulator or 0) + elapsed
+
+    if family == "holy" or family == "moon" then
+        if fx.ambientAccumulator >= (0.18 / math_max(0.5, effectScale)) then
+            fx.ambientAccumulator = 0
+            SpawnFantasyAmbientParticle(fx)
+        end
+    elseif family == "nature" or family == "monk" then
+        if fx.streamAccumulator >= (0.22 / math_max(0.5, effectScale)) then
             fx.streamAccumulator = 0
             SpawnFantasyNatureStream(fx)
         end
+        if family == "monk" and fx.theme == "mistweaver" and CountFantasyParticles(fx, "mist") < 2 then
+            SpawnFantasyMistParticle(fx)
+        end
+    elseif family == "fire" then
+        if fx.ambientAccumulator >= (0.10 / densityScale) then
+            fx.ambientAccumulator = 0
+            SpawnFantasyFireAmbient(fx)
+        end
+    elseif family == "frost" then
+        while CountFantasyParticles(fx, "mist") < (fx.theme == "arctic" and 3 or fx.theme == "frostfire" and 3 or 2) do
+            SpawnFantasyMistParticle(fx)
+        end
+    elseif family == "water" then
+        if fx.rippleAccumulator >= ((fx.theme == "fishing" and 0.34 or 0.45) / densityScale) then
+            fx.rippleAccumulator = 0
+            SpawnFantasyRippleParticle(fx)
+        end
+        if (fx.theme == "fishing" or fx.theme == "mossystone" or fx.theme == "mossystone_icon") and CountFantasyParticles(fx, "mist") < 2 then
+            SpawnFantasyMistParticle(fx)
+        end
+    elseif family == "arcane" then
+        while CountFantasyParticles(fx, "rune") < (fx.theme == "arcaneum" and 3 or 2) do
+            SpawnFantasyRuneParticle(fx)
+        end
+    elseif family == "void" then
+        if CountFantasyParticles(fx, "vortex") < 1 then
+            SpawnFantasyVortexParticle(fx)
+        end
+        if fx.ambientAccumulator >= (0.24 / densityScale) then
+            fx.ambientAccumulator = 0
+            SpawnFantasyEmberParticle(fx, roamX(), family)
+        end
+    elseif family == "earth" then
+        local rockCount = 0
+        local debrisCount = 0
+        for index = 1, #fx.particles do
+            local particle = fx.particles[index]
+            if particle.active and particle.kind == "earth-orbiter" then
+                if particle.isRock then
+                    rockCount = rockCount + 1
+                else
+                    debrisCount = debrisCount + 1
+                end
+            end
+        end
+        while rockCount < 3 do
+            SpawnFantasyEarthOrbiter(fx, true)
+            rockCount = rockCount + 1
+        end
+        while debrisCount < 8 do
+            SpawnFantasyEarthOrbiter(fx, false)
+            debrisCount = debrisCount + 1
+        end
+    elseif family == "gather" or family == "metal" then
+        if fx.ambientAccumulator >= (0.20 / densityScale) then
+            fx.ambientAccumulator = 0
+            SpawnFantasyEmberParticle(fx, roamX(), family)
+        end
+    elseif family == "thunder" then
+        if fx.glowAccumulator >= (0.08 / densityScale) then
+            fx.glowAccumulator = 0
+            local count = math.random(1, 2) + math_max(0, math_floor(effectScale - 1))
+            for _ = 1, count do
+                SpawnFantasyGlowParticle(fx, centerX + RandomRange(-width * 0.2, width * 0.2))
+            end
+        end
     else
-        fx.streamAccumulator = 0
+        if fx.glowAccumulator >= (0.12 / densityScale) then
+            fx.glowAccumulator = 0
+            SpawnFantasyGlowParticle(fx, centerX)
+        end
     end
 
     -- Advance all active particles
