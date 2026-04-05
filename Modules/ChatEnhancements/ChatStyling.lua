@@ -645,6 +645,100 @@ function ChatStylingModule:RefreshSettings()
     self:RefreshCopyFrame()
 end
 
+local function RoundPixel(value)
+    if type(value) ~= "number" then
+        return nil
+    end
+
+    return math.floor(value + 0.5)
+end
+
+local function GetUIScreenSize()
+    local width = UIParent and UIParent.GetWidth and UIParent:GetWidth() or 0
+    local height = UIParent and UIParent.GetHeight and UIParent:GetHeight() or 0
+    return width or 0, height or 0
+end
+
+local function ScaleByReference(value, referenceDimension, currentDimension)
+    if type(value) ~= "number" then
+        return nil
+    end
+
+    if type(referenceDimension) ~= "number" or referenceDimension <= 0 then
+        return value
+    end
+
+    if type(currentDimension) ~= "number" or currentDimension <= 0 then
+        return value
+    end
+
+    if math.abs(referenceDimension - currentDimension) < 1 then
+        return value
+    end
+
+    return value * (currentDimension / referenceDimension)
+end
+
+local function ClampChatLayout(x, y, width, height, parentWidth, parentHeight)
+    local clampedWidth = width
+    local clampedHeight = height
+
+    if type(clampedWidth) == "number" and parentWidth > 0 then
+        clampedWidth = max(50, min(clampedWidth, parentWidth))
+    end
+
+    if type(clampedHeight) == "number" and parentHeight > 0 then
+        clampedHeight = max(50, min(clampedHeight, parentHeight))
+    end
+
+    local clampedX = x
+    local clampedY = y
+    if type(clampedX) == "number" and parentWidth > 0 and type(clampedWidth) == "number" then
+        clampedX = max(0, min(clampedX, max(0, parentWidth - clampedWidth)))
+    end
+
+    if type(clampedY) == "number" and parentHeight > 0 and type(clampedHeight) == "number" then
+        clampedY = max(0, min(clampedY, max(0, parentHeight - clampedHeight)))
+    end
+
+    return clampedX, clampedY, clampedWidth, clampedHeight
+end
+
+function ChatStylingModule:PersistPrimaryChatLayout(db, x, y, width, height)
+    if type(db) ~= "table" then
+        return
+    end
+
+    local screenWidth, screenHeight = GetUIScreenSize()
+
+    if type(x) == "number" and type(y) == "number" then
+        db.chatPositionX = RoundPixel(x)
+        db.chatPositionY = RoundPixel(y)
+        db.chatPositionRefWidth = RoundPixel(screenWidth)
+        db.chatPositionRefHeight = RoundPixel(screenHeight)
+        if self.settings then
+            self.settings.positionX = db.chatPositionX
+            self.settings.positionY = db.chatPositionY
+        end
+    end
+
+    if type(width) == "number" and width > 50 then
+        db.chatWidth = RoundPixel(width)
+        db.chatSizeRefWidth = RoundPixel(screenWidth)
+        if self.settings then
+            self.settings.chatWidth = db.chatWidth
+        end
+    end
+
+    if type(height) == "number" and height > 50 then
+        db.chatHeight = RoundPixel(height)
+        db.chatSizeRefHeight = RoundPixel(screenHeight)
+        if self.settings then
+            self.settings.chatHeight = db.chatHeight
+        end
+    end
+end
+
 --- Applies a saved X/Y position and optional size override to ChatFrame1.
 --- Uses BOTTOMLEFT → UIParent BOTTOMLEFT so 0,0 = bottom-left of screen.
 function ChatStylingModule:ApplyPositionOverride()
@@ -654,9 +748,31 @@ function ChatStylingModule:ApplyPositionOverride()
     local frame = _G.ChatFrame1
     if not frame then return end
 
+    local opts = self:GetOptions()
+    local db = opts and opts.GetChatEnhancementDB and opts:GetChatEnhancementDB() or nil
+    local parentWidth, parentHeight = GetUIScreenSize()
+
     local hasPos  = type(x) == "number" and type(y) == "number"
     local hasSize = type(w) == "number" and type(h) == "number" and w > 50 and h > 50
     if not hasPos and not hasSize then return end
+
+    if hasPos and db then
+        x = ScaleByReference(x, db.chatPositionRefWidth, parentWidth)
+        y = ScaleByReference(y, db.chatPositionRefHeight, parentHeight)
+    end
+
+    if hasSize and db then
+        w = ScaleByReference(w, db.chatSizeRefWidth or db.chatPositionRefWidth, parentWidth)
+        h = ScaleByReference(h, db.chatSizeRefHeight or db.chatPositionRefHeight, parentHeight)
+    end
+
+    local frameWidth = hasSize and w or (frame.GetWidth and frame:GetWidth() or nil)
+    local frameHeight = hasSize and h or (frame.GetHeight and frame:GetHeight() or nil)
+    x, y, frameWidth, frameHeight = ClampChatLayout(x, y, frameWidth, frameHeight, parentWidth, parentHeight)
+    if hasSize then
+        w = frameWidth
+        h = frameHeight
+    end
 
     -- SetUserPlaced / SetSize both require the frame to be movable/resizable.
     -- The lock state is applied by ApplyFrameChrome; temporarily lift it here
@@ -682,6 +798,9 @@ function ChatStylingModule:ApplyPositionOverride()
     -- Do NOT call FCF_SavePositionAndDimensions here: doing so would snapshot
     -- the frame's position at lifecycle-timer time into Blizzard's own storage,
     -- potentially overwriting a more recent drag-stop position with a stale value.
+    if db then
+        self:PersistPrimaryChatLayout(db, hasPos and x or nil, hasPos and y or nil, hasSize and w or nil, hasSize and h or nil)
+    end
 end
 
 --- Gets the current BOTTOMLEFT position of ChatFrame1 as x, y integers.
@@ -1074,15 +1193,7 @@ function ChatStylingModule:ForwardDragStop(frame)
             local x, y = self:CaptureCurrentPosition()
             if x and y then
                 local db = opts:GetChatEnhancementDB()
-                db.chatPositionX = x
-                db.chatPositionY = y
-                -- Keep cached settings in sync so any lifecycle refresh (UPDATE_CHAT_WINDOWS
-                -- etc.) doesn't call ApplyPositionOverride with stale old values and
-                -- overwrite the freshly dragged position.
-                if self.settings then
-                    self.settings.positionX = x
-                    self.settings.positionY = y
-                end
+                self:PersistPrimaryChatLayout(db, x, y, nil, nil)
             end
         end
     end
@@ -1700,14 +1811,7 @@ function ChatStylingModule:EnsureFrameChrome(frame)
                     local w = targetFrame:GetWidth()
                     local h = targetFrame:GetHeight()
                     local db = opts:GetChatEnhancementDB()
-                    if w and w > 50 then
-                        db.chatWidth = math.floor(w + 0.5)
-                        if ChatStylingModule.settings then ChatStylingModule.settings.chatWidth = db.chatWidth end
-                    end
-                    if h and h > 50 then
-                        db.chatHeight = math.floor(h + 0.5)
-                        if ChatStylingModule.settings then ChatStylingModule.settings.chatHeight = db.chatHeight end
-                    end
+                    ChatStylingModule:PersistPrimaryChatLayout(db, nil, nil, w, h)
                 end
             end
         end
@@ -3026,11 +3130,7 @@ function ChatStylingModule:OnEnable()
             local opts = ChatStylingModule:GetOptions()
             if not opts then return end
             local db = opts:GetChatEnhancementDB()
-            db.chatPositionX = absX
-            db.chatPositionY = absY
-            if absW and absW > 50 then db.chatWidth = absW end
-            if absH and absH > 50 then db.chatHeight = absH end
-            -- Sync into the live settings cache so ApplyPositionOverride can run immediately.
+            ChatStylingModule:PersistPrimaryChatLayout(db, absX, absY, absW, absH)
             ChatStylingModule:RefreshSettings()
         end)
     end

@@ -4,4 +4,6 @@
 
 #### New
 
+- Added unusable spell feedback to action bars
+
 #### Other
