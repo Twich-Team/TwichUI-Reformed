@@ -2869,7 +2869,7 @@ local function BuildGeneralTab()
         args = {
             moduleSettings = Widgets.IGroup(1, "Module", {
                 moveHint = Widgets.Description(0,
-                    "Move Mode opens the shared TwichUI mover overlay. Use Test Mode when the anchor frame is normally hidden, such as party, raid, tank, or boss previews."),
+                    "Interface Designer opens the shared TwichUI mover overlay. Use Test Mode when the anchor frame is normally hidden, such as party, raid, tank, or boss previews."),
                 enable = {
                     type = "toggle",
                     name = "Enable",
@@ -2926,7 +2926,7 @@ local function BuildGeneralTab()
                             end
                         end,
                     }),
-                openMoveMode = BuildExecute(5, "Open Move Mode",
+                openMoveMode = BuildExecute(5, "Open Interface Designer",
                     "Open the shared mover overlay and retire the legacy Unit Frames movers.", function()
                         local module = GetModule()
                         if module and type(module.SetFrameLock) == "function" then

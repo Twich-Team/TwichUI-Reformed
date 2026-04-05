@@ -682,9 +682,9 @@ local function GetOrderedEntries(section)
     table.sort(ordered, function(left, right)
         if section and section.childGroups then
             local leftName = type(left.option) == "table" and tostring(left.option.name or left.key) or
-            tostring(left.key)
+                tostring(left.key)
             local rightName = type(right.option) == "table" and tostring(right.option.name or right.key) or
-            tostring(right.key)
+                tostring(right.key)
             leftName = leftName:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):lower()
             rightName = rightName:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):lower()
 
@@ -1486,10 +1486,10 @@ function UI:EnsureFrame()
         "Open the TwichUI Debug Console to inspect live module state and logs.")
 
     frame.MoverButton = CreateFrame("Button", nil, frame.TitleBar, "BackdropTemplate")
-    frame.MoverButton:SetSize(96, 24)
+    frame.MoverButton:SetSize(144, 24)
     frame.MoverButton:SetPoint("RIGHT", frame.DebuggerButton, "LEFT", -6, 0)
     SkinActionButton(frame.MoverButton, { 0.10, 0.72, 0.74 })
-    SetButtonText(frame.MoverButton, "Move Mode")
+    SetButtonText(frame.MoverButton, "Interface Designer")
     frame.MoverButton:SetScript("OnClick", function()
         local movers = _G.TwichMoverModule
         if movers then
@@ -1497,7 +1497,7 @@ function UI:EnsureFrame()
             frame:Hide()
         end
     end)
-    AttachTooltip(frame.MoverButton, "Move Mode",
+    AttachTooltip(frame.MoverButton, "Interface Designer",
         "Open the central mover overlay to drag and reposition all UI elements at once.\nThe config panel closes so handles are accessible.")
 
     frame.Subtitle:SetPoint("RIGHT", frame.MoverButton, "LEFT", -12, 0)
@@ -2142,7 +2142,7 @@ function UI:RenderUnitFramePanel(parent, width)
         local moversActive = _G.TwichMoverModule and _G.TwichMoverModule:IsActive() or false
         SetButtonText(enableBtn, enabled and "Disable UF" or "Enable UF")
         SetButtonText(testBtn, testMode and "Exit Test" or "Test Mode")
-        SetButtonText(moversBtn, moversActive and "Exit Move Mode" or "Move Mode")
+        SetButtonText(moversBtn, moversActive and "Exit Interface Designer" or "Interface Designer")
     end
     RefreshButtonStates()
 
@@ -2175,7 +2175,8 @@ function UI:RenderUnitFramePanel(parent, width)
             RefreshButtonStates()
         end
     end)
-    AttachTooltip(moversBtn, "Move Mode", "Open the central mover overlay to reposition all UI elements simultaneously.")
+    AttachTooltip(moversBtn, "Interface Designer",
+        "Open the central mover overlay to reposition all UI elements simultaneously.")
 
     -- ── Divider ───────────────────────────────────────────────────────────────
     local divider = parent:CreateTexture(nil, "ARTWORK")

@@ -543,7 +543,7 @@ local function NormalizeBarSettings(barKey, barDB)
     barDB.y = tonumber(barDB.y) or defaults.y or 0
     barDB.point = defaults.point and (barDB.point or defaults.point) or barDB.point
     barDB.relativePoint = defaults.relativePoint and (barDB.relativePoint or defaults.relativePoint) or
-    barDB.relativePoint
+        barDB.relativePoint
 
     if type(barDB.simpleVisibility) ~= "table" then
         barDB.simpleVisibility = DeepCopyValue(defaults.simpleVisibility or {})
@@ -812,8 +812,8 @@ function Options:BuildConfiguration()
             },
             unlock = {
                 type = "toggle",
-                name = "Unlock Movers",
-                desc = "Open the TwichUI central mover overlay to reposition all bars and frames simultaneously.",
+                name = "Interface Designer",
+                desc = "Open the TwichUI Interface Designer to reposition all bars and frames simultaneously.",
                 order = 2,
                 width = "half",
                 get = function()
@@ -1753,7 +1753,7 @@ function Options:BuildConfiguration()
                         end,
                     },
                     note = Widgets.Description(15,
-                        "Use Unlock Movers for drag-and-drop placement. Visibility drivers are applied only while bars are locked so mover mode always stays visible."),
+                        "Use Interface Designer for drag-and-drop placement. Visibility drivers are applied only while bars are locked so the designer stays visible."),
                 }),
             },
         }

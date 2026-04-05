@@ -59,6 +59,7 @@ function BrandDT:OnClick(panel, button)
     local menuList = {
         {
             text = "Open Settings",
+            notCheckable = true,
             func = function()
                 if ConfigurationModule and ConfigurationModule.OpenOptionsUI then
                     ConfigurationModule:OpenOptionsUI()
@@ -66,7 +67,8 @@ function BrandDT:OnClick(panel, button)
             end,
         },
         {
-            text = moversActive and "Lock Movers" or "Unlock Movers",
+            text = moversActive and "Close Interface Designer" or "Open Interface Designer",
+            notCheckable = true,
             func = function()
                 if moversModule then
                     moversModule:Toggle()
