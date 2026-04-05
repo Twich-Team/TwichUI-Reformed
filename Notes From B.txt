@@ -1,0 +1,15 @@
+- Need SIMPLICITY.
+  - Search may search entire configuration interface
+  - Clicking a settings button on a mover information panel will open configuration directly to that page
+  - Automatically scale up or down amount of action bars (players say i want more!)
+  - Chat sizing and positioning on login
+
+- Action bars: Brents has a artwork on one of his action bars and none others?
+- Action bars; unusable spell tried to be used indicator
+- Chat is still positioning weird
+- Alphabatize sections
+- "Designer" mode
+  - Allow changing action bar number of buttons, button size from designer mode
+- Make sleeping indicator a class icon or combat
+- Enable swipe on action bars by default
+-

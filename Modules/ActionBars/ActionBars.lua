@@ -1273,10 +1273,20 @@ function ActionBars:CreateInfrastructure()
         local holder = CreateFrame("Frame", "TwichUIActionBarHolder_" .. definition.key, UIParent,
             "SecureHandlerStateTemplate,BackdropTemplate")
         holder:SetClampedToScreen(true)
+        if holder.SetClipsChildren then
+            holder:SetClipsChildren(false)
+        end
         holder:SetFrameStrata("MEDIUM")
         holder:SetFrameLevel(30)
         holder:EnableMouse(true)
         holder.barKey = barKey
+
+        holder:HookScript("OnEnter", function(self)
+            ActionBars:SetBarHoverState(self.barKey, true)
+        end)
+        holder:HookScript("OnLeave", function(self)
+            ActionBars:ScheduleBarFade(self.barKey)
+        end)
 
         self.holders[barKey] = holder
     end
@@ -3040,6 +3050,10 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
     local height = (rows * buttonSize) + ((rows - 1) * spacing) + (DEFAULT_HOLDER_PADDING * 2)
 
     holder:SetSize(width, height)
+    if holder.SetHitRectInsets then
+        local hoverPadding = max(DEFAULT_HOLDER_PADDING + spacing + 4, floor(buttonSize * 0.2))
+        holder:SetHitRectInsets(-hoverPadding, -hoverPadding, -hoverPadding, -hoverPadding)
+    end
 
     for index, button in ipairs(buttons) do
         button:SetParent(holder)

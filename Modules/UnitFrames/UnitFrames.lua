@@ -487,7 +487,26 @@ function UnitFrames:GetAuraRemainingTime(durationObject, expirationTime, duratio
     return 0
 end
 
+function UnitFrames:TryApplyAuraTimerDuration(bar)
+    if not bar or not bar._durationObject or not bar.SetTimerDuration then
+        return false
+    end
+
+    local timerDirection = (_G.Enum and _G.Enum.StatusBarTimerDirection)
+        and _G.Enum.StatusBarTimerDirection.RemainingTime or nil
+
+    if timerDirection ~= nil and StatusBarInterpolation and StatusBarInterpolation.Immediate then
+        return pcall(bar.SetTimerDuration, bar, bar._durationObject, StatusBarInterpolation.Immediate, timerDirection)
+    end
+
+    return pcall(bar.SetTimerDuration, bar, bar._durationObject)
+end
+
 function UnitFrames:ShouldUseAuraTimerFill(durationObject, expirationTime, duration)
+    if durationObject then
+        return true
+    end
+
     if durationObject and durationObject.GetRemainingDuration then
         local okRemaining, remaining = pcall(durationObject.GetRemainingDuration, durationObject)
         if okRemaining and remaining ~= nil then
@@ -3680,8 +3699,13 @@ function UnitFrames:EnsureAuraBarsContainer(frame)
             end
 
             self2._auraTimerElapsed = 0
+            if self2._usesDurationObjectFill ~= true and self2._durationObject then
+                self2._usesDurationObjectFill = UnitFrames:TryApplyAuraTimerDuration(self2) == true
+            end
+
             local remaining = UnitFrames:GetAuraRemainingTime(nil, self2._expiry, self2._duration)
-            if not self2._usesDurationObjectFill then
+            if self2._usesDurationObjectFill ~= true then
+                remaining = UnitFrames:GetAuraRemainingTime(self2._durationObject, self2._expiry, self2._duration)
                 if remaining > 0 and self2._duration and self2._duration > 0 then
                     self2:SetValue(remaining)
                 else
@@ -3994,19 +4018,8 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
             bar._usesDurationObjectFill = false
             bar._hasTimer = self:ShouldUseAuraTimerFill(data.durationObject, exp, dur)
             bar._auraTimerElapsed = 0
-            if bar._hasTimer and data.durationObject and bar.SetTimerDuration then
-                local timerDirection = (_G.Enum and _G.Enum.StatusBarTimerDirection)
-                    and _G.Enum.StatusBarTimerDirection.RemainingTime or nil
-                local okTimer = false
-                if timerDirection ~= nil and StatusBarInterpolation and StatusBarInterpolation.Immediate then
-                    okTimer = pcall(bar.SetTimerDuration, bar, data.durationObject, StatusBarInterpolation.Immediate,
-                        timerDirection)
-                else
-                    okTimer = pcall(bar.SetTimerDuration, bar, data.durationObject)
-                end
-                if okTimer then
-                    bar._usesDurationObjectFill = true
-                end
+            if bar._hasTimer and data.durationObject then
+                bar._usesDurationObjectFill = self:TryApplyAuraTimerDuration(bar) == true
             end
             self:LogAuraAppearanceOnce(unit, data, appearance, bar._usesDurationObjectFill, texture)
             if bar._usesDurationObjectFill then
