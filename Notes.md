@@ -34,11 +34,7 @@
 
 ## Interface Designer
 
-I would like to attempt to implement a new level of simplicity to our addon when it comes to custimizing the interface. Currently, we have a nice mover system. I would like to implement what I'm calling the "Interface Designer". This is a mode similar to mover mode that perhaps takes the features of move mode and enhances it. I would like to create a nice simple way for players to customize the modules directly in this designer mode. Say for example if they click on an action bar, they not only get the option to move via nudging, precise placement, snapping and drag and drop, but it will also show most of the configuration for that action bar, allowing them to quickly customize the bar in designer mode. It should show most configuration options for just the bar clicked on, and in a pretty way that matches our theme, and succinctly, optimizing ease and space instead of having a bunch of tabs and scroll. This logic should be similar for unit frames, data panels, etc. There should be a way to toggle party frame test mode, raid frame test mode, as well as add/enable action bars. It would also be perfect if the player selects an action bar, they could choose something like "add bar above" or "add bar below" that would add an action bar snapped to the selected with the settings copied so they appear the same.
-
-- When we select a mover to get its options, can we fade the other movers so they arent as prominent? Also, i would need to be able to see through the selected mover to configure the frame im looking at, say if i were chosing a color or something, that would be obscured by the color of the mover overlay. Maybe when we select the frame, if the mouse is not over the mover or the positioning frame, we change to an outline that adds padding within it and a label of what it is so we can see through?
-
-- For number configurations in the docker, for example the action bar visibile buttons or button size, we currently have toggles to move it up or down, this is good however i would like to be able to click in the middle box where the number is to manually enter a number.
+- There are a number of missing configuration options for action bars in the interface designer. For example, i'd like to be able to copy settings from another bar in here, modify the background/border/accent, etc. Also we should have a tab to configure visibility
 
 ## Quality of Life
 

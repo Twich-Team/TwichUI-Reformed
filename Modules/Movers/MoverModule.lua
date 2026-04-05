@@ -90,8 +90,8 @@ local OVERLAY_ALPHA               = 0.65 -- translucency of the full-screen back
 
 -- ── Registry ────────────────────────────────────────────────────────────────
 MoverModule._registry             = MoverModule._registry or {} -- key → opts
-MoverModule._handles              = MoverModule._handles or {} -- key → handle frame
-MoverModule._hidden               = MoverModule._hidden or {} -- key → true  (temp-hidden)
+MoverModule._handles              = MoverModule._handles or {}  -- key → handle frame
+MoverModule._hidden               = MoverModule._hidden or {}   -- key → true  (temp-hidden)
 MoverModule._active               = false
 
 -- ── Font helper ─────────────────────────────────────────────────────────────
@@ -260,14 +260,24 @@ function MoverModule:_GetInspector()
     end
     panel.CancelHide   = CancelHide
     panel.ScheduleHide = ScheduleHide
-    panel:SetScript("OnEnter", CancelHide)
-    panel:SetScript("OnLeave", ScheduleHide)
+    panel:SetScript("OnEnter", function(self)
+        self._hovering = true
+        CancelHide()
+        MoverModule:_RefreshHandleVisualStates()
+    end)
+    panel:SetScript("OnLeave", function(self)
+        self._hovering = false
+        ScheduleHide()
+        MoverModule:_RefreshHandleVisualStates()
+    end)
     panel:SetScript("OnHide", function(self)
         if self._dock then
             self._dock:Hide()
         end
+        self._hovering = false
         self._dockSessionSide = nil
         self._activeKey = nil
+        MoverModule:_RefreshHandleVisualStates()
     end)
 
     local dockHeaderFrame = CreateFrame("Frame", nil, dock, "BackdropTemplate")
@@ -894,6 +904,7 @@ function MoverModule:_GetInspector()
         panel._activeKey = key
         panel.titleFS:SetText(opts.label or key)
         panel.subtitleFS:SetText(opts.category or "Designer Control")
+        MoverModule:_RefreshHandleVisualStates()
 
         -- Rebuild extra controls in dock
         local ec = dock._extrasContainer
@@ -1016,7 +1027,7 @@ function MoverModule:_GetInspector()
 
                     local disabled = ResolveExtraDisabled(extra)
                     local currentValue = type(extra.get) == "function" and extra.get() or
-                    ResolveExtraNumeric(extra.min, 0)
+                        ResolveExtraNumeric(extra.min, 0)
                     local rowY = curY - 14
                     local minus = MakeExtraBtn(ec, "-", 0, rowY, 24, 18, function()
                         if ResolveExtraDisabled(extra) then
@@ -1066,7 +1077,7 @@ function MoverModule:_GetInspector()
                     end)
                     valueBox:SetScript("OnEscapePressed", function(self)
                         local refreshedValue = type(extra.get) == "function" and extra.get() or
-                        ResolveExtraNumeric(extra.min, 0)
+                            ResolveExtraNumeric(extra.min, 0)
                         self:SetText(FormatExtraValue(extra, refreshedValue))
                         self:HighlightText(0, 0)
                         self:ClearFocus()
@@ -1074,7 +1085,7 @@ function MoverModule:_GetInspector()
                     valueBox:SetScript("OnEnterPressed", function(self)
                         if ResolveExtraDisabled(extra) then
                             local refreshedValue = type(extra.get) == "function" and extra.get() or
-                            ResolveExtraNumeric(extra.min, 0)
+                                ResolveExtraNumeric(extra.min, 0)
                             self:SetText(FormatExtraValue(extra, refreshedValue))
                             self:ClearFocus()
                             return
@@ -1167,7 +1178,7 @@ function MoverModule:_GetInspector()
             if hT > sh * 0.6 then
                 panel:SetPoint("TOP", anchorHandle, "BOTTOM", 0, -6)
             else
-                panel:SetPoint("BOTTOM", anchorHandle, "TOP", 0, 6)
+                panel:SetPoint("BOTTOM", anchorHandle, "TOP", 0, 34)
             end
             C_Timer.After(0, function()
                 local pl = panel:GetLeft() or 0
@@ -1195,6 +1206,7 @@ function MoverModule:_GetInspector()
         end
         panel:Show()
         panel:SetFrameLevel(9999)
+        MoverModule:_RefreshHandleVisualStates()
     end
 
     self._inspector = panel
@@ -1359,6 +1371,97 @@ local function BuildHandleLabel(opts)
     return opts and opts.label or "?"
 end
 
+function MoverModule:_RefreshHandleVisualStates()
+    local inspector = self._inspector
+    local selectedKey = inspector and inspector:IsShown() and inspector._activeKey or nil
+
+    for key, handle in pairs(self._handles) do
+        local opts = self._registry[key]
+        local categoryColor = handle._catColor or C_ACCENT
+        local isSelected = selectedKey ~= nil and key == selectedKey
+        local isHovered = handle._hovered == true
+        local inspectorHovered = inspector and inspector:IsShown() and inspector._hovering == true
+        local interactiveSelected = isSelected and (handle._dragging == true or isHovered or inspectorHovered)
+
+        if handle._outline then
+            handle._outline:SetShown(isSelected and not interactiveSelected)
+        end
+        if handle._outlineOuter then
+            handle._outlineOuter:SetShown(isSelected and not interactiveSelected)
+        end
+        if handle._tag then
+            handle._tag:SetShown(isSelected and not interactiveSelected)
+        end
+
+        if isSelected then
+            if interactiveSelected then
+                ApplyBackdrop(handle,
+                    categoryColor[1] * 0.20, categoryColor[2] * 0.20, categoryColor[3] * 0.20, 0.55,
+                    categoryColor[1], categoryColor[2], categoryColor[3], 1)
+                if handle._label then
+                    handle._label:Show()
+                    handle._label:SetTextColor(1, 0.95, 0.85, 1)
+                end
+                if handle._cat then
+                    handle._cat:Show()
+                    handle._cat:SetTextColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.8)
+                end
+                if handle._hint then
+                    handle._hint:Show()
+                    handle._hint:SetTextColor(0.45, 0.47, 0.56, 0.85)
+                end
+            else
+                ApplyBackdrop(handle,
+                    categoryColor[1] * 0.05, categoryColor[2] * 0.05, categoryColor[3] * 0.05, 0.04,
+                    categoryColor[1], categoryColor[2], categoryColor[3], 0.18)
+                if handle._label then handle._label:Hide() end
+                if handle._cat then handle._cat:Hide() end
+                if handle._hint then handle._hint:Hide() end
+            end
+        elseif selectedKey ~= nil then
+            ApplyBackdrop(handle,
+                categoryColor[1] * 0.08, categoryColor[2] * 0.08, categoryColor[3] * 0.08, 0.12,
+                categoryColor[1], categoryColor[2], categoryColor[3], 0.35)
+            if handle._label then
+                handle._label:Show()
+                handle._label:SetTextColor(1, 0.95, 0.85, 0.45)
+            end
+            if handle._cat then
+                handle._cat:Show()
+                handle._cat:SetTextColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.35)
+            end
+            if handle._hint then
+                handle._hint:Show()
+                handle._hint:SetTextColor(0.45, 0.47, 0.56, 0.28)
+            end
+        else
+            local hoveredOnly = isHovered and handle._dragging ~= true
+            ApplyBackdrop(handle,
+                categoryColor[1] * (hoveredOnly and 0.28 or 0.15),
+                categoryColor[2] * (hoveredOnly and 0.28 or 0.15),
+                categoryColor[3] * (hoveredOnly and 0.28 or 0.15),
+                hoveredOnly and 0.9 or 0.78,
+                categoryColor[1], categoryColor[2], categoryColor[3], hoveredOnly and 1 or 0.9)
+            if handle._label then
+                handle._label:Show()
+                handle._label:SetTextColor(1, 0.95, 0.85, 1)
+            end
+            if handle._cat then
+                handle._cat:Show()
+                handle._cat:SetTextColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.7)
+            end
+            if handle._hint then
+                handle._hint:Show()
+                handle._hint:SetTextColor(0.45, 0.47, 0.56, 0.85)
+            end
+        end
+
+        if handle._tagLabel and opts then
+            handle._tagLabel:SetText(BuildHandleLabel(opts))
+        end
+    end
+end
+
 function MoverModule:_EnsureHandle(key)
     if self._handles[key] then return self._handles[key] end
     local opts = self._registry[key]
@@ -1409,6 +1512,39 @@ function MoverModule:_EnsureHandle(key)
     hint:SetTextColor(0.45, 0.47, 0.56, 0.85)
     h._hint = hint
 
+    local outline = CreateFrame("Frame", nil, h, "BackdropTemplate")
+    outline:SetPoint("TOPLEFT", h, "TOPLEFT", -6, 6)
+    outline:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 6, -6)
+    outline:EnableMouse(false)
+    ApplyBackdrop(outline, 0, 0, 0, 0, catCol[1], catCol[2], catCol[3], 1)
+    outline:Hide()
+    h._outline = outline
+
+    local outlineOuter = CreateFrame("Frame", nil, h, "BackdropTemplate")
+    outlineOuter:SetPoint("TOPLEFT", h, "TOPLEFT", -8, 8)
+    outlineOuter:SetPoint("BOTTOMRIGHT", h, "BOTTOMRIGHT", 8, -8)
+    outlineOuter:EnableMouse(false)
+    ApplyBackdrop(outlineOuter, 0, 0, 0, 0, catCol[1], catCol[2], catCol[3], 0.55)
+    outlineOuter:Hide()
+    h._outlineOuter = outlineOuter
+
+    local tag = CreateFrame("Frame", nil, h, "BackdropTemplate")
+    tag:SetSize(132, 18)
+    tag:SetPoint("BOTTOMLEFT", h, "TOPLEFT", -2, 8)
+    tag:EnableMouse(false)
+    ApplyBackdrop(tag, 0.03, 0.05, 0.07, 0.94, catCol[1], catCol[2], catCol[3], 0.95)
+    local tagLabel = tag:CreateFontString(nil, "OVERLAY")
+    tagLabel:SetPoint("LEFT", tag, "LEFT", 6, 0)
+    tagLabel:SetPoint("RIGHT", tag, "RIGHT", -6, 0)
+    tagLabel:SetJustifyH("LEFT")
+    tagLabel:SetJustifyV("MIDDLE")
+    SetFont(tagLabel, 9)
+    tagLabel:SetText(BuildHandleLabel(opts))
+    tagLabel:SetTextColor(1, 0.96, 0.90, 1)
+    tag:Hide()
+    h._tag = tag
+    h._tagLabel = tagLabel
+
     h._key = key
 
     -- Store original position on drag start
@@ -1440,6 +1576,7 @@ function MoverModule:_EnsureHandle(key)
         if inspector and inspector._activeKey == key then
             inspector:Hide()
         end
+        MoverModule:_RefreshHandleVisualStates()
     end)
 
     h:SetScript("OnDragStop", function(self)
@@ -1544,21 +1681,19 @@ function MoverModule:_EnsureHandle(key)
             -- Close inspector if it's showing this mover
             local insp = MoverModule._inspector
             if insp and insp._activeKey == key then insp:Hide() end
+            MoverModule:_RefreshHandleVisualStates()
         end
     end)
 
     h:SetScript("OnEnter", function(self)
         local insp = MoverModule._inspector
         if insp then insp.CancelHide() end
-        -- Highlight using the category colour
-        local cc = self._catColor or C_ACCENT
-        self:SetBackdropColor(cc[1] * 0.28, cc[2] * 0.28, cc[3] * 0.28, 0.9)
-        self:SetBackdropBorderColor(cc[1], cc[2], cc[3], 1)
+        self._hovered = true
+        MoverModule:_RefreshHandleVisualStates()
     end)
     h:SetScript("OnLeave", function(self)
-        local cc = self._catColor or C_ACCENT
-        self:SetBackdropColor(cc[1] * 0.15, cc[2] * 0.15, cc[3] * 0.15, 0.78)
-        self:SetBackdropBorderColor(cc[1], cc[2], cc[3], 0.9)
+        self._hovered = false
+        MoverModule:_RefreshHandleVisualStates()
     end)
 
     h:Hide()
@@ -1593,6 +1728,7 @@ function MoverModule:_PositionHandle(key)
                 h:SetPoint("TOPRIGHT", liveFrame, "TOPRIGHT", 0, 0)
                 if h._label then h._label:SetText(BuildHandleLabel(opts)) end
                 if h._cat then h._cat:SetText(opts.category or "") end
+                self:_RefreshHandleVisualStates()
                 local insp = self._inspector
                 if insp and insp._activeKey == key and insp:IsShown() then
                     insp.RefreshBoxes()
@@ -1628,6 +1764,7 @@ function MoverModule:_PositionHandle(key)
 
     if h._label then h._label:SetText(BuildHandleLabel(opts)) end
     if h._cat then h._cat:SetText(opts.category or "") end
+    self:_RefreshHandleVisualStates()
 
     -- Update inspector boxes if this handle is currently active
     local insp = self._inspector
@@ -1646,6 +1783,7 @@ function MoverModule:_RefreshHandleVisibility(key)
         self:_PositionHandle(key)
         if self._active then h:Show() end
     end
+    self:_RefreshHandleVisualStates()
 end
 
 -- ── Overlay (full-screen dim + HUD bar) ─────────────────────────────────────
@@ -1788,6 +1926,7 @@ function MoverModule:Activate()
 
     print(
         "|cff19c9c7[TwichUI]|r Interface Designer active — drag handles or click for quick controls. |cffff6060ESC|r or Exit button to close.")
+    self:_RefreshHandleVisualStates()
 end
 
 function MoverModule:Deactivate()
@@ -1810,6 +1949,7 @@ function MoverModule:Deactivate()
     -- Hide overlay / HUD
     if self._overlay then self._overlay:Hide() end
     if self._hud then self._hud:Hide() end
+    self:_RefreshHandleVisualStates()
 
     print("|cff19c9c7[TwichUI]|r Interface Designer closed.")
 
