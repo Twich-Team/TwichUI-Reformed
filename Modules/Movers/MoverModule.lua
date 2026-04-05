@@ -32,58 +32,66 @@
         })
 ]]
 
-local TwichRx                     = _G.TwichRx
+local TwichRx                             = _G.TwichRx
 ---@type TwichUI
-local T                           = unpack(TwichRx)
+local T                                   = unpack(TwichRx)
 
 ---@class TwichMoverModule : AceModule, AceEvent-3.0
 ---@field _snapLineH Frame|nil
 ---@field _snapLineV Frame|nil
-local MoverModule                 = T:NewModule("Movers", "AceEvent-3.0")
+local MoverModule                         = T:NewModule("Movers", "AceEvent-3.0")
 
-_G.TwichMoverModule               = MoverModule
+_G.TwichMoverModule                       = MoverModule
 
-local CreateFrame                 = _G.CreateFrame
-local UIParent                    = _G.UIParent
-local InCombatLockdown            = _G.InCombatLockdown
-local IsShiftKeyDown              = _G.IsShiftKeyDown
-local C_Timer                     = _G.C_Timer
-local math_floor                  = math.floor
-local math_max                    = math.max
-local math_min                    = math.min
-local math_abs                    = math.abs
+local CreateFrame                         = _G.CreateFrame
+local UIParent                            = _G.UIParent
+local InCombatLockdown                    = _G.InCombatLockdown
+local IsShiftKeyDown                      = _G.IsShiftKeyDown
+local C_Timer                             = _G.C_Timer
+local ColorPickerFrame                    = _G.ColorPickerFrame
+local math_floor                          = math.floor
+local math_ceil                           = math.ceil
+local math_max                            = math.max
+local math_min                            = math.min
+local math_abs                            = math.abs
 
-local DESIGNER_DOCK_WIDTH         = 360
-local DESIGNER_DOCK_INSET         = 16
-local DESIGNER_DOCK_CONTENT_WIDTH = DESIGNER_DOCK_WIDTH - (DESIGNER_DOCK_INSET * 2)
+local DESIGNER_DOCK_WIDTH                 = 440
+local DESIGNER_DOCK_INSET                 = 16
+local DESIGNER_DOCK_CONTENT_WIDTH         = DESIGNER_DOCK_WIDTH - (DESIGNER_DOCK_INSET * 2)
+local DESIGNER_DOCK_SCROLLBAR_WIDTH       = 12
+local DESIGNER_DOCK_SCROLLBAR_GAP         = 6
+local DESIGNER_DOCK_VISIBLE_CONTENT_WIDTH = DESIGNER_DOCK_CONTENT_WIDTH - DESIGNER_DOCK_SCROLLBAR_WIDTH -
+    DESIGNER_DOCK_SCROLLBAR_GAP
 
 -- ── Snapping constants ───────────────────────────────────────────────────────
 -- Frames snap when a dragged edge comes within SNAP_THRESHOLD px of a target.
 -- Hold Shift while dragging to bypass snapping for pixel-perfect placement.
-local SNAP_THRESHOLD              = 16
+local SNAP_THRESHOLD                      = 16
 
 -- ── Colours (match the rest of TwichUI) ────────────────────────────────────
-local C_ACCENT                    = { 0.10, 0.72, 0.74 } -- teal
-local C_BG                        = { 0.05, 0.06, 0.09 }
-local C_BORDER                    = { 0.10, 0.72, 0.74 }
-local C_LABEL                     = { 0.55, 0.58, 0.68 }
-local C_BTN_BG                    = { 0.09, 0.11, 0.15 }
-local C_BTN_BD                    = { 0.20, 0.22, 0.30 }
-local C_DOCK_BORDER               = { 0.94, 0.77, 0.28 }
-local C_DOCK_GLOW                 = { 0.94, 0.77, 0.28 }
-local C_DOCK_TEXT                 = { 0.72, 0.74, 0.80 }
-local C_DOCK_PILL                 = { 0.14, 0.11, 0.08 }
-local C_DOCK_PILL_TEXT            = { 1.00, 0.95, 0.82 }
-local C_CFG_ACCENT                = { 0.98, 0.76, 0.22 }
-local C_TAB_ACCENT                = { 0.78, 0.82, 0.88 }
-local C_DOCK_ACTION_ACCENT        = { 0.98, 0.68, 0.26 }
-local C_DOCK_RANGE_ACCENT         = { 0.44, 0.82, 0.98 }
-local C_DOCK_SELECT_ACCENT        = { 0.42, 0.89, 0.63 }
-local C_DOCK_TOGGLE_ACCENT        = { 0.81, 0.58, 0.95 }
+local C_ACCENT                            = { 0.10, 0.72, 0.74 } -- teal
+local C_BG                                = { 0.05, 0.06, 0.09 }
+local C_BORDER                            = { 0.10, 0.72, 0.74 }
+local C_LABEL                             = { 0.55, 0.58, 0.68 }
+local C_BTN_BG                            = { 0.09, 0.11, 0.15 }
+local C_BTN_BD                            = { 0.20, 0.22, 0.30 }
+local C_DOCK_BORDER                       = { 0.94, 0.77, 0.28 }
+local C_DOCK_GLOW                         = { 0.94, 0.77, 0.28 }
+local C_DOCK_TEXT                         = { 0.72, 0.74, 0.80 }
+local C_DOCK_PILL                         = { 0.14, 0.11, 0.08 }
+local C_DOCK_PILL_TEXT                    = { 1.00, 0.95, 0.82 }
+local C_CFG_ACCENT                        = { 0.98, 0.76, 0.22 }
+local C_TAB_ACCENT                        = { 0.78, 0.82, 0.88 }
+local C_DOCK_ACTION_ACCENT                = { 0.98, 0.68, 0.26 }
+local C_DOCK_RANGE_ACCENT                 = { 0.44, 0.82, 0.98 }
+local C_DOCK_SELECT_ACCENT                = { 0.42, 0.89, 0.63 }
+local C_DOCK_TOGGLE_ACCENT                = { 0.81, 0.58, 0.95 }
+local C_DOCK_INPUT_ACCENT                 = { 0.74, 0.84, 0.98 }
+local C_DOCK_COLOR_ACCENT                 = { 0.98, 0.56, 0.66 }
 
 -- ── Per-category tint colours ────────────────────────────────────────────────
 -- Handles are tinted by category so the user can identify module groups at a glance.
-local CATEGORY_COLORS             = {
+local CATEGORY_COLORS                     = {
     ["Unit Frames"] = { 0.32, 0.55, 0.98 }, -- blue
     ["Action Bars"] = { 0.98, 0.62, 0.22 }, -- orange
     ["Data Panels"] = { 0.32, 0.85, 0.45 }, -- green
@@ -92,13 +100,13 @@ local CATEGORY_COLORS             = {
     -- fallback: teal (C_ACCENT) for anything unrecognised
 }
 
-local OVERLAY_ALPHA               = 0.65 -- translucency of the full-screen backdrop
+local OVERLAY_ALPHA                       = 0.65 -- translucency of the full-screen backdrop
 
 -- ── Registry ────────────────────────────────────────────────────────────────
-MoverModule._registry             = MoverModule._registry or {} -- key → opts
-MoverModule._handles              = MoverModule._handles or {}  -- key → handle frame
-MoverModule._hidden               = MoverModule._hidden or {}   -- key → true  (temp-hidden)
-MoverModule._active               = false
+MoverModule._registry                     = MoverModule._registry or {} -- key → opts
+MoverModule._handles                      = MoverModule._handles or {} -- key → handle frame
+MoverModule._hidden                       = MoverModule._hidden or {} -- key → true  (temp-hidden)
+MoverModule._active                       = false
 
 -- ── Font helper ─────────────────────────────────────────────────────────────
 local function ResolveFont(size)
@@ -292,7 +300,7 @@ function MoverModule:_GetInspector()
     local dockHeaderFrame = CreateFrame("Frame", nil, dock, "BackdropTemplate")
     dockHeaderFrame:SetPoint("TOPLEFT", dock, "TOPLEFT", 6, -6)
     dockHeaderFrame:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -6, -6)
-    dockHeaderFrame:SetHeight(60)
+    dockHeaderFrame:SetHeight(84)
     ApplyBackdrop(dockHeaderFrame, 0.08, 0.08, 0.11, 0.98, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.24)
     dockHeaderFrame:SetFrameLevel(dock:GetFrameLevel() + 2)
 
@@ -309,7 +317,7 @@ function MoverModule:_GetInspector()
     local dockHeader = dockHeaderFrame:CreateTexture(nil, "ARTWORK")
     dockHeader:SetPoint("TOPLEFT", dockHeaderFrame, "TOPLEFT", 1, -1)
     dockHeader:SetPoint("TOPRIGHT", dockHeaderFrame, "TOPRIGHT", -1, -1)
-    dockHeader:SetHeight(57)
+    dockHeader:SetHeight(81)
     dockHeader:SetColorTexture(0.08, 0.08, 0.11, 0.96)
 
     local dockHeaderGlow = dockHeaderFrame:CreateTexture(nil, "ARTWORK")
@@ -325,14 +333,14 @@ function MoverModule:_GetInspector()
     dockHeaderBottom:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.55)
 
     local dockGlow = dock:CreateTexture(nil, "BACKGROUND")
-    dockGlow:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, -62)
-    dockGlow:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, -62)
+    dockGlow:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, -86)
+    dockGlow:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, -86)
     dockGlow:SetHeight(96)
     dockGlow:SetColorTexture(C_DOCK_GLOW[1], C_DOCK_GLOW[2], C_DOCK_GLOW[3], 0.025)
 
     local dockSpotlight = dock:CreateTexture(nil, "BACKGROUND")
-    dockSpotlight:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, -62)
-    dockSpotlight:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, -62)
+    dockSpotlight:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, -86)
+    dockSpotlight:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, -86)
     dockSpotlight:SetHeight(180)
     dockSpotlight:SetColorTexture(1, 1, 1, 0.015)
 
@@ -378,6 +386,31 @@ function MoverModule:_GetInspector()
     dockSubtitle:SetTextColor(0.72, 0.74, 0.80)
     dock._subtitle = dockSubtitle
 
+    local dockHeaderToggle = CreateFrame("Button", nil, dockHeaderContent, "BackdropTemplate")
+    dockHeaderToggle:SetSize(124, 20)
+    dockHeaderToggle:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 18, -56)
+    dockHeaderToggle:SetFrameStrata(dockHeaderFrame:GetFrameStrata())
+    dockHeaderToggle:SetFrameLevel(dockHeaderContent:GetFrameLevel() + 4)
+    ApplyBackdrop(dockHeaderToggle, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
+        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+    local dockHeaderToggleFS = dockHeaderToggle:CreateFontString(nil, "OVERLAY")
+    dockHeaderToggleFS:SetAllPoints(dockHeaderToggle)
+    dockHeaderToggleFS:SetJustifyH("CENTER")
+    dockHeaderToggleFS:SetJustifyV("MIDDLE")
+    SetFont(dockHeaderToggleFS, 10)
+    dockHeaderToggle._fs = dockHeaderToggleFS
+    dockHeaderToggle:Hide()
+    dockHeaderToggle:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(C_DOCK_TOGGLE_ACCENT[1] * 0.18, C_DOCK_TOGGLE_ACCENT[2] * 0.18,
+            C_DOCK_TOGGLE_ACCENT[3] * 0.18, 0.98)
+        self:SetBackdropBorderColor(C_DOCK_TOGGLE_ACCENT[1], C_DOCK_TOGGLE_ACCENT[2], C_DOCK_TOGGLE_ACCENT[3], 0.88)
+    end)
+    dockHeaderToggle:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
+        self:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+    end)
+    dock._headerToggleBtn = dockHeaderToggle
+
     local dockBtn = CreateFrame("Button", nil, dockHeaderContent, "BackdropTemplate")
     dockBtn:SetSize(74, 20)
     dockBtn:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -10, -10)
@@ -404,8 +437,8 @@ function MoverModule:_GetInspector()
 
     local dockDivider = dock:CreateTexture(nil, "ARTWORK")
     dockDivider:SetHeight(1)
-    dockDivider:SetPoint("TOPLEFT", dock, "TOPLEFT", DESIGNER_DOCK_INSET, -82)
-    dockDivider:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -DESIGNER_DOCK_INSET, -82)
+    dockDivider:SetPoint("TOPLEFT", dock, "TOPLEFT", DESIGNER_DOCK_INSET, -94)
+    dockDivider:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -DESIGNER_DOCK_INSET, -94)
     dockDivider:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.40)
 
     local dockTopEdge = dock:CreateTexture(nil, "BORDER")
@@ -563,6 +596,20 @@ function MoverModule:_GetInspector()
         end
 
         return string.format("%.2f", tonumber(value) or 0)
+    end
+
+    local function ResolveExtraColor(extra)
+        local color = type(extra.get) == "function" and extra.get() or extra.defaultColor
+        if type(color) ~= "table" then
+            color = extra.defaultColor
+        end
+
+        local red = tonumber(color and (color.r or color[1])) or 1
+        local green = tonumber(color and (color.g or color[2])) or 1
+        local blue = tonumber(color and (color.b or color[3])) or 1
+        local alpha = tonumber(color and (color.a or color[4])) or 1
+
+        return red, green, blue, alpha
     end
 
     local function StyleExtraState(frame, enabled)
@@ -1098,11 +1145,58 @@ function MoverModule:_GetInspector()
     panel.hideBtn = hideBtn
 
     -- ── Extra controls placeholder (rebuilt on Show) ─────────────────────
-    dock._extrasContainer = CreateFrame("Frame", nil, dock)
-    dock._extrasContainer:SetPoint("TOPLEFT", dock, "TOPLEFT", DESIGNER_DOCK_INSET, -118)
-    dock._extrasContainer:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -DESIGNER_DOCK_INSET, -118)
+    dock._extrasScrollFrame = CreateFrame("ScrollFrame", nil, dock)
+    dock._extrasScrollFrame:SetPoint("TOPLEFT", dock, "TOPLEFT", DESIGNER_DOCK_INSET, -104)
+    dock._extrasScrollFrame:SetPoint("TOPRIGHT", dock, "TOPRIGHT",
+        -(DESIGNER_DOCK_INSET + DESIGNER_DOCK_SCROLLBAR_WIDTH + DESIGNER_DOCK_SCROLLBAR_GAP), -118)
+    dock._extrasScrollFrame:SetPoint("BOTTOM", dock, "BOTTOM", 0, DESIGNER_DOCK_INSET)
+    dock._extrasScrollFrame:EnableMouseWheel(true)
+    dock._extrasScrollFrame:Hide()
+
+    dock._extrasContainer = CreateFrame("Frame", nil, dock._extrasScrollFrame)
+    dock._extrasContainer:SetPoint("TOPLEFT", dock._extrasScrollFrame, "TOPLEFT", 0, 0)
+    dock._extrasContainer:SetWidth(DESIGNER_DOCK_VISIBLE_CONTENT_WIDTH)
     dock._extrasContainer:SetHeight(0)
     dock._extrasContainer:Hide()
+    dock._extrasScrollFrame:SetScrollChild(dock._extrasContainer)
+    dock._extrasContentWidth = DESIGNER_DOCK_VISIBLE_CONTENT_WIDTH
+
+    local extrasScrollBar = CreateFrame("Slider", nil, dock, "BackdropTemplate")
+    extrasScrollBar:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -DESIGNER_DOCK_INSET, -118)
+    extrasScrollBar:SetPoint("BOTTOMRIGHT", dock, "BOTTOMRIGHT", -DESIGNER_DOCK_INSET, DESIGNER_DOCK_INSET)
+    extrasScrollBar:SetWidth(DESIGNER_DOCK_SCROLLBAR_WIDTH)
+    extrasScrollBar:SetOrientation("VERTICAL")
+    extrasScrollBar:SetMinMaxValues(0, 0)
+    extrasScrollBar:SetValue(0)
+    extrasScrollBar:SetValueStep(12)
+    extrasScrollBar:SetObeyStepOnDrag(true)
+    ApplyBackdrop(extrasScrollBar, 0.05, 0.06, 0.09, 0.92, C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 0.55)
+    extrasScrollBar:Hide()
+    dock._extrasScrollBar = extrasScrollBar
+
+    local scrollThumb = extrasScrollBar:CreateTexture(nil, "ARTWORK")
+    scrollThumb:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.75)
+    scrollThumb:SetSize(DESIGNER_DOCK_SCROLLBAR_WIDTH - 4, 36)
+    extrasScrollBar:SetThumbTexture(scrollThumb)
+
+    extrasScrollBar:SetScript("OnValueChanged", function(self, value)
+        if dock._extrasScrollFrame then
+            dock._extrasScrollFrame:SetVerticalScroll(value or 0)
+        end
+    end)
+
+    dock._extrasScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        local bar = dock._extrasScrollBar
+        if not bar or not bar:IsShown() then
+            return
+        end
+
+        local minValue, maxValue = bar:GetMinMaxValues()
+        local step = math_max(18, bar:GetValueStep() or 0)
+        local nextValue = (bar:GetValue() or 0) - ((delta or 0) * step)
+        nextValue = math_max(minValue or 0, math_min(maxValue or 0, nextValue))
+        bar:SetValue(nextValue)
+    end)
 
     -- Dynamic height is recalculated in panel.Activate().
     panel._baseHeight = math_abs(hideY) + 20 + 8 -- extra margin below hide btn
@@ -1229,6 +1323,9 @@ function MoverModule:_GetInspector()
 
         -- Rebuild extra controls in dock
         local ec = dock._extrasContainer
+        local scrollFrame = dock._extrasScrollFrame
+        local scrollBar = dock._extrasScrollBar
+        local headerToggle = dock._headerToggleBtn
         if dock._extraSelectMenu and dock._extraSelectMenu.Hide then
             dock._extraSelectMenu:Hide()
         end
@@ -1238,15 +1335,56 @@ function MoverModule:_GetInspector()
         end
         ec._extraWidgets = {}
         ec:Hide()
+        if scrollFrame then
+            scrollFrame:Hide()
+            scrollFrame:SetVerticalScroll(0)
+        end
+        if scrollBar then
+            scrollBar:Hide()
+            scrollBar:SetMinMaxValues(0, 0)
+            scrollBar:SetValue(0)
+        end
+        if headerToggle then
+            headerToggle:Hide()
+            headerToggle:SetScript("OnClick", nil)
+        end
         dock:Hide()
+
+        if headerToggle and type(opts.headerToggle) == "table" and type(opts.headerToggle.get) == "function" and type(opts.headerToggle.set) == "function" then
+            local toggleSpec = opts.headerToggle
+            local function RefreshHeaderToggleText()
+                local isEnabled = toggleSpec.get() == true
+                headerToggle._fs:SetText(string.format("%s: %s", toggleSpec.label or "Toggle",
+                    isEnabled and "On" or "Off"))
+                headerToggle._fs:SetTextColor(isEnabled and C_DOCK_TOGGLE_ACCENT[1] or C_DOCK_TEXT[1],
+                    isEnabled and C_DOCK_TOGGLE_ACCENT[2] or C_DOCK_TEXT[2],
+                    isEnabled and C_DOCK_TOGGLE_ACCENT[3] or C_DOCK_TEXT[3])
+            end
+
+            RefreshHeaderToggleText()
+            headerToggle:SetScript("OnClick", function()
+                toggleSpec.set(toggleSpec.get() ~= true)
+                RefreshHeaderToggleText()
+                C_Timer.After(0, function()
+                    if panel._activeKey == key then
+                        panel.Activate(key, MoverModule._handles[key] or anchorHandle)
+                    end
+                end)
+            end)
+            headerToggle:Show()
+        end
 
         local extraH = 0
         local extras = opts.extras
         if type(extras) == "table" and #extras > 0 then
             ec:Show()
+            if scrollFrame then
+                scrollFrame:Show()
+            end
             dock._title:SetText(opts.label or key)
             dock._subtitle:SetText(opts.category or "Designer Control")
             local curY = -4
+            local contentWidth = dock._extrasContentWidth or DESIGNER_DOCK_VISIBLE_CONTENT_WIDTH
             panel._tabSelections = panel._tabSelections or {}
             local function QueueRefresh()
                 C_Timer.After(0, function()
@@ -1286,10 +1424,24 @@ function MoverModule:_GetInspector()
                 return btn
             end
 
+            local function MeasureTabWidth(text)
+                local measure = ec._measureFS
+                if not measure then
+                    measure = ec:CreateFontString(nil, "OVERLAY")
+                    measure:Hide()
+                    ec._measureFS = measure
+                end
+                SetFont(measure, 10)
+                measure:SetText(text or "")
+                local measured = math_ceil((measure:GetStringWidth() or 0) + 20)
+                return math_max(76, math_min(contentWidth, measured))
+            end
+
             local tabKeys = {}
             local tabLabels = {}
             for _, extra in ipairs(extras) do
-                if type(extra.tab) == "string" and tabLabels[extra.tab] == nil then
+                local extraHidden = type(extra.hidden) == "function" and extra.hidden() == true
+                if not extraHidden and type(extra.tab) == "string" and tabLabels[extra.tab] == nil then
                     tabKeys[#tabKeys + 1] = extra.tab
                     tabLabels[extra.tab] = extra.tabLabel or extra.tab
                 end
@@ -1310,24 +1462,33 @@ function MoverModule:_GetInspector()
                     panel._tabSelections[key] = activeTab
                 end
 
-                local tabCount = math.max(1, #tabKeys)
                 local gap = 6
-                local tabWidth = math.floor(((DESIGNER_DOCK_CONTENT_WIDTH - ((tabCount - 1) * gap)) / tabCount) + 0.5)
+                local tabX = 0
+                local tabRow = 0
+                local tabHeight = 20
                 for index, tabKey in ipairs(tabKeys) do
-                    local xOffset = (index - 1) * (tabWidth + gap)
-                    local tabButton = MakeExtraBtn(ec, tabLabels[tabKey], xOffset, curY, tabWidth, 20, function()
-                        if dock._extraSelectMenu and dock._extraSelectMenu.Hide then
-                            dock._extraSelectMenu:Hide()
-                        end
-                        panel._tabSelections[key] = tabKey
-                        QueueRefresh()
-                    end, { kind = "tab", accent = C_TAB_ACCENT })
+                    local tabWidth = MeasureTabWidth(tabLabels[tabKey])
+                    if tabX > 0 and (tabX + tabWidth) > contentWidth then
+                        tabX = 0
+                        tabRow = tabRow + 1
+                    end
+                    local tabButton = MakeExtraBtn(ec, tabLabels[tabKey], tabX, curY - (tabRow * (tabHeight + 8)),
+                        tabWidth, tabHeight, function()
+                            if dock._extraSelectMenu and dock._extraSelectMenu.Hide then
+                                dock._extraSelectMenu:Hide()
+                            end
+                            panel._tabSelections[key] = tabKey
+                            QueueRefresh()
+                        end, { kind = "tab", accent = C_TAB_ACCENT })
                     tabButton._selected = tabKey == activeTab
                     StyleExtraState(tabButton, true)
                     ec._extraWidgets[#ec._extraWidgets + 1] = tabButton
+                    tabX = tabX + tabWidth + gap
                 end
-                curY = curY - 28
-                extraH = extraH + 28
+                local tabRows = tabRow + 1
+                local tabBlockHeight = (tabRows * tabHeight) + ((tabRows - 1) * 8) + 8
+                curY = curY - tabBlockHeight
+                extraH = extraH + tabBlockHeight
             end
 
             for extraIndex, extra in ipairs(extras) do
@@ -1372,7 +1533,7 @@ function MoverModule:_GetInspector()
                     extraH = extraH + 22
                 elseif not hidden and not tabHidden and extra.type == "execute" then
                     local btn = MakeExtraBtn(ec, extra.buttonLabel or extra.label or "Action", 0, curY,
-                        DESIGNER_DOCK_CONTENT_WIDTH, 22,
+                        contentWidth, 22,
                         function()
                             if ResolveExtraDisabled(extra) then
                                 return
@@ -1416,7 +1577,7 @@ function MoverModule:_GetInspector()
                             QueueRefresh()
                         end
                     end, { kind = "button", accent = C_DOCK_RANGE_ACCENT, fontSize = 14, iconOnly = true })
-                    local plus = MakeExtraBtn(ec, "+", DESIGNER_DOCK_CONTENT_WIDTH - 24, rowY, 24, 18, function()
+                    local plus = MakeExtraBtn(ec, "+", contentWidth - 24, rowY, 24, 18, function()
                         if ResolveExtraDisabled(extra) then
                             return
                         end
@@ -1432,7 +1593,7 @@ function MoverModule:_GetInspector()
                         end
                     end, { kind = "button", accent = C_DOCK_RANGE_ACCENT, fontSize = 14, iconOnly = true })
                     local valueBox = CreateFrame("EditBox", nil, ec, "BackdropTemplate")
-                    valueBox:SetSize(DESIGNER_DOCK_CONTENT_WIDTH - 56, 18)
+                    valueBox:SetSize(contentWidth - 56, 18)
                     valueBox:SetPoint("TOPLEFT", ec, "TOPLEFT", 28, rowY)
                     ApplyBackdrop(valueBox, 0.08, 0.08, 0.10, 0.96, C_DOCK_RANGE_ACCENT[1], C_DOCK_RANGE_ACCENT[2],
                         C_DOCK_RANGE_ACCENT[3], 0.22)
@@ -1494,6 +1655,152 @@ function MoverModule:_GetInspector()
 
                     curY = curY - 38
                     extraH = extraH + 38
+                elseif not hidden and not tabHidden and extra.type == "input" then
+                    local lbl = ec:CreateFontString(nil, "OVERLAY")
+                    lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY)
+                    lbl:SetPoint("TOPRIGHT", ec, "TOPRIGHT", 0, curY)
+                    SetFont(lbl, 10)
+                    lbl:SetText(extra.label or "")
+                    lbl:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3])
+                    ec._extraWidgets[#ec._extraWidgets + 1] = lbl
+
+                    local disabled = ResolveExtraDisabled(extra)
+                    local currentValue = type(extra.get) == "function" and extra.get() or ""
+                    local rowY = curY - 14
+                    local valueBox = CreateFrame("EditBox", nil, ec, "BackdropTemplate")
+                    valueBox:SetSize(contentWidth, 18)
+                    valueBox:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, rowY)
+                    ApplyBackdrop(valueBox, 0.08, 0.08, 0.10, 0.96, C_DOCK_INPUT_ACCENT[1], C_DOCK_INPUT_ACCENT[2],
+                        C_DOCK_INPUT_ACCENT[3], 0.22)
+                    valueBox:SetTextInsets(5, 5, 2, 2)
+                    valueBox:SetAutoFocus(false)
+                    valueBox:SetMaxLetters(tonumber(extra.maxLetters) or 128)
+                    valueBox:SetJustifyH(extra.justifyH or "LEFT")
+                    SetFont(valueBox, 10)
+                    valueBox:SetText(tostring(currentValue or ""))
+                    valueBox:SetScript("OnEnter", CancelHide)
+                    valueBox:SetScript("OnLeave", ScheduleHide)
+                    valueBox:SetScript("OnEditFocusGained", function(self)
+                        CancelHide()
+                        self:HighlightText()
+                    end)
+                    valueBox:SetScript("OnEscapePressed", function(self)
+                        local refreshedValue = type(extra.get) == "function" and extra.get() or ""
+                        self:SetText(tostring(refreshedValue or ""))
+                        self:HighlightText(0, 0)
+                        self:ClearFocus()
+                    end)
+                    valueBox:SetScript("OnEnterPressed", function(self)
+                        if ResolveExtraDisabled(extra) then
+                            local refreshedValue = type(extra.get) == "function" and extra.get() or ""
+                            self:SetText(tostring(refreshedValue or ""))
+                            self:ClearFocus()
+                            return
+                        end
+
+                        if type(extra.set) == "function" then
+                            extra.set(self:GetText())
+                        end
+
+                        local refreshedValue = type(extra.get) == "function" and extra.get() or self:GetText()
+                        self:SetText(tostring(refreshedValue or ""))
+                        self:HighlightText(0, 0)
+                        self:ClearFocus()
+                        QueueRefresh()
+                    end)
+                    valueBox:SetEnabled(not disabled)
+                    StyleExtraState(valueBox, valueBox:IsEnabled())
+                    ec._extraWidgets[#ec._extraWidgets + 1] = valueBox
+
+                    curY = curY - 38
+                    extraH = extraH + 38
+                elseif not hidden and not tabHidden and extra.type == "color" then
+                    local lbl = ec:CreateFontString(nil, "OVERLAY")
+                    lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY)
+                    lbl:SetPoint("TOPRIGHT", ec, "TOPRIGHT", 0, curY)
+                    SetFont(lbl, 10)
+                    lbl:SetText(extra.label or "")
+                    lbl:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3])
+                    ec._extraWidgets[#ec._extraWidgets + 1] = lbl
+
+                    local disabled = ResolveExtraDisabled(extra)
+                    local red, green, blue, alpha = ResolveExtraColor(extra)
+                    local rowY = curY - 14
+
+                    local swatch = CreateFrame("Button", nil, ec, "BackdropTemplate")
+                    swatch:SetSize(28, 20)
+                    swatch:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, rowY)
+                    ApplyBackdrop(swatch, 0.08, 0.08, 0.10, 0.96, C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2],
+                        C_DOCK_COLOR_ACCENT[3], 0.22)
+                    local fill = swatch:CreateTexture(nil, "ARTWORK")
+                    fill:SetPoint("TOPLEFT", swatch, "TOPLEFT", 3, -3)
+                    fill:SetPoint("BOTTOMRIGHT", swatch, "BOTTOMRIGHT", -3, 3)
+                    fill:SetColorTexture(red, green, blue, alpha)
+                    swatch._fill = fill
+                    swatch:SetScript("OnEnter", CancelHide)
+                    swatch:SetScript("OnLeave", ScheduleHide)
+                    swatch:SetScript("OnClick", function()
+                        if disabled or not ColorPickerFrame or not ColorPickerFrame.SetupColorPickerAndShow then
+                            return
+                        end
+
+                        local cr, cg, cb, ca = ResolveExtraColor(extra)
+                        local function applyColor()
+                            local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+                            local na = extra.hasAlpha == true and ColorPickerFrame.GetColorAlpha and
+                                ColorPickerFrame:GetColorAlpha() or 1
+                            if type(extra.set) == "function" then
+                                extra.set({ nr, ng, nb, na })
+                            end
+                            QueueRefresh()
+                        end
+
+                        local function cancelColor(previousValues)
+                            local prev = previousValues or { r = cr, g = cg, b = cb, a = ca, opacity = ca }
+                            local prevAlpha = prev.a
+                            if prevAlpha == nil then
+                                prevAlpha = prev.opacity
+                            end
+                            if type(extra.set) == "function" then
+                                extra.set({ prev.r, prev.g, prev.b, prevAlpha or ca })
+                            end
+                            QueueRefresh()
+                        end
+
+                        ColorPickerFrame:SetupColorPickerAndShow({
+                            r = cr,
+                            g = cg,
+                            b = cb,
+                            opacity = ca,
+                            hasOpacity = extra.hasAlpha == true,
+                            swatchFunc = applyColor,
+                            func = applyColor,
+                            opacityFunc = applyColor,
+                            cancelFunc = cancelColor,
+                        })
+                    end)
+
+                    local buttonLabel = string.format("R:%d G:%d B:%d%s", math_floor(red * 255 + 0.5),
+                        math_floor(green * 255 + 0.5), math_floor(blue * 255 + 0.5),
+                        extra.hasAlpha == true and string.format(" A:%d", math_floor(alpha * 100 + 0.5)) or "")
+                    local openBtn = MakeExtraBtn(ec, buttonLabel, 34, rowY, contentWidth - 34, 20,
+                        function()
+                            if swatch and swatch.Click then
+                                swatch:Click()
+                            elseif swatch and swatch.GetScript then
+                                local onClick = swatch:GetScript("OnClick")
+                                if onClick then onClick(swatch) end
+                            end
+                        end, { kind = "button", accent = C_DOCK_COLOR_ACCENT, justifyH = "LEFT" })
+                    openBtn:SetEnabled(not disabled)
+                    swatch:SetEnabled(not disabled)
+                    StyleExtraState(swatch, swatch:IsEnabled())
+                    StyleExtraState(openBtn, openBtn:IsEnabled())
+                    ec._extraWidgets[#ec._extraWidgets + 1] = swatch
+                    ec._extraWidgets[#ec._extraWidgets + 1] = openBtn
+
+                    curY = curY - 38
+                    extraH = extraH + 38
                 elseif not hidden and not tabHidden and extra.type == "select" then
                     local values, orderedKeys = ResolveExtraOptions(extra)
                     local currentKey = type(extra.get) == "function" and extra.get() or orderedKeys[1]
@@ -1509,7 +1816,7 @@ function MoverModule:_GetInspector()
                     local disabled = ResolveExtraDisabled(extra) or #orderedKeys <= 0
                     local rowY = curY - 14
                     local dropdownBtn = MakeExtraBtn(ec, tostring(values[currentKey] or extra.placeholder or "Select"), 0,
-                        rowY, DESIGNER_DOCK_CONTENT_WIDTH, 20, function(self)
+                        rowY, contentWidth, 20, function(self)
                             if ResolveExtraDisabled(extra) then
                                 return
                             end
@@ -1564,15 +1871,6 @@ function MoverModule:_GetInspector()
                 return panel._dockSessionSide
             end
 
-            if anchorHandle then
-                local left, _, right = GetFrameScreenRect(anchorHandle)
-                local centerX = ((left or 0) + (right or left or 0)) * 0.5
-                local screenMid = (UIParent:GetWidth() or 1280) * 0.5
-                if centerX < screenMid then
-                    return "RIGHT"
-                end
-            end
-
             return "LEFT"
         end
 
@@ -1612,6 +1910,22 @@ function MoverModule:_GetInspector()
         if type(extras) == "table" and #extras > 0 then
             local dockHeight = math.floor(math_max(420, math_min((UIParent:GetHeight() or 768) * 0.72, 760)) + 0.5)
             dock:SetHeight(dockHeight)
+            if scrollFrame and ec then
+                local availableHeight = math_max(0, dockHeight - 118 - DESIGNER_DOCK_INSET)
+                local visibleWidth = math_max(120, DESIGNER_DOCK_CONTENT_WIDTH - DESIGNER_DOCK_SCROLLBAR_WIDTH -
+                    DESIGNER_DOCK_SCROLLBAR_GAP)
+                dock._extrasContentWidth = visibleWidth
+                ec:SetWidth(visibleWidth)
+
+                if scrollBar then
+                    local contentHeight = ec:GetHeight() or 0
+                    local maxScroll = math_max(0, contentHeight - availableHeight)
+                    scrollBar:SetMinMaxValues(0, maxScroll)
+                    scrollBar:SetShown(maxScroll > 0)
+                    scrollFrame:SetVerticalScroll(0)
+                    scrollBar:SetValue(0)
+                end
+            end
             dock:ClearAllPoints()
             if dockSide == "LEFT" then
                 dock:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, -42)
@@ -2331,6 +2645,56 @@ function MoverModule:_BuildOverlay()
         "Drag to reposition · snaps to edges & other frames · |cffffcc00Shift|r: bypass snap · Left-click: inspector · Right-click: hide")
     hudHint:SetTextColor(0.55, 0.58, 0.68)
 
+    local function StyleHudButton(button, normalBg, normalBorder, hoverBg, hoverBorder)
+        button:SetScript("OnEnter", function(self)
+            self:SetBackdropColor(hoverBg[1], hoverBg[2], hoverBg[3], hoverBg[4] or 1)
+            self:SetBackdropBorderColor(hoverBorder[1], hoverBorder[2], hoverBorder[3], hoverBorder[4] or 1)
+        end)
+        button:SetScript("OnLeave", function(self)
+            self:SetBackdropColor(normalBg[1], normalBg[2], normalBg[3], normalBg[4] or 1)
+            self:SetBackdropBorderColor(normalBorder[1], normalBorder[2], normalBorder[3], normalBorder[4] or 1)
+        end)
+    end
+
+    local addBarBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
+    addBarBtn:SetSize(124, 22)
+    addBarBtn:SetPoint("RIGHT", hud, "RIGHT", -238, 0)
+    ApplyBackdrop(addBarBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
+        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+    local addBarFS = addBarBtn:CreateFontString(nil, "OVERLAY")
+    addBarFS:SetAllPoints(addBarBtn)
+    addBarFS:SetJustifyH("CENTER")
+    addBarFS:SetJustifyV("MIDDLE")
+    SetFont(addBarFS, 10)
+    addBarFS:SetText("Add Action Bar")
+    addBarBtn:SetScript("OnClick", function()
+        local actionBars = T:GetModule("ActionBars", true)
+        if not actionBars or type(actionBars.CreateCenteredDesignerBar) ~= "function" then
+            return
+        end
+
+        actionBars:CreateCenteredDesignerBar(function(barKey)
+            if not barKey then
+                return
+            end
+
+            local moverKey = "AB_" .. barKey
+            C_Timer.After(0, function()
+                local insp = MoverModule:_GetInspector()
+                local handle = MoverModule._handles[moverKey]
+                if insp and handle then
+                    insp:Show()
+                    insp.Activate(moverKey, handle)
+                end
+            end)
+        end)
+    end)
+    StyleHudButton(addBarBtn,
+        { C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1 },
+        { C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1 },
+        { C_DOCK_BORDER[1] * 0.22, C_DOCK_BORDER[2] * 0.22, C_DOCK_BORDER[3] * 0.22, 0.98 },
+        { C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.78 })
+
     -- Show Hidden button (reveals all temp-hidden)
     local showAllBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
     showAllBtn:SetSize(110, 22)
@@ -2349,14 +2713,11 @@ function MoverModule:_BuildOverlay()
             self:_RefreshHandleVisibility(key)
         end
     end)
-    showAllBtn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.22)
-        self:SetBackdropBorderColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 1)
-    end)
-    showAllBtn:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
-        self:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
-    end)
+    StyleHudButton(showAllBtn,
+        { C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1 },
+        { C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1 },
+        { C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.22 },
+        { C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 1 })
 
     -- Exit button
     local exitBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
@@ -2367,14 +2728,11 @@ function MoverModule:_BuildOverlay()
     exitFS:SetAllPoints(exitBtn); exitFS:SetJustifyH("CENTER"); exitFS:SetJustifyV("MIDDLE")
     SetFont(exitFS, 11); exitFS:SetText("Exit  [Esc]")
     exitBtn:SetScript("OnClick", function() MoverModule:Deactivate() end)
-    exitBtn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(0.55, 0.12, 0.12, 1)
-        self:SetBackdropBorderColor(0.90, 0.30, 0.30, 1)
-    end)
-    exitBtn:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(0.35, 0.08, 0.08, 1)
-        self:SetBackdropBorderColor(0.75, 0.20, 0.20, 1)
-    end)
+    StyleHudButton(exitBtn,
+        { 0.35, 0.08, 0.08, 1 },
+        { 0.75, 0.20, 0.20, 1 },
+        { 0.55, 0.12, 0.12, 1 },
+        { 0.90, 0.30, 0.30, 1 })
 
     -- ESC key closes mover mode
     ov:SetScript("OnKeyDown", function(self, key)
@@ -2383,6 +2741,7 @@ function MoverModule:_BuildOverlay()
     ov:SetPropagateKeyboardInput(false)
 
     hud._showAllBtn = showAllBtn
+    hud._addBarBtn  = addBarBtn
     self._overlay   = ov
     self._hud       = hud
     self:_RefreshOverlayCutout(nil)
@@ -2431,6 +2790,11 @@ end
 
 function MoverModule:Deactivate()
     self._active = false
+
+    local unitFrames = T:GetModule("UnitFrames", true)
+    if unitFrames and type(unitFrames.ClearDesignerPreviewModes) == "function" then
+        unitFrames:ClearDesignerPreviewModes()
+    end
 
     -- Hide all handles
     for _, h in pairs(self._handles) do

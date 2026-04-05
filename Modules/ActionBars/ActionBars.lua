@@ -1464,6 +1464,107 @@ function ActionBars:FindDesignerSiblingBar(sourceBarKey, direction)
     end)
 end
 
+function ActionBars:FindNextDisabledDesignerBar()
+    local ordered = {}
+    for _, definition in ipairs(BAR_DEFINITIONS) do
+        local order = self:GetPrimaryBarOrder(definition.key)
+        if order then
+            ordered[#ordered + 1] = {
+                key = definition.key,
+                order = order,
+            }
+        end
+    end
+
+    table.sort(ordered, function(a, b)
+        return a.order < b.order
+    end)
+
+    for _, entry in ipairs(ordered) do
+        local settings = self:GetBarSettings(entry.key)
+        if settings and settings.enabled ~= true then
+            return entry.key
+        end
+    end
+
+    return nil
+end
+
+function ActionBars:CreateCenteredDesignerBar(onComplete)
+    if InCombatLockdown() then
+        print("|cff19c9c7[TwichUI]|r Action bars cannot be added in combat.")
+        if type(onComplete) == "function" then
+            onComplete(nil)
+        end
+        return false
+    end
+
+    local targetBarKey = self:FindNextDisabledDesignerBar()
+    if not targetBarKey then
+        print("|cff19c9c7[TwichUI]|r No disabled action bars are available to enable.")
+        if type(onComplete) == "function" then
+            onComplete(nil)
+        end
+        return false
+    end
+
+    local targetSettings = self:GetBarSettings(targetBarKey)
+    if not targetSettings then
+        if type(onComplete) == "function" then
+            onComplete(nil)
+        end
+        return false
+    end
+
+    self:NormalizeDesignerBarSettings(targetBarKey, targetSettings)
+    targetSettings.enabled = true
+    targetSettings.point = "BOTTOMLEFT"
+    targetSettings.relativePoint = "BOTTOMLEFT"
+
+    self:RequestRefresh()
+
+    local moversModule = _G.TwichMoverModule
+    C_Timer.After(0, function()
+        C_Timer.After(0, function()
+            local holder = ActionBars.holders[targetBarKey]
+            local holderWidth = holder and holder.GetWidth and holder:GetWidth() or nil
+            local holderHeight = holder and holder.GetHeight and holder:GetHeight() or nil
+            local fallbackWidth = (targetSettings.buttonSize or 36) * math.max(1, targetSettings.buttonsPerRow or 12)
+            local fallbackRows = math.max(1,
+                math.ceil((targetSettings.buttonCount or targetSettings.buttonsPerRow or 12) /
+                    math.max(1, targetSettings.buttonsPerRow or 12)))
+            local fallbackHeight = ((targetSettings.buttonSize or 36) * fallbackRows) +
+                (math.max(0, fallbackRows - 1) * (targetSettings.spacing or 6))
+            local width = math.max(1, math.floor((holderWidth or fallbackWidth) + 0.5))
+            local height = math.max(1, math.floor((holderHeight or fallbackHeight) + 0.5))
+            local centerX = (UIParent:GetWidth() or 0) * 0.5
+            local centerY = (UIParent:GetHeight() or 0) * 0.5
+            local finalX = math.floor((centerX - (width * 0.5)) + 0.5)
+            local finalY = math.floor((centerY - (height * 0.5)) + 0.5)
+            local persistedX, persistedY = ActionBars:PersistBarLayout(targetBarKey, finalX, finalY)
+
+            if holder then
+                holder:ClearAllPoints()
+                holder:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", persistedX or finalX, persistedY or finalY)
+            end
+
+            ActionBars:RefreshAll()
+
+            if moversModule and moversModule._RefreshHandleVisibility then
+                moversModule:_RefreshHandleVisibility("AB_" .. targetBarKey)
+            end
+            if moversModule and moversModule._PositionHandle then
+                moversModule:_PositionHandle("AB_" .. targetBarKey)
+            end
+            if type(onComplete) == "function" then
+                onComplete(targetBarKey)
+            end
+        end)
+    end)
+
+    return true
+end
+
 function ActionBars:CreateSiblingBarFromSource(sourceBarKey, direction)
     if InCombatLockdown() then
         print("|cff19c9c7[TwichUI]|r Action bars cannot be added in combat.")

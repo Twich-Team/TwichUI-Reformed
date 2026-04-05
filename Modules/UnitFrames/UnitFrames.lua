@@ -7761,7 +7761,7 @@ end
 function UnitFrames:ApplyHeaderSettings(header, groupKey)
     local settings = self:GetGroupSettings(groupKey)
     local layout = self:GetLayoutSettings(groupKey)
-    local testMode = self:GetDB().testMode == true
+    local testMode = self:GetDB().testMode == true or self:IsDesignerPreviewEnabled(groupKey)
     local growthDirection = ResolveGroupGrowthDirection(settings, "DOWN")
 
     local enabled = settings.enabled ~= false
@@ -8810,10 +8810,1470 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         thunder = "Blue Sparkle",
         void = "Void",
     }
+    local HEADER_GROWTH_VALUES = {
+        DOWN = "Down",
+        UP = "Up",
+        LEFT = "Left",
+        RIGHT = "Right",
+    }
+    local HEADER_WRAP_VALUES = {
+        LEFT = "Left",
+        RIGHT = "Right",
+        TOP = "Top",
+        BOTTOM = "Bottom",
+    }
+    local TEXTURE_BLEND_VALUES = {
+        BLEND = "Blend",
+        ADD = "Add",
+        MOD = "Multiply",
+        ALPHAKEY = "Alpha Key",
+    }
 
     local extras = {}
     local function AddExtra(extra)
         extras[#extras + 1] = extra
+    end
+    local POINT_SELECT_VALUES = {
+        TOPLEFT = "Top Left",
+        TOP = "Top",
+        TOPRIGHT = "Top Right",
+        LEFT = "Left",
+        CENTER = "Center",
+        RIGHT = "Right",
+        BOTTOMLEFT = "Bottom Left",
+        BOTTOM = "Bottom",
+        BOTTOMRIGHT = "Bottom Right",
+    }
+    local OUTLINE_SELECT_VALUES = {
+        NONE = "None",
+        OUTLINE = "Outline",
+        THICKOUTLINE = "Thick Outline",
+        MONOCHROME = "Monochrome",
+        MONOCHROMEOUTLINE = "Mono Outline",
+        MONOCHROMETHICKOUTLINE = "Mono Thick",
+    }
+    local NAME_FORMAT_VALUES = {
+        full = "Full",
+        short = "Short",
+        none = "None",
+        custom = "Custom",
+    }
+    local RESOURCE_FORMAT_VALUES = {
+        percent = "Percent",
+        current = "Current",
+        currentPercent = "Current + Percent",
+        missing = "Missing",
+        none = "None",
+        custom = "Custom",
+    }
+    local HEALTH_MODE_VALUES = {
+        theme = "Theme",
+        class = "Class",
+        custom = "Custom",
+    }
+    local UNIT_HEALTH_MODE_VALUES = {
+        inherit = "Inherit",
+        theme = "Theme",
+        class = "Class",
+        custom = "Custom",
+    }
+    local POWER_MODE_VALUES = {
+        custom = "Custom",
+        powertype = "Power Type",
+    }
+    local UNIT_POWER_MODE_VALUES = {
+        inherit = "Inherit",
+        custom = "Custom",
+        powertype = "Power Type",
+    }
+    local JUSTIFY_VALUES = {
+        LEFT = "Left",
+        CENTER = "Center",
+        RIGHT = "Right",
+    }
+    local AURA_FILTER_VALUES = {
+        ALL = "All",
+        HELPFUL = "Buffs",
+        HARMFUL = "Debuffs",
+    }
+    local ROLE_ICON_FILTER_VALUES = {
+        all = "All",
+        assigned = "Assigned Only",
+        nonDps = "Non-DPS",
+        healers = "Healers",
+        tanks = "Tanks",
+    }
+    local ROLE_ICON_CORNER_VALUES = {
+        TOPLEFT = "Top Left",
+        TOPRIGHT = "Top Right",
+        BOTTOMLEFT = "Bottom Left",
+        BOTTOMRIGHT = "Bottom Right",
+    }
+    local INFO_BAR_TEXT_SLOTS = {
+        [1] = "1",
+        [2] = "2",
+        [3] = "3",
+    }
+    local SINGLE_COPY_VALUES = {
+        player = "Player",
+        target = "Target",
+        targettarget = "Target of Target",
+        focus = "Focus",
+        pet = "Pet",
+    }
+    local GROUP_COPY_VALUES = {
+        party = "Party",
+        raid = "Raid",
+        tank = "Tank",
+    }
+    local styleUnitKey = layoutKey
+    if isHeader then
+        if layoutKey == "party" then
+            styleUnitKey = "partyMember"
+        elseif layoutKey == "raid" then
+            styleUnitKey = "raidMember"
+        elseif layoutKey == "tank" then
+            styleUnitKey = "tankMember"
+        elseif layoutKey == "boss" then
+            styleUnitKey = "boss"
+        end
+    end
+    local styleScopeKey = ResolveScopeByUnitKey(styleUnitKey)
+
+    local function DesignerRefreshAllFrames()
+        UnitFrames._auraConfigCache = nil
+        UnitFrames:RefreshAllFrames()
+    end
+
+    local function EnsureNestedTable(root, ...)
+        local current = root
+        for index = 1, select("#", ...) do
+            local key = select(index, ...)
+            if type(current[key]) ~= "table" then
+                current[key] = {}
+            end
+            current = current[key]
+        end
+        return current
+    end
+
+    local function DeepCopyValue(value)
+        if type(value) ~= "table" then
+            return value
+        end
+
+        local copy = {}
+        for key, entry in pairs(value) do
+            copy[key] = DeepCopyValue(entry)
+        end
+        return copy
+    end
+
+    local function GetScopeHealthDefaultMode()
+        local db = UnitFrames:GetDB()
+        if db.useThemeAccentHealth == true then
+            return "theme"
+        end
+        return db.useClassColor == true and "class" or "theme"
+    end
+
+    local function GetSingleCopySelectionStore()
+        UnitFrames._designerDockSingleCopy = UnitFrames._designerDockSingleCopy or {}
+        return UnitFrames._designerDockSingleCopy
+    end
+
+    local function GetGroupCopySelectionStore()
+        UnitFrames._designerDockGroupCopy = UnitFrames._designerDockGroupCopy or {}
+        return UnitFrames._designerDockGroupCopy
+    end
+
+    local function GetTextOverrideTable()
+        local db = UnitFrames:GetDB()
+        if styleScopeKey == "singles" and not isHeader then
+            return EnsureNestedTable(db, "units", layoutKey, "text")
+        end
+        return EnsureNestedTable(db, "text", "scopes", styleScopeKey)
+    end
+
+    local function GetAuraOverrideTable()
+        local db = UnitFrames:GetDB()
+        if styleScopeKey == "singles" and not isHeader then
+            return EnsureNestedTable(db, "units", layoutKey, "auras")
+        end
+        return EnsureNestedTable(db, "auras", "scopes", styleScopeKey)
+    end
+
+    local function GetInfoBarOverrideTable()
+        local db = UnitFrames:GetDB()
+        if isHeader then
+            if layoutKey == "boss" then
+                return nil
+            end
+            return EnsureNestedTable(db, "groups", layoutKey, "infoBar")
+        end
+        return EnsureNestedTable(db, "units", layoutKey, "infoBar")
+    end
+
+    local function GetRoleIconOverrideTable()
+        local db = UnitFrames:GetDB()
+        if isHeader then
+            if layoutKey == "boss" then
+                return nil
+            end
+            return EnsureNestedTable(db, "groups", layoutKey, "roleIcon")
+        end
+        return EnsureNestedTable(db, "units", layoutKey, "roleIcon")
+    end
+
+    local function GetIndicatorOverrideTable(indicatorKey)
+        local db = UnitFrames:GetDB()
+        if isHeader and layoutKey ~= "boss" then
+            return EnsureNestedTable(db, "groups", layoutKey, indicatorKey)
+        end
+        return EnsureNestedTable(db, "units", layoutKey == "boss" and "boss" or layoutKey, indicatorKey)
+    end
+
+    local function GetColorOverrideTable()
+        local db = UnitFrames:GetDB()
+        if isHeader then
+            return EnsureNestedTable(db, "colors", "scopes", styleScopeKey)
+        end
+        return EnsureNestedTable(db, "units", layoutKey, "colors")
+    end
+
+    local function GetHealthColorOverrideTable()
+        local db = UnitFrames:GetDB()
+        if isHeader then
+            return EnsureNestedTable(db, "healthColorByScope", styleScopeKey)
+        end
+        return EnsureNestedTable(db, "units", layoutKey, "healthColor")
+    end
+
+    local function IsDetachedPlayerPower()
+        if layoutKey ~= "player" then
+            return false
+        end
+        local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+        return unitSettings and unitSettings.powerDetached == true
+    end
+
+    local function GetCustomFrameOverrideTable()
+        return EnsureNestedTable(UnitFrames:GetDB(), "units", layoutKey, "customFrame")
+    end
+
+    local function GetDesignerPreviewToggleValue(previewKey)
+        local db = UnitFrames:GetDB()
+        return UnitFrames:IsDesignerPreviewEnabled(previewKey)
+    end
+
+    local function SetDesignerPreviewToggle(previewKey, enabled)
+        UnitFrames:SetTestPreviewGroupEnabled(previewKey, enabled == true)
+    end
+
+    local function AddCustomFrameExtras()
+        if layoutKey ~= "player" and layoutKey ~= "target" then
+            return
+        end
+
+        AddExtra({
+            label = "Enable Custom Art",
+            type = "toggle",
+            tab = "art",
+            tabLabel = "Art",
+            get = function()
+                local cfg = GetCustomFrameOverrideTable()
+                return cfg.enabled == true
+            end,
+            set = function(value)
+                GetCustomFrameOverrideTable().enabled = value == true
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label = "Texture / Media Name",
+            type = "input",
+            tab = "art",
+            tabLabel = "Art",
+            get = function()
+                local cfg = GetCustomFrameOverrideTable()
+                return tostring(cfg.texture or "")
+            end,
+            set = function(value)
+                local trimmed = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+                GetCustomFrameOverrideTable().texture = trimmed ~= "" and trimmed or nil
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetCustomFrameOverrideTable().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Raw Texture Path",
+            type = "input",
+            tab = "art",
+            tabLabel = "Art",
+            get = function()
+                local cfg = GetCustomFrameOverrideTable()
+                return tostring(cfg.texturePath or "")
+            end,
+            set = function(value)
+                local trimmed = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+                GetCustomFrameOverrideTable().texturePath = trimmed ~= "" and trimmed or nil
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetCustomFrameOverrideTable().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Tint",
+            type = "color",
+            hasAlpha = true,
+            tab = "art",
+            tabLabel = "Art",
+            get = function()
+                local cfg = GetCustomFrameOverrideTable()
+                return cfg.color or CUSTOM_FRAME_DEFAULTS.color
+            end,
+            set = function(value)
+                GetCustomFrameOverrideTable().color = DeepCopyValue(value)
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetCustomFrameOverrideTable().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Blend Mode",
+            type = "select",
+            tab = "art",
+            tabLabel = "Art",
+            values = TEXTURE_BLEND_VALUES,
+            get = function()
+                local cfg = GetCustomFrameOverrideTable()
+                return cfg.blendMode or CUSTOM_FRAME_DEFAULTS.blendMode
+            end,
+            set = function(value)
+                GetCustomFrameOverrideTable().blendMode = TEXTURE_BLEND_VALUES[value] and value or "BLEND"
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetCustomFrameOverrideTable().enabled ~= true
+            end,
+        })
+
+        local customArtRanges = {
+            { field = "extraWidth",  label = "Extra Width",  min = -200, max = 400 },
+            { field = "extraHeight", label = "Extra Height", min = -120, max = 240 },
+            { field = "offsetX",     label = "Offset X",     min = -200, max = 200 },
+            { field = "offsetY",     label = "Offset Y",     min = -200, max = 200 },
+        }
+        for _, entry in ipairs(customArtRanges) do
+            AddExtra({
+                label = entry.label,
+                type = "range",
+                tab = "art",
+                tabLabel = "Art",
+                min = entry.min,
+                max = entry.max,
+                step = 1,
+                get = function()
+                    local cfg = GetCustomFrameOverrideTable()
+                    local fallback = CUSTOM_FRAME_DEFAULTS[entry.field] or 0
+                    return tonumber(cfg[entry.field]) or fallback
+                end,
+                set = function(value)
+                    GetCustomFrameOverrideTable()[entry.field] = tonumber(value) or 0
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return GetCustomFrameOverrideTable().enabled ~= true
+                end,
+            })
+        end
+    end
+
+    local function AddCopyExtras()
+        if isHeader then
+            if layoutKey == "boss" then
+                return
+            end
+
+            AddExtra({
+                label = "Copy From",
+                type = "select",
+                tab = "copy",
+                tabLabel = "Copy",
+                values = function()
+                    local values = {}
+                    for key, label in pairs(GROUP_COPY_VALUES) do
+                        if key ~= layoutKey then
+                            values[key] = label
+                        end
+                    end
+                    return values
+                end,
+                get = function()
+                    return GetGroupCopySelectionStore()[layoutKey]
+                end,
+                set = function(value)
+                    GetGroupCopySelectionStore()[layoutKey] = value
+                end,
+            })
+            AddExtra({
+                label = "Copy Settings",
+                type = "execute",
+                tab = "copy",
+                tabLabel = "Copy",
+                func = function()
+                    local sourceKey = GetGroupCopySelectionStore()[layoutKey]
+                    if not sourceKey or sourceKey == layoutKey then
+                        return
+                    end
+
+                    local db = UnitFrames:GetDB()
+                    db.groups = db.groups or {}
+                    db.groups[layoutKey] = db.groups[layoutKey] or {}
+                    for key, value in pairs(db.groups[sourceKey] or {}) do
+                        if key ~= "enabled" then
+                            db.groups[layoutKey][key] = DeepCopyValue(value)
+                        end
+                    end
+
+                    db.text = db.text or {}
+                    db.text.scopes = db.text.scopes or {}
+                    if db.text.scopes[sourceKey] then
+                        db.text.scopes[layoutKey] = DeepCopyValue(db.text.scopes[sourceKey])
+                    end
+
+                    db.auras = db.auras or {}
+                    db.auras.scopes = db.auras.scopes or {}
+                    if db.auras.scopes[sourceKey] then
+                        db.auras.scopes[layoutKey] = DeepCopyValue(db.auras.scopes[sourceKey])
+                    end
+
+                    db.colors = db.colors or {}
+                    db.colors.scopes = db.colors.scopes or {}
+                    if db.colors.scopes[sourceKey] then
+                        db.colors.scopes[layoutKey] = DeepCopyValue(db.colors.scopes[sourceKey])
+                    end
+
+                    db.healthColorByScope = db.healthColorByScope or {}
+                    if db.healthColorByScope[sourceKey] then
+                        db.healthColorByScope[layoutKey] = DeepCopyValue(db.healthColorByScope[sourceKey])
+                    end
+
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    local sourceKey = GetGroupCopySelectionStore()[layoutKey]
+                    return not sourceKey or sourceKey == layoutKey
+                end,
+            })
+        else
+            AddExtra({
+                label = "Copy From",
+                type = "select",
+                tab = "copy",
+                tabLabel = "Copy",
+                values = function()
+                    local values = {}
+                    for key, label in pairs(SINGLE_COPY_VALUES) do
+                        if key ~= layoutKey then
+                            values[key] = label
+                        end
+                    end
+                    return values
+                end,
+                get = function()
+                    return GetSingleCopySelectionStore()[layoutKey]
+                end,
+                set = function(value)
+                    GetSingleCopySelectionStore()[layoutKey] = value
+                end,
+            })
+            AddExtra({
+                label = "Copy Settings",
+                type = "execute",
+                tab = "copy",
+                tabLabel = "Copy",
+                func = function()
+                    local sourceKey = GetSingleCopySelectionStore()[layoutKey]
+                    if not sourceKey or sourceKey == layoutKey then
+                        return
+                    end
+
+                    local db = UnitFrames:GetDB()
+                    db.units = db.units or {}
+                    db.units[layoutKey] = db.units[layoutKey] or {}
+                    for key, value in pairs(db.units[sourceKey] or {}) do
+                        if key ~= "enabled" then
+                            db.units[layoutKey][key] = DeepCopyValue(value)
+                        end
+                    end
+
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    local sourceKey = GetSingleCopySelectionStore()[layoutKey]
+                    return not sourceKey or sourceKey == layoutKey
+                end,
+            })
+        end
+    end
+
+    local function AddColorExtras()
+        AddExtra({
+            label = "Health Color Mode",
+            type = "select",
+            tab = "colors",
+            tabLabel = "Colors",
+            values = isHeader and HEALTH_MODE_VALUES or UNIT_HEALTH_MODE_VALUES,
+            get = function()
+                local override = GetHealthColorOverrideTable()
+                return override.mode or (isHeader and GetScopeHealthDefaultMode() or "inherit")
+            end,
+            set = function(value)
+                GetHealthColorOverrideTable().mode = value
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label = "Custom Health",
+            type = "color",
+            hasAlpha = true,
+            tab = "colors",
+            tabLabel = "Colors",
+            get = function()
+                local override = GetHealthColorOverrideTable()
+                return override.color or UnitFrames:GetPalette(styleUnitKey).health
+            end,
+            set = function(value)
+                GetHealthColorOverrideTable().color = DeepCopyValue(value)
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return (GetHealthColorOverrideTable().mode or (isHeader and GetScopeHealthDefaultMode() or "inherit")) ~=
+                "custom"
+            end,
+        })
+        AddExtra({
+            label = "Power Color Mode",
+            type = "select",
+            tab = "colors",
+            tabLabel = "Colors",
+            values = isHeader and POWER_MODE_VALUES or UNIT_POWER_MODE_VALUES,
+            get = function()
+                local override = GetColorOverrideTable()
+                return override.powerColorMode or
+                (isHeader and (UnitFrames:GetDB().powerColorMode or "custom") or "inherit")
+            end,
+            set = function(value)
+                GetColorOverrideTable().powerColorMode = value
+                DesignerRefreshAllFrames()
+            end,
+        })
+
+        local colorFields = {
+            { field = "power",           label = "Power",           onlyCustomPower = true },
+            { field = "powerBackground", label = "Power Background" },
+            { field = "powerBorder",     label = "Power Border" },
+            { field = "cast",            label = "Cast" },
+            { field = "background",      label = "Background" },
+            { field = "border",          label = "Border" },
+        }
+        for _, entry in ipairs(colorFields) do
+            AddExtra({
+                label = entry.label,
+                type = "color",
+                hasAlpha = true,
+                tab = "colors",
+                tabLabel = "Colors",
+                get = function()
+                    return GetColorOverrideTable()[entry.field] or UnitFrames:GetPalette(styleUnitKey)[entry.field]
+                end,
+                set = function(value)
+                    GetColorOverrideTable()[entry.field] = DeepCopyValue(value)
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    if not entry.onlyCustomPower then
+                        return false
+                    end
+                    local mode = GetColorOverrideTable().powerColorMode or
+                    (isHeader and (UnitFrames:GetDB().powerColorMode or "custom") or "inherit")
+                    return mode == "powertype"
+                end,
+            })
+        end
+    end
+
+    local function AddTextExtras()
+        local function GetTextConfig()
+            return UnitFrames:GetTextConfigFor(styleUnitKey)
+        end
+
+        local formatFields = {
+            { field = "nameFormat",   label = "Name",   values = NAME_FORMAT_VALUES,     customField = "customNameTag",   customLabel = "Custom Name Tag" },
+            { field = "healthFormat", label = "Health", values = RESOURCE_FORMAT_VALUES, customField = "customHealthTag", customLabel = "Custom Health Tag" },
+            { field = "powerFormat",  label = "Power",  values = RESOURCE_FORMAT_VALUES, customField = "customPowerTag",  customLabel = "Custom Power Tag" },
+        }
+
+        for _, entry in ipairs(formatFields) do
+            AddExtra({
+                label = entry.label,
+                type = "select",
+                tab = "text",
+                tabLabel = "Text",
+                values = entry.values,
+                get = function()
+                    return GetTextConfig()[entry.field]
+                end,
+                set = function(value)
+                    GetTextOverrideTable()[entry.field] = value
+                    DesignerRefreshAllFrames()
+                end,
+            })
+            AddExtra({
+                label = entry.customLabel,
+                type = "input",
+                tab = "text",
+                tabLabel = "Text",
+                get = function()
+                    return tostring(GetTextConfig()[entry.customField] or "")
+                end,
+                set = function(value)
+                    local trimmed = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+                    GetTextOverrideTable()[entry.customField] = trimmed ~= "" and trimmed or nil
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return GetTextConfig()[entry.field] ~= "custom"
+                end,
+            })
+        end
+
+        AddExtra({
+            label = "Outline",
+            type = "select",
+            tab = "text",
+            tabLabel = "Text",
+            values = OUTLINE_SELECT_VALUES,
+            get = function()
+                return GetTextConfig().outlineMode or "OUTLINE"
+            end,
+            set = function(value)
+                GetTextOverrideTable().outlineMode = value
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label = "Name Size",
+            type = "range",
+            tab = "text",
+            tabLabel = "Text",
+            min = 6,
+            max = 28,
+            step = 1,
+            get = function()
+                return tonumber(GetTextConfig().nameFontSize) or 11
+            end,
+            set = function(value)
+                GetTextOverrideTable().nameFontSize = math.floor((tonumber(value) or 11) + 0.5)
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label = "Health Size",
+            type = "range",
+            tab = "text",
+            tabLabel = "Text",
+            min = 6,
+            max = 28,
+            step = 1,
+            get = function()
+                return tonumber(GetTextConfig().healthFontSize) or 10
+            end,
+            set = function(value)
+                GetTextOverrideTable().healthFontSize = math.floor((tonumber(value) or 10) + 0.5)
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label = "Power Size",
+            type = "range",
+            tab = "text",
+            tabLabel = "Text",
+            min = 6,
+            max = 28,
+            step = 1,
+            get = function()
+                return tonumber(GetTextConfig().powerFontSize) or 9
+            end,
+            set = function(value)
+                GetTextOverrideTable().powerFontSize = math.floor((tonumber(value) or 9) + 0.5)
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label = "Text Shadow",
+            type = "toggle",
+            tab = "text",
+            tabLabel = "Text",
+            get = function()
+                return GetTextConfig().shadowEnabled == true
+            end,
+            set = function(value)
+                GetTextOverrideTable().shadowEnabled = value == true
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label = "Shadow Color",
+            type = "color",
+            hasAlpha = true,
+            tab = "text",
+            tabLabel = "Text",
+            get = function()
+                return GetTextConfig().shadowColor or { 0, 0, 0, 0.85 }
+            end,
+            set = function(value)
+                GetTextOverrideTable().shadowColor = DeepCopyValue(value)
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetTextConfig().shadowEnabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Shadow X",
+            type = "range",
+            tab = "text",
+            tabLabel = "Text",
+            min = -8,
+            max = 8,
+            step = 1,
+            get = function()
+                return tonumber(GetTextConfig().shadowOffsetX) or 1
+            end,
+            set = function(value)
+                GetTextOverrideTable().shadowOffsetX = tonumber(value) or 1
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetTextConfig().shadowEnabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Shadow Y",
+            type = "range",
+            tab = "text",
+            tabLabel = "Text",
+            min = -8,
+            max = 8,
+            step = 1,
+            get = function()
+                return tonumber(GetTextConfig().shadowOffsetY) or -1
+            end,
+            set = function(value)
+                GetTextOverrideTable().shadowOffsetY = tonumber(value) or -1
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetTextConfig().shadowEnabled ~= true
+            end,
+        })
+
+        local colorEntries = {
+            { field = "nameColor",   label = "Name Color" },
+            { field = "healthColor", label = "Health Color" },
+            { field = "powerColor",  label = "Power Color" },
+        }
+        for _, entry in ipairs(colorEntries) do
+            AddExtra({
+                label = entry.label,
+                type = "color",
+                hasAlpha = true,
+                tab = "text",
+                tabLabel = "Text",
+                get = function()
+                    return GetTextConfig()[entry.field] or { 1, 1, 1, 1 }
+                end,
+                set = function(value)
+                    GetTextOverrideTable()[entry.field] = DeepCopyValue(value)
+                    DesignerRefreshAllFrames()
+                end,
+            })
+        end
+
+        local positionEntries = {
+            { field = "namePoint",           label = "Name Point",      values = POINT_SELECT_VALUES },
+            { field = "nameRelativePoint",   label = "Name Relative",   values = POINT_SELECT_VALUES },
+            { field = "nameOffsetX",         label = "Name X",          min = -120,                  max = 120 },
+            { field = "nameOffsetY",         label = "Name Y",          min = -60,                   max = 60 },
+            { field = "healthPoint",         label = "Health Point",    values = POINT_SELECT_VALUES },
+            { field = "healthRelativePoint", label = "Health Relative", values = POINT_SELECT_VALUES },
+            { field = "healthOffsetX",       label = "Health X",        min = -120,                  max = 120 },
+            { field = "healthOffsetY",       label = "Health Y",        min = -60,                   max = 60 },
+            { field = "powerPoint",          label = "Power Point",     values = POINT_SELECT_VALUES },
+            { field = "powerRelativePoint",  label = "Power Relative",  values = POINT_SELECT_VALUES },
+            { field = "powerOffsetX",        label = "Power X",         min = -120,                  max = 120 },
+            { field = "powerOffsetY",        label = "Power Y",         min = -60,                   max = 60 },
+        }
+        for _, entry in ipairs(positionEntries) do
+            AddExtra({
+                label = entry.label,
+                type = entry.values and "select" or "range",
+                tab = "textpos",
+                tabLabel = "Text Pos",
+                values = entry.values,
+                min = entry.min,
+                max = entry.max,
+                step = entry.values and nil or 1,
+                get = function()
+                    return GetTextConfig()[entry.field]
+                end,
+                set = function(value)
+                    GetTextOverrideTable()[entry.field] = value
+                    DesignerRefreshAllFrames()
+                end,
+            })
+        end
+    end
+
+    local function AddAuraExtras()
+        local function GetAuraConfig()
+            return UnitFrames:GetAuraConfigFor(styleUnitKey)
+        end
+
+        local baseEntries = {
+            { label = "Enable",      field = "enabled",    kind = "toggle" },
+            { label = "Filter",      field = "filter",     kind = "select", values = AURA_FILTER_VALUES },
+            { label = "Only Mine",   field = "onlyMine",   kind = "toggle" },
+            { label = "Count",       field = "maxIcons",   kind = "range",  min = 1,                    max = 20 },
+            { label = "Icon Size",   field = "iconSize",   kind = "range",  min = 10,                   max = 40 },
+            { label = "Spacing",     field = "spacing",    kind = "range",  min = 0,                    max = 12 },
+            { label = "Y Offset",    field = "yOffset",    kind = "range",  min = -40,                  max = 60 },
+            { label = "Bar Mode",    field = "barMode",    kind = "toggle" },
+            { label = "Bar Height",  field = "barHeight",  kind = "range",  min = 8,                    max = 30 },
+            { label = "Show Time",   field = "showTime",   kind = "toggle" },
+            { label = "Show Stacks", field = "showStacks", kind = "toggle" },
+        }
+
+        for _, entry in ipairs(baseEntries) do
+            AddExtra({
+                label = entry.label,
+                type = entry.kind,
+                tab = "auras",
+                tabLabel = "Auras",
+                values = entry.values,
+                min = entry.min,
+                max = entry.max,
+                step = entry.kind == "range" and 1 or nil,
+                get = function()
+                    local cfg = GetAuraConfig()
+                    if entry.kind == "toggle" then
+                        return cfg[entry.field] == true
+                    end
+                    return cfg[entry.field]
+                end,
+                set = function(value)
+                    local override = GetAuraOverrideTable()
+                    override[entry.field] = entry.kind == "toggle" and (value == true) or value
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    if entry.field == "barHeight" or entry.field == "showTime" or entry.field == "showStacks" then
+                        return GetAuraConfig().barMode ~= true
+                    end
+                    return false
+                end,
+            })
+        end
+
+        local colorEntries = {
+            { field = "barColor",       label = "Bar Fill" },
+            { field = "barBackground",  label = "Bar Background" },
+            { field = "barBorderColor", label = "Bar Border" },
+            { field = "barTextColor",   label = "Bar Text" },
+        }
+        for _, entry in ipairs(colorEntries) do
+            AddExtra({
+                label = entry.label,
+                type = "color",
+                hasAlpha = true,
+                tab = "auras",
+                tabLabel = "Auras",
+                get = function()
+                    return GetAuraConfig()[entry.field] or UnitFrames:GetPalette(styleUnitKey).cast
+                end,
+                set = function(value)
+                    GetAuraOverrideTable()[entry.field] = DeepCopyValue(value)
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return GetAuraConfig().barMode ~= true
+                end,
+            })
+        end
+    end
+
+    local function AddRoleIconExtras()
+        if isHeader and layoutKey == "boss" then
+            return
+        end
+
+        local function GetConfig()
+            return UnitFrames:GetRoleIconConfig(styleUnitKey)
+        end
+
+        AddExtra({
+            label = "Show Role Icon",
+            type = "toggle",
+            tab = "indicators",
+            tabLabel = "Indicators",
+            get = function()
+                return GetConfig().enabled == true
+            end,
+            set = function(value)
+                GetRoleIconOverrideTable().enabled = value == true
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label = "Show For",
+            type = "select",
+            tab = "indicators",
+            tabLabel = "Indicators",
+            values = ROLE_ICON_FILTER_VALUES,
+            get = function()
+                return GetConfig().filter or "all"
+            end,
+            set = function(value)
+                GetRoleIconOverrideTable().filter = value
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetConfig().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Corner",
+            type = "select",
+            tab = "indicators",
+            tabLabel = "Indicators",
+            values = ROLE_ICON_CORNER_VALUES,
+            get = function()
+                return GetConfig().corner or "TOPRIGHT"
+            end,
+            set = function(value)
+                GetRoleIconOverrideTable().corner = value
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetConfig().enabled ~= true
+            end,
+        })
+        local roleRangeFields = {
+            { field = "size",   label = "Role Size",    min = 8, max = 40 },
+            { field = "alpha",  label = "Role Alpha",   min = 0, max = 1, step = 0.01 },
+            { field = "insetX", label = "Role X Inset", min = 0, max = 20 },
+            { field = "insetY", label = "Role Y Inset", min = 0, max = 20 },
+        }
+        for _, entry in ipairs(roleRangeFields) do
+            AddExtra({
+                label = entry.label,
+                type = "range",
+                tab = "indicators",
+                tabLabel = "Indicators",
+                min = entry.min,
+                max = entry.max,
+                step = entry.step or 1,
+                get = function()
+                    return GetConfig()[entry.field]
+                end,
+                set = function(value)
+                    GetRoleIconOverrideTable()[entry.field] = value
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return GetConfig().enabled ~= true
+                end,
+            })
+        end
+    end
+
+    local function AddIndicatorExtraGroup(indicatorKey, label, isReadyCheck)
+        local function GetConfig()
+            if isReadyCheck then
+                return UnitFrames:GetReadyCheckIndicatorConfig(styleUnitKey)
+            end
+            return UnitFrames:GetStateIndicatorConfig(styleUnitKey, indicatorKey)
+        end
+
+        AddExtra({
+            label = label,
+            type = "label",
+            tab = "indicators",
+            tabLabel = "Indicators",
+            hidden = function()
+                return false
+            end,
+            text = label,
+        })
+        AddExtra({
+            label = "Enable " .. label,
+            type = "toggle",
+            tab = "indicators",
+            tabLabel = "Indicators",
+            get = function()
+                return GetConfig().enabled == true
+            end,
+            set = function(value)
+                GetIndicatorOverrideTable(isReadyCheck and "readyCheckIndicator" or indicatorKey).enabled = value == true
+                DesignerRefreshAllFrames()
+            end,
+        })
+        local indicatorEntries = {
+            { field = "point",         label = label .. " Point",    type = "select", values = POINT_SELECT_VALUES },
+            { field = "relativePoint", label = label .. " Relative", type = "select", values = POINT_SELECT_VALUES },
+            { field = "offsetX",       label = label .. " X",        type = "range",  min = -200,                  max = 200 },
+            { field = "offsetY",       label = label .. " Y",        type = "range",  min = -200,                  max = 200 },
+            { field = "size",          label = label .. " Size",     type = "range",  min = 8,                     max = 64 },
+            { field = "alpha",         label = label .. " Alpha",    type = "range",  min = 0,                     max = 1,  step = 0.01 },
+        }
+        for _, entry in ipairs(indicatorEntries) do
+            AddExtra({
+                label = entry.label,
+                type = entry.type,
+                tab = "indicators",
+                tabLabel = "Indicators",
+                values = entry.values,
+                min = entry.min,
+                max = entry.max,
+                step = entry.step or (entry.type == "range" and 1 or nil),
+                get = function()
+                    return GetConfig()[entry.field]
+                end,
+                set = function(value)
+                    GetIndicatorOverrideTable(isReadyCheck and "readyCheckIndicator" or indicatorKey)[entry.field] =
+                    value
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return GetConfig().enabled ~= true
+                end,
+            })
+        end
+    end
+
+    local function AddInfoBarExtras()
+        local overrideTable = GetInfoBarOverrideTable()
+        if not overrideTable then
+            return
+        end
+
+        local function GetConfig()
+            return UnitFrames:GetInfoBarConfig(styleUnitKey)
+        end
+
+        AddExtra({
+            label = "Enable Info Bar",
+            type = "toggle",
+            tab = "infobar",
+            tabLabel = "Info Bar",
+            get = function()
+                return GetConfig().enabled == true
+            end,
+            set = function(value)
+                overrideTable.enabled = value == true
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label = "Height",
+            type = "range",
+            tab = "infobar",
+            tabLabel = "Info Bar",
+            min = 8,
+            max = 40,
+            step = 1,
+            get = function()
+                return tonumber(GetConfig().height) or 18
+            end,
+            set = function(value)
+                overrideTable.height = math.floor((tonumber(value) or 18) + 0.5)
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetConfig().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Text Slots",
+            type = "select",
+            tab = "infobar",
+            tabLabel = "Info Bar",
+            values = INFO_BAR_TEXT_SLOTS,
+            get = function()
+                return tonumber(GetConfig().numTexts) or 3
+            end,
+            set = function(value)
+                overrideTable.numTexts = tonumber(value) or 3
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetConfig().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Background",
+            type = "color",
+            hasAlpha = true,
+            tab = "infobar",
+            tabLabel = "Info Bar",
+            get = function()
+                return GetConfig().bgColor or { 0.05, 0.06, 0.08, 0.92 }
+            end,
+            set = function(value)
+                overrideTable.bgColor = DeepCopyValue(value)
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetConfig().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Border Size",
+            type = "range",
+            tab = "infobar",
+            tabLabel = "Info Bar",
+            min = 0,
+            max = 3,
+            step = 1,
+            get = function()
+                return tonumber(GetConfig().borderSize) or 1
+            end,
+            set = function(value)
+                overrideTable.borderSize = math.floor((tonumber(value) or 1) + 0.5)
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetConfig().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Border Color",
+            type = "color",
+            hasAlpha = true,
+            tab = "infobar",
+            tabLabel = "Info Bar",
+            get = function()
+                return GetConfig().borderColor or { 0.24, 0.26, 0.32, 0.9 }
+            end,
+            set = function(value)
+                overrideTable.borderColor = DeepCopyValue(value)
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetConfig().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Outline",
+            type = "select",
+            tab = "infobar",
+            tabLabel = "Info Bar",
+            values = OUTLINE_SELECT_VALUES,
+            get = function()
+                return GetConfig().outlineMode or "OUTLINE"
+            end,
+            set = function(value)
+                overrideTable.outlineMode = value
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetConfig().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Shadow",
+            type = "toggle",
+            tab = "infobar",
+            tabLabel = "Info Bar",
+            get = function()
+                return GetConfig().shadowEnabled == true
+            end,
+            set = function(value)
+                overrideTable.shadowEnabled = value == true
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetConfig().enabled ~= true
+            end,
+        })
+        AddExtra({
+            label = "Shadow Color",
+            type = "color",
+            hasAlpha = true,
+            tab = "infobar",
+            tabLabel = "Info Bar",
+            get = function()
+                return GetConfig().shadowColor or { 0, 0, 0, 0.85 }
+            end,
+            set = function(value)
+                overrideTable.shadowColor = DeepCopyValue(value)
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function()
+                return GetConfig().enabled ~= true or GetConfig().shadowEnabled ~= true
+            end,
+        })
+
+        for index = 1, 3 do
+            AddExtra({
+                label = "Text " .. index .. " Tag",
+                type = "input",
+                tab = "infobar",
+                tabLabel = "Info Bar",
+                get = function()
+                    return tostring((GetConfig().texts[index] and GetConfig().texts[index].tag) or "")
+                end,
+                set = function(value)
+                    overrideTable["text" .. index] = overrideTable["text" .. index] or {}
+                    local trimmed = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+                    overrideTable["text" .. index].tag = trimmed ~= "" and trimmed or nil
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return GetConfig().enabled ~= true
+                end,
+            })
+            AddExtra({
+                label = "Text " .. index .. " Align",
+                type = "select",
+                tab = "infobar",
+                tabLabel = "Info Bar",
+                values = JUSTIFY_VALUES,
+                get = function()
+                    return (GetConfig().texts[index] and GetConfig().texts[index].justify) or "CENTER"
+                end,
+                set = function(value)
+                    overrideTable["text" .. index] = overrideTable["text" .. index] or {}
+                    overrideTable["text" .. index].justify = value
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return GetConfig().enabled ~= true
+                end,
+            })
+            AddExtra({
+                label = "Text " .. index .. " Size",
+                type = "range",
+                tab = "infobar",
+                tabLabel = "Info Bar",
+                min = 6,
+                max = 20,
+                step = 1,
+                get = function()
+                    return tonumber(GetConfig().texts[index] and GetConfig().texts[index].fontSize) or 9
+                end,
+                set = function(value)
+                    overrideTable["text" .. index] = overrideTable["text" .. index] or {}
+                    overrideTable["text" .. index].fontSize = math.floor((tonumber(value) or 9) + 0.5)
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return GetConfig().enabled ~= true
+                end,
+            })
+            AddExtra({
+                label = "Text " .. index .. " Class Color",
+                type = "toggle",
+                tab = "infobar",
+                tabLabel = "Info Bar",
+                get = function()
+                    return GetConfig().texts[index] and GetConfig().texts[index].useClassColor == true
+                end,
+                set = function(value)
+                    overrideTable["text" .. index] = overrideTable["text" .. index] or {}
+                    overrideTable["text" .. index].useClassColor = value == true
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return GetConfig().enabled ~= true
+                end,
+            })
+            AddExtra({
+                label = "Text " .. index .. " Color",
+                type = "color",
+                hasAlpha = true,
+                tab = "infobar",
+                tabLabel = "Info Bar",
+                get = function()
+                    local cfg = GetConfig().texts[index]
+                    return cfg and cfg.color or { 1, 1, 1, 1 }
+                end,
+                set = function(value)
+                    overrideTable["text" .. index] = overrideTable["text" .. index] or {}
+                    overrideTable["text" .. index].color = DeepCopyValue(value)
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    local cfg = GetConfig().texts[index]
+                    return GetConfig().enabled ~= true or (cfg and cfg.useClassColor == true)
+                end,
+            })
+        end
+    end
+
+    local function AddClassBarExtras()
+        if layoutKey ~= "player" then
+            return
+        end
+
+        local function GetConfig()
+            local db = UnitFrames:GetDB()
+            db.classBar = db.classBar or {}
+            return db.classBar
+        end
+
+        local function IsPowerDetached()
+            local unitSettings = UnitFrames:GetUnitSettings("player")
+            return unitSettings and unitSettings.showPower ~= false and unitSettings.powerDetached ~= true
+        end
+
+        AddExtra({
+            label = "Enable Class Bar",
+            type = "toggle",
+            tab = "classbar",
+            tabLabel = "Class Bar",
+            get = function()
+                return GetConfig().enabled ~= false
+            end,
+            set = function(value)
+                GetConfig().enabled = value == true
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label = "Match Frame Width",
+            type = "toggle",
+            tab = "classbar",
+            tabLabel = "Class Bar",
+            get = function()
+                return GetConfig().matchFrameWidth == true
+            end,
+            set = function(value)
+                GetConfig().matchFrameWidth = value == true
+                DesignerRefreshAllFrames()
+            end,
+            disabled = IsPowerDetached,
+        })
+
+        local classBarRanges = {
+            { field = "width",   label = "Width",       min = 40,   max = 600 },
+            { field = "height",  label = "Height",      min = 4,    max = 40 },
+            { field = "spacing", label = "Segment Gap", min = 0,    max = 40 },
+            { field = "xOffset", label = "X Offset",    min = -240, max = 240 },
+            { field = "yOffset", label = "Y Offset",    min = -240, max = 240 },
+        }
+        for _, entry in ipairs(classBarRanges) do
+            AddExtra({
+                label = entry.label,
+                type = "range",
+                tab = "classbar",
+                tabLabel = "Class Bar",
+                min = entry.min,
+                max = entry.max,
+                step = 1,
+                get = function()
+                    local cfg = GetConfig()
+                    local fallback = ({ width = 260, height = 10, spacing = 2, xOffset = 0, yOffset = -2 })[entry.field]
+                    return tonumber(cfg[entry.field]) or fallback
+                end,
+                set = function(value)
+                    GetConfig()[entry.field] = tonumber(value) or 0
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    if entry.field == "width" then
+                        return IsPowerDetached() or GetConfig().matchFrameWidth == true
+                    end
+                    return IsPowerDetached()
+                end,
+            })
+        end
+
+        AddExtra({
+            label = "Anchor",
+            type = "select",
+            tab = "classbar",
+            tabLabel = "Class Bar",
+            values = POINT_SELECT_VALUES,
+            get = function()
+                return GetConfig().point or "TOPLEFT"
+            end,
+            set = function(value)
+                GetConfig().point = value
+                DesignerRefreshAllFrames()
+            end,
+            disabled = IsPowerDetached,
+        })
+        AddExtra({
+            label = "Relative Point",
+            type = "select",
+            tab = "classbar",
+            tabLabel = "Class Bar",
+            values = POINT_SELECT_VALUES,
+            get = function()
+                return GetConfig().relativePoint or "BOTTOMLEFT"
+            end,
+            set = function(value)
+                GetConfig().relativePoint = value
+                DesignerRefreshAllFrames()
+            end,
+            disabled = IsPowerDetached,
+        })
+
+        local classBarColorToggles = {
+            { toggle = "useCustomColor",      color = "color",           label = "Custom Bar Color",  colorLabel = "Bar Color",        default = { 0.96, 0.76, 0.24, 1 } },
+            { toggle = "useCustomBackground", color = "backgroundColor", label = "Custom Background", colorLabel = "Background Color", default = { 0.05, 0.06, 0.08, 0.8 } },
+            { toggle = "useCustomBorder",     color = "borderColor",     label = "Custom Border",     colorLabel = "Border Color",     default = { 0.24, 0.26, 0.32, 1 } },
+        }
+        for _, entry in ipairs(classBarColorToggles) do
+            AddExtra({
+                label = entry.label,
+                type = "toggle",
+                tab = "classbar",
+                tabLabel = "Class Bar",
+                get = function()
+                    return GetConfig()[entry.toggle] == true
+                end,
+                set = function(value)
+                    GetConfig()[entry.toggle] = value == true
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = IsPowerDetached,
+            })
+            AddExtra({
+                label = entry.colorLabel,
+                type = "color",
+                hasAlpha = true,
+                tab = "classbar",
+                tabLabel = "Class Bar",
+                get = function()
+                    return GetConfig()[entry.color] or entry.default
+                end,
+                set = function(value)
+                    GetConfig()[entry.color] = DeepCopyValue(value)
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return IsPowerDetached() or GetConfig()[entry.toggle] ~= true
+                end,
+            })
+        end
     end
 
     if layoutKey == "castbar" then
@@ -8837,6 +10297,8 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         AddExtra({
             label = "Frame Enabled",
             type = "toggle",
+            tab = "frame",
+            tabLabel = "Frame",
             get = function()
                 local group = UnitFrames:GetGroupSettings(groupKey)
                 return group and group.enabled ~= false
@@ -8850,10 +10312,241 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
 
+        AddExtra({
+            label = layoutKey == "boss" and "Frame Width" or "Member Width",
+            type = "range",
+            tab = "frame",
+            tabLabel = "Frame",
+            min = layoutKey == "boss" and 120 or 70,
+            max = 500,
+            step = 1,
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey == "boss" and "boss" or layoutKey)
+                return tonumber(unitSettings and unitSettings.width) or 220
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey == "boss" and "boss" or layoutKey)
+                if unitSettings then
+                    unitSettings.width = math.floor((tonumber(value) or 220) + 0.5)
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                return not group or group.enabled == false
+            end,
+        })
+
+        AddExtra({
+            label = layoutKey == "boss" and "Frame Height" or "Member Height",
+            type = "range",
+            tab = "frame",
+            tabLabel = "Frame",
+            min = 14,
+            max = 120,
+            step = 1,
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey == "boss" and "boss" or layoutKey)
+                return tonumber(unitSettings and unitSettings.height) or 48
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey == "boss" and "boss" or layoutKey)
+                if unitSettings then
+                    unitSettings.height = math.floor((tonumber(value) or 48) + 0.5)
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                return not group or group.enabled == false
+            end,
+        })
+
+        AddExtra({
+            label = layoutKey == "boss" and "Growth Direction" or "Growth",
+            type = "select",
+            tab = "frame",
+            tabLabel = "Frame",
+            values = HEADER_GROWTH_VALUES,
+            get = function()
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                return ResolveGroupGrowthDirection(group, "DOWN")
+            end,
+            set = function(value)
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                if group and HEADER_GROWTH_VALUES[value] then
+                    group.growthDirection = value
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                return not group or group.enabled == false
+            end,
+        })
+
+        AddExtra({
+            label = layoutKey == "boss" and "Horizontal Spacing" or "X Spacing",
+            type = "range",
+            tab = "frame",
+            tabLabel = "Frame",
+            min = -120,
+            max = 120,
+            step = 1,
+            get = function()
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                return tonumber(group and group.xOffset) or 0
+            end,
+            set = function(value)
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                if group then
+                    group.xOffset = tonumber(value) or 0
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                return not group or group.enabled == false
+            end,
+        })
+
+        AddExtra({
+            label = layoutKey == "boss" and "Vertical Spacing" or "Y Spacing",
+            type = "range",
+            tab = "frame",
+            tabLabel = "Frame",
+            min = -120,
+            max = 120,
+            step = 1,
+            get = function()
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                return tonumber(group and group.yOffset) or 0
+            end,
+            set = function(value)
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                if group then
+                    group.yOffset = tonumber(value) or 0
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local group = UnitFrames:GetGroupSettings(groupKey)
+                return not group or group.enabled == false
+            end,
+        })
+
+        if layoutKey == "raid" or layoutKey == "tank" or layoutKey == "boss" then
+            AddExtra({
+                label = layoutKey == "boss" and "Frames Before Wrap" or "Units Per Column",
+                type = "range",
+                tab = "frame",
+                tabLabel = "Frame",
+                min = 1,
+                max = layoutKey == "boss" and 5 or 8,
+                step = 1,
+                get = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return tonumber(group and group.unitsPerColumn) or (layoutKey == "boss" and 5 or 5)
+                end,
+                set = function(value)
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    if group then
+                        group.unitsPerColumn = math.floor((tonumber(value) or 5) + 0.5)
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+                disabled = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return not group or group.enabled == false
+                end,
+            })
+        end
+
+        if layoutKey == "raid" or layoutKey == "tank" then
+            AddExtra({
+                label = "Max Columns",
+                type = "range",
+                tab = "frame",
+                tabLabel = "Frame",
+                min = 1,
+                max = 8,
+                step = 1,
+                get = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return tonumber(group and group.maxColumns) or 1
+                end,
+                set = function(value)
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    if group then
+                        group.maxColumns = math.floor((tonumber(value) or 1) + 0.5)
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+                disabled = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return not group or group.enabled == false
+                end,
+            })
+        end
+
+        if layoutKey == "raid" or layoutKey == "tank" or layoutKey == "boss" then
+            AddExtra({
+                label = layoutKey == "boss" and "Wrap Spacing" or "Column Spacing",
+                type = "range",
+                tab = "frame",
+                tabLabel = "Frame",
+                min = 0,
+                max = 80,
+                step = 1,
+                get = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return tonumber(group and group.columnSpacing) or 8
+                end,
+                set = function(value)
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    if group then
+                        group.columnSpacing = math.floor((tonumber(value) or 8) + 0.5)
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+                disabled = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return not group or group.enabled == false
+                end,
+            })
+
+            AddExtra({
+                label = layoutKey == "boss" and "Wrap Direction" or "Column Anchor",
+                type = "select",
+                tab = "frame",
+                tabLabel = "Frame",
+                values = HEADER_WRAP_VALUES,
+                get = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    local growthDirection = ResolveGroupGrowthDirection(group, "DOWN")
+                    return ResolveHeaderColumnAnchorPoint(group, growthDirection,
+                        layoutKey == "boss" and "LEFT" or "LEFT")
+                end,
+                set = function(value)
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    if group and HEADER_WRAP_VALUES[value] then
+                        group.columnAnchorPoint = value
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+                disabled = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return not group or group.enabled == false
+                end,
+            })
+        end
+
         if layoutKey ~= "boss" then
             AddExtra({
                 label = "Show Power",
                 type = "toggle",
+                tab = "power",
+                tabLabel = "Power",
                 get = function()
                     local group = UnitFrames:GetGroupSettings(groupKey)
                     return not group or group.showPower ~= false
@@ -8870,55 +10563,112 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                     return not group or group.enabled == false
                 end,
             })
+
+            if layoutKey == "party" or layoutKey == "raid" then
+                AddExtra({
+                    label = "Healer Only",
+                    type = "toggle",
+                    tab = "power",
+                    tabLabel = "Power",
+                    get = function()
+                        local group = UnitFrames:GetGroupSettings(groupKey)
+                        return not group or group.healerOnlyPower ~= false
+                    end,
+                    set = function(value)
+                        local group = UnitFrames:GetGroupSettings(groupKey)
+                        if group then
+                            group.healerOnlyPower = value == true
+                            UnitFrames:RefreshAllFrames()
+                        end
+                    end,
+                    disabled = function()
+                        local group = UnitFrames:GetGroupSettings(groupKey)
+                        return not group or group.enabled == false or group.showPower == false
+                    end,
+                })
+            end
         end
 
-        if layoutKey == "party" or layoutKey == "raid" then
+        if layoutKey == "party" then
             AddExtra({
-                type = "label",
-                text = "Preview controls stay close to the selected group mover.",
-            })
-            AddExtra({
-                label = "Test Mode",
+                label = "Include Player",
                 type = "toggle",
+                tab = "visibility",
+                tabLabel = "Visibility",
                 get = function()
-                    local db = UnitFrames:GetDB()
-                    return db and db.testMode == true
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return not group or group.showPlayer ~= false
                 end,
                 set = function(value)
-                    UnitFrames:SetTestMode(value == true)
-                end,
-            })
-            AddExtra({
-                label = "Show Party Preview",
-                type = "toggle",
-                get = function()
-                    local db = UnitFrames:GetDB()
-                    return db and db.testPreviewParty ~= false
-                end,
-                set = function(value)
-                    UnitFrames:SetTestPreviewGroupEnabled("party", value == true)
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    if group then
+                        group.showPlayer = value == true
+                        UnitFrames:RefreshAllFrames()
+                    end
                 end,
                 disabled = function()
-                    local db = UnitFrames:GetDB()
-                    return not db or db.testMode ~= true
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return not group or group.enabled == false
                 end,
             })
             AddExtra({
-                label = "Show Raid Preview",
+                label = "Show Solo",
                 type = "toggle",
+                tab = "visibility",
+                tabLabel = "Visibility",
                 get = function()
-                    local db = UnitFrames:GetDB()
-                    return db and db.testPreviewRaid ~= false
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return group and group.showSolo == true
                 end,
                 set = function(value)
-                    UnitFrames:SetTestPreviewGroupEnabled("raid", value == true)
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    if group then
+                        group.showSolo = value == true
+                        UnitFrames:RefreshAllFrames()
+                    end
                 end,
                 disabled = function()
-                    local db = UnitFrames:GetDB()
-                    return not db or db.testMode ~= true
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return not group or group.enabled == false
+                end,
+            })
+        elseif layoutKey == "raid" or layoutKey == "tank" then
+            AddExtra({
+                label = "Show Solo",
+                type = "toggle",
+                tab = "visibility",
+                tabLabel = "Visibility",
+                get = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return group and group.showSolo == true
+                end,
+                set = function(value)
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    if group then
+                        group.showSolo = value == true
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+                disabled = function()
+                    local group = UnitFrames:GetGroupSettings(groupKey)
+                    return not group or group.enabled == false
                 end,
             })
         end
+
+        AddCopyExtras()
+        AddColorExtras()
+        AddTextExtras()
+        AddAuraExtras()
+        AddRoleIconExtras()
+        AddIndicatorExtraGroup("combatIndicator", "Combat", false)
+        AddIndicatorExtraGroup("restingIndicator", "Resting", false)
+        AddIndicatorExtraGroup("spiritIndicator", "Spirit", false)
+        AddIndicatorExtraGroup("offlineIndicator", "Offline", false)
+        AddIndicatorExtraGroup("resurrectIndicator", "Resurrect", false)
+        AddIndicatorExtraGroup("summonIndicator", "Summon", false)
+        AddIndicatorExtraGroup("readyCheckIndicator", "Ready Check", true)
+        AddInfoBarExtras()
     elseif powerBase then
         AddExtra({
             label = "Show Power",
@@ -8971,7 +10721,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             get = function()
                 local unitSettings = UnitFrames:GetUnitSettings(powerBase)
                 return tonumber(unitSettings and unitSettings.powerWidth) or
-                tonumber(unitSettings and unitSettings.width) or 220
+                    tonumber(unitSettings and unitSettings.width) or 220
             end,
             set = function(value)
                 local unitSettings = UnitFrames:GetUnitSettings(powerBase)
@@ -9012,6 +10762,73 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         })
 
         if powerBase == "player" then
+            AddExtra({
+                label = "Power Color Mode",
+                type = "select",
+                tab = "colors",
+                tabLabel = "Colors",
+                values = UNIT_POWER_MODE_VALUES,
+                get = function()
+                    local colorTable = EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors")
+                    return colorTable.powerColorMode or "inherit"
+                end,
+                set = function(value)
+                    EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors").powerColorMode = value
+                    DesignerRefreshAllFrames()
+                end,
+            })
+            AddExtra({
+                label = "Power Color",
+                type = "color",
+                hasAlpha = true,
+                tab = "colors",
+                tabLabel = "Colors",
+                get = function()
+                    local colorTable = EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors")
+                    return colorTable.power or UnitFrames:GetPalette(powerBase).power
+                end,
+                set = function(value)
+                    EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors").power = DeepCopyValue(value)
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    local colorTable = EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors")
+                    return colorTable.powerColorMode == "powertype"
+                end,
+            })
+            AddExtra({
+                label = "Power Background",
+                type = "color",
+                hasAlpha = true,
+                tab = "colors",
+                tabLabel = "Colors",
+                get = function()
+                    local colorTable = EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors")
+                    return colorTable.powerBackground or UnitFrames:GetPalette(powerBase).powerBackground
+                end,
+                set = function(value)
+                    EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors").powerBackground = DeepCopyValue(
+                    value)
+                    DesignerRefreshAllFrames()
+                end,
+            })
+            AddExtra({
+                label = "Power Border",
+                type = "color",
+                hasAlpha = true,
+                tab = "colors",
+                tabLabel = "Colors",
+                get = function()
+                    local colorTable = EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors")
+                    return colorTable.powerBorder or UnitFrames:GetPalette(powerBase).powerBorder
+                end,
+                set = function(value)
+                    EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors").powerBorder = DeepCopyValue(
+                    value)
+                    DesignerRefreshAllFrames()
+                end,
+            })
+
             AddExtra({
                 type = "label",
                 tab = "effects",
@@ -9064,7 +10881,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                     local unitSettings = UnitFrames:GetUnitSettings(powerBase)
                     local fx = unitSettings and unitSettings.powerFx
                     return not unitSettings or unitSettings.showPower == false or type(fx) ~= "table" or
-                    fx.enabled ~= true
+                        fx.enabled ~= true
                 end,
             })
             AddExtra({
@@ -9092,7 +10909,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                     local unitSettings = UnitFrames:GetUnitSettings(powerBase)
                     local fx = unitSettings and unitSettings.powerFx
                     return not unitSettings or unitSettings.showPower == false or type(fx) ~= "table" or
-                    fx.enabled ~= true
+                        fx.enabled ~= true
                 end,
             })
         end
@@ -9101,6 +10918,8 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             AddExtra({
                 label = "Frame Enabled",
                 type = "toggle",
+                tab = "frame",
+                tabLabel = "Frame",
                 get = function()
                     local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
                     return unitSettings and unitSettings.enabled ~= false
@@ -9116,8 +10935,113 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         end
 
         AddExtra({
+            label = "Frame Width",
+            type = "range",
+            tab = "frame",
+            tabLabel = "Frame",
+            min = 80,
+            max = 600,
+            step = 1,
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return tonumber(unitSettings and unitSettings.width) or 220
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                if unitSettings then
+                    unitSettings.width = math.floor((tonumber(value) or 220) + 0.5)
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                if layoutKey == "player" then
+                    return false
+                end
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return not unitSettings or unitSettings.enabled == false
+            end,
+        })
+
+        AddExtra({
+            label = "Frame Height",
+            type = "range",
+            tab = "frame",
+            tabLabel = "Frame",
+            min = 16,
+            max = 180,
+            step = 1,
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return tonumber(unitSettings and unitSettings.height) or 48
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                if unitSettings then
+                    unitSettings.height = math.floor((tonumber(value) or 48) + 0.5)
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                if layoutKey == "player" then
+                    return false
+                end
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return not unitSettings or unitSettings.enabled == false
+            end,
+        })
+
+        if layoutKey == "player" then
+            AddExtra({
+                label = "Class Corner Artwork",
+                type = "toggle",
+                tab = "frame",
+                tabLabel = "Frame",
+                get = function()
+                    local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                    return unitSettings and unitSettings.classArtworkEnabled == true
+                end,
+                set = function(value)
+                    local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                    if unitSettings then
+                        unitSettings.classArtworkEnabled = value == true
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+            })
+            AddExtra({
+                label = "Artwork Scale",
+                type = "range",
+                tab = "frame",
+                tabLabel = "Frame",
+                min = 0.5,
+                max = 2.5,
+                step = 0.01,
+                get = function()
+                    local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                    return tonumber(unitSettings and unitSettings.classArtworkScale) or 1
+                end,
+                set = function(value)
+                    local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                    if unitSettings then
+                        unitSettings.classArtworkScale = Clamp(tonumber(value) or 1, 0.5, 2.5)
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+                disabled = function()
+                    local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                    return not unitSettings or unitSettings.classArtworkEnabled ~= true
+                end,
+            })
+        end
+
+        AddExtra({
             label = "Show Power",
             type = "toggle",
+            tab = "power",
+            tabLabel = "Power",
+            hidden = function()
+                return IsDetachedPlayerPower()
+            end,
             get = function()
                 local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
                 return not unitSettings or unitSettings.showPower ~= false
@@ -9130,25 +11054,136 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 end
             end,
         })
+
+        AddExtra({
+            label = "Power Height",
+            type = "range",
+            tab = "power",
+            tabLabel = "Power",
+            hidden = function()
+                return IsDetachedPlayerPower()
+            end,
+            min = 4,
+            max = 32,
+            step = 1,
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return tonumber(unitSettings and unitSettings.powerHeight) or 8
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                if unitSettings then
+                    unitSettings.powerHeight = math.floor((tonumber(value) or 8) + 0.5)
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return unitSettings and unitSettings.showPower == false
+            end,
+        })
+
+        AddExtra({
+            label = "Detach Power",
+            type = "toggle",
+            tab = "power",
+            tabLabel = "Power",
+            hidden = function()
+                return IsDetachedPlayerPower()
+            end,
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return unitSettings and unitSettings.powerDetached == true
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                if unitSettings then
+                    unitSettings.powerDetached = value == true
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return unitSettings and unitSettings.showPower == false
+            end,
+        })
+
+        AddExtra({
+            label = "Detached Width",
+            type = "range",
+            tab = "power",
+            tabLabel = "Power",
+            hidden = function()
+                return IsDetachedPlayerPower()
+            end,
+            min = 40,
+            max = 600,
+            step = 1,
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return tonumber(unitSettings and unitSettings.powerWidth) or
+                tonumber(unitSettings and unitSettings.width) or 220
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                if unitSettings then
+                    unitSettings.powerWidth = math.floor((tonumber(value) or 220) + 0.5)
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+                return not unitSettings or unitSettings.showPower == false or unitSettings.powerDetached ~= true
+            end,
+        })
+
+        AddCopyExtras()
+        AddColorExtras()
+        AddCustomFrameExtras()
+        AddTextExtras()
+        AddAuraExtras()
+        AddRoleIconExtras()
+        AddIndicatorExtraGroup("combatIndicator", "Combat", false)
+        AddIndicatorExtraGroup("restingIndicator", "Resting", false)
+        AddIndicatorExtraGroup("spiritIndicator", "Spirit", false)
+        AddIndicatorExtraGroup("offlineIndicator", "Offline", false)
+        AddIndicatorExtraGroup("resurrectIndicator", "Resurrect", false)
+        AddIndicatorExtraGroup("summonIndicator", "Summon", false)
+        AddIndicatorExtraGroup("readyCheckIndicator", "Ready Check", true)
+        AddInfoBarExtras()
+        AddClassBarExtras()
+    end
+
+    local headerToggle = nil
+    if layoutKey == "castbar" or layoutKey == "party" or layoutKey == "raid" or layoutKey == "tank" then
+        headerToggle = {
+            label = "Test Mode",
+            get = function()
+                return GetDesignerPreviewToggleValue(layoutKey)
+            end,
+            set = function(value)
+                SetDesignerPreviewToggle(layoutKey, value == true)
+            end,
+        }
     end
 
     moversModule:RegisterMover("UF_" .. layoutKey, {
-        label     = LABELS[layoutKey] or BuildFrameName(layoutKey),
-        category  = "Unit Frames",
-        getFrame  = function() return frame end,
-        getX      = function()
+        label        = LABELS[layoutKey] or BuildFrameName(layoutKey),
+        category     = "Unit Frames",
+        getFrame     = function() return frame end,
+        getX         = function()
             return getLayoutX()
         end,
-        getY      = function()
+        getY         = function()
             return getLayoutY()
         end,
-        getW      = function()
+        getW         = function()
             return getLayoutWidth()
         end,
-        getH      = function()
+        getH         = function()
             return getLayoutHeight()
         end,
-        setPos    = function(x, y)
+        setPos       = function(x, y)
             local layout = UnitFrames:GetLayoutSettings(layoutKey)
             layout.point = "BOTTOMLEFT"
             layout.relativePoint = "BOTTOMLEFT"
@@ -9159,8 +11194,8 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", layout.x, layout.y)
             end
         end,
-        setSize   = getSetSize(),
-        isEnabled = function()
+        setSize      = getSetSize(),
+        isEnabled    = function()
             if isHeader then
                 local groupKey = layoutKey == "boss" and "boss" or layoutKey
                 local gs = UnitFrames:GetGroupSettings(groupKey)
@@ -9178,7 +11213,8 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             local us = UnitFrames:GetUnitSettings(layoutKey)
             return us and us.enabled ~= false
         end,
-        extras    = extras,
+        headerToggle = headerToggle,
+        extras       = extras,
     })
 end
 
@@ -9925,38 +11961,45 @@ do
         self:BuildOrRefreshSinglePreviews()
 
         local db = self:GetDB()
-        local showPreview = db.testMode == true
+        local standalonePreviewMode = db.testMode == true
 
         for key, container in pairs(self.previewFrames) do
             if container then
-                local shouldShow = showPreview
+                local shouldShow = false
                 if key == "castbar" then
-                    shouldShow = shouldShow and ((db.castbar and db.castbar.enabled ~= false) ~= false)
+                    shouldShow = (standalonePreviewMode or self:IsDesignerPreviewEnabled("castbar"))
+                        and ((db.castbar and db.castbar.enabled ~= false) ~= false)
                 elseif key:match("^bossPreview") then
-                    shouldShow = shouldShow and (self:GetGroupSettings("boss").enabled ~= false)
+                    shouldShow = standalonePreviewMode and (self:GetGroupSettings("boss").enabled ~= false)
                 elseif key == "bossAnchor" then
-                    shouldShow = shouldShow and (self:GetGroupSettings("boss").enabled ~= false)
+                    shouldShow = standalonePreviewMode and (self:GetGroupSettings("boss").enabled ~= false)
                 elseif key == "player" or key == "target" or key == "targettarget" or key == "focus" or key == "pet" then
-                    shouldShow = shouldShow and (self:GetUnitSettings(key).enabled ~= false)
+                    shouldShow = standalonePreviewMode and (self:GetUnitSettings(key).enabled ~= false)
                 elseif key == "party" or key == "raid" or key == "tank" then
                     if key == "party" then
-                        if db.testPreviewParty == true then
-                            shouldShow = showPreview -- force-show only while testMode is active
-                        elseif db.testPreviewParty == false then
-                            shouldShow = false
+                        if self:IsDesignerPreviewEnabled("party") then
+                            shouldShow = true
+                        elseif standalonePreviewMode then
+                            shouldShow = self:GetGroupSettings(key).enabled ~= false
                         else
-                            shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
+                            shouldShow = false
                         end
                     elseif key == "raid" then
-                        if db.testPreviewRaid == true then
-                            shouldShow = showPreview -- force-show only while testMode is active
-                        elseif db.testPreviewRaid == false then
-                            shouldShow = false
+                        if self:IsDesignerPreviewEnabled("raid") then
+                            shouldShow = true
+                        elseif standalonePreviewMode then
+                            shouldShow = self:GetGroupSettings(key).enabled ~= false
                         else
-                            shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
+                            shouldShow = false
                         end
                     else
-                        shouldShow = shouldShow and (self:GetGroupSettings(key).enabled ~= false)
+                        if self:IsDesignerPreviewEnabled("tank") then
+                            shouldShow = true
+                        elseif standalonePreviewMode then
+                            shouldShow = self:GetGroupSettings(key).enabled ~= false
+                        else
+                            shouldShow = false
+                        end
                     end
                 end
                 container:SetShown(shouldShow)
@@ -10707,7 +12750,7 @@ function UnitFrames:RefreshCastbarLayout()
         castbar._forceHide = true
         self:StopStandaloneCastbarUpdates()
         castbar:Hide()
-    elseif db.testMode == true then
+    elseif db.testMode == true or self:IsDesignerPreviewEnabled("castbar") then
         castbar._forceHide = true
         self:StopStandaloneCastbarUpdates()
         castbar:Hide()
@@ -11359,6 +13402,10 @@ function UnitFrames:OnEnable()
     do
         local db = self:GetDB()
         db.testMode = false
+        db.testPreviewParty = false
+        db.testPreviewRaid = false
+        db.testPreviewTank = false
+        db.testPreviewCastbar = false
     end
 
     if not self:SpawnFrames() then
@@ -11506,20 +13553,69 @@ end
 function UnitFrames:SetTestMode(enabled)
     local db = self:GetDB()
     db.testMode = enabled == true
+    if enabled ~= true then
+        db.testPreviewParty = false
+        db.testPreviewRaid = false
+        db.testPreviewTank = false
+        db.testPreviewCastbar = false
+    end
+    self:RefreshPreviewVisibility()
+    self:RefreshAllFrames()
+end
+
+function UnitFrames:IsDesignerPreviewEnabled(previewKey)
+    local db = self:GetDB()
+    if not db then
+        return false
+    end
+
+    if previewKey == "party" then
+        return db.testPreviewParty == true
+    elseif previewKey == "raid" then
+        return db.testPreviewRaid == true
+    elseif previewKey == "tank" then
+        return db.testPreviewTank == true
+    elseif previewKey == "castbar" then
+        return db.testPreviewCastbar == true
+    end
+
+    return false
+end
+
+function UnitFrames:HasAnyDesignerPreviewEnabled()
+    return self:IsDesignerPreviewEnabled("party")
+        or self:IsDesignerPreviewEnabled("raid")
+        or self:IsDesignerPreviewEnabled("tank")
+        or self:IsDesignerPreviewEnabled("castbar")
+end
+
+function UnitFrames:ClearDesignerPreviewModes()
+    local db = self:GetDB()
+    db.testMode = false
+    db.testPreviewParty = false
+    db.testPreviewRaid = false
+    db.testPreviewTank = false
+    db.testPreviewCastbar = false
+    self:RefreshPreviewVisibility()
     self:RefreshAllFrames()
 end
 
 function UnitFrames:SetTestPreviewGroupEnabled(groupKey, enabled)
     local db = self:GetDB()
     if groupKey == "party" then
-        db.testPreviewParty = enabled ~= false
+        db.testPreviewParty = enabled == true
     elseif groupKey == "raid" then
-        db.testPreviewRaid = enabled ~= false
+        db.testPreviewRaid = enabled == true
+    elseif groupKey == "tank" then
+        db.testPreviewTank = enabled == true
+    elseif groupKey == "castbar" then
+        db.testPreviewCastbar = enabled == true
     else
         return
     end
 
     self:RefreshPreviewVisibility()
+    self:RefreshAllFrames()
 end
 
 function UnitFrames:SetFrameLock(locked)
