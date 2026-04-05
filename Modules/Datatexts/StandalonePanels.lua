@@ -1433,6 +1433,24 @@ function DataTextModule:RegisterStandalonePanelsWithMoverModule()
                 label            = (panelDefinition.name and panelDefinition.name ~= "" and panelDefinition.name) or
                     ("Panel: " .. tostring(pid)),
                 category         = "Data Panels",
+                headerToggle     = {
+                    label = "Enabled",
+                    get = function()
+                        local xdb = GetStandaloneDB()
+                        local pd = xdb and xdb.panels and xdb.panels[pid]
+                        return not pd or pd.enabled ~= false
+                    end,
+                    set = function(value)
+                        local xdb = GetStandaloneDB()
+                        local pd = xdb and xdb.panels and xdb.panels[pid]
+                        if not pd then
+                            return
+                        end
+
+                        pd.enabled = value == true
+                        RefreshStandaloneDockPanels()
+                    end,
+                },
                 getX             = function()
                     local xdb = GetStandaloneDB()
                     local pd  = xdb and xdb.panels and xdb.panels[pid]

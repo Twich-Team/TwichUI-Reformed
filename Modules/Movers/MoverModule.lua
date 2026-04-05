@@ -49,6 +49,7 @@ local InCombatLockdown                    = _G.InCombatLockdown
 local IsShiftKeyDown                      = _G.IsShiftKeyDown
 local C_Timer                             = _G.C_Timer
 local ColorPickerFrame                    = _G.ColorPickerFrame
+local GameTooltip                         = _G.GameTooltip
 local math_floor                          = math.floor
 local math_ceil                           = math.ceil
 local math_max                            = math.max
@@ -417,14 +418,14 @@ function MoverModule:_GetInspector()
 
     local dockBadge = dockHeaderContent:CreateFontString(nil, "OVERLAY")
     dockBadge:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 18, -9)
-    dockBadge:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -138, -9)
+    dockBadge:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -272, -9)
     dockBadge:SetJustifyH("LEFT")
     SetFont(dockBadge, 8)
     dockBadge:SetText("INTERFACE DESIGNER")
     dockBadge:SetTextColor(C_DOCK_TEXT[1], C_DOCK_TEXT[2], C_DOCK_TEXT[3])
 
     local dockPill = dockHeaderContent:CreateTexture(nil, "ARTWORK")
-    dockPill:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -88, -10)
+    dockPill:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -194, -10)
     dockPill:SetSize(66, 14)
     dockPill:SetColorTexture(C_DOCK_PILL[1], C_DOCK_PILL[2], C_DOCK_PILL[3], 0.96)
 
@@ -525,6 +526,49 @@ function MoverModule:_GetInspector()
     end)
     dock._dockBtn = dockBtn
 
+    local dockAppearanceBtn = CreateFrame("Button", nil, dockHeaderContent, "BackdropTemplate")
+    dockAppearanceBtn:SetSize(98, 20)
+    dockAppearanceBtn:SetPoint("RIGHT", dockBtn, "LEFT", -6, 0)
+    dockAppearanceBtn:SetFrameStrata(dockHeaderFrame:GetFrameStrata())
+    dockAppearanceBtn:SetFrameLevel(dockHeaderContent:GetFrameLevel() + 4)
+    ApplyBackdrop(dockAppearanceBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
+        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+    local dockAppearanceBtnFS = dockAppearanceBtn:CreateFontString(nil, "OVERLAY")
+    dockAppearanceBtnFS:SetAllPoints(dockAppearanceBtn)
+    dockAppearanceBtnFS:SetJustifyH("CENTER")
+    dockAppearanceBtnFS:SetJustifyV("MIDDLE")
+    SetFont(dockAppearanceBtnFS, 10)
+    dockAppearanceBtnFS:SetText("Appearance")
+    dockAppearanceBtn._fs = dockAppearanceBtnFS
+    dockAppearanceBtn:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(C_DOCK_COLOR_ACCENT[1] * 0.22, C_DOCK_COLOR_ACCENT[2] * 0.22,
+            C_DOCK_COLOR_ACCENT[3] * 0.22, 0.98)
+        self:SetBackdropBorderColor(C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.78)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+            GameTooltip:SetText("Appearance", 1, 0.95, 0.82, 1, true)
+            GameTooltip:AddLine("Open the Theme page so you can adjust TwichUI's global colors and overall look.",
+                0.76, 0.80, 0.88, true)
+            GameTooltip:Show()
+        end
+    end)
+    dockAppearanceBtn:SetScript("OnLeave", function(self)
+        self:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
+        self:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+        if GameTooltip then
+            GameTooltip:Hide()
+        end
+    end)
+    dockAppearanceBtn:SetScript("OnClick", function()
+        local configurationModule = T:GetModule("Configuration", true)
+        if configurationModule and configurationModule.OpenOptionsUI then
+            configurationModule:OpenOptionsUI("Theme")
+        elseif configurationModule and configurationModule.ToggleOptionsUI then
+            configurationModule:ToggleOptionsUI("Theme")
+        end
+    end)
+    dock._appearanceBtn = dockAppearanceBtn
+
     local dockDivider = dock:CreateTexture(nil, "ARTWORK")
     dockDivider:SetHeight(1)
     dockDivider:SetPoint("TOPLEFT", dock, "TOPLEFT", DESIGNER_DOCK_INSET, -94)
@@ -563,6 +607,32 @@ function MoverModule:_GetInspector()
             dockBottomEdge:SetPoint("BOTTOMLEFT", dock, "BOTTOMLEFT", 0, 0)
             dockBottomEdge:SetPoint("BOTTOMRIGHT", dock, "BOTTOMRIGHT", 0, 0)
         end
+    end
+
+    local function AttachDockTooltip(widget, titleText, bodyText)
+        if not widget or not bodyText or bodyText == "" or type(widget.HookScript) ~= "function" then
+            return
+        end
+
+        widget:HookScript("OnEnter", function(self)
+            if not GameTooltip then
+                return
+            end
+
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            if titleText and titleText ~= "" then
+                GameTooltip:SetText(titleText, 1, 0.95, 0.82, 1, true)
+                GameTooltip:AddLine(bodyText, 0.76, 0.80, 0.88, true)
+            else
+                GameTooltip:SetText(bodyText, 0.76, 0.80, 0.88, 1, true)
+            end
+            GameTooltip:Show()
+        end)
+        widget:HookScript("OnLeave", function()
+            if GameTooltip then
+                GameTooltip:Hide()
+            end
+        end)
     end
 
     -- ── Shared widget builders ───────────────────────────────────────────
@@ -1621,7 +1691,42 @@ function MoverModule:_GetInspector()
             for extraIndex, extra in ipairs(extras) do
                 local hidden = type(extra.hidden) == "function" and extra.hidden() == true
                 local tabHidden = activeTab ~= nil and type(extra.tab) == "string" and extra.tab ~= activeTab
-                if not hidden and not tabHidden and extra.type == "toggle" then
+                if not hidden and not tabHidden and extra.type == "section" then
+                    local title = ec:CreateFontString(nil, "OVERLAY")
+                    title:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY)
+                    title:SetPoint("TOPRIGHT", ec, "TOPRIGHT", 0, curY)
+                    title:SetJustifyH("LEFT")
+                    SetFont(title, 10)
+                    title:SetText(extra.label or extra.title or "Section")
+                    title:SetTextColor(1, 0.95, 0.82)
+                    ec._extraWidgets[#ec._extraWidgets + 1] = title
+
+                    local usedHeight = 16
+                    local descriptionText = extra.text or extra.desc
+                    if type(descriptionText) == "string" and descriptionText ~= "" then
+                        local description = ec:CreateFontString(nil, "OVERLAY")
+                        description:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY - 14)
+                        description:SetWidth(contentWidth)
+                        description:SetJustifyH("LEFT")
+                        description:SetJustifyV("TOP")
+                        SetFont(description, 9)
+                        description:SetText(descriptionText)
+                        description:SetTextColor(0.62, 0.66, 0.74)
+                        ec._extraWidgets[#ec._extraWidgets + 1] = description
+                        usedHeight = usedHeight + math_ceil(description:GetStringHeight() or 12) + 2
+                    end
+
+                    local divider = ec:CreateTexture(nil, "ARTWORK")
+                    divider:SetHeight(1)
+                    divider:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY - usedHeight)
+                    divider:SetPoint("TOPRIGHT", ec, "TOPRIGHT", 0, curY - usedHeight)
+                    divider:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.18)
+                    ec._extraWidgets[#ec._extraWidgets + 1] = divider
+
+                    usedHeight = usedHeight + 10
+                    curY = curY - usedHeight
+                    extraH = extraH + usedHeight
+                elseif not hidden and not tabHidden and extra.type == "toggle" then
                     local cur = type(extra.get) == "function" and extra.get() or false
                     local lbl = ec:CreateFontString(nil, "OVERLAY")
                     lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 8, curY)
@@ -1629,6 +1734,7 @@ function MoverModule:_GetInspector()
                     lbl:SetText(extra.label or "")
                     lbl:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3])
                     ec._extraWidgets[#ec._extraWidgets + 1] = lbl
+                    AttachDockTooltip(lbl, extra.label or "", extra.desc)
 
                     local chk = CreateFrame("Button", nil, ec, "BackdropTemplate")
                     chk:SetSize(14, 14)
@@ -1654,6 +1760,7 @@ function MoverModule:_GetInspector()
                     chk:SetScript("OnLeave", ScheduleHide)
                     chk:SetEnabled(not ResolveExtraDisabled(extra))
                     StyleExtraState(chk, chk:IsEnabled())
+                    AttachDockTooltip(chk, extra.label or "", extra.desc)
                     ec._extraWidgets[#ec._extraWidgets + 1] = chk
 
                     curY = curY - 22
@@ -1672,6 +1779,7 @@ function MoverModule:_GetInspector()
                         end, { kind = "button", accent = C_DOCK_ACTION_ACCENT })
                     btn:SetEnabled(not ResolveExtraDisabled(extra))
                     StyleExtraState(btn, btn:IsEnabled())
+                    AttachDockTooltip(btn, extra.label or extra.buttonLabel or "Action", extra.desc)
                     ec._extraWidgets[#ec._extraWidgets + 1] = btn
 
                     curY = curY - 24
@@ -1684,6 +1792,7 @@ function MoverModule:_GetInspector()
                     lbl:SetText(extra.label or "")
                     lbl:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3])
                     ec._extraWidgets[#ec._extraWidgets + 1] = lbl
+                    AttachDockTooltip(lbl, extra.label or "", extra.desc)
 
                     local disabled = ResolveExtraDisabled(extra)
                     local currentValue = type(extra.get) == "function" and extra.get() or
@@ -1775,6 +1884,9 @@ function MoverModule:_GetInspector()
                     StyleExtraState(minus, minus:IsEnabled())
                     StyleExtraState(plus, plus:IsEnabled())
                     StyleExtraState(valueBox, valueBox:IsEnabled())
+                    AttachDockTooltip(minus, extra.label or "", extra.desc)
+                    AttachDockTooltip(plus, extra.label or "", extra.desc)
+                    AttachDockTooltip(valueBox, extra.label or "", extra.desc)
 
                     ec._extraWidgets[#ec._extraWidgets + 1] = minus
                     ec._extraWidgets[#ec._extraWidgets + 1] = plus
@@ -1790,6 +1902,7 @@ function MoverModule:_GetInspector()
                     lbl:SetText(extra.label or "")
                     lbl:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3])
                     ec._extraWidgets[#ec._extraWidgets + 1] = lbl
+                    AttachDockTooltip(lbl, extra.label or "", extra.desc)
 
                     local disabled = ResolveExtraDisabled(extra)
                     local currentValue = type(extra.get) == "function" and extra.get() or ""
@@ -1837,6 +1950,7 @@ function MoverModule:_GetInspector()
                     end)
                     valueBox:SetEnabled(not disabled)
                     StyleExtraState(valueBox, valueBox:IsEnabled())
+                    AttachDockTooltip(valueBox, extra.label or "", extra.desc)
                     ec._extraWidgets[#ec._extraWidgets + 1] = valueBox
 
                     curY = curY - 38
@@ -1849,6 +1963,7 @@ function MoverModule:_GetInspector()
                     lbl:SetText(extra.label or "")
                     lbl:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3])
                     ec._extraWidgets[#ec._extraWidgets + 1] = lbl
+                    AttachDockTooltip(lbl, extra.label or "", extra.desc)
 
                     local disabled = ResolveExtraDisabled(extra)
                     local red, green, blue, alpha = ResolveExtraColor(extra)
@@ -1907,9 +2022,8 @@ function MoverModule:_GetInspector()
                         })
                     end)
 
-                    local buttonLabel = string.format("R:%d G:%d B:%d%s", math_floor(red * 255 + 0.5),
-                        math_floor(green * 255 + 0.5), math_floor(blue * 255 + 0.5),
-                        extra.hasAlpha == true and string.format(" A:%d", math_floor(alpha * 100 + 0.5)) or "")
+                    local buttonLabel = extra.buttonLabel or
+                        (extra.hasAlpha == true and "Choose Color & Opacity" or "Choose Color")
                     local openBtn = MakeExtraBtn(ec, buttonLabel, 34, rowY, contentWidth - 34, 20,
                         function()
                             if swatch and swatch.Click then
@@ -1923,6 +2037,8 @@ function MoverModule:_GetInspector()
                     swatch:SetEnabled(not disabled)
                     StyleExtraState(swatch, swatch:IsEnabled())
                     StyleExtraState(openBtn, openBtn:IsEnabled())
+                    AttachDockTooltip(swatch, extra.label or "Color", extra.desc)
+                    AttachDockTooltip(openBtn, extra.label or "Color", extra.desc)
                     ec._extraWidgets[#ec._extraWidgets + 1] = swatch
                     ec._extraWidgets[#ec._extraWidgets + 1] = openBtn
 
@@ -1939,6 +2055,7 @@ function MoverModule:_GetInspector()
                     lbl:SetText(extra.label or "")
                     lbl:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3])
                     ec._extraWidgets[#ec._extraWidgets + 1] = lbl
+                    AttachDockTooltip(lbl, extra.label or "", extra.desc)
 
                     local disabled = ResolveExtraDisabled(extra) or #orderedKeys <= 0
                     local rowY = curY - 14
@@ -1967,6 +2084,7 @@ function MoverModule:_GetInspector()
                     dropdownBtn:SetEnabled(not disabled)
                     dropdownBtn._selected = false
                     StyleExtraState(dropdownBtn, dropdownBtn:IsEnabled())
+                    AttachDockTooltip(dropdownBtn, extra.label or "Select", extra.desc)
                     ec._extraWidgets[#ec._extraWidgets + 1] = dropdownBtn
 
                     curY = curY - 38
@@ -1974,16 +2092,17 @@ function MoverModule:_GetInspector()
                 elseif not hidden and not tabHidden and extra.type == "label" then
                     local lbl = ec:CreateFontString(nil, "OVERLAY")
                     lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY)
-                    lbl:SetPoint("TOPRIGHT", ec, "TOPRIGHT", 0, curY)
                     lbl:SetJustifyH("LEFT")
                     lbl:SetJustifyV("TOP")
                     SetFont(lbl, 9)
                     lbl:SetText(extra.text or extra.label or "")
                     lbl:SetTextColor(0.62, 0.66, 0.74)
+                    lbl:SetWidth(contentWidth)
                     ec._extraWidgets[#ec._extraWidgets + 1] = lbl
 
-                    curY = curY - 18
-                    extraH = extraH + 18
+                    local labelHeight = math_ceil(lbl:GetStringHeight() or 12)
+                    curY = curY - labelHeight - 8
+                    extraH = extraH + labelHeight + 8
                 end
             end
             ec:SetHeight(extraH + 4)

@@ -16,6 +16,8 @@
 - Highlight friend in raid groups
 - Allow particle effects to be used in aura designer (say regrowth shows leaves around unitframe, or BoP shows holy aura)
 
+- In our attempts to fix issues with the interface designer, we made the background of our shared secure menu 100% opaque, can we please bring back slight transparency so the menus look nice.
+
 - Cast bar rules:
   - Define how the cast bar looks for each school of spell or by spell itself; I could have water-themed cast bar for healing spells while having fire for fire spells.
 
@@ -25,11 +27,7 @@
 
 ## Action Bars
 
-- My brother is using my addon and as I was helping him setup his action bars, I noticed that one of his action bars seemed to have a blizzard artwork backdrop texture for each empty button space, while the other bars did not. We do not want that backdrop texture.
-
 ## Other
-
-- create a Transmog Data Text: Provides quick access to your saved transmog outfits. I would like this datatext to operate similarly to the mounts datatext, where it retrieves your transmog outfits, and provides them in a menu to quickly access them. I would like them to be named the same as the player named them in the transmog UI, as well as include the same icon the player selected.
 
 ## Interface Designer
 

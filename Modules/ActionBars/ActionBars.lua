@@ -1736,9 +1736,15 @@ function ActionBars:RegisterWithMoverModule()
         local barLabel = definition.label
         local extras = {
             {
-                label = "Copy Settings From",
+                type = "section",
+                tab = "Layout",
+                label = "Start From Another Bar",
+            },
+            {
+                label = "Copy From",
                 type = "select",
                 tab = "Layout",
+                desc = "Source bar used for layout, styling, and visibility copy.",
                 values = function()
                     local values = ActionBars:GetDesignerCopySourceValues(barKey)
                     return values
@@ -1755,10 +1761,11 @@ function ActionBars:RegisterWithMoverModule()
                 end,
             },
             {
-                label = "Copy Settings",
+                label = "Apply Copy",
                 type = "execute",
                 tab = "Layout",
-                buttonLabel = "Copy Into This Bar",
+                buttonLabel = "Apply to This Bar",
+                desc = "Copies layout, styling, and visibility settings from the selected source bar.",
                 func = function()
                     local sourceBarKey = ActionBars:GetDesignerCopySource(barKey)
                     if sourceBarKey then
@@ -1771,30 +1778,15 @@ function ActionBars:RegisterWithMoverModule()
                 end,
             },
             {
-                type = "label",
+                type = "section",
                 tab = "Layout",
-                text = "Copying replaces this bar's current layout, styling, and visibility settings.",
+                label = "Size & Shape",
             },
             {
+                label = "Fade Until Hovered",
                 type = "toggle",
                 tab = "Visibility",
-                label = "Bar Enabled",
-                get = function()
-                    local s = ActionBars:GetBarSettings(barKey)
-                    return s and s.enabled == true or false
-                end,
-                set = function(value)
-                    local s = ActionBars:GetBarSettings(barKey)
-                    if s then
-                        s.enabled = value == true
-                        ActionBars:RequestRefresh()
-                    end
-                end,
-            },
-            {
-                label = "Mouseover Visibility",
-                type = "toggle",
-                tab = "Visibility",
+                desc = "Keeps the bar faded until hovered.",
                 get = function()
                     local s = ActionBars:GetBarSettings(barKey)
                     return s and s.mouseover == true or false
@@ -1812,9 +1804,10 @@ function ActionBars:RegisterWithMoverModule()
                 end,
             },
             {
-                label = "Cooldown Swipe",
+                label = "Cooldown Sweep",
                 type = "toggle",
                 tab = "Style",
+                desc = "Shows the circular cooldown animation on buttons.",
                 get = function()
                     local s = ActionBars:GetBarSettings(barKey)
                     return not s or s.showCooldownSwipe ~= false
@@ -1832,9 +1825,10 @@ function ActionBars:RegisterWithMoverModule()
                 end,
             },
             {
-                label = "Visible Buttons",
+                label = "Buttons",
                 type = "range",
                 tab = "Layout",
+                desc = "Number of buttons shown on the bar.",
                 min = 1,
                 max = definition.maxButtons or 12,
                 step = 1,
@@ -1862,6 +1856,7 @@ function ActionBars:RegisterWithMoverModule()
                 label = "Buttons Per Row",
                 type = "range",
                 tab = "Layout",
+                desc = "Controls when the bar wraps into another row.",
                 min = 1,
                 max = function()
                     local s = ActionBars:GetBarSettings(barKey)
@@ -1890,6 +1885,7 @@ function ActionBars:RegisterWithMoverModule()
                 label = "Button Size",
                 type = "range",
                 tab = "Layout",
+                desc = "Size of each button.",
                 min = 20,
                 max = 72,
                 step = 2,
@@ -1911,9 +1907,10 @@ function ActionBars:RegisterWithMoverModule()
                 end,
             },
             {
-                label = "Scale",
+                label = "Overall Scale",
                 type = "range",
                 tab = "Layout",
+                desc = "Scales the entire bar.",
                 min = 0.5,
                 max = 2,
                 step = 0.01,
@@ -1934,9 +1931,10 @@ function ActionBars:RegisterWithMoverModule()
                 end,
             },
             {
-                label = "Alpha",
+                label = "Opacity",
                 type = "range",
                 tab = "Layout",
+                desc = "Opacity of the full bar.",
                 min = 0.05,
                 max = 1,
                 step = 0.01,
@@ -1957,9 +1955,15 @@ function ActionBars:RegisterWithMoverModule()
                 end,
             },
             {
-                label = "Backdrop",
+                type = "section",
+                tab = "Style",
+                label = "Bar Chrome",
+            },
+            {
+                label = "Background Plate",
                 type = "toggle",
                 tab = "Style",
+                desc = "Shows the panel behind the buttons.",
                 get = function()
                     local s = ActionBars:GetBarSettings(barKey)
                     return not s or s.backdrop ~= false
@@ -1977,9 +1981,10 @@ function ActionBars:RegisterWithMoverModule()
                 end,
             },
             {
-                label = "Border",
+                label = "Border Frame",
                 type = "toggle",
                 tab = "Style",
+                desc = "Shows the outer frame around the bar.",
                 get = function()
                     local s = ActionBars:GetBarSettings(barKey)
                     return not s or s.showBorder ~= false
@@ -1997,9 +2002,10 @@ function ActionBars:RegisterWithMoverModule()
                 end,
             },
             {
-                label = "Accent",
+                label = "Accent Trim",
                 type = "toggle",
                 tab = "Style",
+                desc = "Shows the accent trim on the bar.",
                 get = function()
                     local s = ActionBars:GetBarSettings(barKey)
                     return not s or s.showAccent ~= false
@@ -2017,9 +2023,15 @@ function ActionBars:RegisterWithMoverModule()
                 end,
             },
             {
-                label = "Simple Visibility",
+                type = "section",
+                tab = "Visibility",
+                label = "When the Bar Appears",
+            },
+            {
+                label = "Show Bar When",
                 type = "select",
                 tab = "Visibility",
+                desc = "Selects simple state rules or the raw visibility driver.",
                 values = {
                     raw = "Raw Driver",
                     show = "Show Selected States",
@@ -2048,7 +2060,7 @@ function ActionBars:RegisterWithMoverModule()
             {
                 type = "label",
                 tab = "Visibility",
-                text = "Raw driver editing remains in the full Action Bars config UI.",
+                text = "Advanced macro-style driver strings remain in the full Action Bars config UI.",
                 hidden = function()
                     local s = ActionBars:GetBarSettings(barKey)
                     return not s or s.simpleVisibilityMode ~= "raw"
@@ -2083,15 +2095,16 @@ function ActionBars:RegisterWithMoverModule()
 
         if ActionBars:IsPrimaryBarKey(barKey) then
             extras[#extras + 1] = {
-                type = "label",
+                type = "section",
                 tab = "Layout",
-                text = "Clone this layout into the next disabled action bar.",
+                label = "Expand the Stack",
             }
             extras[#extras + 1] = {
                 label = "Add Bar Above",
                 type = "execute",
                 tab = "Layout",
                 buttonLabel = "Add Bar Above",
+                desc = "Creates a matching bar in the next available slot above.",
                 func = function()
                     ActionBars:CreateSiblingBarFromSource(barKey, "above")
                 end,
@@ -2104,6 +2117,7 @@ function ActionBars:RegisterWithMoverModule()
                 type = "execute",
                 tab = "Layout",
                 buttonLabel = "Add Bar Below",
+                desc = "Creates a matching bar in the next available slot below.",
                 func = function()
                     ActionBars:CreateSiblingBarFromSource(barKey, "below")
                 end,
@@ -2114,10 +2128,24 @@ function ActionBars:RegisterWithMoverModule()
         end
 
         moversModule:RegisterMover("AB_" .. barKey, {
-            label     = barLabel,
-            category  = "Action Bars",
-            getFrame  = function() return ActionBars.holders[barKey] end,
-            getX      = function()
+            label        = barLabel,
+            category     = "Action Bars",
+            headerToggle = {
+                label = "Enabled",
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return s and s.enabled == true or false
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.enabled = value == true
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+            },
+            getFrame     = function() return ActionBars.holders[barKey] end,
+            getX         = function()
                 local holder = ActionBars.holders[barKey]
                 if holder and holder.GetLeft then
                     return floor(((holder:GetLeft() or 0) + 0.5))
@@ -2125,7 +2153,7 @@ function ActionBars:RegisterWithMoverModule()
                 local s = ActionBars:GetBarSettings(barKey)
                 return s and floor((s.x or 0) + 0.5) or 0
             end,
-            getY      = function()
+            getY         = function()
                 local holder = ActionBars.holders[barKey]
                 if holder and holder.GetBottom then
                     return floor(((holder:GetBottom() or 0) + 0.5))
@@ -2133,15 +2161,15 @@ function ActionBars:RegisterWithMoverModule()
                 local s = ActionBars:GetBarSettings(barKey)
                 return s and floor((s.y or 0) + 0.5) or 0
             end,
-            getW      = function()
+            getW         = function()
                 local h = ActionBars.holders[barKey]
                 return h and h:GetWidth() or nil
             end,
-            getH      = function()
+            getH         = function()
                 local h = ActionBars.holders[barKey]
                 return h and h:GetHeight() or nil
             end,
-            setPos    = function(x, y)
+            setPos       = function(x, y)
                 local anchorX, anchorY = ActionBars:PersistBarLayout(barKey, x, y)
                 local holder = ActionBars.holders[barKey]
                 if holder then
@@ -2150,12 +2178,12 @@ function ActionBars:RegisterWithMoverModule()
                 end
                 ActionBars:RefreshAll()
             end,
-            setSize   = nil, -- bar dimensions are governed by button size/count settings
-            isEnabled = function()
+            setSize      = nil, -- bar dimensions are governed by button size/count settings
+            isEnabled    = function()
                 local s = ActionBars:GetBarSettings(barKey)
                 return not s or s.enabled ~= false
             end,
-            extras    = extras,
+            extras       = extras,
         })
     end
 end

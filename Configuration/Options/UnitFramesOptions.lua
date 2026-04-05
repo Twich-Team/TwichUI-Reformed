@@ -1885,6 +1885,96 @@ local function BuildSingleUnitTab(unitKey, label)
     local auraPath = ExtendPath(basePath, "auras")
     local customFrameDefaults = defaults.customFrame or {}
     local disabled = ModuleDisabled()
+    local customFrameGroup = (unitKey == "player" or unitKey == "target") and Widgets.IGroup(1,
+        "Custom Frame Art", {
+            enabled = BuildToggle(1, "Enable Artwork",
+                "Show a custom art layer behind this frame.",
+                ExtendPath(basePath, "customFrame", "enabled"), customFrameDefaults.enabled == true, {
+                    disabled = disabled,
+                    refreshConfig = true,
+                }),
+            texture = BuildTextureSelect(2, "Texture",
+                "SharedMedia texture used for the artwork layer.",
+                ExtendPath(basePath, "customFrame", "texture"), "Use Flat Tint", {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                            customFrameDefaults.enabled) ~= true
+                    end),
+                    refreshConfig = true,
+                    width = "full",
+                }),
+            texturePath = BuildInput(3, "Texture Path",
+                "Optional direct texture path override.",
+                ExtendPath(basePath, "customFrame", "texturePath"), customFrameDefaults.texturePath, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                            customFrameDefaults.enabled) ~= true
+                    end),
+                    refreshConfig = true,
+                    width = "full",
+                    normalize = function(value)
+                        value = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+                        if value == "" then
+                            return nil
+                        end
+                        return value
+                    end,
+                }),
+            color = BuildColor(4, "Tint", "Artwork color and opacity.",
+                ExtendPath(basePath, "customFrame", "color"), customFrameDefaults.color or { 1, 1, 1, 0.9 }, true, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                            customFrameDefaults.enabled) ~= true
+                    end),
+                    refreshConfig = true,
+                }),
+            blendMode = BuildSelect(5, "Blend Mode",
+                "Blend mode for the artwork layer.",
+                ExtendPath(basePath, "customFrame", "blendMode"), customFrameDefaults.blendMode or "BLEND",
+                TEXTURE_BLEND_MODE_VALUES, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                            customFrameDefaults.enabled) ~= true
+                    end),
+                    refreshConfig = true,
+                }),
+            extraWidth = BuildRange(6, "Stretch Width",
+                "Artwork width adjustment.",
+                ExtendPath(basePath, "customFrame", "extraWidth"), customFrameDefaults.extraWidth or 0, -200, 400,
+                1, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                            customFrameDefaults.enabled) ~= true
+                    end),
+                    refreshConfig = true,
+                }),
+            extraHeight = BuildRange(7, "Stretch Height",
+                "Artwork height adjustment.",
+                ExtendPath(basePath, "customFrame", "extraHeight"), customFrameDefaults.extraHeight or 0, -120, 240,
+                1, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                            customFrameDefaults.enabled) ~= true
+                    end),
+                    refreshConfig = true,
+                }),
+            offsetX = BuildRange(8, "Offset X", "Horizontal artwork offset.",
+                ExtendPath(basePath, "customFrame", "offsetX"), customFrameDefaults.offsetX or 0, -200, 200, 1, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                            customFrameDefaults.enabled) ~= true
+                    end),
+                    refreshConfig = true,
+                }),
+            offsetY = BuildRange(9, "Offset Y", "Vertical artwork offset.",
+                ExtendPath(basePath, "customFrame", "offsetY"), customFrameDefaults.offsetY or 0, -200, 200, 1, {
+                    disabled = ModuleDisabled(function()
+                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                            customFrameDefaults.enabled) ~= true
+                    end),
+                    refreshConfig = true,
+                }),
+        }) or nil
     local powerTab = {
         type = "group",
         name = "Power Bar",
@@ -2008,99 +2098,6 @@ local function BuildSingleUnitTab(unitKey, label)
                                 refreshConfig = true,
                             }) or nil,
                     }),
-                    customFrame = (unitKey == "player" or unitKey == "target") and Widgets.IGroup(2,
-                        "Custom Frame Art", {
-                            enabled = BuildToggle(1, "Enable",
-                                "Show a custom art layer behind this frame. This works for soft backgrounds or transparent frame textures.",
-                                ExtendPath(basePath, "customFrame", "enabled"), customFrameDefaults.enabled == true, {
-                                    disabled = disabled,
-                                    refreshConfig = true,
-                                }),
-                            texture = BuildTextureSelect(2, "Texture",
-                                "SharedMedia texture for the art layer. If Raw Path is set, that path is used instead.",
-                                ExtendPath(basePath, "customFrame", "texture"), "Use Flat Tint", {
-                                    disabled = ModuleDisabled(function()
-                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
-                                            customFrameDefaults.enabled) ~= true
-                                    end),
-                                    refreshConfig = true,
-                                    width = "full",
-                                }),
-                            texturePath = BuildInput(3, "Raw Path",
-                                "Optional direct texture path override, for example Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\MyFrame. Leave empty to use the texture picker.",
-                                ExtendPath(basePath, "customFrame", "texturePath"), customFrameDefaults.texturePath, {
-                                    disabled = ModuleDisabled(function()
-                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
-                                            customFrameDefaults.enabled) ~= true
-                                    end),
-                                    refreshConfig = true,
-                                    width = "full",
-                                    normalize = function(value)
-                                        value = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
-                                        if value == "" then
-                                            return nil
-                                        end
-                                        return value
-                                    end,
-                                }),
-                            color = BuildColor(4, "Tint", "Vertex color and alpha for the art layer.",
-                                ExtendPath(basePath, "customFrame", "color"), customFrameDefaults.color or
-                                { 1, 1, 1, 0.9 }, true, {
-                                    disabled = ModuleDisabled(function()
-                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
-                                            customFrameDefaults.enabled) ~= true
-                                    end),
-                                    refreshConfig = true,
-                                }),
-                            blendMode = BuildSelect(5, "Blend Mode",
-                                "How the texture blends with the frame backdrop.",
-                                ExtendPath(basePath, "customFrame", "blendMode"), customFrameDefaults.blendMode or
-                                "BLEND", TEXTURE_BLEND_MODE_VALUES, {
-                                    disabled = ModuleDisabled(function()
-                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
-                                            customFrameDefaults.enabled) ~= true
-                                    end),
-                                    refreshConfig = true,
-                                }),
-                            extraWidth = BuildRange(6, "Extra Width",
-                                "Expand or shrink the art width relative to the frame.",
-                                ExtendPath(basePath, "customFrame", "extraWidth"), customFrameDefaults.extraWidth or
-                                0, -200, 400, 1, {
-                                    disabled = ModuleDisabled(function()
-                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
-                                            customFrameDefaults.enabled) ~= true
-                                    end),
-                                    refreshConfig = true,
-                                }),
-                            extraHeight = BuildRange(7, "Extra Height",
-                                "Expand or shrink the art height relative to the frame.",
-                                ExtendPath(basePath, "customFrame", "extraHeight"),
-                                customFrameDefaults.extraHeight or 0, -120, 240, 1, {
-                                    disabled = ModuleDisabled(function()
-                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
-                                            customFrameDefaults.enabled) ~= true
-                                    end),
-                                    refreshConfig = true,
-                                }),
-                            offsetX = BuildRange(8, "Offset X", "Horizontal offset for the art layer.",
-                                ExtendPath(basePath, "customFrame", "offsetX"), customFrameDefaults.offsetX or 0,
-                                -200, 200, 1, {
-                                    disabled = ModuleDisabled(function()
-                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
-                                            customFrameDefaults.enabled) ~= true
-                                    end),
-                                    refreshConfig = true,
-                                }),
-                            offsetY = BuildRange(9, "Offset Y", "Vertical offset for the art layer.",
-                                ExtendPath(basePath, "customFrame", "offsetY"), customFrameDefaults.offsetY or 0,
-                                -200, 200, 1, {
-                                    disabled = ModuleDisabled(function()
-                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
-                                            customFrameDefaults.enabled) ~= true
-                                    end),
-                                    refreshConfig = true,
-                                }),
-                        }) or nil,
                     healPrediction = BuildHealPredictionGroup(4, ExtendPath(basePath, "healPrediction")),
                     highlights = Widgets.IGroup(5, "Highlights", {
                         showTarget = BuildToggle(1, "Target Highlight",
@@ -2134,8 +2131,16 @@ local function BuildSingleUnitTab(unitKey, label)
                     copyFrom = BuildCopyFromSingle(unitKey),
                 },
             },
+            artwork = (unitKey == "player" or unitKey == "target") and {
+                type = "group",
+                name = "Artwork",
+                order = 2,
+                args = {
+                    customFrame = customFrameGroup,
+                },
+            } or nil,
             power = powerTab,
-            layout = BuildLayoutGroup(3, "Layout", unitKey, layoutDefaults, {
+            layout = BuildLayoutGroup(4, "Layout", unitKey, layoutDefaults, {
                 disabled = disabled,
             }),
             text = BuildTextGroup(4, "Text", textPath, unitKey),

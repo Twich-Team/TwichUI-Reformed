@@ -9117,10 +9117,17 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         end
 
         AddExtra({
-            label = "Enable Custom Art",
+            type = "section",
+            tab = "art",
+            tabLabel = "Art",
+            label = "Frame Artwork",
+        })
+        AddExtra({
+            label = "Enable Frame Artwork",
             type = "toggle",
             tab = "art",
             tabLabel = "Art",
+            desc = "Enables custom artwork for this frame.",
             get = function()
                 local cfg = GetCustomFrameOverrideTable()
                 return cfg.enabled == true
@@ -9131,10 +9138,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Texture / Media Name",
+            label = "Registered Texture Name",
             type = "input",
             tab = "art",
             tabLabel = "Art",
+            desc = "Registered texture name from the addon or SharedMedia.",
             get = function()
                 local cfg = GetCustomFrameOverrideTable()
                 return tostring(cfg.texture or "")
@@ -9149,10 +9157,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Raw Texture Path",
+            label = "Texture File Path",
             type = "input",
             tab = "art",
             tabLabel = "Art",
+            desc = "Optional direct file path for a custom texture.",
             get = function()
                 local cfg = GetCustomFrameOverrideTable()
                 return tostring(cfg.texturePath or "")
@@ -9167,11 +9176,12 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Tint",
+            label = "Artwork Tint",
             type = "color",
             hasAlpha = true,
             tab = "art",
             tabLabel = "Art",
+            desc = "Artwork color and opacity.",
             get = function()
                 local cfg = GetCustomFrameOverrideTable()
                 return cfg.color or CUSTOM_FRAME_DEFAULTS.color
@@ -9185,10 +9195,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Blend Mode",
+            label = "Artwork Blend Mode",
             type = "select",
             tab = "art",
             tabLabel = "Art",
+            desc = "Blend mode for the artwork layer.",
             values = TEXTURE_BLEND_VALUES,
             get = function()
                 local cfg = GetCustomFrameOverrideTable()
@@ -9203,11 +9214,18 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
 
+        AddExtra({
+            type = "section",
+            tab = "art",
+            tabLabel = "Art",
+            label = "Placement",
+        })
+
         local customArtRanges = {
-            { field = "extraWidth",  label = "Extra Width",  min = -200, max = 400 },
-            { field = "extraHeight", label = "Extra Height", min = -120, max = 240 },
-            { field = "offsetX",     label = "Offset X",     min = -200, max = 200 },
-            { field = "offsetY",     label = "Offset Y",     min = -200, max = 200 },
+            { field = "extraWidth",  label = "Stretch Width",     min = -200, max = 400 },
+            { field = "extraHeight", label = "Stretch Height",    min = -120, max = 240 },
+            { field = "offsetX",     label = "Move Left / Right", min = -200, max = 200 },
+            { field = "offsetY",     label = "Move Up / Down",    min = -200, max = 200 },
         }
         for _, entry in ipairs(customArtRanges) do
             AddExtra({
@@ -9215,6 +9233,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 type = "range",
                 tab = "art",
                 tabLabel = "Art",
+                desc = string.format("%s for the artwork layer.", entry.label),
                 min = entry.min,
                 max = entry.max,
                 step = 1,
@@ -9277,10 +9296,17 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         }
 
         AddExtra({
-            label = "Frame Enabled",
+            type = "section",
+            tab = "frame",
+            tabLabel = "Frame",
+            label = "Cast Bar Frame",
+        })
+        AddExtra({
+            label = "Show Cast Bar",
             type = "toggle",
             tab = "frame",
             tabLabel = "Frame",
+            desc = "Enables the standalone cast bar.",
             get = function()
                 return GetCastbarConfig().enabled ~= false
             end,
@@ -9294,6 +9320,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             type = "range",
             tab = "frame",
             tabLabel = "Frame",
+            desc = "Cast bar width.",
             min = 120,
             max = 600,
             step = 1,
@@ -9310,6 +9337,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             type = "range",
             tab = "frame",
             tabLabel = "Frame",
+            desc = "Cast bar height.",
             min = 10,
             max = 60,
             step = 1,
@@ -9323,10 +9351,17 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         })
 
         AddExtra({
+            type = "section",
+            tab = "icon",
+            tabLabel = "Icon",
+            label = "Spell Icon",
+        })
+        AddExtra({
             label = "Show Icon",
             type = "toggle",
             tab = "icon",
             tabLabel = "Icon",
+            desc = "Shows the spell icon.",
             get = function()
                 return GetCastbarConfig().showIcon ~= false
             end,
@@ -9340,6 +9375,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             type = "range",
             tab = "icon",
             tabLabel = "Icon",
+            desc = "Spell icon size.",
             min = 12,
             max = 50,
             step = 1,
@@ -9359,6 +9395,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             type = "select",
             tab = "icon",
             tabLabel = "Icon",
+            desc = "Icon placement inside or outside the bar.",
             values = CASTBAR_ICON_POSITION_VALUES,
             get = function()
                 return GetCastbarConfig().iconPosition or castbarDefaults.iconPosition
@@ -9378,6 +9415,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             type = "select",
             tab = "icon",
             tabLabel = "Icon",
+            desc = "Icon side.",
             values = CASTBAR_ICON_SIDE_VALUES,
             get = function()
                 return GetCastbarConfig().iconSide or castbarDefaults.iconSide
@@ -9394,8 +9432,8 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         })
 
         local textToggles = {
-            { field = "showSpellText", label = "Show Spell", sizeField = "spellFontSize", sizeLabel = "Spell Size", defaultSize = castbarDefaults.spellFontSize },
-            { field = "showTimeText",  label = "Show Time",  sizeField = "timeFontSize",  sizeLabel = "Time Size",  defaultSize = castbarDefaults.timeFontSize },
+            { field = "showSpellText", label = "Show Spell Name", sizeField = "spellFontSize", sizeLabel = "Spell Name Size", defaultSize = castbarDefaults.spellFontSize },
+            { field = "showTimeText",  label = "Show Cast Time",  sizeField = "timeFontSize",  sizeLabel = "Time Size",       defaultSize = castbarDefaults.timeFontSize },
         }
         for _, entry in ipairs(textToggles) do
             AddExtra({
@@ -9432,10 +9470,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             })
         end
         AddExtra({
-            label = "Font / Media Name",
+            label = "Font Name",
             type = "input",
             tab = "text",
             tabLabel = "Text",
+            desc = "Optional font override.",
             get = function()
                 return tostring(GetCastbarConfig().fontName or "")
             end,
@@ -9536,10 +9575,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             text = "Standalone ambient effects for the cast bar.",
         })
         AddExtra({
-            label = "Particle Effects",
+            label = "Fantasy Effects",
             type = "toggle",
             tab = "effects",
             tabLabel = "Effects",
+            desc = "Enables the fantasy effect treatment.",
             get = function()
                 return (GetCastbarConfig().style or castbarDefaults.style) == "fantasy"
             end,
@@ -9549,10 +9589,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Particle Theme",
+            label = "Effect Theme",
             type = "select",
             tab = "effects",
             tabLabel = "Effects",
+            desc = "Fantasy effect theme.",
             values = POWER_FX_THEME_VALUES,
             get = function()
                 local current = GetCastbarConfig().fantasyTheme or castbarDefaults.fantasyTheme
@@ -9569,10 +9610,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Particle Expansion",
+            label = "Effect Size",
             type = "range",
             tab = "effects",
             tabLabel = "Effects",
+            desc = "Fantasy effect size.",
             min = 0.5,
             max = 3,
             step = 0.05,
@@ -9589,10 +9631,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Texture / Media Name",
+            label = "Fill Texture Name",
             type = "input",
             tab = "colors",
             tabLabel = "Colors",
+            desc = "Optional fill texture override.",
             get = function()
                 return tostring(GetCastbarConfig().texture or "")
             end,
@@ -9603,10 +9646,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Custom Fill Color",
+            label = "Use Custom Fill",
             type = "toggle",
             tab = "colors",
             tabLabel = "Colors",
+            desc = "Enables a custom fill color.",
             get = function()
                 return GetCastbarConfig().useCustomColor == true
             end,
@@ -9620,6 +9664,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             type = "toggle",
             tab = "colors",
             tabLabel = "Colors",
+            desc = "Uses the current global accent color.",
             get = function()
                 return GetCastbarConfig().useThemeAccentFill == true
             end,
@@ -9634,6 +9679,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             hasAlpha = true,
             tab = "colors",
             tabLabel = "Colors",
+            desc = "Cast bar fill color.",
             get = function()
                 return GetCastbarConfig().color or UnitFrames:GetPalette("player", "player").cast
             end,
@@ -9646,10 +9692,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Custom Background",
+            label = "Use Custom Background",
             type = "toggle",
             tab = "colors",
             tabLabel = "Colors",
+            desc = "Enables a custom background color.",
             get = function()
                 return GetCastbarConfig().useCustomBackground == true
             end,
@@ -9664,6 +9711,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             hasAlpha = true,
             tab = "colors",
             tabLabel = "Colors",
+            desc = "Cast bar background color.",
             get = function()
                 return GetCastbarConfig().backgroundColor or UnitFrames:GetPalette("player", "player").background
             end,
@@ -9680,6 +9728,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             type = "toggle",
             tab = "colors",
             tabLabel = "Colors",
+            desc = "Applies Masque styling when supported.",
             get = function()
                 return GetCastbarConfig().masqueEnabled == true
             end,
@@ -9697,10 +9746,17 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end
 
             AddExtra({
+                type = "section",
+                tab = "copy",
+                tabLabel = "Copy",
+                label = "Duplicate Settings",
+            })
+            AddExtra({
                 label = "Copy From",
                 type = "select",
                 tab = "copy",
                 tabLabel = "Copy",
+                desc = "Source group layout.",
                 values = function()
                     local values = {}
                     for key, label in pairs(GROUP_COPY_VALUES) do
@@ -9718,10 +9774,12 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 end,
             })
             AddExtra({
-                label = "Copy Settings",
+                label = "Apply Copy",
                 type = "execute",
                 tab = "copy",
                 tabLabel = "Copy",
+                buttonLabel = "Apply to This Layout",
+                desc = "Copies settings from the selected group layout.",
                 func = function()
                     local sourceKey = GetGroupCopySelectionStore()[layoutKey]
                     if not sourceKey or sourceKey == layoutKey then
@@ -9769,10 +9827,17 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             })
         else
             AddExtra({
+                type = "section",
+                tab = "copy",
+                tabLabel = "Copy",
+                label = "Duplicate Settings",
+            })
+            AddExtra({
                 label = "Copy From",
                 type = "select",
                 tab = "copy",
                 tabLabel = "Copy",
+                desc = "Source single-unit frame.",
                 values = function()
                     local values = {}
                     for key, label in pairs(SINGLE_COPY_VALUES) do
@@ -9790,10 +9855,12 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 end,
             })
             AddExtra({
-                label = "Copy Settings",
+                label = "Apply Copy",
                 type = "execute",
                 tab = "copy",
                 tabLabel = "Copy",
+                buttonLabel = "Apply to This Frame",
+                desc = "Copies settings from the selected single-unit frame.",
                 func = function()
                     local sourceKey = GetSingleCopySelectionStore()[layoutKey]
                     if not sourceKey or sourceKey == layoutKey then
@@ -9821,10 +9888,17 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
 
     local function AddColorExtras()
         AddExtra({
-            label = "Health Color Mode",
+            type = "section",
+            tab = "colors",
+            tabLabel = "Colors",
+            label = "Color Rules",
+        })
+        AddExtra({
+            label = "Health Fill Mode",
             type = "select",
             tab = "colors",
             tabLabel = "Colors",
+            desc = "Health bar color mode.",
             values = isHeader and HEALTH_MODE_VALUES or UNIT_HEALTH_MODE_VALUES,
             get = function()
                 local override = GetHealthColorOverrideTable()
@@ -9836,11 +9910,12 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Custom Health",
+            label = "Health Fill Color",
             type = "color",
             hasAlpha = true,
             tab = "colors",
             tabLabel = "Colors",
+            desc = "Custom health color.",
             get = function()
                 local override = GetHealthColorOverrideTable()
                 return override.color or UnitFrames:GetPalette(styleUnitKey).health
@@ -9855,10 +9930,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Power Color Mode",
+            label = "Power Fill Mode",
             type = "select",
             tab = "colors",
             tabLabel = "Colors",
+            desc = "Power bar color mode.",
             values = isHeader and POWER_MODE_VALUES or UNIT_POWER_MODE_VALUES,
             get = function()
                 local override = GetColorOverrideTable()
