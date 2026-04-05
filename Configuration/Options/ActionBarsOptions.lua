@@ -453,6 +453,14 @@ local BAR_ORDER = {
     { key = "stance",      label = "Stance Bar" },
 }
 
+local BAR_LABELS = {}
+local pendingCopySources = {}
+local UpdateBarVisibilityFromSimple
+
+for _, entry in ipairs(BAR_ORDER) do
+    BAR_LABELS[entry.key] = entry.label
+end
+
 local BAR_MAX_BUTTONS = {
     bar1 = 12,
     bar2 = 12,
@@ -489,6 +497,111 @@ local function ClampNumber(value, minValue, maxValue, fallback)
     end
 
     return value
+end
+
+local function DeepCopyValue(value)
+    if type(value) ~= "table" then
+        return value
+    end
+
+    local clone = {}
+    for key, nestedValue in pairs(value) do
+        clone[key] = DeepCopyValue(nestedValue)
+    end
+
+    return clone
+end
+
+local function NormalizeBarSettings(barKey, barDB)
+    if type(barDB) ~= "table" then
+        return
+    end
+
+    local defaults = BAR_DEFAULTS[barKey] or {}
+    local maxButtons = BAR_MAX_BUTTONS[barKey] or 12
+
+    for key, defaultValue in pairs(defaults) do
+        if barDB[key] == nil then
+            barDB[key] = DeepCopyValue(defaultValue)
+        end
+    end
+
+    barDB.enabled = barDB.enabled == true
+    barDB.mouseover = barDB.mouseover == true
+    barDB.backdrop = barDB.backdrop ~= false
+    barDB.showBorder = barDB.showBorder ~= false
+    barDB.showAccent = barDB.showAccent ~= false
+    barDB.showCooldownSwipe = barDB.showCooldownSwipe ~= false
+
+    barDB.buttonCount = ClampNumber(barDB.buttonCount, 1, maxButtons, defaults.buttonCount or maxButtons)
+    barDB.buttonsPerRow = ClampNumber(barDB.buttonsPerRow, 1, maxButtons,
+        defaults.buttonsPerRow or barDB.buttonCount or maxButtons)
+    barDB.buttonSize = ClampNumber(barDB.buttonSize, 22, 64, defaults.buttonSize or 32)
+    barDB.scale = ClampNumber(barDB.scale, 0.5, 2, defaults.scale or 1)
+    barDB.alpha = ClampNumber(barDB.alpha, 0.05, 1, defaults.alpha or 1)
+    barDB.x = tonumber(barDB.x) or defaults.x or 0
+    barDB.y = tonumber(barDB.y) or defaults.y or 0
+    barDB.point = defaults.point and (barDB.point or defaults.point) or barDB.point
+    barDB.relativePoint = defaults.relativePoint and (barDB.relativePoint or defaults.relativePoint) or
+    barDB.relativePoint
+
+    if type(barDB.simpleVisibility) ~= "table" then
+        barDB.simpleVisibility = DeepCopyValue(defaults.simpleVisibility or {})
+    end
+
+    if barDB.simpleVisibilityMode ~= "show" and barDB.simpleVisibilityMode ~= "hide" then
+        barDB.simpleVisibilityMode = "raw"
+    end
+
+    if barDB.simpleVisibilityMode ~= "raw" then
+        UpdateBarVisibilityFromSimple(barDB)
+    else
+        barDB.visibility = tostring(barDB.visibility or defaults.visibility or "show")
+    end
+
+    barDB._cooldownSwipeDefaultsMigrated = true
+end
+
+local function CopyBarSettings(targetBarKey, sourceBarKey, db)
+    if not targetBarKey or not sourceBarKey or targetBarKey == sourceBarKey then
+        return false
+    end
+
+    db = db or Options:GetDB()
+    if type(db) ~= "table" or type(db.bars) ~= "table" then
+        return false
+    end
+
+    local sourceBarDB = db.bars[sourceBarKey]
+    local targetBarDB = db.bars[targetBarKey]
+    if type(sourceBarDB) ~= "table" or type(targetBarDB) ~= "table" then
+        return false
+    end
+
+    for key in pairs(targetBarDB) do
+        targetBarDB[key] = nil
+    end
+
+    for key, value in pairs(sourceBarDB) do
+        if key ~= "_cooldownSwipeDefaultsMigrated" then
+            targetBarDB[key] = DeepCopyValue(value)
+        end
+    end
+
+    NormalizeBarSettings(targetBarKey, targetBarDB)
+    return true
+end
+
+local function GetCopySourceValues(targetBarKey)
+    local values = {}
+
+    for _, entry in ipairs(BAR_ORDER) do
+        if entry.key ~= targetBarKey then
+            values[entry.key] = entry.label
+        end
+    end
+
+    return values
 end
 
 local function GetModule()
@@ -589,7 +702,7 @@ local function EnsureSimpleVisibility(barDB)
     return barDB.simpleVisibility
 end
 
-local function UpdateBarVisibilityFromSimple(barDB)
+UpdateBarVisibilityFromSimple = function(barDB)
     barDB.visibility = BuildSimpleVisibilityDriver(barDB)
 end
 
@@ -1136,6 +1249,58 @@ function Options:BuildConfiguration()
             order = 10 + index,
             args = {
                 controls = Widgets.IGroup(1, label, {
+                    copySource = {
+                        type = "select",
+                        name = "Copy Settings From",
+                        desc =
+                        "Choose another bar and copy its current settings into this bar, including layout, visibility, and styling.",
+                        order = 0.1,
+                        width = 1.5,
+                        values = function()
+                            return GetCopySourceValues(barKey)
+                        end,
+                        get = function()
+                            return pendingCopySources[barKey]
+                        end,
+                        set = function(_, value)
+                            pendingCopySources[barKey] = value
+                        end,
+                    },
+                    copyExecute = {
+                        type = "execute",
+                        name = "Copy Settings",
+                        desc = "Apply the selected bar's settings to this bar.",
+                        order = 0.2,
+                        width = 1.1,
+                        disabled = function()
+                            local sourceBarKey = pendingCopySources[barKey]
+                            return sourceBarKey == nil or sourceBarKey == barKey
+                        end,
+                        func = function()
+                            local sourceBarKey = pendingCopySources[barKey]
+                            if not sourceBarKey or sourceBarKey == barKey then
+                                return
+                            end
+
+                            local sourceLabel = BAR_LABELS[sourceBarKey] or sourceBarKey
+                            local targetLabel = BAR_LABELS[barKey] or barKey
+                            local applyCopy = function()
+                                if CopyBarSettings(barKey, sourceBarKey, db) then
+                                    RequestRefresh(true)
+                                end
+                            end
+
+                            if ConfigurationModule and ConfigurationModule.ShowGenericConfirmationDialog then
+                                ConfigurationModule:ShowGenericConfirmationDialog(
+                                    string.format("Copy settings from %s to %s?", sourceLabel, targetLabel),
+                                    applyCopy)
+                            else
+                                applyCopy()
+                            end
+                        end,
+                    },
+                    copyNote = Widgets.Description(0.3,
+                        "Copying replaces this bar's current settings and then normalizes values for the target bar's limits."),
                     enable = {
                         type = "toggle",
                         name = "Enable",
