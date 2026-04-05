@@ -84,7 +84,31 @@ end
 ---@field Hide fun(self:TwichUISecureMenu)
 ---@field SetEntries fun(self:TwichUISecureMenu, entries:TwichUISecureMenuEntry[])
 
-local function GetBorderAndBackdrop()
+local function GetBorderAndBackdrop(menu, scope)
+    local style = menu and menu.styleOverride or nil
+    if type(style) == "table" then
+        local prefix = scope == "row" and "row" or "frame"
+        local border = type(style[prefix .. "BorderColor"]) == "table" and style[prefix .. "BorderColor"] or
+            type(style.borderColor) == "table" and style.borderColor or nil
+        local backdrop = type(style[prefix .. "BackdropColor"]) == "table" and style[prefix .. "BackdropColor"] or
+            type(style.backdropColor) == "table" and style.backdropColor or nil
+        local br = border and border[1] or 0
+        local bg = border and border[2] or 0
+        local bb = border and border[3] or 0
+        local fr = backdrop and backdrop[1] or 0.06
+        local fg = backdrop and backdrop[2] or 0.06
+        local fb = backdrop and backdrop[3] or 0.06
+        local alphaKey = prefix .. "BackdropAlpha"
+        local fa = tonumber(style[alphaKey])
+        if fa == nil then
+            fa = tonumber(style.backdropAlpha)
+        end
+        if fa == nil then
+            fa = backdrop and backdrop[4] or 0.9
+        end
+        return br, bg, bb, fr, fg, fb, fa
+    end
+
     ---@diagnostic disable-next-line: undefined-field
     local E = _G.ElvUI and _G.ElvUI[1]
     if E and E.media and E.media.bordercolor and E.media.backdropfadecolor then
@@ -95,8 +119,8 @@ local function GetBorderAndBackdrop()
     return 0, 0, 0, 0.06, 0.06, 0.06, 0.9
 end
 
-local function SkinBackdrop(frame)
-    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop()
+local function SkinBackdrop(frame, menu, scope)
+    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop(menu, scope)
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
@@ -334,7 +358,7 @@ local function CreateRow(menu, index)
     button:EnableMouse(true)
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp", "LeftButtonDown", "RightButtonDown")
     button:SetAttribute("pressAndHoldAction", true)
-    SkinBackdrop(button)
+    SkinBackdrop(button, menu, "row")
 
     local label = button:CreateFontString(nil, "OVERLAY")
     label:SetPoint("LEFT", button, "LEFT", 6, 0)
@@ -394,8 +418,8 @@ local function CreateRow(menu, index)
     end)
 
     button:SetScript("OnLeave", function(self)
-        local br, bg, bb = GetBorderAndBackdrop()
-        local _, _, _, fr, fg, fb, fa = GetBorderAndBackdrop()
+        local br, bg, bb = GetBorderAndBackdrop(self.__twichuiMenu, "row")
+        local _, _, _, fr, fg, fb, fa = GetBorderAndBackdrop(self.__twichuiMenu, "row")
         self:SetBackdropColor(fr, fg, fb, fa)
         self:SetBackdropBorderColor(br, bg, bb, 1)
         self.__twichuiGlow:SetAlpha(0)
@@ -454,7 +478,7 @@ function UI.CreateSecureMenu(key)
     frame:SetClampedToScreen(true)
     frame:Hide()
 
-    SkinBackdrop(frame)
+    SkinBackdrop(frame, menu, "frame")
     EnsureFrameFadeAnimations(frame, MENU_FADE_IN_DURATION, MENU_FADE_OUT_DURATION, function(menuFrame)
         menuFrame:Hide()
     end)
@@ -464,6 +488,13 @@ function UI.CreateSecureMenu(key)
         buttons = {},
         entries = {},
     }
+
+    local blocker = CreateFrame("Frame", nil, frame)
+    blocker:SetAllPoints(frame)
+    blocker:SetFrameStrata(frame:GetFrameStrata())
+    blocker:SetFrameLevel(frame:GetFrameLevel())
+    blocker:EnableMouse(true)
+    menu.blocker = blocker
 
     local dismiss = CreateFrame("Button", nil, _G.UIParent, "BackdropTemplate")
     dismiss:SetAllPoints(_G.UIParent)
@@ -589,7 +620,7 @@ function UI.CreateSecureMenu(key)
                     tostring(entry.disabled == true))
 
                 if entry.isTitle then
-                    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop()
+                    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop(self, "row")
                     row:SetBackdropColor(fr, fg, fb, fa)
                     row:SetBackdropBorderColor(br, bg, bb, 1)
                     row:EnableMouse(false)
@@ -599,14 +630,14 @@ function UI.CreateSecureMenu(key)
                     row.__twichuiUnderline:SetAlpha(0)
                     row.__twichuiLabel:SetTextColor(0.98, 0.82, 0.42)
                 elseif entry.disabled then
-                    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop()
+                    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop(self, "row")
                     row:SetBackdropColor(fr, fg, fb, fa)
                     row:SetBackdropBorderColor(br, bg, bb, 1)
                     row:EnableMouse(false)
                     row:SetAlpha(0.5)
                     row.__twichuiLabel:SetTextColor(0.6, 0.64, 0.7)
                 else
-                    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop()
+                    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop(self, "row")
                     row:SetBackdropColor(fr, fg, fb, fa)
                     row:SetBackdropBorderColor(br, bg, bb, 1)
                     row:EnableMouse(true)

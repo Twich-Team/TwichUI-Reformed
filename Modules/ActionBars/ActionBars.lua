@@ -69,6 +69,16 @@ local DEBUG_SOURCE_KEY = "actionbars"
 local PIXEL_GLOW_ALPHA = 0.9
 local FAILED_ACTION_FEEDBACK_WINDOW = 0.6
 
+local SIMPLE_VISIBILITY_RULES = {
+    { key = "combat",    label = "Combat",               condition = "combat" },
+    { key = "petbattle", label = "Pet Battle",           condition = "petbattle" },
+    { key = "skyriding", label = "Skyriding / Override", condition = "overridebar" },
+    { key = "vehicle",   label = "Vehicle",              condition = "vehicleui" },
+    { key = "possess",   label = "Possess",              condition = "possessbar" },
+    { key = "pet",       label = "Pet",                  condition = "pet" },
+    { key = "stance",    label = "Stance",               condition = "shapeshift" },
+}
+
 local function SplitBindingTarget(target)
     if type(target) ~= "string" then
         return nil, nil, nil
@@ -317,6 +327,13 @@ local BAR_DEFINITIONS = {
 }
 
 ActionBars.BAR_DEFINITIONS = BAR_DEFINITIONS
+
+local DESIGNER_BAR_LABELS = {}
+local DESIGNER_BAR_ORDER = {}
+for _, definition in ipairs(BAR_DEFINITIONS) do
+    DESIGNER_BAR_LABELS[definition.key] = definition.label
+    DESIGNER_BAR_ORDER[#DESIGNER_BAR_ORDER + 1] = definition.key
+end
 
 local function ClampNumber(value, minValue, maxValue, fallback)
     value = tonumber(value)
@@ -1253,6 +1270,112 @@ function ActionBars:GetPrimaryBarOrder(barKey)
     return tonumber(barKey:match("^bar(%d+)$"))
 end
 
+function ActionBars:BuildDesignerSimpleVisibilityDriver(settings)
+    if type(settings) ~= "table" then
+        return DEFAULT_VISIBILITY
+    end
+
+    local mode = settings.simpleVisibilityMode or "raw"
+    if mode == "raw" then
+        return tostring(settings.visibility or DEFAULT_VISIBILITY)
+    end
+
+    local action = mode == "show" and "show" or "hide"
+    local fallback = mode == "show" and "hide" or "show"
+    local clauses = {}
+    local simpleVisibility = type(settings.simpleVisibility) == "table" and settings.simpleVisibility or {}
+
+    for _, rule in ipairs(SIMPLE_VISIBILITY_RULES) do
+        if simpleVisibility[rule.key] == true then
+            clauses[#clauses + 1] = string.format("[%s] %s", rule.condition, action)
+        end
+    end
+
+    if #clauses == 0 then
+        return fallback
+    end
+
+    clauses[#clauses + 1] = fallback
+    return table.concat(clauses, "; ")
+end
+
+function ActionBars:EnsureDesignerSimpleVisibility(settings)
+    if type(settings.simpleVisibility) ~= "table" then
+        settings.simpleVisibility = {}
+    end
+
+    return settings.simpleVisibility
+end
+
+function ActionBars:UpdateDesignerVisibilityFromSimple(settings)
+    if type(settings) ~= "table" then
+        return
+    end
+
+    settings.visibility = self:BuildDesignerSimpleVisibilityDriver(settings)
+end
+
+function ActionBars:GetDesignerCopySourceValues(targetBarKey)
+    local values = {}
+    local order = {}
+
+    for _, barKey in ipairs(DESIGNER_BAR_ORDER) do
+        if barKey ~= targetBarKey then
+            values[barKey] = DESIGNER_BAR_LABELS[barKey] or barKey
+            order[#order + 1] = barKey
+        end
+    end
+
+    return values, order
+end
+
+function ActionBars:GetDesignerCopySource(barKey)
+    self._designerCopySources = self._designerCopySources or {}
+    local values, order = self:GetDesignerCopySourceValues(barKey)
+    local selected = self._designerCopySources[barKey]
+    if selected == nil or values[selected] == nil then
+        selected = order[1]
+        self._designerCopySources[barKey] = selected
+    end
+
+    return selected
+end
+
+function ActionBars:SetDesignerCopySource(barKey, sourceBarKey)
+    local values = self:GetDesignerCopySourceValues(barKey)
+    self._designerCopySources = self._designerCopySources or {}
+    if values[sourceBarKey] ~= nil then
+        self._designerCopySources[barKey] = sourceBarKey
+    end
+end
+
+function ActionBars:CopyDesignerBarSettings(targetBarKey, sourceBarKey)
+    if not targetBarKey or not sourceBarKey or targetBarKey == sourceBarKey then
+        return false
+    end
+
+    local sourceSettings = self:GetBarSettings(sourceBarKey)
+    local targetSettings = self:GetBarSettings(targetBarKey)
+    if type(sourceSettings) ~= "table" or type(targetSettings) ~= "table" then
+        return false
+    end
+
+    for key in pairs(targetSettings) do
+        targetSettings[key] = nil
+    end
+    for key, value in pairs(sourceSettings) do
+        targetSettings[key] = DeepCopyDesignerValue(value)
+    end
+
+    self:NormalizeDesignerBarSettings(targetBarKey, targetSettings)
+    if targetSettings.simpleVisibilityMode ~= "raw" then
+        self:UpdateDesignerVisibilityFromSimple(targetSettings)
+    end
+
+    self:RequestRefresh()
+    return true
+end
+
 function ActionBars:NormalizeDesignerBarSettings(barKey, settings)
     local definition = self:GetBarDefinition(barKey)
     if not definition or type(settings) ~= "table" then
@@ -1267,13 +1390,24 @@ function ActionBars:NormalizeDesignerBarSettings(barKey, settings)
     settings.enabled = settings.enabled == true
     settings.buttonCount = math.floor(buttonCount + 0.5)
     settings.buttonsPerRow = math.floor(ClampDesignerNumber(settings.buttonsPerRow, 1, settings.buttonCount, fallbackRows) +
-    0.5)
+        0.5)
     settings.buttonSize = math.floor(ClampDesignerNumber(settings.buttonSize, 20, 72, fallbackSize) + 0.5)
     settings.spacing = ClampDesignerNumber(settings.spacing, 0, 24, 6)
     settings.scale = ClampDesignerNumber(settings.scale, 0.5, 2, 1)
     settings.alpha = ClampDesignerNumber(settings.alpha, 0.05, 1, 1)
     settings.mouseover = settings.mouseover == true
+    settings.backdrop = settings.backdrop ~= false
+    settings.showBorder = settings.showBorder ~= false
+    settings.showAccent = settings.showAccent ~= false
     settings.showCooldownSwipe = settings.showCooldownSwipe ~= false
+    if settings.simpleVisibilityMode ~= "show" and settings.simpleVisibilityMode ~= "hide" then
+        settings.simpleVisibilityMode = "raw"
+    end
+    self:EnsureDesignerSimpleVisibility(settings)
+    settings.visibility = tostring(settings.visibility or DEFAULT_VISIBILITY)
+    if settings.simpleVisibilityMode ~= "raw" then
+        self:UpdateDesignerVisibilityFromSimple(settings)
+    end
 
     return settings
 end
@@ -1388,7 +1522,7 @@ function ActionBars:CreateSiblingBarFromSource(sourceBarKey, direction)
             end
 
             local sourceHeight = refreshedSourceHolder and refreshedSourceHolder.GetHeight and
-            refreshedSourceHolder:GetHeight() or nil
+                refreshedSourceHolder:GetHeight() or nil
             local targetHeight = targetHolder and targetHolder.GetHeight and targetHolder:GetHeight() or nil
             local offsetHeight = math.max(sourceHeight or 0, targetHeight or 0, targetSettings.buttonSize or 36)
             local offset = math.floor(offsetHeight + 0.5)
@@ -1424,8 +1558,49 @@ function ActionBars:RegisterWithMoverModule()
         local barLabel = definition.label
         local extras = {
             {
-                label = "Bar Enabled",
+                label = "Copy Settings From",
+                type = "select",
+                tab = "Layout",
+                values = function()
+                    local values = ActionBars:GetDesignerCopySourceValues(barKey)
+                    return values
+                end,
+                valuesOrder = function()
+                    local _, order = ActionBars:GetDesignerCopySourceValues(barKey)
+                    return order
+                end,
+                get = function()
+                    return ActionBars:GetDesignerCopySource(barKey)
+                end,
+                set = function(value)
+                    ActionBars:SetDesignerCopySource(barKey, value)
+                end,
+            },
+            {
+                label = "Copy Settings",
+                type = "execute",
+                tab = "Layout",
+                buttonLabel = "Copy Into This Bar",
+                func = function()
+                    local sourceBarKey = ActionBars:GetDesignerCopySource(barKey)
+                    if sourceBarKey then
+                        ActionBars:CopyDesignerBarSettings(barKey, sourceBarKey)
+                    end
+                end,
+                disabled = function()
+                    local sourceBarKey = ActionBars:GetDesignerCopySource(barKey)
+                    return sourceBarKey == nil or sourceBarKey == barKey
+                end,
+            },
+            {
+                type = "label",
+                tab = "Layout",
+                text = "Copying replaces this bar's current layout, styling, and visibility settings.",
+            },
+            {
                 type = "toggle",
+                tab = "Visibility",
+                label = "Bar Enabled",
                 get = function()
                     local s = ActionBars:GetBarSettings(barKey)
                     return s and s.enabled == true or false
@@ -1441,6 +1616,7 @@ function ActionBars:RegisterWithMoverModule()
             {
                 label = "Mouseover Visibility",
                 type = "toggle",
+                tab = "Visibility",
                 get = function()
                     local s = ActionBars:GetBarSettings(barKey)
                     return s and s.mouseover == true or false
@@ -1460,6 +1636,7 @@ function ActionBars:RegisterWithMoverModule()
             {
                 label = "Cooldown Swipe",
                 type = "toggle",
+                tab = "Style",
                 get = function()
                     local s = ActionBars:GetBarSettings(barKey)
                     return not s or s.showCooldownSwipe ~= false
@@ -1479,6 +1656,7 @@ function ActionBars:RegisterWithMoverModule()
             {
                 label = "Visible Buttons",
                 type = "range",
+                tab = "Layout",
                 min = 1,
                 max = definition.maxButtons or 12,
                 step = 1,
@@ -1505,6 +1683,7 @@ function ActionBars:RegisterWithMoverModule()
             {
                 label = "Buttons Per Row",
                 type = "range",
+                tab = "Layout",
                 min = 1,
                 max = function()
                     local s = ActionBars:GetBarSettings(barKey)
@@ -1532,6 +1711,7 @@ function ActionBars:RegisterWithMoverModule()
             {
                 label = "Button Size",
                 type = "range",
+                tab = "Layout",
                 min = 20,
                 max = 72,
                 step = 2,
@@ -1543,7 +1723,7 @@ function ActionBars:RegisterWithMoverModule()
                     local s = ActionBars:GetBarSettings(barKey)
                     if s then
                         s.buttonSize = math.floor(ClampDesignerNumber(value, 20, 72, definition.fallbackButtonSize or 36) +
-                        0.5)
+                            0.5)
                         ActionBars:RequestRefresh()
                     end
                 end,
@@ -1552,16 +1732,187 @@ function ActionBars:RegisterWithMoverModule()
                     return not s or s.enabled ~= true
                 end,
             },
+            {
+                label = "Scale",
+                type = "range",
+                tab = "Layout",
+                min = 0.5,
+                max = 2,
+                step = 0.01,
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return s and s.scale or 1
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.scale = ClampDesignerNumber(value, 0.5, 2, 1)
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+            {
+                label = "Alpha",
+                type = "range",
+                tab = "Layout",
+                min = 0.05,
+                max = 1,
+                step = 0.01,
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return s and s.alpha or 1
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.alpha = ClampDesignerNumber(value, 0.05, 1, 1)
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+            {
+                label = "Backdrop",
+                type = "toggle",
+                tab = "Style",
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.backdrop ~= false
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.backdrop = value == true
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+            {
+                label = "Border",
+                type = "toggle",
+                tab = "Style",
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.showBorder ~= false
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.showBorder = value == true
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+            {
+                label = "Accent",
+                type = "toggle",
+                tab = "Style",
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.showAccent ~= false
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.showAccent = value == true
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+            {
+                label = "Simple Visibility",
+                type = "select",
+                tab = "Visibility",
+                values = {
+                    raw = "Raw Driver",
+                    show = "Show Selected States",
+                    hide = "Hide Selected States",
+                },
+                valuesOrder = { "raw", "show", "hide" },
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return s and s.simpleVisibilityMode or "raw"
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        s.simpleVisibilityMode = value or "raw"
+                        if s.simpleVisibilityMode ~= "raw" then
+                            ActionBars:UpdateDesignerVisibilityFromSimple(s)
+                        end
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true
+                end,
+            },
+            {
+                type = "label",
+                tab = "Visibility",
+                text = "Raw driver editing remains in the full Action Bars config UI.",
+                hidden = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.simpleVisibilityMode ~= "raw"
+                end,
+            },
         }
+
+        for _, rule in ipairs(SIMPLE_VISIBILITY_RULES) do
+            extras[#extras + 1] = {
+                label = rule.label,
+                type = "toggle",
+                tab = "Visibility",
+                get = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    local simpleVisibility = s and ActionBars:EnsureDesignerSimpleVisibility(s) or {}
+                    return simpleVisibility[rule.key] == true
+                end,
+                set = function(value)
+                    local s = ActionBars:GetBarSettings(barKey)
+                    if s then
+                        ActionBars:EnsureDesignerSimpleVisibility(s)[rule.key] = value == true
+                        ActionBars:UpdateDesignerVisibilityFromSimple(s)
+                        ActionBars:RequestRefresh()
+                    end
+                end,
+                disabled = function()
+                    local s = ActionBars:GetBarSettings(barKey)
+                    return not s or s.enabled ~= true or s.simpleVisibilityMode == "raw"
+                end,
+            }
+        end
 
         if ActionBars:IsPrimaryBarKey(barKey) then
             extras[#extras + 1] = {
                 type = "label",
+                tab = "Layout",
                 text = "Clone this layout into the next disabled action bar.",
             }
             extras[#extras + 1] = {
                 label = "Add Bar Above",
                 type = "execute",
+                tab = "Layout",
                 buttonLabel = "Add Bar Above",
                 func = function()
                     ActionBars:CreateSiblingBarFromSource(barKey, "above")
@@ -1573,6 +1924,7 @@ function ActionBars:RegisterWithMoverModule()
             extras[#extras + 1] = {
                 label = "Add Bar Below",
                 type = "execute",
+                tab = "Layout",
                 buttonLabel = "Add Bar Below",
                 func = function()
                     ActionBars:CreateSiblingBarFromSource(barKey, "below")

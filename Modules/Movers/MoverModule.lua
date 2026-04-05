@@ -74,6 +74,8 @@ local C_DOCK_GLOW                 = { 0.24, 0.62, 0.92 }
 local C_DOCK_TEXT                 = { 0.70, 0.90, 0.98 }
 local C_DOCK_PILL                 = { 0.11, 0.18, 0.24 }
 local C_DOCK_PILL_TEXT            = { 0.58, 0.88, 1.00 }
+local C_CFG_ACCENT                = { 0.98, 0.76, 0.22 }
+local C_TAB_ACCENT                = { 0.42, 0.82, 0.98 }
 
 -- ── Per-category tint colours ────────────────────────────────────────────────
 -- Handles are tinted by category so the user can identify module groups at a glance.
@@ -237,8 +239,8 @@ function MoverModule:_GetInspector()
     panel._activeDockSide = "RIGHT"
 
     local dock = CreateFrame("Frame", "TwichUIInterfaceDesignerDock", UIParent, "BackdropTemplate")
-    dock:SetFrameStrata("TOOLTIP")
-    dock:SetFrameLevel(9998)
+    dock:SetFrameStrata("DIALOG")
+    dock:SetFrameLevel(400)
     dock:SetClampedToScreen(true)
     dock:SetWidth(DESIGNER_DOCK_WIDTH)
     dock:EnableMouse(true)
@@ -249,7 +251,7 @@ function MoverModule:_GetInspector()
     local dockInner = CreateFrame("Frame", nil, dock, "BackdropTemplate")
     dockInner:SetPoint("TOPLEFT", dock, "TOPLEFT", 1, -1)
     dockInner:SetPoint("BOTTOMRIGHT", dock, "BOTTOMRIGHT", -1, 1)
-    ApplyBackdrop(dockInner, 0.05, 0.035, 0.025, 0.82, 0.27, 0.16, 0.09, 0.55)
+    ApplyBackdrop(dockInner, 0.055, 0.06, 0.075, 0.96, 0.94, 0.77, 0.28, 0.10)
 
     -- Hide on click-outside via overlay script (see _BuildOverlay)
     panel._activeKey = nil
@@ -271,6 +273,9 @@ function MoverModule:_GetInspector()
         MoverModule:_RefreshHandleVisualStates()
     end)
     panel:SetScript("OnHide", function(self)
+        if self._dock and self._dock._extraSelectMenu and self._dock._extraSelectMenu.Hide then
+            self._dock._extraSelectMenu:Hide()
+        end
         if self._dock then
             self._dock:Hide()
         end
@@ -524,6 +529,32 @@ function MoverModule:_GetInspector()
         return type(extra.disabled) == "function" and extra.disabled() == true
     end
 
+    local function ResolveExtraOptions(extra)
+        local values = type(extra.values) == "function" and extra.values() or extra.values
+        if type(values) ~= "table" then
+            values = {}
+        end
+
+        local order = type(extra.valuesOrder) == "function" and extra.valuesOrder() or extra.valuesOrder
+        local orderedKeys = {}
+        if type(order) == "table" then
+            for _, entry in ipairs(order) do
+                if values[entry] ~= nil then
+                    orderedKeys[#orderedKeys + 1] = entry
+                end
+            end
+        else
+            for optionKey in pairs(values) do
+                orderedKeys[#orderedKeys + 1] = optionKey
+            end
+            table.sort(orderedKeys, function(a, b)
+                return tostring(values[a]) < tostring(values[b])
+            end)
+        end
+
+        return values, orderedKeys
+    end
+
     local function FormatExtraValue(extra, value)
         if type(extra.format) == "function" then
             return tostring(extra.format(value))
@@ -543,13 +574,17 @@ function MoverModule:_GetInspector()
         end
 
         if enabled then
-            frame:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
-            frame:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
-            if frame._fs and frame._fs.SetTextColor then
-                frame._fs:SetTextColor(0.92, 0.94, 0.96)
-            end
-            if frame.SetTextColor then
-                frame:SetTextColor(0.92, 0.94, 0.96)
+            if frame._dockVisualUpdate then
+                frame._dockVisualUpdate(frame)
+            else
+                frame:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
+                frame:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+                if frame._fs and frame._fs.SetTextColor then
+                    frame._fs:SetTextColor(0.92, 0.94, 0.96)
+                end
+                if frame.SetTextColor then
+                    frame:SetTextColor(0.92, 0.94, 0.96)
+                end
             end
         else
             frame:SetBackdropColor(0.03, 0.03, 0.05, 0.9)
@@ -560,8 +595,270 @@ function MoverModule:_GetInspector()
             if frame.SetTextColor then
                 frame:SetTextColor(0.46, 0.48, 0.56)
             end
+            if frame._leftAccent then
+                frame._leftAccent:SetAlpha(0)
+            end
+            if frame._chevron then
+                frame._chevron:SetAlpha(0.35)
+            end
         end
     end
+
+    local function AttachDockButtonChrome(button, style)
+        if button._leftAccent then
+            return
+        end
+
+        style = style or {}
+        button._dockStyle = style.kind or "button"
+        button._accentColor = style.accent or C_CFG_ACCENT
+
+        local leftAccent = button:CreateTexture(nil, "BORDER")
+        leftAccent:SetPoint("TOPLEFT", button, "TOPLEFT", 1, -1)
+        leftAccent:SetPoint("BOTTOMLEFT", button, "BOTTOMLEFT", 1, 1)
+        leftAccent:SetWidth(style.kind == "tab" and 3 or 3)
+        leftAccent:SetColorTexture(1, 1, 1, 0)
+        button._leftAccent = leftAccent
+
+        if style.hasArrow then
+            local chevron = button:CreateFontString(nil, "OVERLAY")
+            chevron:SetPoint("RIGHT", button, "RIGHT", -8, 0)
+            SetFont(chevron, 11)
+            chevron:SetText("v")
+            chevron:SetTextColor(0.90, 0.88, 0.82)
+            button._chevron = chevron
+            if button._fs then
+                button._fs:ClearAllPoints()
+                button._fs:SetPoint("LEFT", button, "LEFT", 10, 0)
+                button._fs:SetPoint("RIGHT", chevron, "LEFT", -6, 0)
+                button._fs:SetJustifyH(style.justifyH or "LEFT")
+            end
+        elseif button._fs then
+            button._fs:ClearAllPoints()
+            button._fs:SetPoint("LEFT", button, "LEFT", 10, 0)
+            button._fs:SetPoint("RIGHT", button, "RIGHT", -10, 0)
+            button._fs:SetJustifyH(style.justifyH or "CENTER")
+        end
+
+        button._dockVisualUpdate = function(self)
+            local accent = self._accentColor or C_CFG_ACCENT
+            local hovered = self._hovered == true
+            local selected = self._selected == true
+            local kind = self._dockStyle or "button"
+
+            if kind == "tab" then
+                if selected then
+                    self:SetBackdropColor(0.11, 0.10, 0.14, 0.98)
+                    self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.52)
+                    self._fs:SetTextColor(0.98, 0.96, 0.90)
+                    self._leftAccent:SetColorTexture(accent[1], accent[2], accent[3], 1)
+                elseif hovered then
+                    self:SetBackdropColor(0.09, 0.10, 0.13, 0.96)
+                    self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.34)
+                    self._fs:SetTextColor(0.92, 0.94, 0.96)
+                    self._leftAccent:SetColorTexture(accent[1], accent[2], accent[3], 0.55)
+                else
+                    self:SetBackdropColor(0.06, 0.07, 0.10, 0.94)
+                    self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.12)
+                    self._fs:SetTextColor(0.72, 0.78, 0.86)
+                    self._leftAccent:SetColorTexture(accent[1], accent[2], accent[3], 0)
+                end
+            else
+                local fill = selected and 0.30 or (hovered and 0.30 or 0.22)
+                self:SetBackdropColor(accent[1] * fill, accent[2] * fill, accent[3] * fill, 0.98)
+                self:SetBackdropBorderColor(accent[1], accent[2], accent[3], hovered and 0.78 or 0.42)
+                if self._fs then
+                    self._fs:SetTextColor(0.96, 0.96, 0.98)
+                end
+                if self._leftAccent then
+                    self._leftAccent:SetColorTexture(accent[1], accent[2], accent[3], hovered and 0.9 or 0.7)
+                end
+                if self._chevron then
+                    self._chevron:SetTextColor(0.96, 0.94, 0.88)
+                    self._chevron:SetAlpha(0.9)
+                end
+            end
+        end
+    end
+
+    local function EnsureDockSelectMenu()
+        if dock._extraSelectMenu then
+            return dock._extraSelectMenu
+        end
+
+        local dismiss = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
+        dismiss:SetAllPoints(UIParent)
+        dismiss:SetFrameStrata("FULLSCREEN_DIALOG")
+        dismiss:SetFrameLevel(1)
+        dismiss:RegisterForClicks("AnyUp")
+        dismiss:Hide()
+
+        local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+        frame:SetFrameStrata("TOOLTIP")
+        frame:SetFrameLevel(10)
+        frame:SetToplevel(true)
+        frame:SetClampedToScreen(true)
+        frame:EnableMouse(true)
+        ApplyBackdrop(frame, 0.05, 0.06, 0.08, 1, C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.95)
+        frame:Hide()
+
+        local inner = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        inner:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+        inner:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+        ApplyBackdrop(inner, 0.07, 0.08, 0.10, 1, 0.18, 0.20, 0.26, 0.20)
+
+        local title = frame:CreateFontString(nil, "OVERLAY")
+        title:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -6)
+        title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -6)
+        title:SetJustifyH("LEFT")
+        SetFont(title, 10)
+        title:SetTextColor(0.96, 0.92, 0.86)
+
+        local divider = frame:CreateTexture(nil, "ARTWORK")
+        divider:SetHeight(1)
+        divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -22)
+        divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -22)
+        divider:SetColorTexture(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.30)
+
+        local menu = {
+            frame = frame,
+            inner = inner,
+            dismiss = dismiss,
+            title = title,
+            rows = {},
+        }
+
+        function menu:Hide()
+            if self.dismiss then self.dismiss:Hide() end
+            if self.frame then self.frame:Hide() end
+        end
+
+        dismiss:SetScript("OnClick", function()
+            menu:Hide()
+        end)
+
+        local function EnsureRow(index)
+            local row = menu.rows[index]
+            if row then
+                return row
+            end
+
+            row = CreateFrame("Button", nil, frame, "BackdropTemplate")
+            row:SetHeight(22)
+            row:SetFrameStrata("TOOLTIP")
+            row:SetFrameLevel(20)
+            row:RegisterForClicks("AnyUp")
+            row:EnableMouse(true)
+            ApplyBackdrop(row, 0.07, 0.08, 0.10, 1, 0.18, 0.20, 0.26, 1)
+
+            local accent = row:CreateTexture(nil, "BORDER")
+            accent:SetPoint("TOPLEFT", row, "TOPLEFT", 1, -1)
+            accent:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 1, 1)
+            accent:SetWidth(3)
+            accent:SetColorTexture(C_TAB_ACCENT[1], C_TAB_ACCENT[2], C_TAB_ACCENT[3], 0)
+            row._accent = accent
+
+            local text = row:CreateFontString(nil, "OVERLAY")
+            text:SetPoint("LEFT", row, "LEFT", 10, 0)
+            text:SetPoint("RIGHT", row, "RIGHT", -10, 0)
+            text:SetJustifyH("LEFT")
+            SetFont(text, 10)
+            text:SetTextColor(0.92, 0.94, 0.96)
+            row._text = text
+
+            row:SetScript("OnEnter", function(self)
+                self:SetBackdropColor(0.10, 0.11, 0.14, 1)
+                self:SetBackdropBorderColor(C_TAB_ACCENT[1], C_TAB_ACCENT[2], C_TAB_ACCENT[3], 0.34)
+                self._accent:SetColorTexture(C_TAB_ACCENT[1], C_TAB_ACCENT[2], C_TAB_ACCENT[3], 0.9)
+            end)
+            row:SetScript("OnLeave", function(self)
+                if self._selected then
+                    self:SetBackdropColor(0.10, 0.11, 0.14, 1)
+                    self:SetBackdropBorderColor(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.34)
+                    self._accent:SetColorTexture(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.9)
+                else
+                    self:SetBackdropColor(0.07, 0.08, 0.10, 1)
+                    self:SetBackdropBorderColor(0.18, 0.20, 0.26, 1)
+                    self._accent:SetColorTexture(C_TAB_ACCENT[1], C_TAB_ACCENT[2], C_TAB_ACCENT[3], 0)
+                end
+            end)
+
+            menu.rows[index] = row
+            return row
+        end
+
+        function menu:Open(anchor, menuTitle, values, orderedKeys, selectedValue, onSelect)
+            if not anchor or not values or not orderedKeys or #orderedKeys == 0 then
+                self:Hide()
+                return
+            end
+
+            self.title:SetText(menuTitle or "Select")
+            local menuWidth = math.max(anchor:GetWidth() or DESIGNER_DOCK_CONTENT_WIDTH, DESIGNER_DOCK_CONTENT_WIDTH)
+            local rowTopOffset = -26
+
+            for index, optionKey in ipairs(orderedKeys) do
+                local row = EnsureRow(index)
+                row:ClearAllPoints()
+                row:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, rowTopOffset - ((index - 1) * 23))
+                row:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, rowTopOffset - ((index - 1) * 23))
+                row._text:SetText(tostring(values[optionKey] or optionKey))
+                row._selected = optionKey == selectedValue
+                row:SetScript("OnClick", function()
+                    if type(onSelect) == "function" then
+                        onSelect(optionKey)
+                    end
+                    menu:Hide()
+                end)
+                if row._selected then
+                    row:SetBackdropColor(0.10, 0.11, 0.14, 1)
+                    row:SetBackdropBorderColor(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.34)
+                    row._accent:SetColorTexture(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.9)
+                else
+                    row:SetBackdropColor(0.07, 0.08, 0.10, 1)
+                    row:SetBackdropBorderColor(0.18, 0.20, 0.26, 1)
+                    row._accent:SetColorTexture(C_TAB_ACCENT[1], C_TAB_ACCENT[2], C_TAB_ACCENT[3], 0)
+                end
+                row:Show()
+            end
+
+            for index = #orderedKeys + 1, #self.rows do
+                self.rows[index]:Hide()
+            end
+
+            local menuHeight = 28 + (#orderedKeys * 23) + 6
+            frame:SetSize(menuWidth, menuHeight)
+            frame:ClearAllPoints()
+
+            local dockTop = dock:GetTop() or 0
+            local anchorTop = anchor:GetTop() or dockTop
+            local yOffset = math_floor((anchorTop - dockTop) - 2 + 0.5)
+            local dockOnLeft = (dock:GetLeft() or 0) < ((UIParent:GetWidth() or 1280) * 0.5)
+            if dockOnLeft then
+                frame:SetPoint("TOPLEFT", dock, "TOPRIGHT", 8, yOffset)
+            else
+                frame:SetPoint("TOPRIGHT", dock, "TOPLEFT", -8, yOffset)
+            end
+
+            self.dismiss:Show()
+            frame:Raise()
+            frame:Show()
+        end
+
+        dock._extraSelectMenu = menu
+        return menu
+    end
+
+    AttachDockButtonChrome(dockBtn, { kind = "button", accent = C_CFG_ACCENT })
+    dockBtn:SetScript("OnEnter", function(self)
+        self._hovered = true
+        StyleExtraState(self, self:IsEnabled())
+    end)
+    dockBtn:SetScript("OnLeave", function(self)
+        self._hovered = false
+        StyleExtraState(self, self:IsEnabled())
+    end)
+    StyleExtraState(dockBtn, true)
 
     -- ── Title row ────────────────────────────────────────────────────────
     local W = 282
@@ -908,6 +1205,9 @@ function MoverModule:_GetInspector()
 
         -- Rebuild extra controls in dock
         local ec = dock._extrasContainer
+        if dock._extraSelectMenu and dock._extraSelectMenu.Hide then
+            dock._extraSelectMenu:Hide()
+        end
         -- Remove any previous extra children by hiding them
         if ec._extraWidgets then
             for _, w in ipairs(ec._extraWidgets) do w:Hide() end
@@ -923,6 +1223,7 @@ function MoverModule:_GetInspector()
             dock._title:SetText(opts.label or key)
             dock._subtitle:SetText(opts.category or "Designer Control")
             local curY = -4
+            panel._tabSelections = panel._tabSelections or {}
             local function QueueRefresh()
                 C_Timer.After(0, function()
                     if panel._activeKey == key then
@@ -932,7 +1233,7 @@ function MoverModule:_GetInspector()
                 end)
             end
 
-            local function MakeExtraBtn(parent, text, xOff, yOff, width, height, onClick)
+            local function MakeExtraBtn(parent, text, xOff, yOff, width, height, onClick, style)
                 local btn = CreateFrame("Button", nil, parent, "BackdropTemplate")
                 btn:SetSize(width or 80, height or 20)
                 btn:SetPoint("TOPLEFT", parent, "TOPLEFT", xOff, yOff)
@@ -945,24 +1246,70 @@ function MoverModule:_GetInspector()
                 SetFont(fs, 10)
                 fs:SetText(text or "")
                 btn._fs = fs
+                AttachDockButtonChrome(btn, style)
                 btn:SetScript("OnEnter", function(self)
-                    if self:IsEnabled() then
-                        self:SetBackdropColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.22)
-                        self:SetBackdropBorderColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 1)
-                    end
+                    self._hovered = true
+                    StyleExtraState(self, self:IsEnabled())
                     CancelHide()
                 end)
                 btn:SetScript("OnLeave", function(self)
+                    self._hovered = false
                     StyleExtraState(self, self:IsEnabled())
                     ScheduleHide()
                 end)
                 btn:SetScript("OnClick", onClick)
+                StyleExtraState(btn, true)
                 return btn
             end
 
+            local tabKeys = {}
+            local tabLabels = {}
             for _, extra in ipairs(extras) do
+                if type(extra.tab) == "string" and tabLabels[extra.tab] == nil then
+                    tabKeys[#tabKeys + 1] = extra.tab
+                    tabLabels[extra.tab] = extra.tabLabel or extra.tab
+                end
+            end
+
+            local activeTab = nil
+            if #tabKeys > 0 then
+                activeTab = panel._tabSelections[key]
+                local validTab = false
+                for _, tabKey in ipairs(tabKeys) do
+                    if tabKey == activeTab then
+                        validTab = true
+                        break
+                    end
+                end
+                if not validTab then
+                    activeTab = tabKeys[1]
+                    panel._tabSelections[key] = activeTab
+                end
+
+                local tabCount = math.max(1, #tabKeys)
+                local gap = 6
+                local tabWidth = math.floor(((DESIGNER_DOCK_CONTENT_WIDTH - ((tabCount - 1) * gap)) / tabCount) + 0.5)
+                for index, tabKey in ipairs(tabKeys) do
+                    local xOffset = (index - 1) * (tabWidth + gap)
+                    local tabButton = MakeExtraBtn(ec, tabLabels[tabKey], xOffset, curY, tabWidth, 20, function()
+                        if dock._extraSelectMenu and dock._extraSelectMenu.Hide then
+                            dock._extraSelectMenu:Hide()
+                        end
+                        panel._tabSelections[key] = tabKey
+                        QueueRefresh()
+                    end, { kind = "tab", accent = C_TAB_ACCENT })
+                    tabButton._selected = tabKey == activeTab
+                    StyleExtraState(tabButton, true)
+                    ec._extraWidgets[#ec._extraWidgets + 1] = tabButton
+                end
+                curY = curY - 28
+                extraH = extraH + 28
+            end
+
+            for extraIndex, extra in ipairs(extras) do
                 local hidden = type(extra.hidden) == "function" and extra.hidden() == true
-                if not hidden and extra.type == "toggle" then
+                local tabHidden = activeTab ~= nil and type(extra.tab) == "string" and extra.tab ~= activeTab
+                if not hidden and not tabHidden and extra.type == "toggle" then
                     local cur = type(extra.get) == "function" and extra.get() or false
                     local lbl = ec:CreateFontString(nil, "OVERLAY")
                     lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 8, curY)
@@ -998,7 +1345,7 @@ function MoverModule:_GetInspector()
 
                     curY = curY - 22
                     extraH = extraH + 22
-                elseif not hidden and extra.type == "execute" then
+                elseif not hidden and not tabHidden and extra.type == "execute" then
                     local btn = MakeExtraBtn(ec, extra.buttonLabel or extra.label or "Action", 0, curY,
                         DESIGNER_DOCK_CONTENT_WIDTH, 22,
                         function()
@@ -1009,14 +1356,14 @@ function MoverModule:_GetInspector()
                                 extra.func()
                                 QueueRefresh()
                             end
-                        end)
+                        end, { kind = "button", accent = C_CFG_ACCENT })
                     btn:SetEnabled(not ResolveExtraDisabled(extra))
                     StyleExtraState(btn, btn:IsEnabled())
                     ec._extraWidgets[#ec._extraWidgets + 1] = btn
 
                     curY = curY - 24
                     extraH = extraH + 24
-                elseif not hidden and extra.type == "range" then
+                elseif not hidden and not tabHidden and extra.type == "range" then
                     local lbl = ec:CreateFontString(nil, "OVERLAY")
                     lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY)
                     lbl:SetPoint("TOPRIGHT", ec, "TOPRIGHT", 0, curY)
@@ -1043,7 +1390,7 @@ function MoverModule:_GetInspector()
                             extra.set(nextValue)
                             QueueRefresh()
                         end
-                    end)
+                    end, { kind = "button", accent = C_CFG_ACCENT })
                     local plus = MakeExtraBtn(ec, "+", DESIGNER_DOCK_CONTENT_WIDTH - 24, rowY, 24, 18, function()
                         if ResolveExtraDisabled(extra) then
                             return
@@ -1058,11 +1405,12 @@ function MoverModule:_GetInspector()
                             extra.set(nextValue)
                             QueueRefresh()
                         end
-                    end)
+                    end, { kind = "button", accent = C_CFG_ACCENT })
                     local valueBox = CreateFrame("EditBox", nil, ec, "BackdropTemplate")
                     valueBox:SetSize(DESIGNER_DOCK_CONTENT_WIDTH - 56, 18)
                     valueBox:SetPoint("TOPLEFT", ec, "TOPLEFT", 28, rowY)
-                    ApplyBackdrop(valueBox, 0.04, 0.05, 0.08, 1, 0.20, 0.22, 0.30, 1)
+                    ApplyBackdrop(valueBox, 0.08, 0.08, 0.10, 0.96, C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3],
+                        0.22)
                     valueBox:SetTextInsets(5, 5, 2, 2)
                     valueBox:SetAutoFocus(false)
                     valueBox:SetMaxLetters(8)
@@ -1121,7 +1469,50 @@ function MoverModule:_GetInspector()
 
                     curY = curY - 38
                     extraH = extraH + 38
-                elseif not hidden and extra.type == "label" then
+                elseif not hidden and not tabHidden and extra.type == "select" then
+                    local values, orderedKeys = ResolveExtraOptions(extra)
+                    local currentKey = type(extra.get) == "function" and extra.get() or orderedKeys[1]
+
+                    local lbl = ec:CreateFontString(nil, "OVERLAY")
+                    lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY)
+                    lbl:SetPoint("TOPRIGHT", ec, "TOPRIGHT", 0, curY)
+                    SetFont(lbl, 10)
+                    lbl:SetText(extra.label or "")
+                    lbl:SetTextColor(C_LABEL[1], C_LABEL[2], C_LABEL[3])
+                    ec._extraWidgets[#ec._extraWidgets + 1] = lbl
+
+                    local disabled = ResolveExtraDisabled(extra) or #orderedKeys <= 0
+                    local rowY = curY - 14
+                    local dropdownBtn = MakeExtraBtn(ec, tostring(values[currentKey] or extra.placeholder or "Select"), 0,
+                        rowY, DESIGNER_DOCK_CONTENT_WIDTH, 20, function(self)
+                            if ResolveExtraDisabled(extra) then
+                                return
+                            end
+
+                            local menu = EnsureDockSelectMenu()
+                            if not menu then
+                                return
+                            end
+
+                            local optionValues, optionKeys = ResolveExtraOptions(extra)
+                            local selectedValue = type(extra.get) == "function" and extra.get() or optionKeys[1]
+                            menu:Open(self, extra.label or "Select", optionValues, optionKeys, selectedValue,
+                                function(optionKey)
+                                    if type(extra.set) == "function" then
+                                        extra.set(optionKey)
+                                    end
+                                    QueueRefresh()
+                                end)
+                        end, { kind = "dropdown", accent = C_CFG_ACCENT, justifyH = "LEFT", hasArrow = true })
+                    dropdownBtn._fs:SetText(tostring(values[currentKey] or extra.placeholder or "Select"))
+                    dropdownBtn:SetEnabled(not disabled)
+                    dropdownBtn._selected = false
+                    StyleExtraState(dropdownBtn, dropdownBtn:IsEnabled())
+                    ec._extraWidgets[#ec._extraWidgets + 1] = dropdownBtn
+
+                    curY = curY - 38
+                    extraH = extraH + 38
+                elseif not hidden and not tabHidden and extra.type == "label" then
                     local lbl = ec:CreateFontString(nil, "OVERLAY")
                     lbl:SetPoint("TOPLEFT", ec, "TOPLEFT", 0, curY)
                     lbl:SetPoint("TOPRIGHT", ec, "TOPRIGHT", 0, curY)
