@@ -8507,22 +8507,22 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     end
 
     moversModule:RegisterMover("UF_" .. layoutKey, {
-        label    = LABELS[layoutKey] or layoutKey,
-        category = "Unit Frames",
-        getFrame = function() return frame end,
-        getX     = function()
+        label     = LABELS[layoutKey] or layoutKey,
+        category  = "Unit Frames",
+        getFrame  = function() return frame end,
+        getX      = function()
             return frame and frame.GetLeft and math.floor((frame:GetLeft() or 0) + 0.5) or 0
         end,
-        getY     = function()
+        getY      = function()
             return frame and frame.GetBottom and math.floor((frame:GetBottom() or 0) + 0.5) or 0
         end,
-        getW     = function()
+        getW      = function()
             return frame and frame.GetWidth and math.floor((frame:GetWidth() or 100) + 0.5) or 100
         end,
-        getH     = function()
+        getH      = function()
             return frame and frame.GetHeight and math.floor((frame:GetHeight() or 50) + 0.5) or 50
         end,
-        setPos   = function(x, y)
+        setPos    = function(x, y)
             local layout = UnitFrames:GetLayoutSettings(layoutKey)
             layout.point = "BOTTOMLEFT"
             layout.relativePoint = "BOTTOMLEFT"
@@ -8533,7 +8533,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", layout.x, layout.y)
             end
         end,
-        setSize  = getSetSize(),
+        setSize   = getSetSize(),
         isEnabled = function()
             if isHeader then
                 local groupKey = layoutKey == "boss" and "boss" or layoutKey
