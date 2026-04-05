@@ -29,8 +29,7 @@
 
 ## Other
 
-- Transmog Data Text: Provide quick access to your saved transmog outfits
-- The TwichUI data text menu shows empty check boxes before the entries "[ ]". We don't need this as nothing is toggle-able, please just make it the available options.
+- Transmog Data Text: Provides quick access to your saved transmog outfits. I would like this datatext to operate similarly to the mounts datatext, where it retrieves your transmog outfits, and provides them in a menu to quickly access them. I would like them to be named the same as the player named them in the transmog UI, as well as include the same icon the player selected.
 
 ## Interface Designer
 

@@ -42,6 +42,7 @@ local ActionButton_ShowGrid = _G.ActionButton_ShowGrid
 local ActionButton_HideGrid = _G.ActionButton_HideGrid
 local ActionButton_ShowOverlayGlow = _G.ActionButton_ShowOverlayGlow
 local ActionButton_HideOverlayGlow = _G.ActionButton_HideOverlayGlow
+local hooksecurefunc = _G.hooksecurefunc
 
 local floor = math.floor
 local max = math.max
@@ -649,6 +650,9 @@ end
 local function SuppressButtonArtTextures(button)
     for _, texture in pairs(GetButtonArtTextures(button)) do
         if texture then
+            if texture.SetTexture and texture == (button.GetNormalTexture and button:GetNormalTexture() or nil) then
+                texture:SetTexture(nil)
+            end
             if texture.SetAlpha then
                 texture:SetAlpha(0)
             end
@@ -871,6 +875,75 @@ local function SuppressSpellCastAnim(button)
     end
 end
 
+local function CleanupButtonGridArt(button)
+    if not button then
+        return
+    end
+
+    SuppressButtonArtTextures(button)
+    SuppressButtonAnimationEffects(button)
+    SuppressSpellCastAnim(button)
+    SuppressButtonBorder(button)
+end
+
+local function ResolveGridFunctions()
+    local showGrid = _G.ActionButton_ShowGrid
+    local hideGrid = _G.ActionButton_HideGrid
+
+    if type(showGrid) == "function" then
+        ActionButton_ShowGrid = showGrid
+    end
+
+    if type(hideGrid) == "function" then
+        ActionButton_HideGrid = hideGrid
+    end
+
+    return ActionButton_ShowGrid, ActionButton_HideGrid
+end
+
+local function EnsureGridHooksInstalled(module)
+    if not hooksecurefunc or module._gridStateHooksInstalled == true then
+        return
+    end
+
+    local showGrid, hideGrid = ResolveGridFunctions()
+    local installed = false
+
+    if type(showGrid) == "function" then
+        hooksecurefunc("ActionButton_ShowGrid", function(button)
+            CleanupButtonGridArt(button)
+        end)
+        installed = true
+    end
+
+    if type(hideGrid) == "function" then
+        hooksecurefunc("ActionButton_HideGrid", function(button)
+            CleanupButtonGridArt(button)
+        end)
+        installed = true
+    end
+
+    module._gridStateHooksInstalled = installed
+end
+
+local function ApplyButtonGridState(button, showGrid)
+    if not button then
+        return
+    end
+
+    local showGridFunc, hideGridFunc = ResolveGridFunctions()
+
+    if showGrid == true then
+        if type(showGridFunc) == "function" then
+            pcall(showGridFunc, button)
+        end
+    elseif type(hideGridFunc) == "function" then
+        pcall(hideGridFunc, button)
+    end
+
+    CleanupButtonGridArt(button)
+end
+
 local function FetchThemeColor(theme, key, fallback)
     local color = theme and theme.Get and theme:Get(key) or nil
     if type(color) == "table" then
@@ -944,6 +1017,8 @@ function ActionBars:OnInitialize()
     self.blizzardHiddenRoot = CreateFrame("Frame", nil, UIParent)
     self.blizzardHiddenRoot:Hide()
 
+    EnsureGridHooksInstalled(self)
+
     if DebugConsole and DebugConsole.RegisterSource then
         DebugConsole:RegisterSource(DEBUG_SOURCE_KEY, {
             title = "Action Bars",
@@ -963,6 +1038,7 @@ end
 
 function ActionBars:OnEnable()
     LogDebug("action bars enabled", false)
+    EnsureGridHooksInstalled(self)
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "HandlePlayerEnteringWorld")
     self:RegisterEvent("SPELLS_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", "RefreshButtonStates")
@@ -997,6 +1073,7 @@ end
 
 function ActionBars:HandlePlayerEnteringWorld()
     self.pendingRefresh = true
+    EnsureGridHooksInstalled(self)
 
     if not (C_Timer and type(C_Timer.After) == "function") then
         self:RefreshModuleState()
@@ -4023,13 +4100,7 @@ function ActionBars:RefreshButtonStates(event)
         for _, button in ipairs(buttons) do
             self:ApplyCooldownSettingsToButton(button, db, settings)
             self:UpdateButtonGlow(button)
-            if db.showGrid == true then
-                if type(ActionButton_ShowGrid) == "function" then
-                    pcall(ActionButton_ShowGrid, button)
-                end
-            elseif type(ActionButton_HideGrid) == "function" then
-                pcall(ActionButton_HideGrid, button)
-            end
+            ApplyButtonGridState(button, db.showGrid == true)
         end
         local holder = self.holders[barKey]
         if holder and settings then
@@ -4235,13 +4306,7 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
                 -DEFAULT_HOLDER_PADDING - (row * (buttonSize + spacing)))
             self:ApplyButtonStyle(button, actionBarDB, definition.key, barSettings)
 
-            if actionBarDB.showGrid == true then
-                if type(ActionButton_ShowGrid) == "function" then
-                    pcall(ActionButton_ShowGrid, button)
-                end
-            elseif type(ActionButton_HideGrid) == "function" then
-                pcall(ActionButton_HideGrid, button)
-            end
+            ApplyButtonGridState(button, actionBarDB.showGrid == true)
 
             button:Show()
         else
