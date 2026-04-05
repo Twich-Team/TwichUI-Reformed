@@ -36,6 +36,8 @@
 
 - There are a number of missing configuration options for action bars in the interface designer. For example, i'd like to be able to copy settings from another bar in here, modify the background/border/accent, etc. Also we should have a tab to configure visibility
 
+- I would like a button on the top banner in the interface designer to add an action bar, similar to add above or below, but this one just enables it and moves it to the center of the screen so it can easily be found. if possible, also select it.
+
 ## Quality of Life
 
 - Automatically vendor grays (and eventually smarter logic to vendor low ilvl, etc.)

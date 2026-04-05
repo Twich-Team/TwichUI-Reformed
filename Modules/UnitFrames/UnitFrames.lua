@@ -8782,6 +8782,35 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         return math.floor((tonumber(unitSettings and unitSettings.height) or 48) + 0.5)
     end
 
+    local POWER_FX_THEME_VALUES = {
+        aim = "Hunt",
+        alliance = "Blue Sparkle",
+        arcane = "Arcane",
+        arctic = "Frost",
+        bronze = "Gold Sparkle",
+        chaos = "Green Gas",
+        chiji = "Soft Leaves",
+        earth = "Earth",
+        felfire = "Green Fire",
+        fire = "Fire",
+        fishing = "Water",
+        fists = "Green & Blue Leaves",
+        frostfire = "Purple Glow",
+        herbalism = "Leaves",
+        holy = "Holy",
+        horde = "Red Sparkle",
+        lumber = "Wood",
+        mining = "Rock",
+        mistweaver = "Green Mist",
+        moon = "Lunar",
+        mossystone = "Celestial Green",
+        neutral = "Sparkle",
+        sacred = "Holy 2",
+        shadow = "Shadow",
+        thunder = "Blue Sparkle",
+        void = "Void",
+    }
+
     local extras = {}
     local function AddExtra(extra)
         extras[#extras + 1] = extra
@@ -8894,6 +8923,8 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         AddExtra({
             label = "Show Power",
             type = "toggle",
+            tab = "layout",
+            tabLabel = "Layout",
             get = function()
                 local unitSettings = UnitFrames:GetUnitSettings(powerBase)
                 return not unitSettings or unitSettings.showPower ~= false
@@ -8906,6 +8937,165 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 end
             end,
         })
+
+        AddExtra({
+            label = "Detach Power",
+            type = "toggle",
+            tab = "layout",
+            tabLabel = "Layout",
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                return unitSettings and unitSettings.powerDetached == true
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                if unitSettings then
+                    unitSettings.powerDetached = value == true
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                return not unitSettings or unitSettings.showPower == false
+            end,
+        })
+
+        AddExtra({
+            label = "Detached Width",
+            type = "range",
+            tab = "layout",
+            tabLabel = "Layout",
+            min = 40,
+            max = 600,
+            step = 1,
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                return tonumber(unitSettings and unitSettings.powerWidth) or
+                tonumber(unitSettings and unitSettings.width) or 220
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                if unitSettings then
+                    unitSettings.powerWidth = math.floor((tonumber(value) or 220) + 0.5)
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                return not unitSettings or unitSettings.showPower == false or unitSettings.powerDetached ~= true
+            end,
+        })
+
+        AddExtra({
+            label = "Power Height",
+            type = "range",
+            tab = "layout",
+            tabLabel = "Layout",
+            min = 4,
+            max = 32,
+            step = 1,
+            get = function()
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                return tonumber(unitSettings and unitSettings.powerHeight) or 8
+            end,
+            set = function(value)
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                if unitSettings then
+                    unitSettings.powerHeight = math.floor((tonumber(value) or 8) + 0.5)
+                    UnitFrames:RefreshAllFrames()
+                end
+            end,
+            disabled = function()
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                return not unitSettings or unitSettings.showPower == false
+            end,
+        })
+
+        if powerBase == "player" then
+            AddExtra({
+                type = "label",
+                tab = "effects",
+                tabLabel = "Effects",
+                text = "Player-only ambient effects for the detached power bar.",
+            })
+            AddExtra({
+                label = "Particle Effects",
+                type = "toggle",
+                tab = "effects",
+                tabLabel = "Effects",
+                get = function()
+                    local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                    local fx = unitSettings and unitSettings.powerFx
+                    return type(fx) == "table" and fx.enabled == true
+                end,
+                set = function(value)
+                    local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                    if unitSettings then
+                        unitSettings.powerFx = type(unitSettings.powerFx) == "table" and unitSettings.powerFx or {}
+                        unitSettings.powerFx.enabled = value == true
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+                disabled = function()
+                    local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                    return not unitSettings or unitSettings.showPower == false
+                end,
+            })
+            AddExtra({
+                label = "Particle Theme",
+                type = "select",
+                tab = "effects",
+                tabLabel = "Effects",
+                values = POWER_FX_THEME_VALUES,
+                get = function()
+                    local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                    local fx = unitSettings and unitSettings.powerFx
+                    return type(fx) == "table" and fx.theme or "holy"
+                end,
+                set = function(value)
+                    local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                    if unitSettings then
+                        unitSettings.powerFx = type(unitSettings.powerFx) == "table" and unitSettings.powerFx or {}
+                        unitSettings.powerFx.theme = POWER_FX_THEME_VALUES[value] and value or "holy"
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+                disabled = function()
+                    local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                    local fx = unitSettings and unitSettings.powerFx
+                    return not unitSettings or unitSettings.showPower == false or type(fx) ~= "table" or
+                    fx.enabled ~= true
+                end,
+            })
+            AddExtra({
+                label = "Particle Expansion",
+                type = "range",
+                tab = "effects",
+                tabLabel = "Effects",
+                min = 0.5,
+                max = 3,
+                step = 0.05,
+                get = function()
+                    local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                    local fx = unitSettings and unitSettings.powerFx
+                    return tonumber(type(fx) == "table" and fx.effectScale) or 1
+                end,
+                set = function(value)
+                    local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                    if unitSettings then
+                        unitSettings.powerFx = type(unitSettings.powerFx) == "table" and unitSettings.powerFx or {}
+                        unitSettings.powerFx.effectScale = Clamp(tonumber(value) or 1, 0.5, 3)
+                        UnitFrames:RefreshAllFrames()
+                    end
+                end,
+                disabled = function()
+                    local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                    local fx = unitSettings and unitSettings.powerFx
+                    return not unitSettings or unitSettings.showPower == false or type(fx) ~= "table" or
+                    fx.enabled ~= true
+                end,
+            })
+        end
     else
         if layoutKey ~= "player" then
             AddExtra({
