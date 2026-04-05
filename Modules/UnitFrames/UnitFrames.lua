@@ -8305,6 +8305,7 @@ function UnitFrames:UpdateMovers()
             local ufFrame  = self.frames[key]
             local s        = self:GetUnitSettings(key)
             local powerKey = key .. "_power"
+            self:RegisterDetachedPowerLayoutFrame(key)
             if ufFrame and ufFrame.Power and s.powerDetached == true then
                 if not self.movers[powerKey] then
                     self:AttachMover(ufFrame.Power, powerKey)
@@ -8428,6 +8429,8 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         return
     end
 
+    local powerBase = type(layoutKey) == "string" and layoutKey:match("^(.-)_power$") or nil
+
     setupWizard:RegisterLayoutFrame("UF_" .. layoutKey, frame, function(absX, absY, absW, absH)
         local layout = UnitFrames:GetLayoutSettings(layoutKey)
         layout.point = "BOTTOMLEFT"
@@ -8447,6 +8450,17 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end
             if absH and absH > 12 then
                 db.castbar.height = math.floor(absH + 0.5)
+            end
+            return
+        end
+
+        if powerBase then
+            local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+            if absW and absW > 20 then
+                unitSettings.powerWidth = math.floor(absW + 0.5)
+            end
+            if absH and absH > 4 then
+                unitSettings.powerHeight = math.floor(absH + 0.5)
             end
             return
         end
@@ -8496,6 +8510,16 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 end
             end
         end
+        if powerBase then
+            return function(w, h)
+                local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+                if w and w > 20 then unitSettings.powerWidth = math.floor(w + 0.5) end
+                if h and h > 4 then unitSettings.powerHeight = math.floor(h + 0.5) end
+                if frame and frame.SetSize and frame:IsObjectType("Frame") then
+                    frame:SetSize(w or frame:GetWidth(), h or frame:GetHeight())
+                end
+            end
+        end
         return function(w, h)
             local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
             if w and w > 20 then unitSettings.width = math.floor(w + 0.5) end
@@ -8523,6 +8547,12 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             return math.floor((tonumber(castbar and castbar.width) or 240) + 0.5)
         end
 
+        if powerBase then
+            local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+            return math.floor((tonumber(unitSettings and unitSettings.powerWidth) or tonumber(unitSettings and unitSettings.width) or 220) +
+            0.5)
+        end
+
         if isHeader then
             local group = UnitFrames:GetGroupSettings(layoutKey)
             local width = tonumber(group and group.width)
@@ -8545,6 +8575,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             return math.floor((tonumber(castbar and castbar.height) or 28) + 0.5)
         end
 
+        if powerBase then
+            local unitSettings = UnitFrames:GetUnitSettings(powerBase)
+            return math.floor((tonumber(unitSettings and unitSettings.powerHeight) or 8) + 0.5)
+        end
+
         if isHeader then
             local group = UnitFrames:GetGroupSettings(layoutKey)
             local height = tonumber(group and group.height)
@@ -8561,7 +8596,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     end
 
     moversModule:RegisterMover("UF_" .. layoutKey, {
-        label     = LABELS[layoutKey] or layoutKey,
+        label     = LABELS[layoutKey] or BuildFrameName(layoutKey),
         category  = "Unit Frames",
         getFrame  = function() return frame end,
         getX      = function()
@@ -8594,6 +8629,10 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 local gs = UnitFrames:GetGroupSettings(groupKey)
                 return gs and gs.enabled ~= false
             end
+            if powerBase then
+                local us = UnitFrames:GetUnitSettings(powerBase)
+                return us and us.enabled ~= false and us.powerDetached == true and us.showPower ~= false
+            end
             if layoutKey == "castbar" then
                 local db = UnitFrames:GetDB()
                 return db and db.castbar and db.castbar.enabled ~= false
@@ -8603,6 +8642,28 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             return us and us.enabled ~= false
         end,
     })
+end
+
+function UnitFrames:RegisterDetachedPowerLayoutFrame(unitKey)
+    if not unitKey then
+        return
+    end
+
+    local frame = self.frames and self.frames[unitKey]
+    local power = frame and frame.Power or nil
+    if not power then
+        return
+    end
+
+    local settings = self:GetUnitSettings(unitKey)
+    if settings.powerDetached == true then
+        self:RegisterLayoutFrame(unitKey .. "_power", power)
+    else
+        local moversModule = _G.TwichMoverModule
+        if moversModule and type(moversModule.UnregisterMover) == "function" then
+            moversModule:UnregisterMover("UF_" .. unitKey .. "_power")
+        end
+    end
 end
 
 do
