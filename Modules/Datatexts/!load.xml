@@ -5,6 +5,7 @@
     <Include file='UtilityDataTexts.lua' />
     <Include file='Chores.lua' />
     <Include file='Mounts.lua' />
+    <Include file='Transmog.lua' />
     <Include file='MythicPlus.lua' />
     <Include file='Portals.lua' />
     <Include file='Goblin.lua' />

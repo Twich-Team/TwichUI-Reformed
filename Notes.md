@@ -29,11 +29,9 @@
 
 ## Other
 
-- Transmog Data Text: Provides quick access to your saved transmog outfits. I would like this datatext to operate similarly to the mounts datatext, where it retrieves your transmog outfits, and provides them in a menu to quickly access them. I would like them to be named the same as the player named them in the transmog UI, as well as include the same icon the player selected.
+- create a Transmog Data Text: Provides quick access to your saved transmog outfits. I would like this datatext to operate similarly to the mounts datatext, where it retrieves your transmog outfits, and provides them in a menu to quickly access them. I would like them to be named the same as the player named them in the transmog UI, as well as include the same icon the player selected.
 
 ## Interface Designer
-
-- Lets change the cast bar effects configuration to mimic the player power bar effects configuration. make it particles with an enable, etc.
 
 ## Quality of Life
 
