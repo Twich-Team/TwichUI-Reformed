@@ -69,13 +69,17 @@ local C_BORDER                    = { 0.10, 0.72, 0.74 }
 local C_LABEL                     = { 0.55, 0.58, 0.68 }
 local C_BTN_BG                    = { 0.09, 0.11, 0.15 }
 local C_BTN_BD                    = { 0.20, 0.22, 0.30 }
-local C_DOCK_BORDER               = { 0.32, 0.78, 0.96 }
-local C_DOCK_GLOW                 = { 0.24, 0.62, 0.92 }
-local C_DOCK_TEXT                 = { 0.70, 0.90, 0.98 }
-local C_DOCK_PILL                 = { 0.11, 0.18, 0.24 }
-local C_DOCK_PILL_TEXT            = { 0.58, 0.88, 1.00 }
+local C_DOCK_BORDER               = { 0.94, 0.77, 0.28 }
+local C_DOCK_GLOW                 = { 0.94, 0.77, 0.28 }
+local C_DOCK_TEXT                 = { 0.72, 0.74, 0.80 }
+local C_DOCK_PILL                 = { 0.14, 0.11, 0.08 }
+local C_DOCK_PILL_TEXT            = { 1.00, 0.95, 0.82 }
 local C_CFG_ACCENT                = { 0.98, 0.76, 0.22 }
-local C_TAB_ACCENT                = { 0.42, 0.82, 0.98 }
+local C_TAB_ACCENT                = { 0.78, 0.82, 0.88 }
+local C_DOCK_ACTION_ACCENT        = { 0.98, 0.68, 0.26 }
+local C_DOCK_RANGE_ACCENT         = { 0.44, 0.82, 0.98 }
+local C_DOCK_SELECT_ACCENT        = { 0.42, 0.89, 0.63 }
+local C_DOCK_TOGGLE_ACCENT        = { 0.81, 0.58, 0.95 }
 
 -- ── Per-category tint colours ────────────────────────────────────────────────
 -- Handles are tinted by category so the user can identify module groups at a glance.
@@ -245,13 +249,13 @@ function MoverModule:_GetInspector()
     dock:SetWidth(DESIGNER_DOCK_WIDTH)
     dock:EnableMouse(true)
     dock:Hide()
-    ApplyBackdrop(dock, 0.05, 0.055, 0.07, 0.985, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 1)
+    ApplyBackdrop(dock, 0.03, 0.03, 0.05, 0.985, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.30)
     panel._dock = dock
 
     local dockInner = CreateFrame("Frame", nil, dock, "BackdropTemplate")
     dockInner:SetPoint("TOPLEFT", dock, "TOPLEFT", 1, -1)
     dockInner:SetPoint("BOTTOMRIGHT", dock, "BOTTOMRIGHT", -1, 1)
-    ApplyBackdrop(dockInner, 0.055, 0.06, 0.075, 0.96, 0.94, 0.77, 0.28, 0.10)
+    ApplyBackdrop(dockInner, 0.04, 0.04, 0.06, 0.96, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.10)
 
     -- Hide on click-outside via overlay script (see _BuildOverlay)
     panel._activeKey = nil
@@ -288,9 +292,15 @@ function MoverModule:_GetInspector()
     local dockHeaderFrame = CreateFrame("Frame", nil, dock, "BackdropTemplate")
     dockHeaderFrame:SetPoint("TOPLEFT", dock, "TOPLEFT", 6, -6)
     dockHeaderFrame:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -6, -6)
-    dockHeaderFrame:SetHeight(78)
-    ApplyBackdrop(dockHeaderFrame, 0.07, 0.10, 0.14, 0.98, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.72)
+    dockHeaderFrame:SetHeight(60)
+    ApplyBackdrop(dockHeaderFrame, 0.08, 0.08, 0.11, 0.98, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.24)
     dockHeaderFrame:SetFrameLevel(dock:GetFrameLevel() + 2)
+
+    local dockTitleAccent = dockHeaderFrame:CreateTexture(nil, "BORDER")
+    dockTitleAccent:SetPoint("TOPLEFT", dockHeaderFrame, "TOPLEFT", 1, -1)
+    dockTitleAccent:SetPoint("BOTTOMLEFT", dockHeaderFrame, "BOTTOMLEFT", 1, 1)
+    dockTitleAccent:SetWidth(5)
+    dockTitleAccent:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 1)
 
     local dockHeaderContent = CreateFrame("Frame", nil, dockHeaderFrame)
     dockHeaderContent:SetAllPoints(dockHeaderFrame)
@@ -299,14 +309,14 @@ function MoverModule:_GetInspector()
     local dockHeader = dockHeaderFrame:CreateTexture(nil, "ARTWORK")
     dockHeader:SetPoint("TOPLEFT", dockHeaderFrame, "TOPLEFT", 1, -1)
     dockHeader:SetPoint("TOPRIGHT", dockHeaderFrame, "TOPRIGHT", -1, -1)
-    dockHeader:SetHeight(75)
-    dockHeader:SetColorTexture(0.08, 0.12, 0.16, 0.96)
+    dockHeader:SetHeight(57)
+    dockHeader:SetColorTexture(0.08, 0.08, 0.11, 0.96)
 
     local dockHeaderGlow = dockHeaderFrame:CreateTexture(nil, "ARTWORK")
     dockHeaderGlow:SetPoint("TOPLEFT", dockHeaderFrame, "TOPLEFT", 1, -1)
     dockHeaderGlow:SetPoint("TOPRIGHT", dockHeaderFrame, "TOPRIGHT", -1, -1)
-    dockHeaderGlow:SetHeight(22)
-    dockHeaderGlow:SetColorTexture(C_DOCK_GLOW[1], C_DOCK_GLOW[2], C_DOCK_GLOW[3], 0.10)
+    dockHeaderGlow:SetHeight(10)
+    dockHeaderGlow:SetColorTexture(C_DOCK_GLOW[1], C_DOCK_GLOW[2], C_DOCK_GLOW[3], 0.06)
 
     local dockHeaderBottom = dockHeaderFrame:CreateTexture(nil, "BORDER")
     dockHeaderBottom:SetHeight(1)
@@ -315,36 +325,36 @@ function MoverModule:_GetInspector()
     dockHeaderBottom:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.55)
 
     local dockGlow = dock:CreateTexture(nil, "BACKGROUND")
-    dockGlow:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, -76)
-    dockGlow:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, -76)
-    dockGlow:SetHeight(140)
-    dockGlow:SetColorTexture(C_DOCK_GLOW[1], C_DOCK_GLOW[2], C_DOCK_GLOW[3], 0.08)
+    dockGlow:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, -62)
+    dockGlow:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, -62)
+    dockGlow:SetHeight(96)
+    dockGlow:SetColorTexture(C_DOCK_GLOW[1], C_DOCK_GLOW[2], C_DOCK_GLOW[3], 0.025)
 
     local dockSpotlight = dock:CreateTexture(nil, "BACKGROUND")
-    dockSpotlight:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, -76)
-    dockSpotlight:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, -76)
-    dockSpotlight:SetHeight(220)
-    dockSpotlight:SetColorTexture(C_DOCK_TEXT[1], C_DOCK_TEXT[2], C_DOCK_TEXT[3], 0.03)
+    dockSpotlight:SetPoint("TOPLEFT", dock, "TOPLEFT", 0, -62)
+    dockSpotlight:SetPoint("TOPRIGHT", dock, "TOPRIGHT", 0, -62)
+    dockSpotlight:SetHeight(180)
+    dockSpotlight:SetColorTexture(1, 1, 1, 0.015)
 
     local dockAccent = dock:CreateTexture(nil, "BORDER")
-    dockAccent:SetWidth(5)
+    dockAccent:SetWidth(3)
     dockAccent:SetPoint("TOP", dock, "TOP", 0, 0)
     dockAccent:SetPoint("BOTTOM", dock, "BOTTOM", 0, 0)
-    dockAccent:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.95)
+    dockAccent:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.55)
     dock._accent = dockAccent
 
     local dockBadge = dockHeaderContent:CreateFontString(nil, "OVERLAY")
-    dockBadge:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 12, -10)
-    dockBadge:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -100, -10)
+    dockBadge:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 18, -9)
+    dockBadge:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -138, -9)
     dockBadge:SetJustifyH("LEFT")
-    SetFont(dockBadge, 9)
-    dockBadge:SetText("DESIGNER DOCK")
+    SetFont(dockBadge, 8)
+    dockBadge:SetText("INTERFACE DESIGNER")
     dockBadge:SetTextColor(C_DOCK_TEXT[1], C_DOCK_TEXT[2], C_DOCK_TEXT[3])
 
     local dockPill = dockHeaderContent:CreateTexture(nil, "ARTWORK")
-    dockPill:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 12, -24)
-    dockPill:SetSize(74, 14)
-    dockPill:SetColorTexture(C_DOCK_PILL[1], C_DOCK_PILL[2], C_DOCK_PILL[3], 0.92)
+    dockPill:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -88, -10)
+    dockPill:SetSize(66, 14)
+    dockPill:SetColorTexture(C_DOCK_PILL[1], C_DOCK_PILL[2], C_DOCK_PILL[3], 0.96)
 
     local dockPillText = dockHeaderContent:CreateFontString(nil, "OVERLAY")
     dockPillText:SetPoint("CENTER", dockPill, "CENTER", 0, 0)
@@ -353,32 +363,32 @@ function MoverModule:_GetInspector()
     dockPillText:SetTextColor(C_DOCK_PILL_TEXT[1], C_DOCK_PILL_TEXT[2], C_DOCK_PILL_TEXT[3])
 
     local dockTitle = dockHeaderContent:CreateFontString(nil, "OVERLAY")
-    dockTitle:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 12, -42)
-    dockTitle:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -108, -42)
+    dockTitle:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 18, -22)
+    dockTitle:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -122, -22)
     dockTitle:SetJustifyH("LEFT")
-    SetFont(dockTitle, 13)
-    dockTitle:SetTextColor(0.96, 0.92, 0.86)
+    SetFont(dockTitle, 14)
+    dockTitle:SetTextColor(1, 0.95, 0.82)
     dock._title = dockTitle
 
     local dockSubtitle = dockHeaderContent:CreateFontString(nil, "OVERLAY")
-    dockSubtitle:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 12, -59)
-    dockSubtitle:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -108, -59)
+    dockSubtitle:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 18, -40)
+    dockSubtitle:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -122, -40)
     dockSubtitle:SetJustifyH("LEFT")
     SetFont(dockSubtitle, 9)
-    dockSubtitle:SetTextColor(0.64, 0.76, 0.84)
+    dockSubtitle:SetTextColor(0.72, 0.74, 0.80)
     dock._subtitle = dockSubtitle
 
     local dockStatusDot = dockHeaderContent:CreateTexture(nil, "OVERLAY")
-    dockStatusDot:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -90, -36)
-    dockStatusDot:SetSize(6, 6)
-    dockStatusDot:SetColorTexture(0.14, 0.84, 0.78, 1)
+    dockStatusDot:SetPoint("TOPRIGHT", dockHeaderContent, "TOPRIGHT", -92, -32)
+    dockStatusDot:SetSize(5, 5)
+    dockStatusDot:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 1)
 
     local dockStatusText = dockHeaderContent:CreateFontString(nil, "OVERLAY")
     dockStatusText:SetPoint("LEFT", dockStatusDot, "RIGHT", 6, 0)
-    dockStatusText:SetPoint("RIGHT", dockHeaderContent, "RIGHT", -12, -36)
+    dockStatusText:SetPoint("RIGHT", dockHeaderContent, "RIGHT", -12, -32)
     dockStatusText:SetJustifyH("RIGHT")
     SetFont(dockStatusText, 8)
-    dockStatusText:SetText("LIVE CONTROLS")
+    dockStatusText:SetText("LIVE PREVIEW")
     dockStatusText:SetTextColor(C_DOCK_TEXT[1], C_DOCK_TEXT[2], C_DOCK_TEXT[3])
 
     local dockBtn = CreateFrame("Button", nil, dockHeaderContent, "BackdropTemplate")
@@ -396,8 +406,8 @@ function MoverModule:_GetInspector()
     dockBtnFS:SetText("Dock Left")
     dockBtn._fs = dockBtnFS
     dockBtn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.22)
-        self:SetBackdropBorderColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 1)
+        self:SetBackdropColor(C_DOCK_BORDER[1] * 0.22, C_DOCK_BORDER[2] * 0.22, C_DOCK_BORDER[3] * 0.22, 0.98)
+        self:SetBackdropBorderColor(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.78)
     end)
     dockBtn:SetScript("OnLeave", function(self)
         self:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
@@ -407,8 +417,8 @@ function MoverModule:_GetInspector()
 
     local dockDivider = dock:CreateTexture(nil, "ARTWORK")
     dockDivider:SetHeight(1)
-    dockDivider:SetPoint("TOPLEFT", dock, "TOPLEFT", DESIGNER_DOCK_INSET, -100)
-    dockDivider:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -DESIGNER_DOCK_INSET, -100)
+    dockDivider:SetPoint("TOPLEFT", dock, "TOPLEFT", DESIGNER_DOCK_INSET, -82)
+    dockDivider:SetPoint("TOPRIGHT", dock, "TOPRIGHT", -DESIGNER_DOCK_INSET, -82)
     dockDivider:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.40)
 
     local dockTopEdge = dock:CreateTexture(nil, "BORDER")
@@ -633,6 +643,10 @@ function MoverModule:_GetInspector()
                 button._fs:SetPoint("RIGHT", chevron, "LEFT", -6, 0)
                 button._fs:SetJustifyH(style.justifyH or "LEFT")
             end
+        elseif style.iconOnly and button._fs then
+            button._fs:ClearAllPoints()
+            button._fs:SetPoint("CENTER", button, "CENTER", 0, 0)
+            button._fs:SetJustifyH("CENTER")
         elseif button._fs then
             button._fs:ClearAllPoints()
             button._fs:SetPoint("LEFT", button, "LEFT", 10, 0)
@@ -649,19 +663,19 @@ function MoverModule:_GetInspector()
             if kind == "tab" then
                 if selected then
                     self:SetBackdropColor(0.11, 0.10, 0.14, 0.98)
-                    self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.52)
-                    self._fs:SetTextColor(0.98, 0.96, 0.90)
-                    self._leftAccent:SetColorTexture(accent[1], accent[2], accent[3], 1)
+                    self:SetBackdropBorderColor(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.50)
+                    self._fs:SetTextColor(1, 0.95, 0.82)
+                    self._leftAccent:SetColorTexture(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 1)
                 elseif hovered then
-                    self:SetBackdropColor(0.09, 0.10, 0.13, 0.96)
-                    self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.34)
-                    self._fs:SetTextColor(0.92, 0.94, 0.96)
-                    self._leftAccent:SetColorTexture(accent[1], accent[2], accent[3], 0.55)
+                    self:SetBackdropColor(0.09, 0.09, 0.12, 0.96)
+                    self:SetBackdropBorderColor(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.24)
+                    self._fs:SetTextColor(0.94, 0.92, 0.88)
+                    self._leftAccent:SetColorTexture(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.42)
                 else
-                    self:SetBackdropColor(0.06, 0.07, 0.10, 0.94)
-                    self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.12)
-                    self._fs:SetTextColor(0.72, 0.78, 0.86)
-                    self._leftAccent:SetColorTexture(accent[1], accent[2], accent[3], 0)
+                    self:SetBackdropColor(0.07, 0.07, 0.09, 0.94)
+                    self:SetBackdropBorderColor(0.94, 0.77, 0.28, 0.08)
+                    self._fs:SetTextColor(0.72, 0.74, 0.80)
+                    self._leftAccent:SetColorTexture(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0)
                 end
             else
                 local fill = selected and 0.30 or (hovered and 0.30 or 0.22)
@@ -699,26 +713,38 @@ function MoverModule:_GetInspector()
         frame:SetToplevel(true)
         frame:SetClampedToScreen(true)
         frame:EnableMouse(true)
-        ApplyBackdrop(frame, 0.05, 0.06, 0.08, 1, C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.95)
+        ApplyBackdrop(frame, 0.03, 0.03, 0.05, 0.985, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.30)
         frame:Hide()
 
         local inner = CreateFrame("Frame", nil, frame, "BackdropTemplate")
         inner:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
         inner:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
-        ApplyBackdrop(inner, 0.07, 0.08, 0.10, 1, 0.18, 0.20, 0.26, 0.20)
+        ApplyBackdrop(inner, 0.04, 0.04, 0.06, 0.96, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.10)
+
+        local header = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+        header:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -6)
+        header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
+        header:SetHeight(24)
+        ApplyBackdrop(header, 0.08, 0.08, 0.11, 0.98, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.18)
+
+        local headerAccent = header:CreateTexture(nil, "BORDER")
+        headerAccent:SetPoint("TOPLEFT", header, "TOPLEFT", 1, -1)
+        headerAccent:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 1, 1)
+        headerAccent:SetWidth(4)
+        headerAccent:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 1)
 
         local title = frame:CreateFontString(nil, "OVERLAY")
-        title:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -6)
-        title:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -10, -6)
+        title:SetPoint("TOPLEFT", header, "TOPLEFT", 14, -5)
+        title:SetPoint("TOPRIGHT", header, "TOPRIGHT", -10, -5)
         title:SetJustifyH("LEFT")
-        SetFont(title, 10)
-        title:SetTextColor(0.96, 0.92, 0.86)
+        SetFont(title, 9)
+        title:SetTextColor(1, 0.95, 0.82)
 
         local divider = frame:CreateTexture(nil, "ARTWORK")
         divider:SetHeight(1)
-        divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -22)
-        divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -22)
-        divider:SetColorTexture(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.30)
+        divider:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -32)
+        divider:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -8, -32)
+        divider:SetColorTexture(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.24)
 
         local menu = {
             frame = frame,
@@ -726,6 +752,7 @@ function MoverModule:_GetInspector()
             dismiss = dismiss,
             title = title,
             rows = {},
+            accent = { C_DOCK_SELECT_ACCENT[1], C_DOCK_SELECT_ACCENT[2], C_DOCK_SELECT_ACCENT[3] },
         }
 
         function menu:Hide()
@@ -749,7 +776,7 @@ function MoverModule:_GetInspector()
             row:SetFrameLevel(20)
             row:RegisterForClicks("AnyUp")
             row:EnableMouse(true)
-            ApplyBackdrop(row, 0.07, 0.08, 0.10, 1, 0.18, 0.20, 0.26, 1)
+            ApplyBackdrop(row, 0.08, 0.08, 0.11, 0.98, C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.12)
 
             local accent = row:CreateTexture(nil, "BORDER")
             accent:SetPoint("TOPLEFT", row, "TOPLEFT", 1, -1)
@@ -767,19 +794,22 @@ function MoverModule:_GetInspector()
             row._text = text
 
             row:SetScript("OnEnter", function(self)
-                self:SetBackdropColor(0.10, 0.11, 0.14, 1)
-                self:SetBackdropBorderColor(C_TAB_ACCENT[1], C_TAB_ACCENT[2], C_TAB_ACCENT[3], 0.34)
-                self._accent:SetColorTexture(C_TAB_ACCENT[1], C_TAB_ACCENT[2], C_TAB_ACCENT[3], 0.9)
+                self:SetBackdropColor(0.10, 0.10, 0.13, 0.98)
+                local accent = menu.accent or C_DOCK_SELECT_ACCENT
+                self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.26)
+                self._accent:SetColorTexture(accent[1], accent[2], accent[3], 0.55)
             end)
             row:SetScript("OnLeave", function(self)
                 if self._selected then
-                    self:SetBackdropColor(0.10, 0.11, 0.14, 1)
-                    self:SetBackdropBorderColor(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.34)
-                    self._accent:SetColorTexture(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.9)
+                    self:SetBackdropColor(0.10, 0.10, 0.13, 0.98)
+                    local accent = menu.accent or C_DOCK_SELECT_ACCENT
+                    self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.34)
+                    self._accent:SetColorTexture(accent[1], accent[2], accent[3], 0.9)
                 else
-                    self:SetBackdropColor(0.07, 0.08, 0.10, 1)
-                    self:SetBackdropBorderColor(0.18, 0.20, 0.26, 1)
-                    self._accent:SetColorTexture(C_TAB_ACCENT[1], C_TAB_ACCENT[2], C_TAB_ACCENT[3], 0)
+                    self:SetBackdropColor(0.08, 0.08, 0.11, 0.98)
+                    self:SetBackdropBorderColor(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.12)
+                    local accent = menu.accent or C_DOCK_SELECT_ACCENT
+                    self._accent:SetColorTexture(accent[1], accent[2], accent[3], 0)
                 end
             end)
 
@@ -787,15 +817,22 @@ function MoverModule:_GetInspector()
             return row
         end
 
-        function menu:Open(anchor, menuTitle, values, orderedKeys, selectedValue, onSelect)
+        function menu:Open(anchor, menuTitle, values, orderedKeys, selectedValue, onSelect, accentColor)
             if not anchor or not values or not orderedKeys or #orderedKeys == 0 then
                 self:Hide()
                 return
             end
 
+            local accent = accentColor or C_DOCK_SELECT_ACCENT
+            self.accent = { accent[1], accent[2], accent[3] }
             self.title:SetText(menuTitle or "Select")
+            frame:SetBackdropBorderColor(self.accent[1], self.accent[2], self.accent[3], 0.30)
+            inner:SetBackdropBorderColor(self.accent[1], self.accent[2], self.accent[3], 0.10)
+            header:SetBackdropBorderColor(self.accent[1], self.accent[2], self.accent[3], 0.18)
+            headerAccent:SetColorTexture(self.accent[1], self.accent[2], self.accent[3], 1)
+            divider:SetColorTexture(self.accent[1], self.accent[2], self.accent[3], 0.24)
             local menuWidth = math.max(anchor:GetWidth() or DESIGNER_DOCK_CONTENT_WIDTH, DESIGNER_DOCK_CONTENT_WIDTH)
-            local rowTopOffset = -26
+            local rowTopOffset = -38
 
             for index, optionKey in ipairs(orderedKeys) do
                 local row = EnsureRow(index)
@@ -811,13 +848,13 @@ function MoverModule:_GetInspector()
                     menu:Hide()
                 end)
                 if row._selected then
-                    row:SetBackdropColor(0.10, 0.11, 0.14, 1)
-                    row:SetBackdropBorderColor(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.34)
-                    row._accent:SetColorTexture(C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3], 0.9)
+                    row:SetBackdropColor(0.10, 0.10, 0.13, 0.98)
+                    row:SetBackdropBorderColor(self.accent[1], self.accent[2], self.accent[3], 0.34)
+                    row._accent:SetColorTexture(self.accent[1], self.accent[2], self.accent[3], 0.9)
                 else
-                    row:SetBackdropColor(0.07, 0.08, 0.10, 1)
-                    row:SetBackdropBorderColor(0.18, 0.20, 0.26, 1)
-                    row._accent:SetColorTexture(C_TAB_ACCENT[1], C_TAB_ACCENT[2], C_TAB_ACCENT[3], 0)
+                    row:SetBackdropColor(0.08, 0.08, 0.11, 0.98)
+                    row:SetBackdropBorderColor(C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.12)
+                    row._accent:SetColorTexture(self.accent[1], self.accent[2], self.accent[3], 0)
                 end
                 row:Show()
             end
@@ -826,7 +863,7 @@ function MoverModule:_GetInspector()
                 self.rows[index]:Hide()
             end
 
-            local menuHeight = 28 + (#orderedKeys * 23) + 6
+            local menuHeight = 40 + (#orderedKeys * 23) + 6
             frame:SetSize(menuWidth, menuHeight)
             frame:ClearAllPoints()
 
@@ -1243,7 +1280,7 @@ function MoverModule:_GetInspector()
                 fs:SetAllPoints(btn)
                 fs:SetJustifyH("CENTER")
                 fs:SetJustifyV("MIDDLE")
-                SetFont(fs, 10)
+                SetFont(fs, (style and style.fontSize) or 10)
                 fs:SetText(text or "")
                 btn._fs = fs
                 AttachDockButtonChrome(btn, style)
@@ -1321,10 +1358,11 @@ function MoverModule:_GetInspector()
                     local chk = CreateFrame("Button", nil, ec, "BackdropTemplate")
                     chk:SetSize(14, 14)
                     chk:SetPoint("TOPRIGHT", ec, "TOPRIGHT", -8, curY - 2)
-                    ApplyBackdrop(chk, 0.04, 0.05, 0.08, 1, 0.20, 0.22, 0.30, 1)
+                    ApplyBackdrop(chk, 0.04, 0.05, 0.08, 1, C_DOCK_TOGGLE_ACCENT[1], C_DOCK_TOGGLE_ACCENT[2],
+                        C_DOCK_TOGGLE_ACCENT[3], 0.35)
                     local dot = chk:CreateTexture(nil, "OVERLAY")
                     dot:SetAllPoints(chk)
-                    dot:SetColorTexture(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 1)
+                    dot:SetColorTexture(C_DOCK_TOGGLE_ACCENT[1], C_DOCK_TOGGLE_ACCENT[2], C_DOCK_TOGGLE_ACCENT[3], 1)
                     dot:SetShown(cur)
                     chk._dot = dot
                     chk._extra = extra
@@ -1356,7 +1394,7 @@ function MoverModule:_GetInspector()
                                 extra.func()
                                 QueueRefresh()
                             end
-                        end, { kind = "button", accent = C_CFG_ACCENT })
+                        end, { kind = "button", accent = C_DOCK_ACTION_ACCENT })
                     btn:SetEnabled(not ResolveExtraDisabled(extra))
                     StyleExtraState(btn, btn:IsEnabled())
                     ec._extraWidgets[#ec._extraWidgets + 1] = btn
@@ -1390,7 +1428,7 @@ function MoverModule:_GetInspector()
                             extra.set(nextValue)
                             QueueRefresh()
                         end
-                    end, { kind = "button", accent = C_CFG_ACCENT })
+                    end, { kind = "button", accent = C_DOCK_RANGE_ACCENT, fontSize = 14, iconOnly = true })
                     local plus = MakeExtraBtn(ec, "+", DESIGNER_DOCK_CONTENT_WIDTH - 24, rowY, 24, 18, function()
                         if ResolveExtraDisabled(extra) then
                             return
@@ -1405,12 +1443,12 @@ function MoverModule:_GetInspector()
                             extra.set(nextValue)
                             QueueRefresh()
                         end
-                    end, { kind = "button", accent = C_CFG_ACCENT })
+                    end, { kind = "button", accent = C_DOCK_RANGE_ACCENT, fontSize = 14, iconOnly = true })
                     local valueBox = CreateFrame("EditBox", nil, ec, "BackdropTemplate")
                     valueBox:SetSize(DESIGNER_DOCK_CONTENT_WIDTH - 56, 18)
                     valueBox:SetPoint("TOPLEFT", ec, "TOPLEFT", 28, rowY)
-                    ApplyBackdrop(valueBox, 0.08, 0.08, 0.10, 0.96, C_CFG_ACCENT[1], C_CFG_ACCENT[2], C_CFG_ACCENT[3],
-                        0.22)
+                    ApplyBackdrop(valueBox, 0.08, 0.08, 0.10, 0.96, C_DOCK_RANGE_ACCENT[1], C_DOCK_RANGE_ACCENT[2],
+                        C_DOCK_RANGE_ACCENT[3], 0.22)
                     valueBox:SetTextInsets(5, 5, 2, 2)
                     valueBox:SetAutoFocus(false)
                     valueBox:SetMaxLetters(8)
@@ -1502,8 +1540,8 @@ function MoverModule:_GetInspector()
                                         extra.set(optionKey)
                                     end
                                     QueueRefresh()
-                                end)
-                        end, { kind = "dropdown", accent = C_CFG_ACCENT, justifyH = "LEFT", hasArrow = true })
+                                end, C_DOCK_SELECT_ACCENT)
+                        end, { kind = "dropdown", accent = C_DOCK_SELECT_ACCENT, justifyH = "LEFT", hasArrow = true })
                     dropdownBtn._fs:SetText(tostring(values[currentKey] or extra.placeholder or "Select"))
                     dropdownBtn:SetEnabled(not disabled)
                     dropdownBtn._selected = false
