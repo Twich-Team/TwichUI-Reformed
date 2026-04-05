@@ -1186,21 +1186,10 @@ function ActionBars:PersistBarLayout(barKey, absX, absY)
         return
     end
 
-    local anchorX = absX or 0
-    local anchorY = absY or 0
-    local holder = self.holders and self.holders[barKey]
-    if holder then
-        local scale = ClampNumber(holder:GetScale(), 0.5, 2, 1)
-        local width = holder:GetWidth() or 0
-        local height = holder:GetHeight() or 0
-        anchorX = anchorX - ((1 - scale) * width * 0.5)
-        anchorY = anchorY - ((1 - scale) * height * 0.5)
-    end
-
     settings.point = "BOTTOMLEFT"
     settings.relativePoint = "BOTTOMLEFT"
-    settings.x = floor(anchorX + 0.5)
-    settings.y = floor(anchorY + 0.5)
+    settings.x = floor((absX or 0) + 0.5)
+    settings.y = floor((absY or 0) + 0.5)
 
     return settings.x, settings.y
 end
@@ -1224,10 +1213,7 @@ function ActionBars:RegisterWithMoverModule()
                     return floor(((holder:GetLeft() or 0) + 0.5))
                 end
                 local s = ActionBars:GetBarSettings(barKey)
-                if not s then return 0 end
-                local scale = ClampNumber(s.scale, 0.5, 2, 1)
-                local width = holder and holder:GetWidth() or 0
-                return floor(((s.x or 0) + ((1 - scale) * width * 0.5)) + 0.5)
+                return s and floor((s.x or 0) + 0.5) or 0
             end,
             getY      = function()
                 local holder = ActionBars.holders[barKey]
@@ -1235,10 +1221,7 @@ function ActionBars:RegisterWithMoverModule()
                     return floor(((holder:GetBottom() or 0) + 0.5))
                 end
                 local s = ActionBars:GetBarSettings(barKey)
-                if not s then return 0 end
-                local scale = ClampNumber(s.scale, 0.5, 2, 1)
-                local height = holder and holder:GetHeight() or 0
-                return floor(((s.y or 0) + ((1 - scale) * height * 0.5)) + 0.5)
+                return s and floor((s.y or 0) + 0.5) or 0
             end,
             getW      = function()
                 local h = ActionBars.holders[barKey]

@@ -978,6 +978,12 @@ function MoverModule:_EnsureHandle(key)
         self:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", blX, blY)
 
         local o = MoverModule._registry[key]
+        local function FinalizeDrag()
+            MoverModule:_PositionHandle(key)
+            local insp = MoverModule:_GetInspector()
+            insp.Activate(key, self)
+        end
+
         if o then
             if type(o.setAnchor) == "function" then
                 -- Preserve whatever anchor is currently stored: convert the snapped
@@ -985,19 +991,30 @@ function MoverModule:_EnsureHandle(key)
                 local curPt  = type(o.getPoint) == "function" and o.getPoint() or "BOTTOMLEFT"
                 local nx, ny = MoverModule:_ConvertFromBL(blX, blY, curPt, fw, fh)
                 o.setAnchor(curPt, nx, ny)
+                FinalizeDrag()
+                return
             elseif type(o.setPos) == "function" then
                 o.setPos(blX, blY)
+                C_Timer.After(0, function()
+                    MoverModule:_PositionHandle(key)
+
+                    local finalX = math_floor((self:GetLeft() or 0) + 0.5)
+                    local finalY = math_floor((self:GetBottom() or 0) + 0.5)
+                    local driftX = blX - finalX
+                    local driftY = blY - finalY
+
+                    if math_abs(driftX) > 0 or math_abs(driftY) > 0 then
+                        o.setPos(blX + driftX, blY + driftY)
+                        C_Timer.After(0, FinalizeDrag)
+                    else
+                        FinalizeDrag()
+                    end
+                end)
+                return
             end
         end
 
-        -- Reattach to the live frame after the module applies its own layout logic.
-        -- This keeps the handle aligned with scaled frames whose final rendered
-        -- bounds can differ slightly from the raw drag frame position.
-        MoverModule:_PositionHandle(key)
-
-        -- Open inspector at new position
-        local insp = MoverModule:_GetInspector()
-        insp.Activate(key, self)
+        FinalizeDrag()
     end)
 
     -- Left-click: open inspector
