@@ -1396,8 +1396,8 @@ function MoverModule:_RefreshHandleVisualStates()
         if isSelected then
             if interactiveSelected then
                 ApplyBackdrop(handle,
-                    categoryColor[1] * 0.20, categoryColor[2] * 0.20, categoryColor[3] * 0.20, 0.55,
-                    categoryColor[1], categoryColor[2], categoryColor[3], 1)
+                    0, 0, 0, 0,
+                    categoryColor[1], categoryColor[2], categoryColor[3], 0.28)
                 if handle._label then
                     handle._label:Show()
                     handle._label:SetTextColor(1, 0.95, 0.85, 1)
@@ -1412,8 +1412,8 @@ function MoverModule:_RefreshHandleVisualStates()
                 end
             else
                 ApplyBackdrop(handle,
-                    categoryColor[1] * 0.05, categoryColor[2] * 0.05, categoryColor[3] * 0.05, 0.04,
-                    categoryColor[1], categoryColor[2], categoryColor[3], 0.18)
+                    0, 0, 0, 0,
+                    categoryColor[1], categoryColor[2], categoryColor[3], 0)
                 if handle._label then handle._label:Hide() end
                 if handle._cat then handle._cat:Hide() end
                 if handle._hint then handle._hint:Hide() end
@@ -1459,6 +1459,79 @@ function MoverModule:_RefreshHandleVisualStates()
         if handle._tagLabel and opts then
             handle._tagLabel:SetText(BuildHandleLabel(opts))
         end
+    end
+
+    self:_RefreshOverlayCutout(selectedKey)
+end
+
+function MoverModule:_RefreshOverlayCutout(selectedKey)
+    local overlay = self._overlay
+    local dims = overlay and overlay._dims
+    if not dims then return end
+
+    local function ShowFullOverlay()
+        dims.top:ClearAllPoints()
+        dims.top:SetAllPoints(overlay)
+        dims.top:Show()
+        dims.bottom:Hide()
+        dims.left:Hide()
+        dims.right:Hide()
+    end
+
+    local handle = selectedKey and self._handles[selectedKey] or nil
+    if not selectedKey or not handle or not handle:IsShown() then
+        ShowFullOverlay()
+        return
+    end
+
+    local boundsFrame = handle._outline and handle._outline:IsShown() and handle._outline or handle
+    local left, bottom, right, top = GetFrameScreenRect(boundsFrame)
+    if not left or not bottom or not right or not top then
+        ShowFullOverlay()
+        return
+    end
+
+    local screenWidth = UIParent:GetWidth() or 1280
+    local screenHeight = UIParent:GetHeight() or 768
+    left = math_max(0, math_floor(left + 0.5))
+    bottom = math_max(0, math_floor(bottom + 0.5))
+    right = math_min(screenWidth, math_floor(right + 0.5))
+    top = math_min(screenHeight, math_floor(top + 0.5))
+
+    if right <= left or top <= bottom then
+        ShowFullOverlay()
+        return
+    end
+
+    local function SetPanel(panel, pointTop, pointBottom, x1, y1, x2, y2)
+        panel:ClearAllPoints()
+        panel:SetPoint(pointTop, overlay, "BOTTOMLEFT", x1, y1)
+        panel:SetPoint(pointBottom, overlay, "BOTTOMLEFT", x2, y2)
+        panel:Show()
+    end
+
+    if top < screenHeight then
+        SetPanel(dims.top, "TOPLEFT", "BOTTOMRIGHT", 0, screenHeight, screenWidth, top)
+    else
+        dims.top:Hide()
+    end
+
+    if bottom > 0 then
+        SetPanel(dims.bottom, "TOPLEFT", "BOTTOMRIGHT", 0, bottom, screenWidth, 0)
+    else
+        dims.bottom:Hide()
+    end
+
+    if left > 0 then
+        SetPanel(dims.left, "TOPLEFT", "BOTTOMRIGHT", 0, top, left, bottom)
+    else
+        dims.left:Hide()
+    end
+
+    if right < screenWidth then
+        SetPanel(dims.right, "TOPLEFT", "BOTTOMRIGHT", right, top, screenWidth, bottom)
+    else
+        dims.right:Hide()
     end
 end
 
@@ -1796,9 +1869,19 @@ function MoverModule:_BuildOverlay()
     ov:SetAllPoints(UIParent)
     ov:SetFrameStrata("HIGH")
     ov:SetFrameLevel(200)
-    ApplyBackdrop(ov, 0, 0, 0, OVERLAY_ALPHA, 0, 0, 0, 0)
+    ApplyBackdrop(ov, 0, 0, 0, 0, 0, 0, 0, 0)
     ov:EnableMouse(true) -- Blocks clicks to game world, passes to handles above
     ov:Hide()
+
+    local dims = {}
+    for _, name in ipairs({ "top", "bottom", "left", "right" }) do
+        local dim = CreateFrame("Frame", nil, ov, "BackdropTemplate")
+        dim:SetFrameLevel(ov:GetFrameLevel())
+        dim:EnableMouse(false)
+        ApplyBackdrop(dim, 0, 0, 0, OVERLAY_ALPHA, 0, 0, 0, 0)
+        dims[name] = dim
+    end
+    ov._dims = dims
 
     -- Click on overlay (behind handles) dismisses the inspector
     ov:SetScript("OnMouseDown", function()
@@ -1886,6 +1969,7 @@ function MoverModule:_BuildOverlay()
     hud._showAllBtn = showAllBtn
     self._overlay   = ov
     self._hud       = hud
+    self:_RefreshOverlayCutout(nil)
     return ov
 end
 
