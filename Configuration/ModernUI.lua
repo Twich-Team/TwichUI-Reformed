@@ -680,11 +680,56 @@ local function GetOrderedEntries(section)
     end
 
     table.sort(ordered, function(left, right)
+        if section and section.childGroups then
+            local leftName = type(left.option) == "table" and tostring(left.option.name or left.key) or
+            tostring(left.key)
+            local rightName = type(right.option) == "table" and tostring(right.option.name or right.key) or
+            tostring(right.key)
+            leftName = leftName:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):lower()
+            rightName = rightName:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):lower()
+
+            if leftName == rightName then
+                return tostring(left.key) < tostring(right.key)
+            end
+
+            return leftName < rightName
+        end
+
         if left.order == right.order then
             return tostring(left.key) < tostring(right.key)
         end
+
         return left.order < right.order
     end)
+
+    return ordered
+end
+
+local function GetOrderedNavItems()
+    local ordered = {}
+    local pinned = {}
+
+    for _, item in ipairs(NAV_ITEMS) do
+        if item and item.id == "dashboard" then
+            pinned[#pinned + 1] = item
+        else
+            ordered[#ordered + 1] = item
+        end
+    end
+
+    table.sort(ordered, function(left, right)
+        local leftTitle = tostring(left and left.title or ""):lower()
+        local rightTitle = tostring(right and right.title or ""):lower()
+        if leftTitle == rightTitle then
+            return tostring(left and left.id or "") < tostring(right and right.id or "")
+        end
+
+        return leftTitle < rightTitle
+    end)
+
+    for index = #pinned, 1, -1 do
+        table.insert(ordered, 1, pinned[index])
+    end
 
     return ordered
 end
@@ -1677,8 +1722,9 @@ function UI:RefreshSidebar()
     local frame = self:EnsureFrame()
     local filter = self:GetCurrentFilter()
     local shown = 0
+    local navItems = GetOrderedNavItems()
 
-    for index, item in ipairs(NAV_ITEMS) do
+    for index, item in ipairs(navItems) do
         local button = frame.NavButtons[index]
         if not button then
             button = CreatePanel(frame.SidebarScrollChild, 0.08, 0.08, 0.1, 0.96, 0.12)
@@ -2089,10 +2135,10 @@ function UI:RenderUnitFramePanel(parent, width)
 
     -- Dynamic button label refresh (called after all buttons are created)
     local function RefreshButtonStates()
-        local m        = GetUFModule()
-        local db       = m and m.GetDB and m:GetDB()
-        local enabled  = db == nil or db.enabled ~= false
-        local testMode = db and db.testMode == true
+        local m            = GetUFModule()
+        local db           = m and m.GetDB and m:GetDB()
+        local enabled      = db == nil or db.enabled ~= false
+        local testMode     = db and db.testMode == true
         local moversActive = _G.TwichMoverModule and _G.TwichMoverModule:IsActive() or false
         SetButtonText(enableBtn, enabled and "Disable UF" or "Enable UF")
         SetButtonText(testBtn, testMode and "Exit Test" or "Test Mode")

@@ -58,6 +58,44 @@ local function GetAceConfigRegistry()
         or _G.LibStub("AceConfigRegistry-3.0", true)
 end
 
+local function NormalizeSectionSortLabel(value)
+    if type(value) ~= "string" then
+        return ""
+    end
+
+    local normalized = value:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    return normalized:lower()
+end
+
+local function ApplyAlphabeticalRootSectionOrder(optionsTable)
+    if not optionsTable or type(optionsTable.args) ~= "table" then
+        return
+    end
+
+    local ordered = {}
+    for key, section in pairs(optionsTable.args) do
+        ordered[#ordered + 1] = {
+            key = key,
+            section = section,
+            label = NormalizeSectionSortLabel(type(section) == "table" and section.name or key),
+        }
+    end
+
+    table.sort(ordered, function(left, right)
+        if left.label == right.label then
+            return tostring(left.key) < tostring(right.key)
+        end
+
+        return left.label < right.label
+    end)
+
+    for index, entry in ipairs(ordered) do
+        if type(entry.section) == "table" then
+            entry.section.order = index
+        end
+    end
+end
+
 --- Called when the module is initialized. Creates the configuration.
 function ConfigurationModule:OnInitialize()
     self.optionsTable = {
@@ -115,6 +153,8 @@ function ConfigurationModule:RebuildOptionsTableSections()
         local section = func()
         self.optionsTable.args[name] = section
     end
+
+    ApplyAlphabeticalRootSectionOrder(self.optionsTable)
 end
 
 function ConfigurationModule:GetProfileDB()

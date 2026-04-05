@@ -748,12 +748,12 @@ function ChatStylingModule:ApplyPositionOverride()
     local frame = _G.ChatFrame1
     if not frame then return end
 
-    local opts = self:GetOptions()
-    local db = opts and opts.GetChatEnhancementDB and opts:GetChatEnhancementDB() or nil
+    local opts                      = self:GetOptions()
+    local db                        = opts and opts.GetChatEnhancementDB and opts:GetChatEnhancementDB() or nil
     local parentWidth, parentHeight = GetUIScreenSize()
 
-    local hasPos  = type(x) == "number" and type(y) == "number"
-    local hasSize = type(w) == "number" and type(h) == "number" and w > 50 and h > 50
+    local hasPos                    = type(x) == "number" and type(y) == "number"
+    local hasSize                   = type(w) == "number" and type(h) == "number" and w > 50 and h > 50
     if not hasPos and not hasSize then return end
 
     if hasPos and db then
@@ -799,7 +799,8 @@ function ChatStylingModule:ApplyPositionOverride()
     -- the frame's position at lifecycle-timer time into Blizzard's own storage,
     -- potentially overwriting a more recent drag-stop position with a stale value.
     if db then
-        self:PersistPrimaryChatLayout(db, hasPos and x or nil, hasPos and y or nil, hasSize and w or nil, hasSize and h or nil)
+        self:PersistPrimaryChatLayout(db, hasPos and x or nil, hasPos and y or nil, hasSize and w or nil,
+            hasSize and h or nil)
     end
 end
 

@@ -5,7 +5,6 @@
   - Chat sizing and positioning on login
 
 - Action bars: Brents has a artwork on one of his action bars and none others?
-- Chat is still positioning weird
 - Alphabatize sections
 - "Designer" mode
   - Allow changing action bar number of buttons, button size from designer mode
@@ -13,7 +12,7 @@
 - Enable swipe on action bars by default
 - Particle animation on cast bar rules
 
-- brents chat moves every time he logs in
+
 - didnt disable the elvui chat background
 
 - transmog data text?

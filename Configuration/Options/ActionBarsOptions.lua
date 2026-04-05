@@ -40,13 +40,13 @@ local ROOT_DEFAULTS = {
 }
 
 local SIMPLE_VISIBILITY_RULES = {
-    { key = "combat", label = "Combat", condition = "combat" },
-    { key = "petbattle", label = "Pet Battle", condition = "petbattle" },
+    { key = "combat",    label = "Combat",               condition = "combat" },
+    { key = "petbattle", label = "Pet Battle",           condition = "petbattle" },
     { key = "skyriding", label = "Skyriding / Override", condition = "overridebar" },
-    { key = "vehicle", label = "Vehicle", condition = "vehicleui" },
-    { key = "possess", label = "Possess", condition = "possessbar" },
-    { key = "pet", label = "Pet", condition = "pet" },
-    { key = "stance", label = "Stance", condition = "shapeshift" },
+    { key = "vehicle",   label = "Vehicle",              condition = "vehicleui" },
+    { key = "possess",   label = "Possess",              condition = "possessbar" },
+    { key = "pet",       label = "Pet",                  condition = "pet" },
+    { key = "stance",    label = "Stance",               condition = "shapeshift" },
 }
 
 local BAR_DEFAULTS = {
@@ -432,25 +432,25 @@ local BAR_DEFAULTS = {
 }
 
 local BAR_ORDER = {
-    { key = "bar1", label = "Bar 1" },
-    { key = "bar2", label = "Bar 2" },
-    { key = "bar3", label = "Bar 3" },
-    { key = "bar4", label = "Bar 4" },
-    { key = "bar5", label = "Bar 5" },
-    { key = "bar6", label = "Bar 6" },
-    { key = "bar7", label = "Bar 7" },
-    { key = "bar8", label = "Bar 8" },
-    { key = "bar9", label = "Bar 9" },
-    { key = "bar10", label = "Bar 10" },
-    { key = "bar11", label = "Bar 11" },
-    { key = "bar12", label = "Bar 12" },
-    { key = "bar13", label = "Bar 13" },
-    { key = "bar14", label = "Bar 14" },
-    { key = "bar15", label = "Bar 15" },
+    { key = "bar1",        label = "Bar 1" },
+    { key = "bar2",        label = "Bar 2" },
+    { key = "bar3",        label = "Bar 3" },
+    { key = "bar4",        label = "Bar 4" },
+    { key = "bar5",        label = "Bar 5" },
+    { key = "bar6",        label = "Bar 6" },
+    { key = "bar7",        label = "Bar 7" },
+    { key = "bar8",        label = "Bar 8" },
+    { key = "bar9",        label = "Bar 9" },
+    { key = "bar10",       label = "Bar 10" },
+    { key = "bar11",       label = "Bar 11" },
+    { key = "bar12",       label = "Bar 12" },
+    { key = "bar13",       label = "Bar 13" },
+    { key = "bar14",       label = "Bar 14" },
+    { key = "bar15",       label = "Bar 15" },
     { key = "extraAction", label = "Extra Action" },
     { key = "vehicleExit", label = "Vehicle Exit" },
-    { key = "pet", label = "Pet Bar" },
-    { key = "stance", label = "Stance Bar" },
+    { key = "pet",         label = "Pet Bar" },
+    { key = "stance",      label = "Stance Bar" },
 }
 
 local BAR_MAX_BUTTONS = {
@@ -1322,7 +1322,8 @@ function Options:BuildConfiguration()
                     simpleVisibilityMode = {
                         type = "select",
                         name = "Simple Visibility",
-                        desc = "Use common-state checkboxes to build this bar's visibility driver, or leave this on Raw to manage the driver manually.",
+                        desc =
+                        "Use common-state checkboxes to build this bar's visibility driver, or leave this on Raw to manage the driver manually.",
                         order = 9,
                         width = 1.4,
                         values = {
@@ -1372,7 +1373,8 @@ function Options:BuildConfiguration()
                     skyridingVisibility = {
                         type = "toggle",
                         name = "Skyriding / Override",
-                        desc = "Include override-bar states, which are the closest secure visibility match for skyriding-style bars.",
+                        desc =
+                        "Include override-bar states, which are the closest secure visibility match for skyriding-style bars.",
                         order = 9.2,
                         width = "half",
                         disabled = function()
@@ -1504,7 +1506,8 @@ function Options:BuildConfiguration()
                     visibility = {
                         type = "input",
                         name = "Advanced Visibility Driver",
-                        desc = "Secure visibility state driver for this bar. Editing this switches the bar back to raw driver mode.",
+                        desc =
+                        "Secure visibility state driver for this bar. Editing this switches the bar back to raw driver mode.",
                         order = 10,
                         width = 2.2,
                         get = function()
