@@ -8506,21 +8506,75 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         end
     end
 
+    local function getLayoutX()
+        local layout = UnitFrames:GetLayoutSettings(layoutKey)
+        return math.floor((tonumber(layout.x) or 0) + 0.5)
+    end
+
+    local function getLayoutY()
+        local layout = UnitFrames:GetLayoutSettings(layoutKey)
+        return math.floor((tonumber(layout.y) or 0) + 0.5)
+    end
+
+    local function getLayoutWidth()
+        if layoutKey == "castbar" then
+            local db = UnitFrames:GetDB()
+            local castbar = db and db.castbar or nil
+            return math.floor((tonumber(castbar and castbar.width) or 240) + 0.5)
+        end
+
+        if isHeader then
+            local group = UnitFrames:GetGroupSettings(layoutKey)
+            local width = tonumber(group and group.width)
+            if width and width > 4 then
+                local columns = tonumber(group and group.maxColumns) or 1
+                local spacing = tonumber(group and group.columnSpacing) or 8
+                return math.floor((width * math.max(1, columns)) + (spacing * math.max(0, columns - 1)) + 0.5)
+            end
+            return 220
+        end
+
+        local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+        return math.floor((tonumber(unitSettings and unitSettings.width) or 220) + 0.5)
+    end
+
+    local function getLayoutHeight()
+        if layoutKey == "castbar" then
+            local db = UnitFrames:GetDB()
+            local castbar = db and db.castbar or nil
+            return math.floor((tonumber(castbar and castbar.height) or 28) + 0.5)
+        end
+
+        if isHeader then
+            local group = UnitFrames:GetGroupSettings(layoutKey)
+            local height = tonumber(group and group.height)
+            if height and height > 4 then
+                local rows = tonumber(group and group.unitsPerColumn) or ((layoutKey == "tank" and 2) or 5)
+                local spacing = math.abs(tonumber(group and group.rowSpacing) or tonumber(group and group.yOffset) or 6)
+                return math.floor((height * math.max(1, rows)) + (spacing * math.max(0, rows - 1)) + 0.5)
+            end
+            return 120
+        end
+
+        local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
+        return math.floor((tonumber(unitSettings and unitSettings.height) or 48) + 0.5)
+    end
+
     moversModule:RegisterMover("UF_" .. layoutKey, {
         label     = LABELS[layoutKey] or layoutKey,
         category  = "Unit Frames",
         getFrame  = function() return frame end,
         getX      = function()
-            return frame and frame.GetLeft and math.floor((frame:GetLeft() or 0) + 0.5) or 0
+            return getLayoutX()
         end,
         getY      = function()
-            return frame and frame.GetBottom and math.floor((frame:GetBottom() or 0) + 0.5) or 0
+            return getLayoutY()
         end,
         getW      = function()
-            return frame and frame.GetWidth and math.floor((frame:GetWidth() or 100) + 0.5) or 100
+            return getLayoutWidth()
         end,
         getH      = function()
-            return frame and frame.GetHeight and math.floor((frame:GetHeight() or 50) + 0.5) or 50
+            return getLayoutHeight()
         end,
         setPos    = function(x, y)
             local layout = UnitFrames:GetLayoutSettings(layoutKey)
@@ -10692,6 +10746,11 @@ function UnitFrames:OnEnable()
             end
 
             db._migrated.tankRoleFilterDefault = true
+        end
+
+        if not db._migrated.centralMoverLockFrames then
+            db.lockFrames = true
+            db._migrated.centralMoverLockFrames = true
         end
     end
 

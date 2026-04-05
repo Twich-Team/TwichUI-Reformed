@@ -37,6 +37,8 @@ local TwichRx          = _G.TwichRx
 local T                = unpack(TwichRx)
 
 ---@class TwichMoverModule : AceModule, AceEvent-3.0
+---@field _snapLineH Frame|nil
+---@field _snapLineV Frame|nil
 local MoverModule      = T:NewModule("Movers", "AceEvent-3.0")
 
 _G.TwichMoverModule    = MoverModule
@@ -98,6 +100,34 @@ local function ResolveFont(size)
         end
     end
     return path, size or 11
+end
+
+local function GetFrameScreenRect(frame)
+    if not frame then
+        return 0, 0, 0, 0
+    end
+
+    local left = frame:GetLeft() or 0
+    local bottom = frame:GetBottom() or 0
+    local right = frame:GetRight() or (left + (frame:GetWidth() or 0))
+    local top = frame:GetTop() or (bottom + (frame:GetHeight() or 0))
+
+    return left, bottom, right, top
+end
+
+local function GetFrameScreenSize(frame, minWidth, minHeight)
+    local left, bottom, right, top = GetFrameScreenRect(frame)
+    local width = right - left
+    local height = top - bottom
+
+    if width <= 0 then
+        width = frame and frame.GetWidth and frame:GetWidth() or minWidth or 0
+    end
+    if height <= 0 then
+        height = frame and frame.GetHeight and frame:GetHeight() or minHeight or 0
+    end
+
+    return math_max(minWidth or 0, width), math_max(minHeight or 0, height)
 end
 
 local function SetFont(widget, size)
@@ -436,11 +466,14 @@ function MoverModule:_GetInspector()
             local opts = MoverModule._registry[panel._activeKey]
             if not opts then return end
             -- Use handle's current absolute BOTTOMLEFT position for coordinate conversion
-            local hndl   = MoverModule._handles[panel._activeKey]
-            local blX    = hndl and hndl:GetLeft() or (type(opts.getX) == "function" and opts.getX() or 0)
-            local blY    = hndl and hndl:GetBottom() or (type(opts.getY) == "function" and opts.getY() or 0)
-            local hfw    = hndl and hndl:GetWidth() or 0
-            local hfh    = hndl and hndl:GetHeight() or 0
+            local hndl     = MoverModule._handles[panel._activeKey]
+            local blX      = type(opts.getX) == "function" and opts.getX() or 0
+            local blY      = type(opts.getY) == "function" and opts.getY() or 0
+            local hfw, hfh = 0, 0
+            if hndl then
+                blX, blY = GetFrameScreenRect(hndl)
+                hfw, hfh = GetFrameScreenSize(hndl, 0, 0)
+            end
             local nx, ny = MoverModule:_ConvertFromBL(blX, blY, self._pt, hfw, hfh)
             if type(opts.setAnchor) == "function" then
                 opts.setAnchor(self._pt, nx, ny)
@@ -728,6 +761,10 @@ end
 
 function MoverModule:_ShowSnapLines(snapX, snapY)
     local lh, lv = GetOrCreateSnapLines()
+    if not lh or not lv then
+        return
+    end
+
     if snapY then
         lh:ClearAllPoints()
         lh:SetPoint("LEFT", UIParent, "BOTTOMLEFT", 0, snapY)
@@ -774,9 +811,9 @@ function MoverModule:_SnapPosition(dragKey, rawBlX, rawBlY, fw, fh)
 
     -- ── X-axis candidates  { targetBlX, guideLine_X_screen } ────────────────
     local xCands = {
-        { L = 0,                   line = 0 },         -- frame L → screen L
-        { L = sw - fw,             line = sw },        -- frame R → screen R
-        { L = sw * 0.5 - fw * 0.5, line = sw * 0.5 },  -- frame CX → screen CX
+        { L = 0,                   line = 0 },        -- frame L → screen L
+        { L = sw - fw,             line = sw },       -- frame R → screen R
+        { L = sw * 0.5 - fw * 0.5, line = sw * 0.5 }, -- frame CX → screen CX
     }
     -- snap against every other visible handle
     for otherKey, oh in pairs(self._handles) do
@@ -784,29 +821,29 @@ function MoverModule:_SnapPosition(dragKey, rawBlX, rawBlY, fw, fh)
             local oL = oh:GetLeft() or 0
             local oR = oh:GetRight() or (oL + 80)
             local oCX = (oL + oR) * 0.5
-            xCands[#xCands + 1] = { L = oL, line = oL }          -- L-edge align
-            xCands[#xCands + 1] = { L = oR - fw, line = oR }     -- R-edge align
-            xCands[#xCands + 1] = { L = oR, line = oR }          -- frame L sticks to other R
-            xCands[#xCands + 1] = { L = oL - fw, line = oL }     -- frame R sticks to other L
+            xCands[#xCands + 1] = { L = oL, line = oL }              -- L-edge align
+            xCands[#xCands + 1] = { L = oR - fw, line = oR }         -- R-edge align
+            xCands[#xCands + 1] = { L = oR, line = oR }              -- frame L sticks to other R
+            xCands[#xCands + 1] = { L = oL - fw, line = oL }         -- frame R sticks to other L
             xCands[#xCands + 1] = { L = oCX - fw * 0.5, line = oCX } -- centre-X align
         end
     end
 
     -- ── Y-axis candidates  { targetBlY, guideLine_Y_screen } ────────────────
     local yCands = {
-        { B = 0,                   line = 0 },         -- frame B → screen B
-        { B = sh - fh,             line = sh },        -- frame T → screen T
-        { B = sh * 0.5 - fh * 0.5, line = sh * 0.5 },  -- frame CY → screen CY
+        { B = 0,                   line = 0 },        -- frame B → screen B
+        { B = sh - fh,             line = sh },       -- frame T → screen T
+        { B = sh * 0.5 - fh * 0.5, line = sh * 0.5 }, -- frame CY → screen CY
     }
     for otherKey, oh in pairs(self._handles) do
         if otherKey ~= dragKey and oh:IsShown() then
             local oB = oh:GetBottom() or 0
             local oT = oh:GetTop() or (oB + 24)
             local oCY = (oB + oT) * 0.5
-            yCands[#yCands + 1] = { B = oB, line = oB }          -- B-edge align
-            yCands[#yCands + 1] = { B = oT - fh, line = oT }     -- T-edge align
-            yCands[#yCands + 1] = { B = oT, line = oT }          -- frame B sticks to other T
-            yCands[#yCands + 1] = { B = oB - fh, line = oB }     -- frame T sticks to other B
+            yCands[#yCands + 1] = { B = oB, line = oB }              -- B-edge align
+            yCands[#yCands + 1] = { B = oT - fh, line = oT }         -- T-edge align
+            yCands[#yCands + 1] = { B = oT, line = oT }              -- frame B sticks to other T
+            yCands[#yCands + 1] = { B = oB - fh, line = oB }         -- frame T sticks to other B
             yCands[#yCands + 1] = { B = oCY - fh * 0.5, line = oCY } -- centre-Y align
         end
     end
@@ -897,14 +934,15 @@ function MoverModule:_EnsureHandle(key)
     -- Store original position on drag start
     h:SetScript("OnDragStart", function(self)
         if InCombatLockdown() then return end
-        -- When positioned via two-anchor live-frame approach, StartMoving() needs a
-        -- single BOTTOMLEFT anchor first.  Read h's current screen coords (h is always
-        -- scale-1 so GetLeft/GetBottom are reliable in UIParent space), then collapse to
-        -- a single anchor before calling StartMoving.
-        local blX = math_floor((self:GetLeft() or 0) + 0.5)
-        local blY = math_floor((self:GetBottom() or 0) + 0.5)
-        local vw  = math_floor((self:GetWidth() or 40) + 0.5)
-        local vh  = math_floor((self:GetHeight() or 16) + 0.5)
+        -- Collapse the live-frame attachment to a single BOTTOMLEFT anchor while
+        -- preserving the handle's rendered screen-space size. Logical GetWidth/
+        -- GetHeight are not reliable once the source frame is scaled.
+        local blX, blY = GetFrameScreenRect(self)
+        local vw, vh = GetFrameScreenSize(self, 40, 16)
+        blX = math_floor(blX + 0.5)
+        blY = math_floor(blY + 0.5)
+        vw = math_floor(vw + 0.5)
+        vh = math_floor(vh + 0.5)
         self:ClearAllPoints()
         self:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", blX, blY)
         self:SetSize(math_max(40, vw), math_max(16, vh))
@@ -913,10 +951,8 @@ function MoverModule:_EnsureHandle(key)
         -- Live snap-line preview: show guide lines as the frame approaches snap targets.
         self:SetScript("OnUpdate", function(dragFrame)
             if not dragFrame._dragging then return end
-            local rX = dragFrame:GetLeft() or 0
-            local rY = dragFrame:GetBottom() or 0
-            local rW = dragFrame:GetWidth() or 40
-            local rH = dragFrame:GetHeight() or 16
+            local rX, rY = GetFrameScreenRect(dragFrame)
+            local rW, rH = GetFrameScreenSize(dragFrame, 40, 16)
             local _, _, snapX, snapY = MoverModule:_SnapPosition(key, rX, rY, rW, rH)
             MoverModule:_ShowSnapLines(snapX, snapY)
         end)
@@ -932,10 +968,8 @@ function MoverModule:_EnsureHandle(key)
         self:SetScript("OnUpdate", nil) -- stop live-snap preview
 
         -- Compute snapped BOTTOMLEFT position and reposition handle before saving.
-        local rawX     = self:GetLeft() or 0
-        local rawY     = self:GetBottom() or 0
-        local fw       = self:GetWidth() or 40
-        local fh       = self:GetHeight() or 16
+        local rawX, rawY = GetFrameScreenRect(self)
+        local fw, fh = GetFrameScreenSize(self, 40, 16)
         local blX, blY = MoverModule:_SnapPosition(key, rawX, rawY, fw, fh)
         MoverModule:_HideSnapLines()
 
@@ -955,6 +989,12 @@ function MoverModule:_EnsureHandle(key)
                 o.setPos(blX, blY)
             end
         end
+
+        -- Reattach to the live frame after the module applies its own layout logic.
+        -- This keeps the handle aligned with scaled frames whose final rendered
+        -- bounds can differ slightly from the raw drag frame position.
+        MoverModule:_PositionHandle(key)
+
         -- Open inspector at new position
         local insp = MoverModule:_GetInspector()
         insp.Activate(key, self)
@@ -1018,16 +1058,19 @@ function MoverModule:_PositionHandle(key)
     if type(opts.getFrame) == "function" then
         local liveFrame = opts.getFrame()
         if liveFrame and liveFrame.IsShown and liveFrame:IsShown() then
-            h:ClearAllPoints()
-            h:SetPoint("BOTTOMLEFT", liveFrame, "BOTTOMLEFT", 0, 0)
-            h:SetPoint("TOPRIGHT", liveFrame, "TOPRIGHT", 0, 0)
-            if h._label then h._label:SetText(BuildHandleLabel(opts)) end
-            if h._cat then h._cat:SetText(opts.category or "") end
-            local insp = self._inspector
-            if insp and insp._activeKey == key and insp:IsShown() then
-                insp.RefreshBoxes()
+            local liveWidth, liveHeight = GetFrameScreenSize(liveFrame, 0, 0)
+            if liveWidth > 4 and liveHeight > 4 then
+                h:ClearAllPoints()
+                h:SetPoint("BOTTOMLEFT", liveFrame, "BOTTOMLEFT", 0, 0)
+                h:SetPoint("TOPRIGHT", liveFrame, "TOPRIGHT", 0, 0)
+                if h._label then h._label:SetText(BuildHandleLabel(opts)) end
+                if h._cat then h._cat:SetText(opts.category or "") end
+                local insp = self._inspector
+                if insp and insp._activeKey == key and insp:IsShown() then
+                    insp.RefreshBoxes()
+                end
+                return
             end
-            return
         end
     end
 
@@ -1120,7 +1163,7 @@ function MoverModule:_BuildOverlay()
     hudHint:SetPoint("CENTER", hud, "CENTER", 0, 0)
     SetFont(hudHint, 10)
     hudHint:SetText(
-    "Drag to reposition · snaps to edges & other frames · |cffffcc00Shift|r: bypass snap · Left-click: inspector · Right-click: hide")
+        "Drag to reposition · snaps to edges & other frames · |cffffcc00Shift|r: bypass snap · Left-click: inspector · Right-click: hide")
     hudHint:SetTextColor(0.55, 0.58, 0.68)
 
     -- Show Hidden button (reveals all temp-hidden)

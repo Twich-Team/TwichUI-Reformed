@@ -601,7 +601,7 @@ local function GetButtonArtTextures(button)
         flash = button.Flash or (buttonName and _G[buttonName .. "Flash"]) or nil,
         newAction = button.NewActionTexture or (buttonName and _G[buttonName .. "NewActionTexture"]) or nil,
         spellHighlight = button.SpellHighlightTexture or (buttonName and _G[buttonName .. "SpellHighlightTexture"]) or
-        nil,
+            nil,
         flyoutBorder = button.FlyoutBorder or (buttonName and _G[buttonName .. "FlyoutBorder"]) or nil,
         flyoutShadow = button.FlyoutBorderShadow or (buttonName and _G[buttonName .. "FlyoutBorderShadow"]) or nil,
     }
@@ -668,7 +668,7 @@ local function SuppressButtonAnimationEffects(button)
     local buttonName = button.GetName and button:GetName() or nil
     local flash = button.Flash or (buttonName and _G[buttonName .. "Flash"]) or nil
     local spellHighlight = button.SpellHighlightTexture or (buttonName and _G[buttonName .. "SpellHighlightTexture"]) or
-    nil
+        nil
     local pushed = button.GetPushedTexture and button:GetPushedTexture() or nil
     local checked = button.GetCheckedTexture and button:GetCheckedTexture() or nil
 
@@ -1186,10 +1186,23 @@ function ActionBars:PersistBarLayout(barKey, absX, absY)
         return
     end
 
+    local anchorX = absX or 0
+    local anchorY = absY or 0
+    local holder = self.holders and self.holders[barKey]
+    if holder then
+        local scale = ClampNumber(holder:GetScale(), 0.5, 2, 1)
+        local width = holder:GetWidth() or 0
+        local height = holder:GetHeight() or 0
+        anchorX = anchorX - ((1 - scale) * width * 0.5)
+        anchorY = anchorY - ((1 - scale) * height * 0.5)
+    end
+
     settings.point = "BOTTOMLEFT"
     settings.relativePoint = "BOTTOMLEFT"
-    settings.x = floor((absX or 0) + 0.5)
-    settings.y = floor((absY or 0) + 0.5)
+    settings.x = floor(anchorX + 0.5)
+    settings.y = floor(anchorY + 0.5)
+
+    return settings.x, settings.y
 end
 
 -- ── Central Mover System registration ────────────────────────────────────────
@@ -1206,12 +1219,26 @@ function ActionBars:RegisterWithMoverModule()
             category  = "Action Bars",
             getFrame  = function() return ActionBars.holders[barKey] end,
             getX      = function()
+                local holder = ActionBars.holders[barKey]
+                if holder and holder.GetLeft then
+                    return floor(((holder:GetLeft() or 0) + 0.5))
+                end
                 local s = ActionBars:GetBarSettings(barKey)
-                return s and (s.x or 0) or 0
+                if not s then return 0 end
+                local scale = ClampNumber(s.scale, 0.5, 2, 1)
+                local width = holder and holder:GetWidth() or 0
+                return floor(((s.x or 0) + ((1 - scale) * width * 0.5)) + 0.5)
             end,
             getY      = function()
+                local holder = ActionBars.holders[barKey]
+                if holder and holder.GetBottom then
+                    return floor(((holder:GetBottom() or 0) + 0.5))
+                end
                 local s = ActionBars:GetBarSettings(barKey)
-                return s and (s.y or 0) or 0
+                if not s then return 0 end
+                local scale = ClampNumber(s.scale, 0.5, 2, 1)
+                local height = holder and holder:GetHeight() or 0
+                return floor(((s.y or 0) + ((1 - scale) * height * 0.5)) + 0.5)
             end,
             getW      = function()
                 local h = ActionBars.holders[barKey]
@@ -1222,11 +1249,11 @@ function ActionBars:RegisterWithMoverModule()
                 return h and h:GetHeight() or nil
             end,
             setPos    = function(x, y)
-                ActionBars:PersistBarLayout(barKey, x, y)
+                local anchorX, anchorY = ActionBars:PersistBarLayout(barKey, x, y)
                 local holder = ActionBars.holders[barKey]
                 if holder then
                     holder:ClearAllPoints()
-                    holder:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
+                    holder:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", anchorX or x, anchorY or y)
                 end
                 ActionBars:RefreshAll()
             end,
@@ -1642,7 +1669,7 @@ function ActionBars:GetBindPopup()
     popup.desc:SetFont(STANDARD_TEXT_FONT, 10, "")
     popup.desc:SetTextColor(0.82, 0.84, 0.90, 1)
     popup.desc:SetText(
-    "Hover any action and press a key or mouse combo to bind it. Press Escape on an action to clear its bindings.")
+        "Hover any action and press a key or mouse combo to bind it. Press Escape on an action to clear its bindings.")
 
     local function CreatePopupButton(text, point, relativeTo, relativePoint, xOffset)
         local button = CreateFrame("Button", nil, popup, "BackdropTemplate")
@@ -2759,7 +2786,7 @@ function ActionBars:ApplyCooldownSettingsToButton(button, actionBarDB, barSettin
     end
 
     local showSwipe = actionBarDB.showCooldownSwipe == true and
-    (not barSettings or barSettings.showCooldownSwipe ~= false)
+        (not barSettings or barSettings.showCooldownSwipe ~= false)
     local icon = self:GetButtonIcon(button)
 
     if icon then

@@ -2728,7 +2728,7 @@ local function BuildGeneralTab()
         args = {
             moduleSettings = Widgets.IGroup(1, "Module", {
                 moveHint = Widgets.Description(0,
-                    "Unlock Movers shows drag handles for detached power, class, and cast bars. Use Test Mode when the anchor frame is normally hidden, such as party, raid, or boss previews."),
+                    "Move Mode opens the shared TwichUI mover overlay. Use Test Mode when the anchor frame is normally hidden, such as party, raid, tank, or boss previews."),
                 enable = {
                     type = "toggle",
                     name = "Enable",
@@ -2785,21 +2785,20 @@ local function BuildGeneralTab()
                             end
                         end,
                     }),
-                unlockMovers = BuildToggle(5, "Unlock Movers", "Show layout movers so frames can be repositioned.",
-                    { "lockFrames" }, db.lockFrames ~= true, {
-                        refreshConfig = true,
-                        get = function()
-                            return GetPathValue({ "lockFrames" }, true) ~= true
-                        end,
-                        set = function(value)
-                            local module = GetModule()
-                            if module and type(module.SetFrameLock) == "function" then
-                                module:SetFrameLock(value ~= true)
-                            else
-                                SetPathValue({ "lockFrames" }, value ~= true, true)
-                            end
-                        end,
-                    }),
+                openMoveMode = BuildExecute(5, "Open Move Mode",
+                    "Open the shared mover overlay and retire the legacy Unit Frames movers.", function()
+                        local module = GetModule()
+                        if module and type(module.SetFrameLock) == "function" then
+                            module:SetFrameLock(true)
+                        else
+                            SetPathValue({ "lockFrames" }, true, true)
+                        end
+
+                        local movers = _G.TwichMoverModule
+                        if movers and type(movers.Toggle) == "function" then
+                            movers:Toggle()
+                        end
+                    end),
                 refreshNow = BuildExecute(6, "Refresh Frames", "Re-apply the current Unit Frames settings.", function()
                     RefreshModule()
                 end),
