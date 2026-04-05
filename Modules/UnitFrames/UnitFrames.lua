@@ -9530,33 +9530,36 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         end
 
         AddExtra({
-            label = "Style",
-            type = "select",
+            type = "label",
             tab = "effects",
             tabLabel = "Effects",
-            values = CASTBAR_STYLE_SELECT_VALUES,
+            text = "Standalone ambient effects for the cast bar.",
+        })
+        AddExtra({
+            label = "Particle Effects",
+            type = "toggle",
+            tab = "effects",
+            tabLabel = "Effects",
             get = function()
-                return GetCastbarConfig().style or castbarDefaults.style
+                return (GetCastbarConfig().style or castbarDefaults.style) == "fantasy"
             end,
             set = function(value)
-                if CASTBAR_STYLE_SELECT_VALUES[value] then
-                    GetCastbarConfig().style = value
-                    RefreshCastbarDesigner()
-                end
+                GetCastbarConfig().style = value == true and "fantasy" or "modern"
+                RefreshCastbarDesigner()
             end,
         })
         AddExtra({
-            label = "Fantasy Theme",
+            label = "Particle Theme",
             type = "select",
             tab = "effects",
             tabLabel = "Effects",
-            values = CASTBAR_FANTASY_THEME_SELECT_VALUES,
+            values = POWER_FX_THEME_VALUES,
             get = function()
                 local current = GetCastbarConfig().fantasyTheme or castbarDefaults.fantasyTheme
-                return CASTBAR_FANTASY_THEME_SELECT_VALUES[current] and current or castbarDefaults.fantasyTheme
+                return POWER_FX_THEME_VALUES[current] and current or castbarDefaults.fantasyTheme
             end,
             set = function(value)
-                if CASTBAR_FANTASY_THEME_SELECT_VALUES[value] then
+                if POWER_FX_THEME_VALUES[value] then
                     GetCastbarConfig().fantasyTheme = value
                     RefreshCastbarDesigner()
                 end
@@ -9566,7 +9569,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
         })
         AddExtra({
-            label = "Effect Expansion",
+            label = "Particle Expansion",
             type = "range",
             tab = "effects",
             tabLabel = "Effects",

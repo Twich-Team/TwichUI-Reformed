@@ -34,6 +34,8 @@
 
 ## Interface Designer
 
+- Lets change the cast bar effects configuration to mimic the player power bar effects configuration. make it particles with an enable, etc.
+
 ## Quality of Life
 
 - Automatically vendor grays (and eventually smarter logic to vendor low ilvl, etc.)
