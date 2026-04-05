@@ -12,4 +12,9 @@
   - Allow changing action bar number of buttons, button size from designer mode
 - Make sleeping indicator a class icon or combat
 - Enable swipe on action bars by default
--
+- Particle animation on cast bar rules
+
+- brents chat moves every time he logs in
+- didnt disable the elvui chat background
+
+- transmog ddata text?

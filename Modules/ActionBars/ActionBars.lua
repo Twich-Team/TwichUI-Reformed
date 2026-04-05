@@ -67,6 +67,7 @@ local DEFAULT_HOLDER_PADDING = 6
 local MOUSEOVER_FADE_DELAY = 0.08
 local DEBUG_SOURCE_KEY = "actionbars"
 local PIXEL_GLOW_ALPHA = 0.9
+local FAILED_ACTION_FEEDBACK_WINDOW = 0.6
 
 local function SplitBindingTarget(target)
     if type(target) ~= "string" then
@@ -908,6 +909,8 @@ function ActionBars:OnInitialize()
     self.barButtons = {}
     self.customButtons = {}
     self.activeAlertSpells = {}
+    self.lastActionAttempt = nil
+    self.lastSpellAttempt = nil
     self.originalButtons = {}
     self.originalFrames = {}
     self.originalRegions = {}
@@ -961,6 +964,11 @@ function ActionBars:OnEnable()
     self:RegisterEvent("ACTIONBAR_UPDATE_STATE", "RefreshButtonStates")
     self:RegisterEvent("ACTIONBAR_UPDATE_USABLE", "RefreshButtonStates")
     self:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN", "ApplyCooldownSettings")
+    self:RegisterEvent("UNIT_SPELLCAST_SENT")
+    self:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+    self:RegisterEvent("UNIT_SPELLCAST_FAILED")
+    self:RegisterEvent("UNIT_SPELLCAST_FAILED_QUIET")
+    self:RegisterEvent("UI_ERROR_MESSAGE")
     self:RegisterEvent("PLAYER_REGEN_ENABLED")
     self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
 
@@ -1001,6 +1009,8 @@ function ActionBars:OnDisable()
 
     self.pendingDisable = false
     self.pendingRefresh = false
+    self.lastActionAttempt = nil
+    self.lastSpellAttempt = nil
     self:ClearMasqueGroups()
     self:RestoreOriginalLayout()
     RefreshBlizzardLayout()
@@ -1785,6 +1795,344 @@ function ActionBars:GetGlowColor()
     return ResolveConfiguredColor(db and db.procGlowColor or nil, fallback)
 end
 
+function ActionBars:IsFailedActionFeedbackEnabled()
+    local db = self:GetDB()
+    return db and db.enabled ~= false and db.failedActionFeedback ~= false
+end
+
+function ActionBars:GetFailedActionFeedbackColor()
+    local db = self:GetDB()
+    local fallback = { 0.93, 0.22, 0.20 }
+    return ResolveConfiguredColor(db and db.failedActionColor or nil, fallback)
+end
+
+function ActionBars:GetFailedActionFeedbackDuration()
+    local db = self:GetDB()
+    return ClampNumber(db and db.failedActionDuration or nil, 0.15, 1.2, 0.45)
+end
+
+function ActionBars:RecordActionAttempt(button)
+    if not button or self:IsFailedActionFeedbackEnabled() ~= true then
+        return
+    end
+
+    local attempt = {
+        button = button,
+        time = GetTime(),
+    }
+
+    if type(GetActionInfo) == "function" and button.action then
+        local actionType, actionID, actionSubType = GetActionInfo(button.action)
+        attempt.actionType = actionType
+        attempt.actionID = actionID
+        attempt.actionSubType = actionSubType
+        attempt.actionSlot = button.action
+    end
+
+    self.lastActionAttempt = attempt
+end
+
+function ActionBars:GetRecentActionAttempt(spellID)
+    local attempt = self.lastActionAttempt
+    if not attempt or not attempt.button then
+        return nil
+    end
+
+    if (GetTime() - (attempt.time or 0)) > FAILED_ACTION_FEEDBACK_WINDOW then
+        self.lastActionAttempt = nil
+        return nil
+    end
+
+    if spellID and attempt.actionType == "spell" and attempt.actionID and attempt.actionID ~= spellID then
+        return nil
+    end
+
+    return attempt
+end
+
+function ActionBars:ConsumeRecentActionAttempt(spellID)
+    local attempt = self:GetRecentActionAttempt(spellID)
+    if not attempt then
+        return nil
+    end
+
+    self.lastActionAttempt = nil
+    return attempt.button
+end
+
+function ActionBars:RecordSpellAttempt(spellID)
+    if not spellID or self:IsFailedActionFeedbackEnabled() ~= true then
+        return
+    end
+
+    self.lastSpellAttempt = {
+        spellID = spellID,
+        time = GetTime(),
+    }
+end
+
+function ActionBars:GetRecentSpellAttempt()
+    local attempt = self.lastSpellAttempt
+    if not attempt or not attempt.spellID then
+        return nil
+    end
+
+    if (GetTime() - (attempt.time or 0)) > FAILED_ACTION_FEEDBACK_WINDOW then
+        self.lastSpellAttempt = nil
+        return nil
+    end
+
+    return attempt.spellID
+end
+
+function ActionBars:ConsumeRecentSpellAttempt()
+    local spellID = self:GetRecentSpellAttempt()
+    self.lastSpellAttempt = nil
+    return spellID
+end
+
+function ActionBars:GetFailedActionFeedbackFrame(button)
+    if not button then
+        return nil
+    end
+
+    if button.__twichuiABFailedActionFeedback then
+        return button.__twichuiABFailedActionFeedback
+    end
+
+    local feedback = CreateFrame("Frame", nil, button, "BackdropTemplate")
+    feedback:SetAlpha(0)
+    feedback:Hide()
+    feedback:EnableMouse(false)
+
+    feedback.fill = feedback:CreateTexture(nil, "OVERLAY")
+    feedback.ring = feedback:CreateTexture(nil, "OVERLAY")
+    feedback.ring:SetTexture([[Interface\Buttons\CheckButtonHilight]])
+    feedback.ring:SetBlendMode("ADD")
+
+    feedback.top = feedback:CreateTexture(nil, "OVERLAY")
+    feedback.bottom = feedback:CreateTexture(nil, "OVERLAY")
+    feedback.left = feedback:CreateTexture(nil, "OVERLAY")
+    feedback.right = feedback:CreateTexture(nil, "OVERLAY")
+
+    feedback.anim = feedback:CreateAnimationGroup()
+    feedback.anim:SetToFinalAlpha(true)
+    feedback.anim:SetScript("OnFinished", function(animGroup)
+        local owner = animGroup:GetParent()
+        owner:SetAlpha(0)
+        owner:Hide()
+    end)
+
+    local fadeIn = feedback.anim:CreateAnimation("Alpha")
+    fadeIn:SetOrder(1)
+    fadeIn:SetDuration(0.08)
+    fadeIn:SetFromAlpha(0)
+    fadeIn:SetToAlpha(1)
+
+    local fadeOut = feedback.anim:CreateAnimation("Alpha")
+    fadeOut:SetOrder(2)
+    fadeOut:SetDuration(0.37)
+    fadeOut:SetFromAlpha(1)
+    fadeOut:SetToAlpha(0)
+
+    feedback.fadeOut = fadeOut
+    button.__twichuiABFailedActionFeedback = feedback
+    return feedback
+end
+
+function ActionBars:UpdateFailedActionFeedbackLayout(button)
+    local feedback = self:GetFailedActionFeedbackFrame(button)
+    if not feedback then
+        return
+    end
+
+    local red, green, blue = self:GetFailedActionFeedbackColor()
+    local icon = self:GetButtonIcon(button)
+    local target = icon or button
+
+    if feedback.SetFrameLevel then
+        feedback:SetFrameLevel(button:GetFrameLevel() + 6)
+    end
+
+    feedback:ClearAllPoints()
+    feedback:SetPoint("TOPLEFT", button, "TOPLEFT", -2, 2)
+    feedback:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 2, -2)
+
+    feedback:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    feedback:SetBackdropColor(0, 0, 0, 0)
+    feedback:SetBackdropBorderColor(red, green, blue, 0.95)
+
+    feedback.fill:ClearAllPoints()
+    feedback.fill:SetPoint("TOPLEFT", target, "TOPLEFT", -1, 1)
+    feedback.fill:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 1, -1)
+    feedback.fill:SetColorTexture(red, green, blue, 0.16)
+
+    feedback.ring:ClearAllPoints()
+    feedback.ring:SetPoint("TOPLEFT", feedback, "TOPLEFT", -4, 4)
+    feedback.ring:SetPoint("BOTTOMRIGHT", feedback, "BOTTOMRIGHT", 4, -4)
+    feedback.ring:SetVertexColor(red, green, blue, 0.45)
+
+    feedback.top:ClearAllPoints()
+    feedback.top:SetPoint("TOPLEFT", feedback, "TOPLEFT", 1, -1)
+    feedback.top:SetPoint("TOPRIGHT", feedback, "TOPRIGHT", -1, -1)
+    feedback.top:SetHeight(1)
+    feedback.top:SetColorTexture(red, green, blue, 0.95)
+
+    feedback.bottom:ClearAllPoints()
+    feedback.bottom:SetPoint("BOTTOMLEFT", feedback, "BOTTOMLEFT", 1, 1)
+    feedback.bottom:SetPoint("BOTTOMRIGHT", feedback, "BOTTOMRIGHT", -1, 1)
+    feedback.bottom:SetHeight(1)
+    feedback.bottom:SetColorTexture(red, green, blue, 0.95)
+
+    feedback.left:ClearAllPoints()
+    feedback.left:SetPoint("TOPLEFT", feedback, "TOPLEFT", 1, -1)
+    feedback.left:SetPoint("BOTTOMLEFT", feedback, "BOTTOMLEFT", 1, 1)
+    feedback.left:SetWidth(1)
+    feedback.left:SetColorTexture(red, green, blue, 0.95)
+
+    feedback.right:ClearAllPoints()
+    feedback.right:SetPoint("TOPRIGHT", feedback, "TOPRIGHT", -1, -1)
+    feedback.right:SetPoint("BOTTOMRIGHT", feedback, "BOTTOMRIGHT", -1, 1)
+    feedback.right:SetWidth(1)
+    feedback.right:SetColorTexture(red, green, blue, 0.95)
+end
+
+function ActionBars:ShowFailedActionFeedback(button)
+    if not button or self:IsFailedActionFeedbackEnabled() ~= true then
+        return
+    end
+
+    local feedback = self:GetFailedActionFeedbackFrame(button)
+    if not feedback then
+        return
+    end
+
+    local now = GetTime()
+    local lastShown = button.__twichuiABLastFailureFlashAt or 0
+    if (now - lastShown) < 0.05 then
+        return
+    end
+
+    button.__twichuiABLastFailureFlashAt = now
+    self:UpdateFailedActionFeedbackLayout(button)
+
+    if feedback.anim and feedback.anim:IsPlaying() then
+        feedback.anim:Stop()
+    end
+    if feedback.fadeOut then
+        feedback.fadeOut:SetDuration(self:GetFailedActionFeedbackDuration())
+    end
+
+    feedback:SetAlpha(0)
+    feedback:Show()
+    feedback.anim:Play()
+end
+
+function ActionBars:HideFailedActionFeedback(button)
+    local feedback = button and button.__twichuiABFailedActionFeedback or nil
+    if not feedback then
+        return
+    end
+
+    if feedback.anim and feedback.anim:IsPlaying() then
+        feedback.anim:Stop()
+    end
+
+    feedback:SetAlpha(0)
+    feedback:Hide()
+end
+
+function ActionBars:HandleFailedActionButton(button)
+    if not button then
+        return
+    end
+
+    self:ShowFailedActionFeedback(button)
+end
+
+function ActionBars:HandleFailedSpell(spellID)
+    if not spellID then
+        return false
+    end
+
+    local matched = false
+    for _, buttons in pairs(self.barButtons) do
+        for _, button in ipairs(buttons) do
+            if self:GetButtonSpellID(button) == spellID then
+                self:ShowFailedActionFeedback(button)
+                matched = true
+            end
+        end
+    end
+
+    return matched
+end
+
+function ActionBars:UNIT_SPELLCAST_SENT(_, unit, _, _, spellID)
+    if unit ~= "player" then
+        return
+    end
+
+    self:RecordSpellAttempt(spellID)
+end
+
+function ActionBars:UNIT_SPELLCAST_SUCCEEDED(_, unit, _, spellID)
+    if unit ~= "player" then
+        return
+    end
+
+    local recentSpellID = self:GetRecentSpellAttempt()
+    if recentSpellID and recentSpellID == spellID then
+        self.lastSpellAttempt = nil
+    end
+end
+
+function ActionBars:UNIT_SPELLCAST_FAILED(_, unit, _, spellID)
+    if unit ~= "player" then
+        return
+    end
+
+    local button = self:ConsumeRecentActionAttempt(spellID)
+    if button then
+        self:HandleFailedActionButton(button)
+        return
+    end
+
+    self:HandleFailedSpell(spellID)
+end
+
+function ActionBars:UNIT_SPELLCAST_FAILED_QUIET(_, unit, _, spellID)
+    if unit ~= "player" then
+        return
+    end
+
+    local button = self:ConsumeRecentActionAttempt(spellID)
+    if button then
+        self:HandleFailedActionButton(button)
+        return
+    end
+
+    self:HandleFailedSpell(spellID)
+end
+
+function ActionBars:UI_ERROR_MESSAGE()
+    local button = self:ConsumeRecentActionAttempt(nil)
+    if button then
+        self:HandleFailedActionButton(button)
+        return
+    end
+
+    local spellID = self:ConsumeRecentSpellAttempt()
+    if spellID then
+        self:HandleFailedSpell(spellID)
+    end
+end
+
 function ActionBars:GetPixelGlowFrame(button)
     if not button then
         return nil
@@ -2286,6 +2634,7 @@ function ActionBars:RestoreOriginalLayout()
             RestoreButtonArtTextures(button, state.artTextures)
             RestoreSpellCastAnimState(button, state.spellCastAnim)
             ActionBars:HideButtonHoverEffect(button)
+            ActionBars:HideFailedActionFeedback(button)
             ActionBars:HidePixelGlow(button)
             ActionBars:HideProcGlow(button)
             ActionBars:HideNativeOverlayGlow(button)
@@ -2695,6 +3044,7 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
     chrome:SetShown(useMasque ~= true)
 
     self:UpdateButtonHoverEffect(button, actionBarDB, barSettings)
+    self:UpdateFailedActionFeedbackLayout(button)
     if button.IsMouseOver and button:IsMouseOver() then
         self:ShowButtonHoverEffect(button)
     else
@@ -2718,6 +3068,14 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
         button:HookScript("OnHide", function()
             SuppressButtonBorder(button)
             ActionBars:HideButtonHoverEffect(button)
+            ActionBars:HideFailedActionFeedback(button)
+        end)
+        button:HookScript("PreClick", function(clickedButton)
+            if ActionBars.keybindModeActive == true then
+                return
+            end
+
+            ActionBars:RecordActionAttempt(clickedButton)
         end)
         button.__twichuiABHoverHooked = true
     end

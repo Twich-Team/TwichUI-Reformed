@@ -31,6 +31,9 @@ local ROOT_DEFAULTS = {
     showMacroNames = false,
     showCooldownText = true,
     showCooldownSwipe = false,
+    failedActionFeedback = true,
+    failedActionDuration = 0.45,
+    failedActionColor = { 0.93, 0.22, 0.20 },
     procGlowStyle = "pixel",
     procGlowUseThemeColor = true,
     procGlowColor = { 0.96, 0.76, 0.24 },
@@ -886,6 +889,60 @@ function Options:BuildConfiguration()
                 set = function(_, red, green, blue)
                     db.procGlowColor = { red, green, blue }
                     RequestGlowRefresh(false)
+                end,
+            },
+            failedFeedback = {
+                type = "toggle",
+                name = "Failed Cast Feedback",
+                desc = "Flash the last attempted action button red when the spell or action fails to fire.",
+                order = 6,
+                width = "half",
+                get = function()
+                    return db.failedActionFeedback ~= false
+                end,
+                set = function(_, value)
+                    db.failedActionFeedback = value ~= false
+                    RequestRefresh(false)
+                end,
+            },
+            failedFeedbackDuration = {
+                type = "range",
+                name = "Feedback Duration",
+                desc = "How long the failed-action flash remains visible.",
+                order = 7,
+                min = 0.15,
+                max = 1.2,
+                step = 0.05,
+                width = 1.4,
+                disabled = function()
+                    return db.failedActionFeedback == false
+                end,
+                get = function()
+                    return ClampNumber(db.failedActionDuration, 0.15, 1.2, 0.45)
+                end,
+                set = function(_, value)
+                    db.failedActionDuration = ClampNumber(value, 0.15, 1.2, 0.45)
+                end,
+            },
+            failedFeedbackColor = {
+                type = "color",
+                name = "Feedback Color",
+                desc = "Color used for the failed-action flash.",
+                order = 8,
+                width = "half",
+                disabled = function()
+                    return db.failedActionFeedback == false
+                end,
+                get = function()
+                    local color = db.failedActionColor
+                    if type(color) == "table" then
+                        return color[1] or 0.93, color[2] or 0.22, color[3] or 0.20
+                    end
+
+                    return 0.93, 0.22, 0.20
+                end,
+                set = function(_, red, green, blue)
+                    db.failedActionColor = { red, green, blue }
                 end,
             },
         }),
