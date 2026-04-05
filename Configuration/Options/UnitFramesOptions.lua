@@ -1885,6 +1885,86 @@ local function BuildSingleUnitTab(unitKey, label)
     local auraPath = ExtendPath(basePath, "auras")
     local customFrameDefaults = defaults.customFrame or {}
     local disabled = ModuleDisabled()
+    local powerTab = {
+        type = "group",
+        name = "Power Bar",
+        order = 2,
+        args = {
+            power = Widgets.IGroup(1, "Power Bar", {
+                showPower = BuildToggle(1, "Show Power", "Show the embedded power bar.",
+                    ExtendPath(basePath, "showPower"), defaults.showPower, {
+                        disabled = disabled,
+                        refreshConfig = true,
+                    }),
+                powerHeight = BuildRange(2, "Power Height", "Power bar height.",
+                    ExtendPath(basePath, "powerHeight"), defaults.powerHeight, 4, 32, 1, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(basePath, "showPower"), defaults.showPower) ~= true
+                        end),
+                    }),
+                powerDetached = BuildToggle(3, "Detach Power", "Detach the power bar from the main frame.",
+                    ExtendPath(basePath, "powerDetached"), defaults.powerDetached, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(basePath, "showPower"), defaults.showPower) ~= true
+                        end),
+                        refreshConfig = true,
+                    }),
+                powerWidth = BuildRange(4, "Detached Width", "Width of the detached power bar.",
+                    ExtendPath(basePath, "powerWidth"), defaults.powerWidth, 40, 600, 1, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(basePath, "powerDetached"), defaults.powerDetached) ~= true
+                        end),
+                    }),
+                powerPoint = BuildSelect(5, "Power Anchor", "Detached power bar anchor.",
+                    ExtendPath(basePath, "powerPoint"), "TOPLEFT", POINT_VALUES, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(basePath, "powerDetached"), defaults.powerDetached) ~= true
+                        end),
+                    }),
+                powerRelativePoint = BuildSelect(6, "Power Relative", "Detached power bar relative point.",
+                    ExtendPath(basePath, "powerRelativePoint"), "BOTTOMLEFT", POINT_VALUES, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(basePath, "powerDetached"), defaults.powerDetached) ~= true
+                        end),
+                    }),
+                powerOffsetX = BuildRange(7, "Power X", "Detached power bar horizontal offset.",
+                    ExtendPath(basePath, "powerOffsetX"), 0, -120, 120, 1, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(basePath, "powerDetached"), defaults.powerDetached) ~= true
+                        end),
+                    }),
+                powerOffsetY = BuildRange(8, "Power Y", "Detached power bar vertical offset.",
+                    ExtendPath(basePath, "powerOffsetY"), -1, -120, 120, 1, {
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(basePath, "powerDetached"), defaults.powerDetached) ~= true
+                        end),
+                    }),
+                powerFxEnabled = unitKey == "player" and BuildToggle(9, "Particle Effects",
+                    "Enable ambient particle effects on the player power bar. Uses the same effects as the Fantasy Cast Bar.",
+                    ExtendPath(basePath, "powerFx", "enabled"), false, {
+                        disabled = disabled,
+                        refreshConfig = true,
+                    }) or nil,
+                powerFxTheme = unitKey == "player" and BuildSelect(10, "Particle Theme",
+                    "Choose the particle effect theme for the player power bar.",
+                    ExtendPath(basePath, "powerFx", "theme"), "holy", CASTBAR_FANTASY_THEME_VALUES, {
+                        refreshConfig = true,
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(basePath, "powerFx", "enabled"), false) ~= true
+                        end),
+                        width = "full",
+                    }) or nil,
+                powerFxEffectScale = unitKey == "player" and BuildRange(11, "Particle Expansion",
+                    "Increase particle spread and density around the power bar.",
+                    ExtendPath(basePath, "powerFx", "effectScale"), 1, 0.5, 3, 0.05, {
+                        refreshConfig = true,
+                        disabled = ModuleDisabled(function()
+                            return GetPathValue(ExtendPath(basePath, "powerFx", "enabled"), false) ~= true
+                        end),
+                    }) or nil,
+            }),
+        },
+    }
 
     local tab = {
         type = "group",
@@ -2021,84 +2101,6 @@ local function BuildSingleUnitTab(unitKey, label)
                                     refreshConfig = true,
                                 }),
                         }) or nil,
-                    power = Widgets.IGroup(3, "Power Bar", {
-                        showPower = BuildToggle(1, "Show Power", "Show the embedded power bar.",
-                            ExtendPath(basePath, "showPower"), defaults.showPower, {
-                                disabled = disabled,
-                                refreshConfig = true,
-                            }),
-                        powerHeight = BuildRange(2, "Power Height", "Power bar height.",
-                            ExtendPath(basePath, "powerHeight"), defaults.powerHeight, 4, 32, 1, {
-                                disabled = ModuleDisabled(function()
-                                    return GetPathValue(ExtendPath(basePath, "showPower"), defaults.showPower) ~= true
-                                end),
-                            }),
-                        powerDetached = BuildToggle(3, "Detach Power", "Detach the power bar from the main frame.",
-                            ExtendPath(basePath, "powerDetached"), defaults.powerDetached, {
-                                disabled = ModuleDisabled(function()
-                                    return GetPathValue(ExtendPath(basePath, "showPower"), defaults.showPower) ~= true
-                                end),
-                                refreshConfig = true,
-                            }),
-                        powerWidth = BuildRange(4, "Detached Width", "Width of the detached power bar.",
-                            ExtendPath(basePath, "powerWidth"), defaults.powerWidth, 40, 600, 1, {
-                                disabled = ModuleDisabled(function()
-                                    return GetPathValue(ExtendPath(basePath, "powerDetached"), defaults.powerDetached) ~=
-                                        true
-                                end),
-                            }),
-                        powerPoint = BuildSelect(5, "Power Anchor", "Detached power bar anchor.",
-                            ExtendPath(basePath, "powerPoint"), "TOPLEFT", POINT_VALUES, {
-                                disabled = ModuleDisabled(function()
-                                    return GetPathValue(ExtendPath(basePath, "powerDetached"), defaults.powerDetached) ~=
-                                        true
-                                end),
-                            }),
-                        powerRelativePoint = BuildSelect(6, "Power Relative", "Detached power bar relative point.",
-                            ExtendPath(basePath, "powerRelativePoint"), "BOTTOMLEFT", POINT_VALUES, {
-                                disabled = ModuleDisabled(function()
-                                    return GetPathValue(ExtendPath(basePath, "powerDetached"), defaults.powerDetached) ~=
-                                        true
-                                end),
-                            }),
-                        powerOffsetX = BuildRange(7, "Power X", "Detached power bar horizontal offset.",
-                            ExtendPath(basePath, "powerOffsetX"), 0, -120, 120, 1, {
-                                disabled = ModuleDisabled(function()
-                                    return GetPathValue(ExtendPath(basePath, "powerDetached"), defaults.powerDetached) ~=
-                                        true
-                                end),
-                            }),
-                        powerOffsetY = BuildRange(8, "Power Y", "Detached power bar vertical offset.",
-                            ExtendPath(basePath, "powerOffsetY"), -1, -120, 120, 1, {
-                                disabled = ModuleDisabled(function()
-                                    return GetPathValue(ExtendPath(basePath, "powerDetached"), defaults.powerDetached) ~=
-                                        true
-                                end),
-                            }),
-                        powerFxEnabled = unitKey == "player" and BuildToggle(9, "Particle Effects",
-                            "Enable ambient particle effects on the player power bar. Uses the same effects as the Fantasy Cast Bar.",
-                            ExtendPath(basePath, "powerFx", "enabled"), false, {
-                                disabled = disabled,
-                                refreshConfig = true,
-                            }) or nil,
-                        powerFxTheme = unitKey == "player" and BuildSelect(10, "Particle Theme",
-                            "Choose the particle effect theme for the player power bar.",
-                            ExtendPath(basePath, "powerFx", "theme"), "holy", CASTBAR_FANTASY_THEME_VALUES, {
-                                refreshConfig = true,
-                                disabled = ModuleDisabled(function()
-                                    return GetPathValue(ExtendPath(basePath, "powerFx", "enabled"), false) ~= true
-                                end),
-                                width = "full",
-                            }) or nil,
-                        powerFxEffectScale = unitKey == "player" and BuildRange(11, "Particle Expansion",
-                            "Increase particle spread and density around the power bar.",
-                            ExtendPath(basePath, "powerFx", "effectScale"), 1, 0.5, 3, 0.05, {
-                                refreshConfig = true,
-                                disabled = ModuleDisabled(function()
-                                    return GetPathValue(ExtendPath(basePath, "powerFx", "enabled"), false) ~= true
-                                end),
-                            }) or nil,
-                    }),
                     healPrediction = BuildHealPredictionGroup(4, ExtendPath(basePath, "healPrediction")),
                     highlights = Widgets.IGroup(5, "Highlights", {
                         showTarget = BuildToggle(1, "Target Highlight",
@@ -2132,14 +2134,15 @@ local function BuildSingleUnitTab(unitKey, label)
                     copyFrom = BuildCopyFromSingle(unitKey),
                 },
             },
-            layout = BuildLayoutGroup(2, "Layout", unitKey, layoutDefaults, {
+            power = powerTab,
+            layout = BuildLayoutGroup(3, "Layout", unitKey, layoutDefaults, {
                 disabled = disabled,
             }),
-            text = BuildTextGroup(3, "Text", textPath, unitKey),
-            auras = BuildAuraGroup(4, "Auras", auraPath, unitKey),
-            watchers = BuildIndicatorsGroup(5, { "units", unitKey, "indicators" }),
-            colors = BuildUnitColorTab(6, unitKey),
-            infoBar = BuildInfoBarTab(7, ExtendPath(basePath, "infoBar")),
+            text = BuildTextGroup(4, "Text", textPath, unitKey),
+            auras = BuildAuraGroup(5, "Auras", auraPath, unitKey),
+            watchers = BuildIndicatorsGroup(6, { "units", unitKey, "indicators" }),
+            colors = BuildUnitColorTab(7, unitKey),
+            infoBar = BuildInfoBarTab(9, ExtendPath(basePath, "infoBar")),
         },
     }
 
@@ -2165,7 +2168,7 @@ local function BuildSingleUnitTab(unitKey, label)
         tab.args.classBar = {
             type = "group",
             name = "Class Bar",
-            order = 6,
+            order = 8,
             args = Widgets.IGroup(1, "Class Bar", {
                 enabled = BuildToggle(1, "Enable", "Show the player class resource bar.",
                     { "classBar", "enabled" }, true, { disabled = isBarDisabled, refreshConfig = true }),
@@ -2240,6 +2243,29 @@ local function BuildGroupTab(groupKey, label)
     local xSpacingDesc = usesGrowthDirection
         and "Gap between members when growing left or right."
         or "Horizontal spacing between members."
+    local powerTab = {
+        type = "group",
+        name = "Power Bar",
+        order = 2,
+        args = {
+            power = Widgets.IGroup(1, "Power Bar", {
+                showPower = BuildToggle(1, "Show Power",
+                    "Show the power bar on these group member frames.",
+                    ExtendPath(basePath, "showPower"), true, {
+                        disabled = disabled,
+                        refreshConfig = true,
+                    }),
+                healerOnlyPower = BuildToggle(2, "Healer Only",
+                    "When enabled, only show the power bar for frames whose unit has the Healer role assigned. All other roles will have the power bar hidden. Enabled by default — disable to show power for all roles.",
+                    ExtendPath(basePath, "healerOnlyPower"), true, {
+                        disabled = ModuleDisabled(function()
+                            return groupKey ~= "party" and groupKey ~= "raid"
+                                or GetPathValue(ExtendPath(basePath, "showPower"), true) ~= true
+                        end),
+                    }),
+            }),
+        },
+    }
     local frameTab = {
         type = "group",
         name = "Frame",
@@ -2371,26 +2397,10 @@ local function BuildGroupTab(groupKey, label)
             { "units", memberKey, "highlights", "showEnemyTarget" }, true, { disabled = disabled }),
     })
     frameTab.args.healPrediction = BuildHealPredictionGroup(4, { "units", memberKey, "healPrediction" })
-    frameTab.args.power = Widgets.IGroup(5, "Power Bar", {
-        showPower = BuildToggle(1, "Show Power",
-            "Show the power bar on these group member frames.",
-            ExtendPath(basePath, "showPower"), true, {
-                disabled = disabled,
-                refreshConfig = true,
-            }),
-        healerOnlyPower = BuildToggle(2, "Healer Only",
-            "When enabled, only show the power bar for frames whose unit has the Healer role assigned. All other roles will have the power bar hidden. Enabled by default — disable to show power for all roles.",
-            ExtendPath(basePath, "healerOnlyPower"), true, {
-                disabled = ModuleDisabled(function()
-                    return groupKey ~= "party" and groupKey ~= "raid"
-                        or GetPathValue(ExtendPath(basePath, "showPower"), true) ~= true
-                end),
-            }),
-    })
     frameTab.args.copyFrom = BuildCopyFromGroup(groupKey)
 
     local colorsTab = BuildColorScopeTab(groupKey, "Colors")
-    colorsTab.order = 5
+    colorsTab.order = 7
 
     return {
         type = "group",
@@ -2399,30 +2409,31 @@ local function BuildGroupTab(groupKey, label)
         childGroups = "tab",
         args = {
             frame               = frameTab,
-            layout              = BuildLayoutGroup(2, "Layout", groupKey, layoutDefaults, {
+            power               = powerTab,
+            layout              = BuildLayoutGroup(3, "Layout", groupKey, layoutDefaults, {
                 disabled = disabled,
             }),
-            text                = BuildTextGroup(3, "Text", textPath, groupKey .. "Member"),
-            auras               = BuildAuraGroup(4, "Auras", auraPath, groupKey .. "Member"),
-            watchers            = BuildIndicatorsGroup(5, { "auras", "scopes", groupKey, "indicators" }),
+            text                = BuildTextGroup(4, "Text", textPath, groupKey .. "Member"),
+            auras               = BuildAuraGroup(5, "Auras", auraPath, groupKey .. "Member"),
+            watchers            = BuildIndicatorsGroup(6, { "auras", "scopes", groupKey, "indicators" }),
             colors              = colorsTab,
-            roleIcon            = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"),
+            roleIcon            = BuildRoleIconGroup(8, ExtendPath(basePath, "roleIcon"),
                 groupKey == "party" or groupKey == "tank"),
-            combatIndicator     = BuildStateIndicatorGroup(7, "Combat Indicator",
+            combatIndicator     = BuildStateIndicatorGroup(9, "Combat Indicator",
                 ExtendPath(basePath, "combatIndicator"), "combatIndicator"),
-            restingIndicator    = BuildStateIndicatorGroup(8, "Resting Indicator",
+            restingIndicator    = BuildStateIndicatorGroup(10, "Resting Indicator",
                 ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
-            spiritIndicator     = BuildStateIndicatorGroup(9, "Spirit Indicator",
+            spiritIndicator     = BuildStateIndicatorGroup(11, "Spirit Indicator",
                 ExtendPath(basePath, "spiritIndicator"), "spiritIndicator"),
-            offlineIndicator    = BuildStateIndicatorGroup(10, "Offline Indicator",
+            offlineIndicator    = BuildStateIndicatorGroup(12, "Offline Indicator",
                 ExtendPath(basePath, "offlineIndicator"), "offlineIndicator"),
-            resurrectIndicator  = BuildStateIndicatorGroup(11, "Resurrect Indicator",
+            resurrectIndicator  = BuildStateIndicatorGroup(13, "Resurrect Indicator",
                 ExtendPath(basePath, "resurrectIndicator"), "resurrectIndicator"),
-            summonIndicator     = BuildStateIndicatorGroup(12, "Summon Indicator",
+            summonIndicator     = BuildStateIndicatorGroup(14, "Summon Indicator",
                 ExtendPath(basePath, "summonIndicator"), "summonIndicator"),
-            readyCheckIndicator = BuildReadyCheckIndicatorGroup(13,
+            readyCheckIndicator = BuildReadyCheckIndicatorGroup(15,
                 ExtendPath(basePath, "readyCheckIndicator"), true),
-            infoBar             = BuildInfoBarTab(14, ExtendPath(basePath, "infoBar")),
+            infoBar             = BuildInfoBarTab(16, ExtendPath(basePath, "infoBar")),
         },
     }
 end
