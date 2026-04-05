@@ -104,8 +104,8 @@ local OVERLAY_ALPHA                       = 0.65 -- translucency of the full-scr
 
 -- ── Registry ────────────────────────────────────────────────────────────────
 MoverModule._registry                     = MoverModule._registry or {} -- key → opts
-MoverModule._handles                      = MoverModule._handles or {} -- key → handle frame
-MoverModule._hidden                       = MoverModule._hidden or {} -- key → true  (temp-hidden)
+MoverModule._handles                      = MoverModule._handles or {}  -- key → handle frame
+MoverModule._hidden                       = MoverModule._hidden or {}   -- key → true  (temp-hidden)
 MoverModule._active                       = false
 
 -- ── Font helper ─────────────────────────────────────────────────────────────
@@ -410,6 +410,32 @@ function MoverModule:_GetInspector()
         self:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
     end)
     dock._headerToggleBtn = dockHeaderToggle
+
+    local dockHeaderAction = CreateFrame("Button", nil, dockHeaderContent, "BackdropTemplate")
+    dockHeaderAction:SetSize(124, 20)
+    dockHeaderAction:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 18, -56)
+    dockHeaderAction:SetFrameStrata(dockHeaderFrame:GetFrameStrata())
+    dockHeaderAction:SetFrameLevel(dockHeaderContent:GetFrameLevel() + 4)
+    ApplyBackdrop(dockHeaderAction, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
+        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+    local dockHeaderActionFS = dockHeaderAction:CreateFontString(nil, "OVERLAY")
+    dockHeaderActionFS:SetAllPoints(dockHeaderAction)
+    dockHeaderActionFS:SetJustifyH("CENTER")
+    dockHeaderActionFS:SetJustifyV("MIDDLE")
+    SetFont(dockHeaderActionFS, 10)
+    dockHeaderAction._fs = dockHeaderActionFS
+    dockHeaderAction:Hide()
+    dockHeaderAction:SetScript("OnEnter", function(self)
+        local accent = self._accentColor or C_ACCENT
+        self:SetBackdropColor(accent[1] * 0.18, accent[2] * 0.18, accent[3] * 0.18, 0.98)
+        self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.88)
+    end)
+    dockHeaderAction:SetScript("OnLeave", function(self)
+        local accent = self._accentColor or C_BTN_BD
+        self:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
+        self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 1)
+    end)
+    dock._headerActionBtn = dockHeaderAction
 
     local dockBtn = CreateFrame("Button", nil, dockHeaderContent, "BackdropTemplate")
     dockBtn:SetSize(74, 20)
@@ -1326,6 +1352,7 @@ function MoverModule:_GetInspector()
         local scrollFrame = dock._extrasScrollFrame
         local scrollBar = dock._extrasScrollBar
         local headerToggle = dock._headerToggleBtn
+        local headerAction = dock._headerActionBtn
         if dock._extraSelectMenu and dock._extraSelectMenu.Hide then
             dock._extraSelectMenu:Hide()
         end
@@ -1347,6 +1374,14 @@ function MoverModule:_GetInspector()
         if headerToggle then
             headerToggle:Hide()
             headerToggle:SetScript("OnClick", nil)
+        end
+        if headerAction then
+            headerAction:Hide()
+            headerAction:SetScript("OnClick", nil)
+            headerAction:EnableMouse(false)
+            headerAction._accentColor = nil
+            headerAction:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
+            headerAction:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
         end
         dock:Hide()
 
@@ -1372,6 +1407,32 @@ function MoverModule:_GetInspector()
                 end)
             end)
             headerToggle:Show()
+        end
+
+        if headerAction and type(opts.headerAction) == "table" and type(opts.headerAction.func) == "function" then
+            local actionSpec = opts.headerAction
+            local accent = type(actionSpec.accent) == "table" and actionSpec.accent or { 0.85, 0.26, 0.26 }
+            local width = math_max(96, math_min(180, tonumber(actionSpec.width) or 124))
+            headerAction:SetWidth(width)
+            headerAction._accentColor = accent
+            headerAction._fs:SetText(actionSpec.label or "Action")
+            headerAction._fs:SetTextColor(accent[1], accent[2], accent[3])
+            headerAction:SetBackdropBorderColor(accent[1], accent[2], accent[3], 1)
+            headerAction:SetScript("OnClick", function()
+                if type(actionSpec.disabled) == "function" and actionSpec.disabled() == true then
+                    return
+                end
+
+                actionSpec.func()
+            end)
+            local isDisabled = type(actionSpec.disabled) == "function" and actionSpec.disabled() == true
+            headerAction:SetEnabled(not isDisabled)
+            headerAction:EnableMouse(not isDisabled)
+            if isDisabled then
+                headerAction._fs:SetTextColor(0.46, 0.48, 0.56)
+                headerAction:SetBackdropBorderColor(0.12, 0.13, 0.18, 0.9)
+            end
+            headerAction:Show()
         end
 
         local extraH = 0
@@ -2656,9 +2717,48 @@ function MoverModule:_BuildOverlay()
         end)
     end
 
+    local addPanelBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
+    addPanelBtn:SetSize(124, 22)
+    addPanelBtn:SetPoint("RIGHT", hud, "RIGHT", -498, 0)
+    ApplyBackdrop(addPanelBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
+        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+    local addPanelFS = addPanelBtn:CreateFontString(nil, "OVERLAY")
+    addPanelFS:SetAllPoints(addPanelBtn)
+    addPanelFS:SetJustifyH("CENTER")
+    addPanelFS:SetJustifyV("MIDDLE")
+    SetFont(addPanelFS, 10)
+    addPanelFS:SetText("Add Data Panel")
+    addPanelBtn:SetScript("OnClick", function()
+        local datatexts = T:GetModule("Datatexts", true)
+        if not datatexts or type(datatexts.CreateCenteredDesignerPanel) ~= "function" then
+            return
+        end
+
+        datatexts:CreateCenteredDesignerPanel(function(panelID)
+            if not panelID then
+                return
+            end
+
+            local moverKey = "SP_" .. panelID
+            C_Timer.After(0, function()
+                local insp = MoverModule:_GetInspector()
+                local handle = MoverModule._handles[moverKey]
+                if insp and handle then
+                    insp:Show()
+                    insp.Activate(moverKey, handle)
+                end
+            end)
+        end)
+    end)
+    StyleHudButton(addPanelBtn,
+        { C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1 },
+        { C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1 },
+        { C_DOCK_BORDER[1] * 0.22, C_DOCK_BORDER[2] * 0.22, C_DOCK_BORDER[3] * 0.22, 0.98 },
+        { C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.78 })
+
     local addBarBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
     addBarBtn:SetSize(124, 22)
-    addBarBtn:SetPoint("RIGHT", hud, "RIGHT", -238, 0)
+    addBarBtn:SetPoint("RIGHT", hud, "RIGHT", -368, 0)
     ApplyBackdrop(addBarBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
         C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
     local addBarFS = addBarBtn:CreateFontString(nil, "OVERLAY")
@@ -2695,10 +2795,29 @@ function MoverModule:_BuildOverlay()
         { C_DOCK_BORDER[1] * 0.22, C_DOCK_BORDER[2] * 0.22, C_DOCK_BORDER[3] * 0.22, 0.98 },
         { C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.78 })
 
+    local reloadBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
+    reloadBtn:SetSize(110, 22)
+    reloadBtn:SetPoint("RIGHT", hud, "RIGHT", -98, 0)
+    ApplyBackdrop(reloadBtn, 0.16, 0.11, 0.04, 1, 0.86, 0.58, 0.18, 1)
+    local reloadFS = reloadBtn:CreateFontString(nil, "OVERLAY")
+    reloadFS:SetAllPoints(reloadBtn)
+    reloadFS:SetJustifyH("CENTER")
+    reloadFS:SetJustifyV("MIDDLE")
+    SetFont(reloadFS, 10)
+    reloadFS:SetText("Reload UI")
+    reloadBtn:SetScript("OnClick", function()
+        ReloadUI()
+    end)
+    StyleHudButton(reloadBtn,
+        { 0.16, 0.11, 0.04, 1 },
+        { 0.86, 0.58, 0.18, 1 },
+        { 0.30, 0.18, 0.05, 1 },
+        { 1.00, 0.74, 0.24, 1 })
+
     -- Show Hidden button (reveals all temp-hidden)
     local showAllBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
     showAllBtn:SetSize(110, 22)
-    showAllBtn:SetPoint("RIGHT", hud, "RIGHT", -120, 0)
+    showAllBtn:SetPoint("RIGHT", hud, "RIGHT", -214, 0)
     ApplyBackdrop(showAllBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
         C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
     local showAllFS = showAllBtn:CreateFontString(nil, "OVERLAY")
@@ -2741,6 +2860,7 @@ function MoverModule:_BuildOverlay()
     ov:SetPropagateKeyboardInput(false)
 
     hud._showAllBtn = showAllBtn
+    hud._reloadBtn  = reloadBtn
     hud._addBarBtn  = addBarBtn
     self._overlay   = ov
     self._hud       = hud

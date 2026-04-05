@@ -77,6 +77,681 @@ local function GetSortedPanelIDs(panels)
     return panelIDs
 end
 
+local POINT_SELECT_VALUES = {
+    TOPLEFT = "Top Left",
+    TOP = "Top",
+    TOPRIGHT = "Top Right",
+    LEFT = "Left",
+    CENTER = "Center",
+    RIGHT = "Right",
+    BOTTOMLEFT = "Bottom Left",
+    BOTTOM = "Bottom",
+    BOTTOMRIGHT = "Bottom Right",
+}
+
+local TEXT_ALIGN_VALUES = {
+    LEFT = "Left",
+    CENTER = "Center",
+    RIGHT = "Right",
+}
+
+local function CopyColorValue(color, fallback)
+    local source = type(color) == "table" and color or fallback or { 1, 1, 1, 1 }
+    return {
+        tonumber(source[1]) or 1,
+        tonumber(source[2]) or 1,
+        tonumber(source[3]) or 1,
+        tonumber(source[4]) or 1,
+    }
+end
+
+local function RefreshStandaloneDockPanels()
+    DataTextModule:RefreshStandalonePanels()
+end
+
+local function DeleteDesignerPanel(panelID)
+    local options = GetOptions()
+    if not options or type(options.DeleteStandalonePanel) ~= "function" or type(options.GetStandalonePanelIDs) ~= "function" then
+        return
+    end
+
+    local panelIDs = options:GetStandalonePanelIDs()
+    if #panelIDs <= 1 then
+        return
+    end
+
+    local fallbackID = nil
+    for _, existingPanelID in ipairs(panelIDs) do
+        if existingPanelID ~= panelID then
+            fallbackID = existingPanelID
+            break
+        end
+    end
+
+    options:DeleteStandalonePanel(panelID)
+
+    C_Timer.After(0, function()
+        local moversModule = _G.TwichMoverModule
+        if not moversModule then
+            return
+        end
+
+        local inspector = moversModule._inspector
+        if not inspector or not inspector.IsShown or not inspector:IsShown() then
+            return
+        end
+
+        if fallbackID then
+            local moverKey = "SP_" .. fallbackID
+            local handle = moversModule._handles and moversModule._handles[moverKey]
+            if handle then
+                inspector:Show()
+                inspector.Activate(moverKey, handle)
+                return
+            end
+        end
+
+        inspector:Hide()
+    end)
+end
+
+function DataTextModule:CreateCenteredDesignerPanel(onComplete)
+    local options = GetOptions()
+    if not options or type(options.CreateStandalonePanel) ~= "function" then
+        if type(onComplete) == "function" then
+            onComplete(nil)
+        end
+        return nil
+    end
+
+    local standaloneDB = GetStandaloneDB()
+    if not standaloneDB then
+        if type(onComplete) == "function" then
+            onComplete(nil)
+        end
+        return nil
+    end
+
+    standaloneDB.enabled = true
+
+    local panelID = options:CreateStandalonePanel()
+    if not panelID then
+        if type(onComplete) == "function" then
+            onComplete(nil)
+        end
+        return nil
+    end
+
+    local panel = options.GetStandalonePanel and options:GetStandalonePanel(panelID) or nil
+    if panel then
+        panel.enabled = true
+        panel.point = "CENTER"
+        panel.relativePoint = "CENTER"
+        panel.x = 0
+        panel.y = 0
+    end
+
+    self:RefreshStandalonePanels()
+
+    if type(onComplete) == "function" then
+        C_Timer.After(0, function()
+            onComplete(panelID)
+        end)
+    end
+
+    return panelID
+end
+
+local function BuildStandalonePanelDockExtras(panelID)
+    local function GetPanelDefinition()
+        local db = GetStandaloneDB()
+        return db and db.panels and db.panels[panelID] or nil
+    end
+
+    local function GetPanelStyleStore()
+        local panel = GetPanelDefinition()
+        if not panel then
+            return nil
+        end
+
+        panel.style = type(panel.style) == "table" and panel.style or {}
+        return panel.style
+    end
+
+    local function GetPanelValue(key, fallback)
+        local panel = GetPanelDefinition()
+        if panel and panel[key] ~= nil then
+            return panel[key]
+        end
+        return fallback
+    end
+
+    local function GetSharedStyle()
+        return GetStyleDB() or {}
+    end
+
+    local function GetResolvedStyle()
+        return GetResolvedPanelStyle(panelID) or GetSharedStyle()
+    end
+
+    local function GetPanelStyleValue(key, fallback)
+        local panel = GetPanelDefinition()
+        if panel and panel.useStyleOverrides == true and panel.style and panel.style[key] ~= nil then
+            return panel.style[key]
+        end
+
+        local resolved = GetResolvedStyle()
+        if resolved[key] ~= nil then
+            return resolved[key]
+        end
+
+        return fallback
+    end
+
+    local function SetPanelStyleValue(key, value)
+        local style = GetPanelStyleStore()
+        if not style then
+            return
+        end
+
+        style[key] = value
+        RefreshStandaloneDockPanels()
+    end
+
+    local function SetPanelColorValue(colorKey, alphaKey, value)
+        local style = GetPanelStyleStore()
+        if not style then
+            return
+        end
+
+        local color = CopyColorValue(value)
+        style[colorKey] = { color[1], color[2], color[3], 1 }
+        if alphaKey then
+            style[alphaKey] = color[4]
+        end
+        RefreshStandaloneDockPanels()
+    end
+
+    local function IsPanelStyleDisabled()
+        local panel = GetPanelDefinition()
+        return not (panel and panel.useStyleOverrides == true)
+    end
+
+    local function GetPanelColorValue(colorKey, alphaKey, fallbackColorKey, fallbackAlphaKey, defaultAlpha)
+        local shared = GetSharedStyle()
+        local fallbackColor = shared[fallbackColorKey or colorKey] or { 1, 1, 1, 1 }
+        local fallbackAlpha = tonumber(shared[fallbackAlphaKey or alphaKey]) or defaultAlpha or 1
+        local color = GetPanelStyleValue(colorKey, fallbackColor)
+        return CopyColorValue({
+            color[1],
+            color[2],
+            color[3],
+            tonumber(GetPanelStyleValue(alphaKey, fallbackAlpha)) or fallbackAlpha,
+        }, fallbackColor)
+    end
+
+    local extras = {}
+    local function AddExtra(extra)
+        extras[#extras + 1] = extra
+    end
+
+    AddExtra({
+        label = "Enable Panel",
+        type = "toggle",
+        tab = "general",
+        tabLabel = "General",
+        get = function()
+            return GetPanelValue("enabled", true) ~= false
+        end,
+        set = function(value)
+            local panel = GetPanelDefinition()
+            if not panel then
+                return
+            end
+            panel.enabled = value == true
+            RefreshStandaloneDockPanels()
+        end,
+    })
+    AddExtra({
+        label = "Panel Name",
+        type = "input",
+        tab = "general",
+        tabLabel = "General",
+        get = function()
+            return tostring(GetPanelValue("name", "Data Panel"))
+        end,
+        set = function(value)
+            local panel = GetPanelDefinition()
+            if not panel then
+                return
+            end
+            local trimmed = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+            panel.name = trimmed ~= "" and trimmed or "Data Panel"
+            RefreshStandaloneDockPanels()
+        end,
+    })
+    AddExtra({
+        label = "Transparent Theme",
+        type = "toggle",
+        tab = "general",
+        tabLabel = "General",
+        get = function()
+            return GetPanelValue("transparentTheme", false) == true
+        end,
+        set = function(value)
+            local panel = GetPanelDefinition()
+            if not panel then
+                return
+            end
+            panel.transparentTheme = value == true
+            RefreshStandaloneDockPanels()
+        end,
+    })
+
+    AddExtra({
+        label = "Anchor",
+        type = "select",
+        tab = "layout",
+        tabLabel = "Layout",
+        values = POINT_SELECT_VALUES,
+        get = function()
+            return GetPanelValue("point", "BOTTOM")
+        end,
+        set = function(value)
+            local panel = GetPanelDefinition()
+            if not panel or not POINT_SELECT_VALUES[value] then
+                return
+            end
+            panel.point = value
+            panel.relativePoint = value
+            RefreshStandaloneDockPanels()
+        end,
+    })
+    AddExtra({
+        label = "Slots",
+        type = "select",
+        tab = "layout",
+        tabLabel = "Layout",
+        values = {
+            [1] = "One Slot",
+            [2] = "Two Slots",
+            [3] = "Three Slots",
+            [4] = "Four Slots",
+            [5] = "Five Slots",
+            [6] = "Six Slots",
+        },
+        get = function()
+            return tonumber(GetPanelValue("segments", 3)) or 3
+        end,
+        set = function(value)
+            local panel = GetPanelDefinition()
+            if not panel then
+                return
+            end
+            panel.segments = math.max(1, math.min(SLOT_COUNT, tonumber(value) or 3))
+            RefreshStandaloneDockPanels()
+        end,
+    })
+    AddExtra({
+        label = "Width",
+        type = "range",
+        tab = "layout",
+        tabLabel = "Layout",
+        min = 80,
+        max = 4000,
+        step = 1,
+        get = function()
+            return tonumber(GetPanelValue("width", 420)) or 420
+        end,
+        set = function(value)
+            local panel = GetPanelDefinition()
+            if not panel then
+                return
+            end
+            panel.width = math.floor((tonumber(value) or 420) + 0.5)
+            RefreshStandaloneDockPanels()
+        end,
+    })
+    AddExtra({
+        label = "Height",
+        type = "range",
+        tab = "layout",
+        tabLabel = "Layout",
+        min = 20,
+        max = 80,
+        step = 1,
+        get = function()
+            return tonumber(GetPanelValue("height", 28)) or 28
+        end,
+        set = function(value)
+            local panel = GetPanelDefinition()
+            if not panel then
+                return
+            end
+            panel.height = math.floor((tonumber(value) or 28) + 0.5)
+            RefreshStandaloneDockPanels()
+        end,
+    })
+
+    for slotIndex = 1, SLOT_COUNT do
+        AddExtra({
+            label = "Slot " .. tostring(slotIndex),
+            type = "select",
+            tab = "assignments",
+            tabLabel = "Assignments",
+            values = function()
+                return DataTextModule:GetStandaloneDatatextChoices()
+            end,
+            get = function()
+                return GetPanelValue("slot" .. tostring(slotIndex), "NONE")
+            end,
+            set = function(value)
+                local panel = GetPanelDefinition()
+                if not panel then
+                    return
+                end
+                panel["slot" .. tostring(slotIndex)] = value
+                RefreshStandaloneDockPanels()
+            end,
+            hidden = function()
+                return (tonumber(GetPanelValue("segments", 3)) or 3) < slotIndex
+            end,
+        })
+    end
+
+    AddExtra({
+        label = "Enable Per-Panel Overrides",
+        type = "toggle",
+        tab = "style",
+        tabLabel = "Style",
+        get = function()
+            return GetPanelValue("useStyleOverrides", false) == true
+        end,
+        set = function(value)
+            local panel = GetPanelDefinition()
+            if not panel then
+                return
+            end
+            panel.useStyleOverrides = value == true
+            panel.style = type(panel.style) == "table" and panel.style or {}
+            RefreshStandaloneDockPanels()
+        end,
+    })
+    AddExtra({
+        label = "Font / Media Name",
+        type = "input",
+        tab = "style",
+        tabLabel = "Style",
+        get = function()
+            return tostring(GetPanelStyleValue("font", GetSharedStyle().font or ""))
+        end,
+        set = function(value)
+            local trimmed = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+            SetPanelStyleValue("font", trimmed ~= "" and trimmed or nil)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Text Alignment",
+        type = "select",
+        tab = "style",
+        tabLabel = "Style",
+        values = TEXT_ALIGN_VALUES,
+        get = function()
+            return tostring(GetPanelStyleValue("textAlign", GetSharedStyle().textAlign or "CENTER"))
+        end,
+        set = function(value)
+            if TEXT_ALIGN_VALUES[value] then
+                SetPanelStyleValue("textAlign", value)
+            end
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Font Size",
+        type = "range",
+        tab = "style",
+        tabLabel = "Style",
+        min = 8,
+        max = 20,
+        step = 1,
+        get = function()
+            return tonumber(GetPanelStyleValue("fontSize", GetSharedStyle().fontSize or 12)) or 12
+        end,
+        set = function(value)
+            SetPanelStyleValue("fontSize", math.floor((tonumber(value) or 12) + 0.5))
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Tooltip Font",
+        type = "input",
+        tab = "style",
+        tabLabel = "Style",
+        get = function()
+            return tostring(GetPanelStyleValue("tooltipFont", GetSharedStyle().tooltipFont or ""))
+        end,
+        set = function(value)
+            local trimmed = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+            SetPanelStyleValue("tooltipFont", trimmed ~= "" and trimmed or nil)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Tooltip Font Size",
+        type = "range",
+        tab = "style",
+        tabLabel = "Style",
+        min = 8,
+        max = 24,
+        step = 1,
+        get = function()
+            return tonumber(GetPanelStyleValue("tooltipFontSize", GetSharedStyle().tooltipFontSize or 11)) or 11
+        end,
+        set = function(value)
+            SetPanelStyleValue("tooltipFontSize", math.floor((tonumber(value) or 11) + 0.5))
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Menu Font",
+        type = "input",
+        tab = "style",
+        tabLabel = "Style",
+        get = function()
+            return tostring(GetPanelStyleValue("menuFont", GetSharedStyle().menuFont or ""))
+        end,
+        set = function(value)
+            local trimmed = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+            SetPanelStyleValue("menuFont", trimmed ~= "" and trimmed or nil)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Menu Font Size",
+        type = "range",
+        tab = "style",
+        tabLabel = "Style",
+        min = 8,
+        max = 20,
+        step = 1,
+        get = function()
+            return tonumber(GetPanelStyleValue("menuFontSize", GetSharedStyle().menuFontSize or 12)) or 12
+        end,
+        set = function(value)
+            SetPanelStyleValue("menuFontSize", math.floor((tonumber(value) or 12) + 0.5))
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Outline Font",
+        type = "toggle",
+        tab = "style",
+        tabLabel = "Style",
+        get = function()
+            return GetPanelStyleValue("fontOutline", false) == true
+        end,
+        set = function(value)
+            SetPanelStyleValue("fontOutline", value == true)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Show Drag Handle",
+        type = "toggle",
+        tab = "style",
+        tabLabel = "Style",
+        get = function()
+            return GetPanelStyleValue("showDragHandle", true) == true
+        end,
+        set = function(value)
+            SetPanelStyleValue("showDragHandle", value == true)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Text Shadow",
+        type = "range",
+        tab = "style",
+        tabLabel = "Style",
+        min = 0,
+        max = 1,
+        step = 0.01,
+        get = function()
+            return tonumber(GetPanelStyleValue("textShadowAlpha", GetSharedStyle().textShadowAlpha or 0.85)) or 0.85
+        end,
+        set = function(value)
+            SetPanelStyleValue("textShadowAlpha", tonumber(value) or 0.85)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Divider Strength",
+        type = "range",
+        tab = "style",
+        tabLabel = "Style",
+        min = 0,
+        max = 1,
+        step = 0.01,
+        get = function()
+            return tonumber(GetPanelStyleValue("dividerAlpha", GetSharedStyle().dividerAlpha or 0.28)) or 0.28
+        end,
+        set = function(value)
+            SetPanelStyleValue("dividerAlpha", tonumber(value) or 0.28)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+
+    AddExtra({
+        label = "Background Color",
+        type = "color",
+        hasAlpha = true,
+        tab = "colors",
+        tabLabel = "Colors",
+        get = function()
+            return GetPanelColorValue("backgroundColor", "backgroundAlpha", "backgroundColor", "backgroundAlpha", 0.94)
+        end,
+        set = function(value)
+            SetPanelColorValue("backgroundColor", "backgroundAlpha", value)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Border Color",
+        type = "color",
+        hasAlpha = true,
+        tab = "colors",
+        tabLabel = "Colors",
+        get = function()
+            return GetPanelColorValue("borderColor", "borderAlpha", "borderColor", "borderAlpha", 0.9)
+        end,
+        set = function(value)
+            SetPanelColorValue("borderColor", "borderAlpha", value)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Accent Color",
+        type = "color",
+        hasAlpha = true,
+        tab = "colors",
+        tabLabel = "Colors",
+        get = function()
+            return GetPanelColorValue("accentColor", "accentAlpha", "accentColor", "accentAlpha", 0.95)
+        end,
+        set = function(value)
+            SetPanelColorValue("accentColor", "accentAlpha", value)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Hover Glow Color",
+        type = "color",
+        hasAlpha = true,
+        tab = "colors",
+        tabLabel = "Colors",
+        get = function()
+            return GetPanelColorValue("hoverGlowColor", "hoverGlowAlpha", "hoverGlowColor", "hoverGlowAlpha", 0.09)
+        end,
+        set = function(value)
+            SetPanelColorValue("hoverGlowColor", "hoverGlowAlpha", value)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+    AddExtra({
+        label = "Hover Underline Color",
+        type = "color",
+        hasAlpha = true,
+        tab = "colors",
+        tabLabel = "Colors",
+        get = function()
+            return GetPanelColorValue("hoverBarColor", "hoverBarAlpha", "hoverBarColor", "hoverBarAlpha", 0.92)
+        end,
+        set = function(value)
+            SetPanelColorValue("hoverBarColor", "hoverBarAlpha", value)
+        end,
+        disabled = IsPanelStyleDisabled,
+    })
+
+    AddExtra({
+        label = "Center Panel",
+        type = "execute",
+        tab = "actions",
+        tabLabel = "Actions",
+        func = function()
+            local panel = GetPanelDefinition()
+            if not panel then
+                return
+            end
+            panel.point = "CENTER"
+            panel.relativePoint = "CENTER"
+            panel.x = 0
+            panel.y = 0
+            RefreshStandaloneDockPanels()
+        end,
+    })
+    AddExtra({
+        label = "Reset Style Overrides",
+        type = "execute",
+        tab = "actions",
+        tabLabel = "Actions",
+        func = function()
+            local panel = GetPanelDefinition()
+            if not panel then
+                return
+            end
+            panel.style = {}
+            panel.useStyleOverrides = false
+            RefreshStandaloneDockPanels()
+        end,
+        disabled = function()
+            local panel = GetPanelDefinition()
+            return not (panel and type(panel.style) == "table" and next(panel.style) ~= nil)
+        end,
+    })
+    return extras
+end
+
 local function AssignDefinitionPanel(definition, panel)
     if definition and definition.module then
         local target = DataTextModule.ResolveStandaloneCallbackTarget and
@@ -753,21 +1428,22 @@ function DataTextModule:RegisterStandalonePanelsWithMoverModule()
     for panelID, panelDefinition in pairs(db.panels) do
         if not panelDefinition then
         else
-            local pid = panelID  -- capture for closure
+            local pid = panelID -- capture for closure
             moversModule:RegisterMover("SP_" .. pid, {
-                label    = "Panel: " .. tostring(pid),
-                category = "Datatexts",
-                getX     = function()
+                label            = (panelDefinition.name and panelDefinition.name ~= "" and panelDefinition.name) or
+                    ("Panel: " .. tostring(pid)),
+                category         = "Data Panels",
+                getX             = function()
                     local xdb = GetStandaloneDB()
                     local pd  = xdb and xdb.panels and xdb.panels[pid]
                     return pd and (pd.x or 0) or 0
                 end,
-                getY     = function()
+                getY             = function()
                     local xdb = GetStandaloneDB()
                     local pd  = xdb and xdb.panels and xdb.panels[pid]
                     return pd and (pd.y or 0) or 0
                 end,
-                getPoint = function()
+                getPoint         = function()
                     local xdb = GetStandaloneDB()
                     local pd  = xdb and xdb.panels and xdb.panels[pid]
                     return pd and pd.point or "BOTTOMLEFT"
@@ -777,37 +1453,79 @@ function DataTextModule:RegisterStandalonePanelsWithMoverModule()
                     local pd  = xdb and xdb.panels and xdb.panels[pid]
                     return pd and (pd.relativePoint or pd.point) or "BOTTOMLEFT"
                 end,
-                getW     = function()
+                getW             = function()
                     local xdb = GetStandaloneDB()
                     local pd  = xdb and xdb.panels and xdb.panels[pid]
                     return pd and pd.width or nil
                 end,
-                getH     = function()
+                getH             = function()
                     local xdb = GetStandaloneDB()
                     local pd  = xdb and xdb.panels and xdb.panels[pid]
                     return pd and pd.height or nil
                 end,
-                setPos   = function(x, y)
+                setPos           = function(x, y)
                     local xdb = GetStandaloneDB()
                     local pd  = xdb and xdb.panels and xdb.panels[pid]
                     if pd then
-                        pd.point         = "BOTTOMLEFT"
-                        pd.relativePoint = "BOTTOMLEFT"
-                        pd.x             = x
-                        pd.y             = y
+                        pd.x = math.floor((tonumber(x) or 0) + 0.5)
+                        pd.y = math.floor((tonumber(y) or 0) + 0.5)
                         local frame = DataTextModule.standalonePanels and DataTextModule.standalonePanels[pid]
                         if frame then
-                            frame:ClearAllPoints()
-                            frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x, y)
+                            frame:SetSize(pd.width or 360, pd.height or 28)
+                            DataTextModule:ApplyStandalonePanelPosition(frame, pd)
+                            DataTextModule:LayoutStandalonePanel(frame, pd)
                         end
                     end
                 end,
-                setSize  = nil,   -- panel width/height managed in configuration panel
-                isEnabled = function()
+                setSize          = function(width, height)
+                    local xdb = GetStandaloneDB()
+                    local pd = xdb and xdb.panels and xdb.panels[pid]
+                    if not pd then
+                        return
+                    end
+
+                    pd.width = math.max(80, math.floor((tonumber(width) or pd.width or 360) + 0.5))
+                    pd.height = math.max(20, math.floor((tonumber(height) or pd.height or 28) + 0.5))
+                    local frame = DataTextModule.standalonePanels and DataTextModule.standalonePanels[pid]
+                    if frame then
+                        frame:SetSize(pd.width, pd.height)
+                        DataTextModule:LayoutStandalonePanel(frame, pd)
+                    end
+                end,
+                setAnchor        = function(point, x, y)
+                    local xdb = GetStandaloneDB()
+                    local pd = xdb and xdb.panels and xdb.panels[pid]
+                    if not pd or not POINT_SELECT_VALUES[point] then
+                        return
+                    end
+
+                    pd.point = point
+                    pd.relativePoint = point
+                    pd.x = math.floor((tonumber(x) or 0) + 0.5)
+                    pd.y = math.floor((tonumber(y) or 0) + 0.5)
+
+                    local frame = DataTextModule.standalonePanels and DataTextModule.standalonePanels[pid]
+                    if frame then
+                        DataTextModule:ApplyStandalonePanelPosition(frame, pd)
+                    end
+                end,
+                isEnabled        = function()
                     local xdb = GetStandaloneDB()
                     local pd  = xdb and xdb.panels and xdb.panels[pid]
                     return not pd or pd.enabled ~= false
                 end,
+                headerAction     = {
+                    label = "Delete Panel",
+                    accent = { 0.85, 0.26, 0.26 },
+                    func = function()
+                        DeleteDesignerPanel(pid)
+                    end,
+                    disabled = function()
+                        local options = GetOptions()
+                        return not (options and type(options.GetStandalonePanelIDs) == "function" and #options:GetStandalonePanelIDs() > 1)
+                    end,
+                },
+                extras           = BuildStandalonePanelDockExtras(pid),
             })
         end
     end

@@ -8926,6 +8926,47 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         raid = "Raid",
         tank = "Tank",
     }
+    local CASTBAR_STYLE_SELECT_VALUES = {
+        modern = "Simple Modern",
+        fantasy = "Fantasy Cast Bar",
+    }
+    local CASTBAR_FANTASY_THEME_SELECT_VALUES = {
+        aim = "Hunt",
+        alliance = "Blue Sparkle",
+        arcane = "Arcane",
+        arctic = "Frost",
+        bronze = "Gold Sparkle",
+        chaos = "Green Gas",
+        chiji = "Soft Leaves",
+        earth = "Earth",
+        felfire = "Green Fire",
+        fire = "Fire",
+        fishing = "Water",
+        fists = "Green & Blue Leaves",
+        frostfire = "Purple Glow",
+        herbalism = "Leaves",
+        holy = "Holy",
+        horde = "Red Sparkle",
+        inferno = "Inferno",
+        lava = "Lava",
+        lumber = "Lumber",
+        mining = "Mining",
+        moon = "Moon",
+        mossystone = "Mossystone",
+        mossystone_icon = "Mossystone Icon",
+        nature = "Nature",
+        thunder = "Thunder",
+        void = "Void",
+        water = "Water Flow",
+    }
+    local CASTBAR_ICON_POSITION_VALUES = {
+        outside = "Outside Bar",
+        inside = "Inside Bar",
+    }
+    local CASTBAR_ICON_SIDE_VALUES = {
+        left = "Left",
+        right = "Right",
+    }
     local styleUnitKey = layoutKey
     if isHeader then
         if layoutKey == "party" then
@@ -9193,6 +9234,459 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         end
     end
 
+    local function AddStandaloneCastbarExtras()
+        local function GetCastbarConfig()
+            local db = UnitFrames:GetDB()
+            db.castbar = type(db.castbar) == "table" and db.castbar or {}
+            return db.castbar
+        end
+
+        local function RefreshCastbarDesigner()
+            UnitFrames:RefreshCastbarLayout()
+            UnitFrames:RefreshCastbarStyle()
+            DesignerRefreshAllFrames()
+        end
+
+        local castbarDefaults = {
+            enabled = true,
+            style = "modern",
+            fantasyTheme = "holy",
+            fantasyEffectScale = 1,
+            width = 260,
+            height = 20,
+            iconSize = 20,
+            showIcon = true,
+            iconPosition = "outside",
+            iconSide = "left",
+            showSpellText = true,
+            showTimeText = true,
+            spellFontSize = 11,
+            timeFontSize = 10,
+            spellPoint = "LEFT",
+            spellRelativePoint = "LEFT",
+            spellOffsetX = 6,
+            spellOffsetY = 0,
+            timePoint = "RIGHT",
+            timeRelativePoint = "RIGHT",
+            timeOffsetX = -6,
+            timeOffsetY = 0,
+            useCustomColor = false,
+            useThemeAccentFill = false,
+            useCustomBackground = false,
+            masqueEnabled = false,
+        }
+
+        AddExtra({
+            label = "Frame Enabled",
+            type = "toggle",
+            tab = "frame",
+            tabLabel = "Frame",
+            get = function()
+                return GetCastbarConfig().enabled ~= false
+            end,
+            set = function(value)
+                GetCastbarConfig().enabled = value == true
+                RefreshCastbarDesigner()
+            end,
+        })
+        AddExtra({
+            label = "Width",
+            type = "range",
+            tab = "frame",
+            tabLabel = "Frame",
+            min = 120,
+            max = 600,
+            step = 1,
+            get = function()
+                return tonumber(GetCastbarConfig().width) or castbarDefaults.width
+            end,
+            set = function(value)
+                GetCastbarConfig().width = math.floor((tonumber(value) or castbarDefaults.width) + 0.5)
+                RefreshCastbarDesigner()
+            end,
+        })
+        AddExtra({
+            label = "Height",
+            type = "range",
+            tab = "frame",
+            tabLabel = "Frame",
+            min = 10,
+            max = 60,
+            step = 1,
+            get = function()
+                return tonumber(GetCastbarConfig().height) or castbarDefaults.height
+            end,
+            set = function(value)
+                GetCastbarConfig().height = math.floor((tonumber(value) or castbarDefaults.height) + 0.5)
+                RefreshCastbarDesigner()
+            end,
+        })
+
+        AddExtra({
+            label = "Show Icon",
+            type = "toggle",
+            tab = "icon",
+            tabLabel = "Icon",
+            get = function()
+                return GetCastbarConfig().showIcon ~= false
+            end,
+            set = function(value)
+                GetCastbarConfig().showIcon = value == true
+                RefreshCastbarDesigner()
+            end,
+        })
+        AddExtra({
+            label = "Icon Size",
+            type = "range",
+            tab = "icon",
+            tabLabel = "Icon",
+            min = 12,
+            max = 50,
+            step = 1,
+            get = function()
+                return tonumber(GetCastbarConfig().iconSize) or castbarDefaults.iconSize
+            end,
+            set = function(value)
+                GetCastbarConfig().iconSize = math.floor((tonumber(value) or castbarDefaults.iconSize) + 0.5)
+                RefreshCastbarDesigner()
+            end,
+            disabled = function()
+                return GetCastbarConfig().showIcon == false
+            end,
+        })
+        AddExtra({
+            label = "Icon Position",
+            type = "select",
+            tab = "icon",
+            tabLabel = "Icon",
+            values = CASTBAR_ICON_POSITION_VALUES,
+            get = function()
+                return GetCastbarConfig().iconPosition or castbarDefaults.iconPosition
+            end,
+            set = function(value)
+                if CASTBAR_ICON_POSITION_VALUES[value] then
+                    GetCastbarConfig().iconPosition = value
+                    RefreshCastbarDesigner()
+                end
+            end,
+            disabled = function()
+                return GetCastbarConfig().showIcon == false
+            end,
+        })
+        AddExtra({
+            label = "Icon Side",
+            type = "select",
+            tab = "icon",
+            tabLabel = "Icon",
+            values = CASTBAR_ICON_SIDE_VALUES,
+            get = function()
+                return GetCastbarConfig().iconSide or castbarDefaults.iconSide
+            end,
+            set = function(value)
+                if CASTBAR_ICON_SIDE_VALUES[value] then
+                    GetCastbarConfig().iconSide = value
+                    RefreshCastbarDesigner()
+                end
+            end,
+            disabled = function()
+                return GetCastbarConfig().showIcon == false
+            end,
+        })
+
+        local textToggles = {
+            { field = "showSpellText", label = "Show Spell", sizeField = "spellFontSize", sizeLabel = "Spell Size", defaultSize = castbarDefaults.spellFontSize },
+            { field = "showTimeText",  label = "Show Time",  sizeField = "timeFontSize",  sizeLabel = "Time Size",  defaultSize = castbarDefaults.timeFontSize },
+        }
+        for _, entry in ipairs(textToggles) do
+            AddExtra({
+                label = entry.label,
+                type = "toggle",
+                tab = "text",
+                tabLabel = "Text",
+                get = function()
+                    return GetCastbarConfig()[entry.field] ~= false
+                end,
+                set = function(value)
+                    GetCastbarConfig()[entry.field] = value == true
+                    RefreshCastbarDesigner()
+                end,
+            })
+            AddExtra({
+                label = entry.sizeLabel,
+                type = "range",
+                tab = "text",
+                tabLabel = "Text",
+                min = 6,
+                max = 24,
+                step = 1,
+                get = function()
+                    return tonumber(GetCastbarConfig()[entry.sizeField]) or entry.defaultSize
+                end,
+                set = function(value)
+                    GetCastbarConfig()[entry.sizeField] = math.floor((tonumber(value) or entry.defaultSize) + 0.5)
+                    RefreshCastbarDesigner()
+                end,
+                disabled = function()
+                    return GetCastbarConfig()[entry.field] == false
+                end,
+            })
+        end
+        AddExtra({
+            label = "Font / Media Name",
+            type = "input",
+            tab = "text",
+            tabLabel = "Text",
+            get = function()
+                return tostring(GetCastbarConfig().fontName or "")
+            end,
+            set = function(value)
+                local trimmed = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+                GetCastbarConfig().fontName = trimmed ~= "" and trimmed or nil
+                RefreshCastbarDesigner()
+            end,
+        })
+
+        local textAnchorEntries = {
+            { prefix = "spell", label = "Spell", toggle = "showSpellText", pointDefault = castbarDefaults.spellPoint, relativeDefault = castbarDefaults.spellRelativePoint, xDefault = castbarDefaults.spellOffsetX, yDefault = castbarDefaults.spellOffsetY },
+            { prefix = "time",  label = "Time",  toggle = "showTimeText",  pointDefault = castbarDefaults.timePoint,  relativeDefault = castbarDefaults.timeRelativePoint,  xDefault = castbarDefaults.timeOffsetX,  yDefault = castbarDefaults.timeOffsetY },
+        }
+        for _, entry in ipairs(textAnchorEntries) do
+            AddExtra({
+                label = entry.label .. " Point",
+                type = "select",
+                tab = entry.prefix,
+                tabLabel = entry.label,
+                values = POINT_SELECT_VALUES,
+                get = function()
+                    return GetCastbarConfig()[entry.prefix .. "Point"] or entry.pointDefault
+                end,
+                set = function(value)
+                    if POINT_SELECT_VALUES[value] then
+                        GetCastbarConfig()[entry.prefix .. "Point"] = value
+                        RefreshCastbarDesigner()
+                    end
+                end,
+                disabled = function()
+                    return GetCastbarConfig()[entry.toggle] == false
+                end,
+            })
+            AddExtra({
+                label = entry.label .. " Relative",
+                type = "select",
+                tab = entry.prefix,
+                tabLabel = entry.label,
+                values = POINT_SELECT_VALUES,
+                get = function()
+                    return GetCastbarConfig()[entry.prefix .. "RelativePoint"] or entry.relativeDefault
+                end,
+                set = function(value)
+                    if POINT_SELECT_VALUES[value] then
+                        GetCastbarConfig()[entry.prefix .. "RelativePoint"] = value
+                        RefreshCastbarDesigner()
+                    end
+                end,
+                disabled = function()
+                    return GetCastbarConfig()[entry.toggle] == false
+                end,
+            })
+            AddExtra({
+                label = entry.label .. " X",
+                type = "range",
+                tab = entry.prefix,
+                tabLabel = entry.label,
+                min = -240,
+                max = 240,
+                step = 1,
+                get = function()
+                    return tonumber(GetCastbarConfig()[entry.prefix .. "OffsetX"]) or entry.xDefault
+                end,
+                set = function(value)
+                    GetCastbarConfig()[entry.prefix .. "OffsetX"] = tonumber(value) or entry.xDefault
+                    RefreshCastbarDesigner()
+                end,
+                disabled = function()
+                    return GetCastbarConfig()[entry.toggle] == false
+                end,
+            })
+            AddExtra({
+                label = entry.label .. " Y",
+                type = "range",
+                tab = entry.prefix,
+                tabLabel = entry.label,
+                min = -120,
+                max = 120,
+                step = 1,
+                get = function()
+                    return tonumber(GetCastbarConfig()[entry.prefix .. "OffsetY"]) or entry.yDefault
+                end,
+                set = function(value)
+                    GetCastbarConfig()[entry.prefix .. "OffsetY"] = tonumber(value) or entry.yDefault
+                    RefreshCastbarDesigner()
+                end,
+                disabled = function()
+                    return GetCastbarConfig()[entry.toggle] == false
+                end,
+            })
+        end
+
+        AddExtra({
+            label = "Style",
+            type = "select",
+            tab = "effects",
+            tabLabel = "Effects",
+            values = CASTBAR_STYLE_SELECT_VALUES,
+            get = function()
+                return GetCastbarConfig().style or castbarDefaults.style
+            end,
+            set = function(value)
+                if CASTBAR_STYLE_SELECT_VALUES[value] then
+                    GetCastbarConfig().style = value
+                    RefreshCastbarDesigner()
+                end
+            end,
+        })
+        AddExtra({
+            label = "Fantasy Theme",
+            type = "select",
+            tab = "effects",
+            tabLabel = "Effects",
+            values = CASTBAR_FANTASY_THEME_SELECT_VALUES,
+            get = function()
+                local current = GetCastbarConfig().fantasyTheme or castbarDefaults.fantasyTheme
+                return CASTBAR_FANTASY_THEME_SELECT_VALUES[current] and current or castbarDefaults.fantasyTheme
+            end,
+            set = function(value)
+                if CASTBAR_FANTASY_THEME_SELECT_VALUES[value] then
+                    GetCastbarConfig().fantasyTheme = value
+                    RefreshCastbarDesigner()
+                end
+            end,
+            disabled = function()
+                return (GetCastbarConfig().style or castbarDefaults.style) ~= "fantasy"
+            end,
+        })
+        AddExtra({
+            label = "Effect Expansion",
+            type = "range",
+            tab = "effects",
+            tabLabel = "Effects",
+            min = 0.5,
+            max = 3,
+            step = 0.05,
+            get = function()
+                return tonumber(GetCastbarConfig().fantasyEffectScale) or castbarDefaults.fantasyEffectScale
+            end,
+            set = function(value)
+                GetCastbarConfig().fantasyEffectScale = Clamp(tonumber(value) or castbarDefaults.fantasyEffectScale, 0.5,
+                    3)
+                RefreshCastbarDesigner()
+            end,
+            disabled = function()
+                return (GetCastbarConfig().style or castbarDefaults.style) ~= "fantasy"
+            end,
+        })
+        AddExtra({
+            label = "Texture / Media Name",
+            type = "input",
+            tab = "colors",
+            tabLabel = "Colors",
+            get = function()
+                return tostring(GetCastbarConfig().texture or "")
+            end,
+            set = function(value)
+                local trimmed = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+                GetCastbarConfig().texture = trimmed ~= "" and trimmed or nil
+                RefreshCastbarDesigner()
+            end,
+        })
+        AddExtra({
+            label = "Custom Fill Color",
+            type = "toggle",
+            tab = "colors",
+            tabLabel = "Colors",
+            get = function()
+                return GetCastbarConfig().useCustomColor == true
+            end,
+            set = function(value)
+                GetCastbarConfig().useCustomColor = value == true
+                RefreshCastbarDesigner()
+            end,
+        })
+        AddExtra({
+            label = "Theme Accent Fill",
+            type = "toggle",
+            tab = "colors",
+            tabLabel = "Colors",
+            get = function()
+                return GetCastbarConfig().useThemeAccentFill == true
+            end,
+            set = function(value)
+                GetCastbarConfig().useThemeAccentFill = value == true
+                RefreshCastbarDesigner()
+            end,
+        })
+        AddExtra({
+            label = "Fill Color",
+            type = "color",
+            hasAlpha = true,
+            tab = "colors",
+            tabLabel = "Colors",
+            get = function()
+                return GetCastbarConfig().color or UnitFrames:GetPalette("player", "player").cast
+            end,
+            set = function(value)
+                GetCastbarConfig().color = DeepCopyValue(value)
+                RefreshCastbarDesigner()
+            end,
+            disabled = function()
+                return GetCastbarConfig().useCustomColor ~= true or GetCastbarConfig().useThemeAccentFill == true
+            end,
+        })
+        AddExtra({
+            label = "Custom Background",
+            type = "toggle",
+            tab = "colors",
+            tabLabel = "Colors",
+            get = function()
+                return GetCastbarConfig().useCustomBackground == true
+            end,
+            set = function(value)
+                GetCastbarConfig().useCustomBackground = value == true
+                RefreshCastbarDesigner()
+            end,
+        })
+        AddExtra({
+            label = "Background Color",
+            type = "color",
+            hasAlpha = true,
+            tab = "colors",
+            tabLabel = "Colors",
+            get = function()
+                return GetCastbarConfig().backgroundColor or UnitFrames:GetPalette("player", "player").background
+            end,
+            set = function(value)
+                GetCastbarConfig().backgroundColor = DeepCopyValue(value)
+                RefreshCastbarDesigner()
+            end,
+            disabled = function()
+                return GetCastbarConfig().useCustomBackground ~= true
+            end,
+        })
+        AddExtra({
+            label = "Masque Skinning",
+            type = "toggle",
+            tab = "colors",
+            tabLabel = "Colors",
+            get = function()
+                return GetCastbarConfig().masqueEnabled == true
+            end,
+            set = function(value)
+                GetCastbarConfig().masqueEnabled = value == true
+                RefreshCastbarDesigner()
+            end,
+        })
+    end
+
     local function AddCopyExtras()
         if isHeader then
             if layoutKey == "boss" then
@@ -9354,7 +9848,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             end,
             disabled = function()
                 return (GetHealthColorOverrideTable().mode or (isHeader and GetScopeHealthDefaultMode() or "inherit")) ~=
-                "custom"
+                    "custom"
             end,
         })
         AddExtra({
@@ -9366,7 +9860,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             get = function()
                 local override = GetColorOverrideTable()
                 return override.powerColorMode or
-                (isHeader and (UnitFrames:GetDB().powerColorMode or "custom") or "inherit")
+                    (isHeader and (UnitFrames:GetDB().powerColorMode or "custom") or "inherit")
             end,
             set = function(value)
                 GetColorOverrideTable().powerColorMode = value
@@ -9401,7 +9895,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                         return false
                     end
                     local mode = GetColorOverrideTable().powerColorMode or
-                    (isHeader and (UnitFrames:GetDB().powerColorMode or "custom") or "inherit")
+                        (isHeader and (UnitFrames:GetDB().powerColorMode or "custom") or "inherit")
                     return mode == "powertype"
                 end,
             })
@@ -9857,7 +10351,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 end,
                 set = function(value)
                     GetIndicatorOverrideTable(isReadyCheck and "readyCheckIndicator" or indicatorKey)[entry.field] =
-                    value
+                        value
                     DesignerRefreshAllFrames()
                 end,
                 disabled = function()
@@ -10277,21 +10771,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     end
 
     if layoutKey == "castbar" then
-        AddExtra({
-            label = "Frame Enabled",
-            type = "toggle",
-            get = function()
-                local db = UnitFrames:GetDB()
-                return db and db.castbar and db.castbar.enabled ~= false
-            end,
-            set = function(value)
-                local db = UnitFrames:GetDB()
-                if db and db.castbar then
-                    db.castbar.enabled = value == true
-                    UnitFrames:RefreshAllFrames()
-                end
-            end,
-        })
+        AddStandaloneCastbarExtras()
     elseif isHeader then
         local groupKey = layoutKey == "boss" and "boss" or layoutKey
         AddExtra({
@@ -10808,7 +11288,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 end,
                 set = function(value)
                     EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors").powerBackground = DeepCopyValue(
-                    value)
+                        value)
                     DesignerRefreshAllFrames()
                 end,
             })
@@ -10824,7 +11304,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 end,
                 set = function(value)
                     EnsureNestedTable(UnitFrames:GetDB(), "units", powerBase, "colors").powerBorder = DeepCopyValue(
-                    value)
+                        value)
                     DesignerRefreshAllFrames()
                 end,
             })
@@ -11122,7 +11602,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             get = function()
                 local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
                 return tonumber(unitSettings and unitSettings.powerWidth) or
-                tonumber(unitSettings and unitSettings.width) or 220
+                    tonumber(unitSettings and unitSettings.width) or 220
             end,
             set = function(value)
                 local unitSettings = UnitFrames:GetUnitSettings(layoutKey)
