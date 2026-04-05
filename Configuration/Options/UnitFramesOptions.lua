@@ -97,6 +97,13 @@ local POWER_COLOR_MODES                 = {
     powertype = "Power Type",
 }
 
+local TEXTURE_BLEND_MODE_VALUES         = {
+    BLEND = "Blend",
+    ADD = "Add",
+    MOD = "Multiply",
+    ALPHAKEY = "Alpha Key",
+}
+
 local UNIT_POWER_COLOR_MODES            = {
     inherit   = "Inherit",
     custom    = "Custom",
@@ -251,8 +258,37 @@ local SINGLE_UNIT_DEFAULTS              = {
         classArtworkScale = 1,
         classArtworkOffsetX = 0,
         classArtworkOffsetY = 0,
+        customFrame = {
+            enabled = false,
+            texture = nil,
+            texturePath = nil,
+            color = { 1, 1, 1, 0.9 },
+            blendMode = "BLEND",
+            offsetX = 0,
+            offsetY = 0,
+            extraWidth = 0,
+            extraHeight = 0,
+        },
     },
-    target = { width = 240, height = 42, showPower = true, powerHeight = 10, powerDetached = false, powerWidth = 240 },
+    target = {
+        width = 240,
+        height = 42,
+        showPower = true,
+        powerHeight = 10,
+        powerDetached = false,
+        powerWidth = 240,
+        customFrame = {
+            enabled = false,
+            texture = nil,
+            texturePath = nil,
+            color = { 1, 1, 1, 0.9 },
+            blendMode = "BLEND",
+            offsetX = 0,
+            offsetY = 0,
+            extraWidth = 0,
+            extraHeight = 0,
+        },
+    },
     targettarget = { width = 180, height = 30, showPower = true, powerHeight = 8, powerDetached = false, powerWidth = 180 },
     focus = { width = 220, height = 38, showPower = true, powerHeight = 8, powerDetached = false, powerWidth = 220 },
     pet = { width = 180, height = 28, showPower = true, powerHeight = 8, powerDetached = false, powerWidth = 180 },
@@ -1847,6 +1883,7 @@ local function BuildSingleUnitTab(unitKey, label)
     local basePath = { "units", unitKey }
     local textPath = ExtendPath(basePath, "text")
     local auraPath = ExtendPath(basePath, "auras")
+    local customFrameDefaults = defaults.customFrame or {}
     local disabled = ModuleDisabled()
 
     local tab = {
@@ -1891,7 +1928,100 @@ local function BuildSingleUnitTab(unitKey, label)
                                 refreshConfig = true,
                             }) or nil,
                     }),
-                    power = Widgets.IGroup(2, "Power Bar", {
+                    customFrame = (unitKey == "player" or unitKey == "target") and Widgets.IGroup(2,
+                        "Custom Frame Art", {
+                            enabled = BuildToggle(1, "Enable",
+                                "Show a custom art layer behind this frame. This works for soft backgrounds or transparent frame textures.",
+                                ExtendPath(basePath, "customFrame", "enabled"), customFrameDefaults.enabled == true, {
+                                    disabled = disabled,
+                                    refreshConfig = true,
+                                }),
+                            texture = BuildTextureSelect(2, "Texture",
+                                "SharedMedia texture for the art layer. If Raw Path is set, that path is used instead.",
+                                ExtendPath(basePath, "customFrame", "texture"), "Use Flat Tint", {
+                                    disabled = ModuleDisabled(function()
+                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                                            customFrameDefaults.enabled) ~= true
+                                    end),
+                                    refreshConfig = true,
+                                    width = "full",
+                                }),
+                            texturePath = BuildInput(3, "Raw Path",
+                                "Optional direct texture path override, for example Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\MyFrame. Leave empty to use the texture picker.",
+                                ExtendPath(basePath, "customFrame", "texturePath"), customFrameDefaults.texturePath, {
+                                    disabled = ModuleDisabled(function()
+                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                                            customFrameDefaults.enabled) ~= true
+                                    end),
+                                    refreshConfig = true,
+                                    width = "full",
+                                    normalize = function(value)
+                                        value = type(value) == "string" and value:match("^%s*(.-)%s*$") or value
+                                        if value == "" then
+                                            return nil
+                                        end
+                                        return value
+                                    end,
+                                }),
+                            color = BuildColor(4, "Tint", "Vertex color and alpha for the art layer.",
+                                ExtendPath(basePath, "customFrame", "color"), customFrameDefaults.color or
+                                { 1, 1, 1, 0.9 }, true, {
+                                    disabled = ModuleDisabled(function()
+                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                                            customFrameDefaults.enabled) ~= true
+                                    end),
+                                    refreshConfig = true,
+                                }),
+                            blendMode = BuildSelect(5, "Blend Mode",
+                                "How the texture blends with the frame backdrop.",
+                                ExtendPath(basePath, "customFrame", "blendMode"), customFrameDefaults.blendMode or
+                                "BLEND", TEXTURE_BLEND_MODE_VALUES, {
+                                    disabled = ModuleDisabled(function()
+                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                                            customFrameDefaults.enabled) ~= true
+                                    end),
+                                    refreshConfig = true,
+                                }),
+                            extraWidth = BuildRange(6, "Extra Width",
+                                "Expand or shrink the art width relative to the frame.",
+                                ExtendPath(basePath, "customFrame", "extraWidth"), customFrameDefaults.extraWidth or
+                                0, -200, 400, 1, {
+                                    disabled = ModuleDisabled(function()
+                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                                            customFrameDefaults.enabled) ~= true
+                                    end),
+                                    refreshConfig = true,
+                                }),
+                            extraHeight = BuildRange(7, "Extra Height",
+                                "Expand or shrink the art height relative to the frame.",
+                                ExtendPath(basePath, "customFrame", "extraHeight"),
+                                customFrameDefaults.extraHeight or 0, -120, 240, 1, {
+                                    disabled = ModuleDisabled(function()
+                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                                            customFrameDefaults.enabled) ~= true
+                                    end),
+                                    refreshConfig = true,
+                                }),
+                            offsetX = BuildRange(8, "Offset X", "Horizontal offset for the art layer.",
+                                ExtendPath(basePath, "customFrame", "offsetX"), customFrameDefaults.offsetX or 0,
+                                -200, 200, 1, {
+                                    disabled = ModuleDisabled(function()
+                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                                            customFrameDefaults.enabled) ~= true
+                                    end),
+                                    refreshConfig = true,
+                                }),
+                            offsetY = BuildRange(9, "Offset Y", "Vertical offset for the art layer.",
+                                ExtendPath(basePath, "customFrame", "offsetY"), customFrameDefaults.offsetY or 0,
+                                -200, 200, 1, {
+                                    disabled = ModuleDisabled(function()
+                                        return GetPathValue(ExtendPath(basePath, "customFrame", "enabled"),
+                                            customFrameDefaults.enabled) ~= true
+                                    end),
+                                    refreshConfig = true,
+                                }),
+                        }) or nil,
+                    power = Widgets.IGroup(3, "Power Bar", {
                         showPower = BuildToggle(1, "Show Power", "Show the embedded power bar.",
                             ExtendPath(basePath, "showPower"), defaults.showPower, {
                                 disabled = disabled,
@@ -1969,8 +2099,8 @@ local function BuildSingleUnitTab(unitKey, label)
                                 end),
                             }) or nil,
                     }),
-                    healPrediction = BuildHealPredictionGroup(3, ExtendPath(basePath, "healPrediction")),
-                    highlights = Widgets.IGroup(4, "Highlights", {
+                    healPrediction = BuildHealPredictionGroup(4, ExtendPath(basePath, "healPrediction")),
+                    highlights = Widgets.IGroup(5, "Highlights", {
                         showTarget = BuildToggle(1, "Target Highlight",
                             "Show the target highlight on this frame. Disable to hide it even when globally on.",
                             ExtendPath(basePath, "highlights", "showTarget"), true, { disabled = disabled }),
@@ -1984,20 +2114,20 @@ local function BuildSingleUnitTab(unitKey, label)
                             "Show the highlight when enemies are targeting this unit. Disable to hide it even when globally on.",
                             ExtendPath(basePath, "highlights", "showEnemyTarget"), true, { disabled = disabled }),
                     }),
-                    roleIcon = BuildRoleIconGroup(5, ExtendPath(basePath, "roleIcon"), false),
-                    combatIndicator = BuildStateIndicatorGroup(6, "Combat Indicator",
+                    roleIcon = BuildRoleIconGroup(6, ExtendPath(basePath, "roleIcon"), false),
+                    combatIndicator = BuildStateIndicatorGroup(7, "Combat Indicator",
                         ExtendPath(basePath, "combatIndicator"), "combatIndicator"),
-                    restingIndicator = BuildStateIndicatorGroup(7, "Resting Indicator",
+                    restingIndicator = BuildStateIndicatorGroup(8, "Resting Indicator",
                         ExtendPath(basePath, "restingIndicator"), "restingIndicator"),
-                    spiritIndicator = BuildStateIndicatorGroup(8, "Spirit Indicator",
+                    spiritIndicator = BuildStateIndicatorGroup(9, "Spirit Indicator",
                         ExtendPath(basePath, "spiritIndicator"), "spiritIndicator"),
-                    offlineIndicator = BuildStateIndicatorGroup(9, "Offline Indicator",
+                    offlineIndicator = BuildStateIndicatorGroup(10, "Offline Indicator",
                         ExtendPath(basePath, "offlineIndicator"), "offlineIndicator"),
-                    resurrectIndicator = BuildStateIndicatorGroup(10, "Resurrect Indicator",
+                    resurrectIndicator = BuildStateIndicatorGroup(11, "Resurrect Indicator",
                         ExtendPath(basePath, "resurrectIndicator"), "resurrectIndicator"),
-                    summonIndicator = BuildStateIndicatorGroup(11, "Summon Indicator",
+                    summonIndicator = BuildStateIndicatorGroup(12, "Summon Indicator",
                         ExtendPath(basePath, "summonIndicator"), "summonIndicator"),
-                    readyCheckIndicator = BuildReadyCheckIndicatorGroup(12,
+                    readyCheckIndicator = BuildReadyCheckIndicatorGroup(13,
                         ExtendPath(basePath, "readyCheckIndicator"), false),
                     copyFrom = BuildCopyFromSingle(unitKey),
                 },

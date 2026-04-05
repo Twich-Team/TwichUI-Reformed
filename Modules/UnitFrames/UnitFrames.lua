@@ -1729,6 +1729,53 @@ local function EnsureBackdrop(frame)
     return backdrop
 end
 
+local CUSTOM_FRAME_DEFAULTS = {
+    enabled = false,
+    texture = nil,
+    texturePath = nil,
+    color = { 1, 1, 1, 0.9 },
+    blendMode = "BLEND",
+    offsetX = 0,
+    offsetY = 0,
+    extraWidth = 0,
+    extraHeight = 0,
+}
+
+local function NormalizeBlendMode(value)
+    if value == "ADD" or value == "MOD" or value == "ALPHAKEY" then
+        return value
+    end
+
+    return "BLEND"
+end
+
+local function NormalizeTexturePath(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    value = value:match("^%s*(.-)%s*$")
+    if value == "" then
+        return nil
+    end
+
+    return value
+end
+
+local function ResolveCustomFrameTexture(cfg)
+    local directPath = NormalizeTexturePath(cfg and cfg.texturePath)
+    if directPath then
+        return directPath
+    end
+
+    local textureName = cfg and cfg.texture
+    if type(textureName) == "string" and textureName ~= "" then
+        return GetLSMTexture(textureName) or textureName
+    end
+
+    return "Interface\\Buttons\\WHITE8x8"
+end
+
 local function BuildFrameName(unit)
     if unit == "targettarget" then
         return "Target of Target"
@@ -3230,6 +3277,57 @@ function UnitFrames:ApplyFrameColors(frame, unitKey)
     if frame.Castbar and frame.Castbar.SetStatusBarColor then
         frame.Castbar:SetStatusBarColor(palette.cast[1], palette.cast[2], palette.cast[3], 1)
     end
+
+    self:ApplyCustomFrameSettings(frame, unitKey, backdrop)
+end
+
+function UnitFrames:ApplyCustomFrameSettings(frame, unitKey, backdrop)
+    if not frame then
+        return
+    end
+
+    local texture = frame.TwichCustomFrameTexture
+    if not texture and (unitKey == "player" or unitKey == "target") then
+        backdrop = backdrop or EnsureBackdrop(frame)
+        texture = backdrop:CreateTexture(nil, "BACKGROUND", nil, 0)
+        texture:Hide()
+        frame.TwichCustomFrameTexture = texture
+    end
+
+    if not texture then
+        return
+    end
+
+    if unitKey ~= "player" and unitKey ~= "target" then
+        texture:Hide()
+        return
+    end
+
+    local settings = self:GetUnitSettings(unitKey)
+    local cfg = type(settings.customFrame) == "table" and settings.customFrame or CUSTOM_FRAME_DEFAULTS
+    if cfg.enabled ~= true then
+        texture:Hide()
+        return
+    end
+
+    backdrop = backdrop or EnsureBackdrop(frame)
+
+    local color = CopyColor(type(cfg.color) == "table" and cfg.color or CUSTOM_FRAME_DEFAULTS.color)
+    local offsetX = tonumber(cfg.offsetX) or CUSTOM_FRAME_DEFAULTS.offsetX
+    local offsetY = tonumber(cfg.offsetY) or CUSTOM_FRAME_DEFAULTS.offsetY
+    local extraWidth = Clamp(tonumber(cfg.extraWidth) or CUSTOM_FRAME_DEFAULTS.extraWidth, -200, 400)
+    local extraHeight = Clamp(tonumber(cfg.extraHeight) or CUSTOM_FRAME_DEFAULTS.extraHeight, -120, 240)
+    local halfWidth = extraWidth * 0.5
+    local halfHeight = extraHeight * 0.5
+
+    texture:ClearAllPoints()
+    texture:SetPoint("TOPLEFT", backdrop, "TOPLEFT", offsetX - halfWidth, offsetY + halfHeight)
+    texture:SetPoint("BOTTOMRIGHT", backdrop, "BOTTOMRIGHT", offsetX + halfWidth, offsetY - halfHeight)
+    texture:SetTexture(ResolveCustomFrameTexture(cfg))
+    texture:SetBlendMode(NormalizeBlendMode(cfg.blendMode))
+    texture:SetTexCoord(0, 1, 0, 1)
+    texture:SetVertexColor(color[1] or 1, color[2] or 1, color[3] or 1, color[4] or 0.9)
+    texture:Show()
 end
 
 function UnitFrames:ApplyClassBarColors(frame, colorObject)
@@ -8550,7 +8648,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         if powerBase then
             local unitSettings = UnitFrames:GetUnitSettings(powerBase)
             return math.floor((tonumber(unitSettings and unitSettings.powerWidth) or tonumber(unitSettings and unitSettings.width) or 220) +
-            0.5)
+                0.5)
         end
 
         if isHeader then
