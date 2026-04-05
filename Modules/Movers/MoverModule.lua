@@ -130,6 +130,10 @@ local function GetFrameScreenSize(frame, minWidth, minHeight)
     return math_max(minWidth or 0, width), math_max(minHeight or 0, height)
 end
 
+local function RoundPixel(value)
+    return math_floor((tonumber(value) or 0) + 0.5)
+end
+
 local function SetFont(widget, size)
     local p, s = ResolveFont(size)
     widget:SetFont(p, s, "")
@@ -789,7 +793,7 @@ function MoverModule:_HideSnapLines()
 end
 
 -- ── Snap computation ──────────────────────────────────────────────────────────
--- Returns snappedBlX, snappedBlY, guideLineX, guideLineY.
+-- Returns snappedBlX, snappedBlY, guideLineX, guideLineY, snapModeX, snapModeY.
 -- guideLineX/Y are screen-space positions for snap guide lines (nil = no snap on that axis).
 -- Hold Shift during drag to bypass snap entirely.
 
@@ -798,8 +802,12 @@ function MoverModule:_SnapPosition(dragKey, rawBlX, rawBlY, fw, fh)
         return rawBlX, rawBlY, nil, nil
     end
 
-    local sw     = UIParent:GetWidth() or 1280
-    local sh     = UIParent:GetHeight() or 768
+    local sw     = RoundPixel(UIParent:GetWidth() or 1280)
+    local sh     = RoundPixel(UIParent:GetHeight() or 768)
+    fw           = RoundPixel(fw)
+    fh           = RoundPixel(fh)
+    rawBlX       = RoundPixel(rawBlX)
+    rawBlY       = RoundPixel(rawBlY)
 
     -- Edges of the dragged frame at the raw (un-snapped) BOTTOMLEFT.
     local L      = rawBlX
@@ -811,45 +819,45 @@ function MoverModule:_SnapPosition(dragKey, rawBlX, rawBlY, fw, fh)
 
     -- ── X-axis candidates  { targetBlX, guideLine_X_screen } ────────────────
     local xCands = {
-        { L = 0,                   line = 0 },        -- frame L → screen L
-        { L = sw - fw,             line = sw },       -- frame R → screen R
-        { L = sw * 0.5 - fw * 0.5, line = sw * 0.5 }, -- frame CX → screen CX
+        { L = 0,                   line = 0,        mode = "left" },   -- frame L → screen L
+        { L = sw - fw,             line = sw,       mode = "right" },  -- frame R → screen R
+        { L = sw * 0.5 - fw * 0.5, line = sw * 0.5, mode = "center" }, -- frame CX → screen CX
     }
     -- snap against every other visible handle
     for otherKey, oh in pairs(self._handles) do
         if otherKey ~= dragKey and oh:IsShown() then
-            local oL = oh:GetLeft() or 0
-            local oR = oh:GetRight() or (oL + 80)
+            local oL = RoundPixel(oh:GetLeft() or 0)
+            local oR = RoundPixel(oh:GetRight() or (oL + 80))
             local oCX = (oL + oR) * 0.5
-            xCands[#xCands + 1] = { L = oL, line = oL }              -- L-edge align
-            xCands[#xCands + 1] = { L = oR - fw, line = oR }         -- R-edge align
-            xCands[#xCands + 1] = { L = oR, line = oR }              -- frame L sticks to other R
-            xCands[#xCands + 1] = { L = oL - fw, line = oL }         -- frame R sticks to other L
-            xCands[#xCands + 1] = { L = oCX - fw * 0.5, line = oCX } -- centre-X align
+            xCands[#xCands + 1] = { L = oL, line = oL, mode = "left" }                -- L-edge align
+            xCands[#xCands + 1] = { L = oR - fw, line = oR, mode = "right" }          -- R-edge align
+            xCands[#xCands + 1] = { L = oR, line = oR, mode = "left" }                -- frame L sticks to other R
+            xCands[#xCands + 1] = { L = oL - fw, line = oL, mode = "right" }          -- frame R sticks to other L
+            xCands[#xCands + 1] = { L = oCX - fw * 0.5, line = oCX, mode = "center" } -- centre-X align
         end
     end
 
     -- ── Y-axis candidates  { targetBlY, guideLine_Y_screen } ────────────────
     local yCands = {
-        { B = 0,                   line = 0 },        -- frame B → screen B
-        { B = sh - fh,             line = sh },       -- frame T → screen T
-        { B = sh * 0.5 - fh * 0.5, line = sh * 0.5 }, -- frame CY → screen CY
+        { B = 0,                   line = 0,        mode = "bottom" }, -- frame B → screen B
+        { B = sh - fh,             line = sh,       mode = "top" },    -- frame T → screen T
+        { B = sh * 0.5 - fh * 0.5, line = sh * 0.5, mode = "center" }, -- frame CY → screen CY
     }
     for otherKey, oh in pairs(self._handles) do
         if otherKey ~= dragKey and oh:IsShown() then
-            local oB = oh:GetBottom() or 0
-            local oT = oh:GetTop() or (oB + 24)
+            local oB = RoundPixel(oh:GetBottom() or 0)
+            local oT = RoundPixel(oh:GetTop() or (oB + 24))
             local oCY = (oB + oT) * 0.5
-            yCands[#yCands + 1] = { B = oB, line = oB }              -- B-edge align
-            yCands[#yCands + 1] = { B = oT - fh, line = oT }         -- T-edge align
-            yCands[#yCands + 1] = { B = oT, line = oT }              -- frame B sticks to other T
-            yCands[#yCands + 1] = { B = oB - fh, line = oB }         -- frame T sticks to other B
-            yCands[#yCands + 1] = { B = oCY - fh * 0.5, line = oCY } -- centre-Y align
+            yCands[#yCands + 1] = { B = oB, line = oB, mode = "bottom" }              -- B-edge align
+            yCands[#yCands + 1] = { B = oT - fh, line = oT, mode = "top" }            -- T-edge align
+            yCands[#yCands + 1] = { B = oT, line = oT, mode = "bottom" }              -- frame B sticks to other T
+            yCands[#yCands + 1] = { B = oB - fh, line = oB, mode = "top" }            -- frame T sticks to other B
+            yCands[#yCands + 1] = { B = oCY - fh * 0.5, line = oCY, mode = "center" } -- centre-Y align
         end
     end
 
     -- Find best X snap within threshold
-    local bestX, bestXLine = rawBlX, nil
+    local bestX, bestXLine, bestXMode = rawBlX, nil, nil
     local bestXDist = SNAP_THRESHOLD + 1
     for _, c in ipairs(xCands) do
         local d = math_abs(L - c.L)
@@ -857,11 +865,12 @@ function MoverModule:_SnapPosition(dragKey, rawBlX, rawBlY, fw, fh)
             bestXDist = d
             bestX     = math_floor(c.L + 0.5)
             bestXLine = math_floor(c.line + 0.5)
+            bestXMode = c.mode
         end
     end
 
     -- Find best Y snap within threshold
-    local bestY, bestYLine = rawBlY, nil
+    local bestY, bestYLine, bestYMode = rawBlY, nil, nil
     local bestYDist = SNAP_THRESHOLD + 1
     for _, c in ipairs(yCands) do
         local d = math_abs(B - c.B)
@@ -869,10 +878,11 @@ function MoverModule:_SnapPosition(dragKey, rawBlX, rawBlY, fw, fh)
             bestYDist = d
             bestY     = math_floor(c.B + 0.5)
             bestYLine = math_floor(c.line + 0.5)
+            bestYMode = c.mode
         end
     end
 
-    return bestX, bestY, bestXLine, bestYLine
+    return bestX, bestY, bestXLine, bestYLine, bestXMode, bestYMode
 end
 
 local function BuildHandleLabel(opts)
@@ -970,7 +980,7 @@ function MoverModule:_EnsureHandle(key)
         -- Compute snapped BOTTOMLEFT position and reposition handle before saving.
         local rawX, rawY = GetFrameScreenRect(self)
         local fw, fh = GetFrameScreenSize(self, 40, 16)
-        local blX, blY = MoverModule:_SnapPosition(key, rawX, rawY, fw, fh)
+        local blX, blY, snapLineX, snapLineY, snapModeX, snapModeY = MoverModule:_SnapPosition(key, rawX, rawY, fw, fh)
         MoverModule:_HideSnapLines()
 
         -- Commit handle to its final (snapped) screen position.
@@ -984,6 +994,51 @@ function MoverModule:_EnsureHandle(key)
             insp.Activate(key, self)
         end
 
+        local function GetAxisDrift()
+            local left, bottom, right, top = GetFrameScreenRect(self)
+            left = RoundPixel(left)
+            bottom = RoundPixel(bottom)
+            right = RoundPixel(right)
+            top = RoundPixel(top)
+
+            local driftX = 0
+            local driftY = 0
+
+            if snapLineX and snapModeX == "left" then
+                driftX = snapLineX - left
+            elseif snapLineX and snapModeX == "right" then
+                driftX = snapLineX - right
+            elseif snapLineX and snapModeX == "center" then
+                driftX = snapLineX - RoundPixel((left + right) * 0.5)
+            end
+
+            if snapLineY and snapModeY == "bottom" then
+                driftY = snapLineY - bottom
+            elseif snapLineY and snapModeY == "top" then
+                driftY = snapLineY - top
+            elseif snapLineY and snapModeY == "center" then
+                driftY = snapLineY - RoundPixel((bottom + top) * 0.5)
+            end
+
+            return driftX, driftY
+        end
+
+        local function CorrectSnapEdges(targetX, targetY, attempt)
+            C_Timer.After(0, function()
+                MoverModule:_PositionHandle(key)
+
+                local driftX, driftY = GetAxisDrift()
+
+                if (math_abs(driftX) > 0 or math_abs(driftY) > 0) and (attempt or 1) < 2 and o and type(o.setPos) == "function" then
+                    o.setPos(targetX + driftX, targetY + driftY)
+                    CorrectSnapEdges(targetX + driftX, targetY + driftY, (attempt or 1) + 1)
+                    return
+                end
+
+                FinalizeDrag()
+            end)
+        end
+
         if o then
             if type(o.setAnchor) == "function" then
                 -- Preserve whatever anchor is currently stored: convert the snapped
@@ -995,21 +1050,7 @@ function MoverModule:_EnsureHandle(key)
                 return
             elseif type(o.setPos) == "function" then
                 o.setPos(blX, blY)
-                C_Timer.After(0, function()
-                    MoverModule:_PositionHandle(key)
-
-                    local finalX = math_floor((self:GetLeft() or 0) + 0.5)
-                    local finalY = math_floor((self:GetBottom() or 0) + 0.5)
-                    local driftX = blX - finalX
-                    local driftY = blY - finalY
-
-                    if math_abs(driftX) > 0 or math_abs(driftY) > 0 then
-                        o.setPos(blX + driftX, blY + driftY)
-                        C_Timer.After(0, FinalizeDrag)
-                    else
-                        FinalizeDrag()
-                    end
-                end)
+                CorrectSnapEdges(blX, blY, 1)
                 return
             end
         end
