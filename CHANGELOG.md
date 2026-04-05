@@ -10,3 +10,5 @@
 - Ensured that sections in the configuration UI are always in alphabetical order
 
 #### Other
+
+- Cooldown Swipe is now enabled on action bars by default
