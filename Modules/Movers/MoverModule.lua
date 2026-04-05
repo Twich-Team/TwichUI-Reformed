@@ -175,6 +175,69 @@ local function ApplyBackdrop(frame, r, g, b, a, br, bg, bb, ba)
     frame:SetBackdropBorderColor(br, bg, bb, ba or 1)
 end
 
+local function PlayFrameFadeIn(frame, duration)
+    if not frame then
+        return
+    end
+
+    if type(frame.CreateAnimationGroup) ~= "function" then
+        frame:SetAlpha(1)
+        frame:Show()
+        return
+    end
+
+    local animation = frame._tuiFadeIn
+    if not animation then
+        animation = frame:CreateAnimationGroup()
+        local alpha = animation:CreateAnimation("Alpha")
+        alpha:SetOrder(1)
+        animation._alpha = alpha
+        animation:SetScript("OnFinished", function(self)
+            local parent = self:GetParent()
+            if parent then
+                parent:SetAlpha(1)
+            end
+        end)
+        frame._tuiFadeIn = animation
+    end
+
+    animation:Stop()
+    animation._alpha:SetDuration(tonumber(duration) or 0.16)
+    animation._alpha:SetFromAlpha(0)
+    animation._alpha:SetToAlpha(1)
+    frame:SetAlpha(0)
+    frame:Show()
+    animation:Play()
+end
+
+local function EnsureAlphaPulse(region, minAlpha, maxAlpha, duration)
+    if not region or type(region.CreateAnimationGroup) ~= "function" or region._tuiAlphaPulse then
+        return
+    end
+
+    local low = tonumber(minAlpha) or 0.55
+    local high = tonumber(maxAlpha) or 1
+    local pulseDuration = tonumber(duration) or 1.6
+    local animation = region:CreateAnimationGroup()
+    animation:SetLooping("REPEAT")
+
+    local fadeOut = animation:CreateAnimation("Alpha")
+    fadeOut:SetOrder(1)
+    fadeOut:SetDuration(pulseDuration)
+    fadeOut:SetFromAlpha(high)
+    fadeOut:SetToAlpha(low)
+
+    local fadeIn = animation:CreateAnimation("Alpha")
+    fadeIn:SetOrder(2)
+    fadeIn:SetDuration(pulseDuration)
+    fadeIn:SetFromAlpha(low)
+    fadeIn:SetToAlpha(high)
+
+    region:SetAlpha(high)
+    region._tuiAlphaPulse = animation
+    animation:Play()
+end
+
 -- ── Registration API ────────────────────────────────────────────────────────
 
 ---@param key string  Unique key for this mover (e.g. "UF_player", "AB_bar1")
@@ -325,6 +388,7 @@ function MoverModule:_GetInspector()
     dockHeaderGlow:SetPoint("TOPRIGHT", dockHeaderFrame, "TOPRIGHT", -1, -1)
     dockHeaderGlow:SetHeight(10)
     dockHeaderGlow:SetColorTexture(C_DOCK_GLOW[1], C_DOCK_GLOW[2], C_DOCK_GLOW[3], 0.06)
+    EnsureAlphaPulse(dockHeaderGlow, 0.45, 1, 1.35)
 
     local dockHeaderBottom = dockHeaderFrame:CreateTexture(nil, "BORDER")
     dockHeaderBottom:SetHeight(1)
@@ -1342,6 +1406,8 @@ function MoverModule:_GetInspector()
         if not opts then
             panel:Hide(); return
         end
+        local animatePanel = not panel:IsShown() or panel._lastAnimatedKey ~= key
+        local animateDock = not dock:IsShown() or panel._lastAnimatedDockKey ~= key
         panel._activeKey = key
         panel.titleFS:SetText(opts.label or key)
         panel.subtitleFS:SetText(opts.category or "Designer Control")
@@ -1938,6 +2004,7 @@ function MoverModule:_GetInspector()
         local dockSide = GetDockSide()
         panel._dockSessionSide = dockSide
         panel._activeDockSide = dockSide
+        animateDock = animateDock or panel._lastDockSide ~= dockSide
         dock._dockBtn._fs:SetText(dockSide == "LEFT" and "Dock Right" or "Dock Left")
         dock._dockBtn:SetScript("OnClick", function()
             panel._dockSessionSide = dockSide == "LEFT" and "RIGHT" or "LEFT"
@@ -1993,10 +2060,21 @@ function MoverModule:_GetInspector()
             else
                 dock:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", 0, -42)
             end
-            dock:Show()
+            if animateDock then
+                PlayFrameFadeIn(dock, 0.18)
+            else
+                dock:Show()
+            end
         end
-        panel:Show()
+        if animatePanel then
+            PlayFrameFadeIn(panel, 0.14)
+        else
+            panel:Show()
+        end
         panel:SetFrameLevel(9999)
+        panel._lastAnimatedKey = key
+        panel._lastAnimatedDockKey = key
+        panel._lastDockSide = dockSide
         MoverModule:_RefreshHandleVisualStates()
     end
 
@@ -2706,6 +2784,19 @@ function MoverModule:_BuildOverlay()
         "Drag to reposition · snaps to edges & other frames · |cffffcc00Shift|r: bypass snap · Left-click: inspector · Right-click: hide")
     hudHint:SetTextColor(0.55, 0.58, 0.68)
 
+    local hudGlow = hud:CreateTexture(nil, "ARTWORK")
+    hudGlow:SetPoint("TOPLEFT", hud, "TOPLEFT", 0, 0)
+    hudGlow:SetPoint("TOPRIGHT", hud, "TOPRIGHT", 0, 0)
+    hudGlow:SetHeight(8)
+    hudGlow:SetColorTexture(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.08)
+    EnsureAlphaPulse(hudGlow, 0.35, 1, 1.2)
+
+    local hudBottomLine = hud:CreateTexture(nil, "BORDER")
+    hudBottomLine:SetPoint("BOTTOMLEFT", hud, "BOTTOMLEFT", 10, 0)
+    hudBottomLine:SetPoint("BOTTOMRIGHT", hud, "BOTTOMRIGHT", -10, 0)
+    hudBottomLine:SetHeight(1)
+    hudBottomLine:SetColorTexture(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.42)
+
     local function StyleHudButton(button, normalBg, normalBorder, hoverBg, hoverBorder)
         button:SetScript("OnEnter", function(self)
             self:SetBackdropColor(hoverBg[1], hoverBg[2], hoverBg[3], hoverBg[4] or 1)
@@ -2717,141 +2808,110 @@ function MoverModule:_BuildOverlay()
         end)
     end
 
-    local addPanelBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
-    addPanelBtn:SetSize(124, 22)
-    addPanelBtn:SetPoint("RIGHT", hud, "RIGHT", -498, 0)
-    ApplyBackdrop(addPanelBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
-        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
-    local addPanelFS = addPanelBtn:CreateFontString(nil, "OVERLAY")
-    addPanelFS:SetAllPoints(addPanelBtn)
-    addPanelFS:SetJustifyH("CENTER")
-    addPanelFS:SetJustifyV("MIDDLE")
-    SetFont(addPanelFS, 10)
-    addPanelFS:SetText("Add Data Panel")
-    addPanelBtn:SetScript("OnClick", function()
-        local datatexts = T:GetModule("Datatexts", true)
-        if not datatexts or type(datatexts.CreateCenteredDesignerPanel) ~= "function" then
-            return
-        end
+    local function MakeHudButton(label, width, rightOffset, onClick, normalBg, normalBorder, hoverBg, hoverBorder,
+                                 fontSize)
+        local button = CreateFrame("Button", nil, hud, "BackdropTemplate")
+        button:SetSize(width, 22)
+        button:SetPoint("RIGHT", hud, "RIGHT", rightOffset, 0)
+        ApplyBackdrop(button, normalBg[1], normalBg[2], normalBg[3], normalBg[4] or 1,
+            normalBorder[1], normalBorder[2], normalBorder[3], normalBorder[4] or 1)
+        local fontString = button:CreateFontString(nil, "OVERLAY")
+        fontString:SetAllPoints(button)
+        fontString:SetJustifyH("CENTER")
+        fontString:SetJustifyV("MIDDLE")
+        SetFont(fontString, fontSize or 10)
+        fontString:SetText(label)
+        button._fs = fontString
+        button:SetScript("OnClick", onClick)
+        StyleHudButton(button, normalBg, normalBorder, hoverBg, hoverBorder)
+        return button
+    end
 
-        datatexts:CreateCenteredDesignerPanel(function(panelID)
-            if not panelID then
+    local addPanelBtn = MakeHudButton("Add Data Panel", 124, -498, function()
+            local datatexts = T:GetModule("Datatexts", true)
+            if not datatexts or type(datatexts.CreateCenteredDesignerPanel) ~= "function" then
                 return
             end
 
-            local moverKey = "SP_" .. panelID
-            C_Timer.After(0, function()
-                local insp = MoverModule:_GetInspector()
-                local handle = MoverModule._handles[moverKey]
-                if insp and handle then
-                    insp:Show()
-                    insp.Activate(moverKey, handle)
+            datatexts:CreateCenteredDesignerPanel(function(panelID)
+                if not panelID then
+                    return
                 end
+
+                local moverKey = "SP_" .. panelID
+                C_Timer.After(0, function()
+                    local insp = MoverModule:_GetInspector()
+                    local handle = MoverModule._handles[moverKey]
+                    if insp and handle then
+                        insp:Show()
+                        insp.Activate(moverKey, handle)
+                    end
+                end)
             end)
-        end)
-    end)
-    StyleHudButton(addPanelBtn,
+        end,
         { C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1 },
         { C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1 },
         { C_DOCK_BORDER[1] * 0.22, C_DOCK_BORDER[2] * 0.22, C_DOCK_BORDER[3] * 0.22, 0.98 },
         { C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.78 })
 
-    local addBarBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
-    addBarBtn:SetSize(124, 22)
-    addBarBtn:SetPoint("RIGHT", hud, "RIGHT", -368, 0)
-    ApplyBackdrop(addBarBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
-        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
-    local addBarFS = addBarBtn:CreateFontString(nil, "OVERLAY")
-    addBarFS:SetAllPoints(addBarBtn)
-    addBarFS:SetJustifyH("CENTER")
-    addBarFS:SetJustifyV("MIDDLE")
-    SetFont(addBarFS, 10)
-    addBarFS:SetText("Add Action Bar")
-    addBarBtn:SetScript("OnClick", function()
-        local actionBars = T:GetModule("ActionBars", true)
-        if not actionBars or type(actionBars.CreateCenteredDesignerBar) ~= "function" then
-            return
-        end
-
-        actionBars:CreateCenteredDesignerBar(function(barKey)
-            if not barKey then
+    local addBarBtn = MakeHudButton("Add Action Bar", 124, -368, function()
+            local actionBars = T:GetModule("ActionBars", true)
+            if not actionBars or type(actionBars.CreateCenteredDesignerBar) ~= "function" then
                 return
             end
 
-            local moverKey = "AB_" .. barKey
-            C_Timer.After(0, function()
-                local insp = MoverModule:_GetInspector()
-                local handle = MoverModule._handles[moverKey]
-                if insp and handle then
-                    insp:Show()
-                    insp.Activate(moverKey, handle)
+            actionBars:CreateCenteredDesignerBar(function(barKey)
+                if not barKey then
+                    return
                 end
+
+                local moverKey = "AB_" .. barKey
+                C_Timer.After(0, function()
+                    local insp = MoverModule:_GetInspector()
+                    local handle = MoverModule._handles[moverKey]
+                    if insp and handle then
+                        insp:Show()
+                        insp.Activate(moverKey, handle)
+                    end
+                end)
             end)
-        end)
-    end)
-    StyleHudButton(addBarBtn,
+        end,
         { C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1 },
         { C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1 },
         { C_DOCK_BORDER[1] * 0.22, C_DOCK_BORDER[2] * 0.22, C_DOCK_BORDER[3] * 0.22, 0.98 },
         { C_DOCK_BORDER[1], C_DOCK_BORDER[2], C_DOCK_BORDER[3], 0.78 })
 
-    local reloadBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
-    reloadBtn:SetSize(110, 22)
-    reloadBtn:SetPoint("RIGHT", hud, "RIGHT", -98, 0)
-    ApplyBackdrop(reloadBtn, 0.16, 0.11, 0.04, 1, 0.86, 0.58, 0.18, 1)
-    local reloadFS = reloadBtn:CreateFontString(nil, "OVERLAY")
-    reloadFS:SetAllPoints(reloadBtn)
-    reloadFS:SetJustifyH("CENTER")
-    reloadFS:SetJustifyV("MIDDLE")
-    SetFont(reloadFS, 10)
-    reloadFS:SetText("Reload UI")
-    reloadBtn:SetScript("OnClick", function()
-        ReloadUI()
-    end)
-    StyleHudButton(reloadBtn,
+    local reloadBtn = MakeHudButton("Reload UI", 110, -98, function()
+            ReloadUI()
+        end,
         { 0.16, 0.11, 0.04, 1 },
         { 0.86, 0.58, 0.18, 1 },
         { 0.30, 0.18, 0.05, 1 },
         { 1.00, 0.74, 0.24, 1 })
 
     -- Show Hidden button (reveals all temp-hidden)
-    local showAllBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
-    showAllBtn:SetSize(110, 22)
-    showAllBtn:SetPoint("RIGHT", hud, "RIGHT", -214, 0)
-    ApplyBackdrop(showAllBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
-        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
-    local showAllFS = showAllBtn:CreateFontString(nil, "OVERLAY")
-    showAllFS:SetAllPoints(showAllBtn); showAllFS:SetJustifyH("CENTER"); showAllFS:SetJustifyV("MIDDLE")
-    SetFont(showAllFS, 10); showAllFS:SetText("Show All Movers")
-    showAllBtn:SetScript("OnClick", function()
-        -- Un-hide all temporarily hidden movers
-        for key in pairs(self._hidden) do
-            self._hidden[key] = nil
-        end
-        for key in pairs(self._registry) do
-            self:_RefreshHandleVisibility(key)
-        end
-    end)
-    StyleHudButton(showAllBtn,
+    local showAllBtn = MakeHudButton("Show All Movers", 110, -214, function()
+            -- Un-hide all temporarily hidden movers
+            for key in pairs(self._hidden) do
+                self._hidden[key] = nil
+            end
+            for key in pairs(self._registry) do
+                self:_RefreshHandleVisibility(key)
+            end
+        end,
         { C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1 },
         { C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1 },
         { C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.22 },
         { C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 1 })
 
     -- Exit button
-    local exitBtn = CreateFrame("Button", nil, hud, "BackdropTemplate")
-    exitBtn:SetSize(80, 22)
-    exitBtn:SetPoint("RIGHT", hud, "RIGHT", -12, 0)
-    ApplyBackdrop(exitBtn, 0.35, 0.08, 0.08, 1, 0.75, 0.20, 0.20, 1)
-    local exitFS = exitBtn:CreateFontString(nil, "OVERLAY")
-    exitFS:SetAllPoints(exitBtn); exitFS:SetJustifyH("CENTER"); exitFS:SetJustifyV("MIDDLE")
-    SetFont(exitFS, 11); exitFS:SetText("Exit  [Esc]")
-    exitBtn:SetScript("OnClick", function() MoverModule:Deactivate() end)
-    StyleHudButton(exitBtn,
+    local exitBtn = MakeHudButton("Exit  [Esc]", 80, -12, function()
+            MoverModule:Deactivate()
+        end,
         { 0.35, 0.08, 0.08, 1 },
         { 0.75, 0.20, 0.20, 1 },
         { 0.55, 0.12, 0.12, 1 },
-        { 0.90, 0.30, 0.30, 1 })
+        { 0.90, 0.30, 0.30, 1 }, 11)
 
     -- ESC key closes mover mode
     ov:SetScript("OnKeyDown", function(self, key)
@@ -2889,7 +2949,7 @@ function MoverModule:Activate()
     self._active = true
     self:_BuildOverlay()
     self._overlay:Show()
-    self._hud:Show()
+    PlayFrameFadeIn(self._hud, 0.18)
 
     -- Ensure handles exist and are positioned
     for key in pairs(self._registry) do
