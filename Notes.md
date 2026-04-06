@@ -14,7 +14,6 @@
 
 - Allow the option of using class icon as the resting and/or combat indicator on the player frame
 - Highlight friend in raid groups
-- Allow particle effects to be used in aura designer (say regrowth shows leaves around unitframe, or BoP shows holy aura)
 
 - In our attempts to fix issues with the interface designer, we made the background of our shared secure menu 100% opaque, can we please bring back slight transparency so the menus look nice.
 
@@ -53,6 +52,7 @@
 - Nameplates
 - Blizzard skinning
 - Bags (more Baganator styled with categories)
+  I have added an addon to AddOnReferences called Baganator. Today we will implement our own bag system to replace ElvUI and Baganator. I very much like baganator's ability to categorize the items in your bags to show separate groups and keep it organized, as well as its feature to show new items. I would like to closely mimic this functionality, while making it customizable, more performant, and adhering to our eye-candy and twichui established styling. Please analyze baganator for its features andd methods of implementation, and implement our own bag system. It should have its own configuration section in our configuration UI, be draggable, etc. We should also have optional masque support for item icons in the bags
 - Buffs/Debuffs
 - Tooltips (more horizon styled)
 

@@ -337,6 +337,40 @@ local function MatchesFilter(text, filter)
     return text:find(filter, 1, true) ~= nil
 end
 
+local function NormalizeSearchText(text)
+    local normalized = tostring(text or "")
+    normalized = normalized:gsub("|c%x%x%x%x%x%x%x%x", "")
+    normalized = normalized:gsub("|r", "")
+    normalized = normalized:gsub("[_%./\\%-]", " ")
+    normalized = normalized:gsub("%s+", " ")
+    normalized = normalized:lower()
+    return normalized
+end
+
+local function SplitSearchTokens(filter)
+    local tokens = {}
+    local normalized = NormalizeSearchText(filter)
+    for token in normalized:gmatch("%S+") do
+        tokens[#tokens + 1] = token
+    end
+    return tokens
+end
+
+local function MatchesAllTokens(text, tokens)
+    if not tokens or #tokens == 0 then
+        return true
+    end
+
+    local normalized = NormalizeSearchText(text)
+    for _, token in ipairs(tokens) do
+        if not normalized:find(token, 1, true) then
+            return false
+        end
+    end
+
+    return true
+end
+
 local function CreatePanel(parent, r, g, b, a, borderA)
     local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     frame:SetBackdrop({
@@ -1124,6 +1158,129 @@ function UI:GetCurrentFilter()
     return text
 end
 
+function UI:GetSearchResults(filter)
+    local tokens = SplitSearchTokens(filter)
+    if #tokens == 0 then
+        return {}
+    end
+
+    local cacheKey = table.concat(tokens, " ")
+    if self.searchResultsCache and self.searchResultsCache.key == cacheKey then
+        return self.searchResultsCache.results
+    end
+
+    local function cloneStringPath(source)
+        local output = {}
+        for index = 1, #(source or {}) do
+            output[index] = tostring(source[index])
+        end
+        return output
+    end
+
+    local function concatPath(labels)
+        return table.concat(labels or {}, " > ")
+    end
+
+    local function buildSearchText(navTitle, contextLabels, optionLabel, optionDesc, optionKey)
+        local parts = {
+            navTitle or "",
+            concatPath(contextLabels),
+            optionLabel or "",
+            optionDesc or "",
+            optionKey or "",
+        }
+        return table.concat(parts, " ")
+    end
+
+    local function collectFromSection(results, navItem, section, path, labels)
+        if type(section) ~= "table" then
+            return
+        end
+
+        local ordered = GetOrderedEntries(section)
+        for _, entry in ipairs(ordered) do
+            local option = entry.option
+            local key = entry.key
+            local info = BuildOptionInfo(path, key, option, section)
+
+            if not IsOptionHidden(option, info) then
+                local optionLabel = GetDisplayName(path, key, option)
+                local optionDesc = ResolveTextValue(option and option.desc, info)
+                local contextLabels = cloneStringPath(labels)
+
+                if option and option.type == "group" then
+                    contextLabels[#contextLabels + 1] = optionLabel
+                    local childPath = ClonePath(path)
+                    childPath[#childPath + 1] = key
+                    collectFromSection(results, navItem, option, childPath, contextLabels)
+                else
+                    local searchBlob = buildSearchText(navItem.title, contextLabels, optionLabel, optionDesc,
+                        tostring(key))
+                    if MatchesAllTokens(searchBlob, tokens) then
+                        local score = 0
+                        if MatchesAllTokens(optionLabel, tokens) then
+                            score = score + 100
+                        end
+                        if MatchesAllTokens(optionDesc, tokens) then
+                            score = score + 35
+                        end
+                        if MatchesAllTokens(concatPath(contextLabels), tokens) then
+                            score = score + 25
+                        end
+                        if MatchesAllTokens(tostring(key), tokens) then
+                            score = score + 10
+                        end
+
+                        results[#results + 1] = {
+                            navId = navItem.id,
+                            navTitle = navItem.title,
+                            navAccent = navItem.accent,
+                            optionLabel = optionLabel,
+                            optionDescription = optionDesc,
+                            contextLabels = contextLabels,
+                            contextPath = concatPath(contextLabels),
+                            optionKey = tostring(key),
+                            path = ClonePath(path),
+                            score = score,
+                        }
+                    end
+                end
+            end
+        end
+    end
+
+    local results = {}
+    for _, navItem in ipairs(NAV_ITEMS) do
+        if navItem.id ~= "dashboard" and navItem.path then
+            local section = GetSectionByPath(ConfigurationModule.optionsTable, navItem.path)
+            if section then
+                local rootLabels = { navItem.title }
+                collectFromSection(results, navItem, section, ClonePath(navItem.path), rootLabels)
+            end
+        end
+    end
+
+    table.sort(results, function(a, b)
+        if a.score ~= b.score then
+            return a.score > b.score
+        end
+        if a.navTitle ~= b.navTitle then
+            return a.navTitle < b.navTitle
+        end
+        if a.contextPath ~= b.contextPath then
+            return a.contextPath < b.contextPath
+        end
+        return a.optionLabel < b.optionLabel
+    end)
+
+    self.searchResultsCache = {
+        key = cacheKey,
+        results = results,
+    }
+
+    return results
+end
+
 function UI:FindNavItem(id)
     for _, item in ipairs(NAV_ITEMS) do
         if item.id == id then
@@ -1533,7 +1690,7 @@ function UI:EnsureFrame()
     frame.SearchBox:SetPoint("TOPLEFT", frame.SearchShell, "TOPLEFT", 62, -1)
     frame.SearchBox:SetPoint("BOTTOMRIGHT", frame.SearchShell, "BOTTOMRIGHT", -10, 1)
     frame.SearchBox:SetFontObject("ChatFontNormal")
-    frame.SearchBox.placeholderText = "Search sections"
+    frame.SearchBox.placeholderText = "Search all settings"
     frame.SearchBox:SetText(frame.SearchBox.placeholderText)
     frame.SearchBox:SetTextColor(0.48, 0.5, 0.56)
     frame.SearchBox:SetScript("OnEditFocusGained", function(box)
@@ -1555,6 +1712,10 @@ function UI:EnsureFrame()
     frame.SearchBox:SetScript("OnTextChanged", function(_, userInput)
         if not userInput then
             return
+        end
+        local activeFilter = self:GetCurrentFilter()
+        if activeFilter ~= "" and self.currentPageId ~= "dashboard" then
+            self:ShowDashboard(self:FindNavItem("dashboard"))
         end
         self:RefreshSidebar()
         if self.currentPageId == "dashboard" then
@@ -1721,6 +1882,16 @@ end
 function UI:RefreshSidebar()
     local frame = self:EnsureFrame()
     local filter = self:GetCurrentFilter()
+    local hasFilter = filter ~= ""
+    local searchResults = hasFilter and self:GetSearchResults(filter) or nil
+    local matchesByNav = {}
+    local totalMatches = 0
+    if searchResults then
+        for _, result in ipairs(searchResults) do
+            matchesByNav[result.navId] = (matchesByNav[result.navId] or 0) + 1
+            totalMatches = totalMatches + 1
+        end
+    end
     local shown = 0
     local navItems = GetOrderedNavItems()
 
@@ -1770,7 +1941,16 @@ function UI:RefreshSidebar()
             frame.NavButtons[index] = button
         end
 
-        local matches = MatchesFilter(item.title, filter) or MatchesFilter(item.description, filter)
+        local matchCount = matchesByNav[item.id] or 0
+        local matches = false
+        if not hasFilter then
+            matches = true
+        elseif item.id == "dashboard" then
+            matches = totalMatches > 0 or MatchesFilter(item.title, filter) or MatchesFilter(item.description, filter)
+        else
+            matches = matchCount > 0 or MatchesFilter(item.title, filter) or MatchesFilter(item.description, filter)
+        end
+
         if matches then
             button.item = item
             button.offsetY = shown * 82
@@ -1778,7 +1958,17 @@ function UI:RefreshSidebar()
             button:SetPoint("TOPLEFT", frame.SidebarScrollChild, "TOPLEFT", 0, -button.offsetY)
             button:SetPoint("TOPRIGHT", frame.SidebarScrollChild, "TOPRIGHT", 0, -button.offsetY)
             button.Title:SetText(item.title)
-            button.Meta:SetText(item.description)
+            if hasFilter then
+                if item.id == "dashboard" then
+                    button.Meta:SetText(string.format("%d matching settings", totalMatches))
+                elseif matchCount > 0 then
+                    button.Meta:SetText(string.format("%d matching settings", matchCount))
+                else
+                    button.Meta:SetText(item.description)
+                end
+            else
+                button.Meta:SetText(item.description)
+            end
             local selected = self.currentPageId == item.id
             local accent = item.accent or { 0.98, 0.76, 0.22 }
             button:SetBackdropBorderColor(accent[1], accent[2], accent[3], selected and 0.52 or 0.12)
@@ -1803,6 +1993,12 @@ end
 function UI:RefreshDashboard()
     local frame = self:EnsureFrame()
     local filter = self:GetCurrentFilter()
+    local hasFilter = filter ~= ""
+    local dashboardScrollWidth = math.max(1,
+        (frame.DashboardScrollFrame and frame.DashboardScrollFrame:GetWidth() or 1) - 8)
+    if frame.DashboardScrollChild then
+        frame.DashboardScrollChild:SetWidth(dashboardScrollWidth)
+    end
     local shown = 0
     local cardHeight = 170
     local cardGapX = 18
@@ -1811,6 +2007,161 @@ function UI:RefreshDashboard()
         (frame.DashboardScrollChild and frame.DashboardScrollChild:GetWidth()) or (frame.Dashboard:GetWidth() or 1))
     local innerWidth = math.max(640, childWidth - 4)
     local cardWidth = math.max(280, math.floor((innerWidth - cardGapX) / 2))
+
+    local function HideSearchWidgets()
+        if frame.SearchHeaders then
+            for _, header in ipairs(frame.SearchHeaders) do
+                header:Hide()
+            end
+        end
+        if frame.SearchRows then
+            for _, row in ipairs(frame.SearchRows) do
+                row:Hide()
+            end
+        end
+        if frame.SearchEmpty then
+            frame.SearchEmpty:Hide()
+        end
+    end
+
+    if hasFilter then
+        for _, widget in ipairs(frame.Cards or {}) do
+            widget:Hide()
+        end
+
+        frame.SearchHeaders = frame.SearchHeaders or {}
+        frame.SearchRows = frame.SearchRows or {}
+
+        local function EnsureSearchHeader(index)
+            local header = frame.SearchHeaders[index]
+            if header then
+                return header
+            end
+
+            header = CreatePanel(frame.CardContainer, 0.08, 0.08, 0.11, 0.98, 0.12)
+            header:SetHeight(32)
+            header.Accent = header:CreateTexture(nil, "BORDER")
+            header.Accent:SetPoint("TOPLEFT", header, "TOPLEFT", 1, -1)
+            header.Accent:SetPoint("BOTTOMLEFT", header, "BOTTOMLEFT", 1, 1)
+            header.Accent:SetWidth(3)
+            header.Title = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            header.Title:SetPoint("LEFT", header, "LEFT", 12, 0)
+            header.Title:SetPoint("RIGHT", header, "RIGHT", -12, 0)
+            header.Title:SetJustifyH("LEFT")
+            frame.SearchHeaders[index] = header
+            return header
+        end
+
+        local function EnsureSearchRow(index)
+            local row = frame.SearchRows[index]
+            if row then
+                return row
+            end
+
+            row = CreatePanel(frame.CardContainer, 0.08, 0.08, 0.11, 0.98, 0.1)
+            row:SetHeight(62)
+            row.Title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            row.Title:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -10)
+            row.Title:SetPoint("RIGHT", row, "RIGHT", -128, 0)
+            row.Title:SetJustifyH("LEFT")
+            row.Title:SetWordWrap(false)
+            row.Context = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.Context:SetPoint("TOPLEFT", row.Title, "BOTTOMLEFT", 0, -2)
+            row.Context:SetPoint("RIGHT", row, "RIGHT", -128, 0)
+            row.Context:SetJustifyH("LEFT")
+            row.Context:SetTextColor(0.78, 0.8, 0.86)
+            row.Context:SetWordWrap(false)
+            row.Meta = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            row.Meta:SetPoint("TOPLEFT", row.Context, "BOTTOMLEFT", 0, -2)
+            row.Meta:SetPoint("RIGHT", row, "RIGHT", -128, 0)
+            row.Meta:SetJustifyH("LEFT")
+            row.Meta:SetTextColor(0.66, 0.68, 0.74)
+            row.Meta:SetWordWrap(false)
+            row.OpenButton = CreateFrame("Button", nil, row, "BackdropTemplate")
+            row.OpenButton:SetSize(96, 24)
+            row.OpenButton:SetPoint("RIGHT", row, "RIGHT", -12, 0)
+            SkinActionButton(row.OpenButton, { 0.98, 0.76, 0.22 })
+            SetButtonText(row.OpenButton, "Open")
+            frame.SearchRows[index] = row
+            return row
+        end
+
+        local results = self:GetSearchResults(filter)
+        local maxResults = 80
+        local yOffset = 0
+        local headerCount = 0
+        local rowCount = 0
+        local lastNavId = nil
+
+        for index, result in ipairs(results) do
+            if index > maxResults then
+                break
+            end
+
+            if result.navId ~= lastNavId then
+                headerCount = headerCount + 1
+                local header = EnsureSearchHeader(headerCount)
+                local accent = result.navAccent or { 0.98, 0.76, 0.22 }
+                header:ClearAllPoints()
+                header:SetPoint("TOPLEFT", frame.CardContainer, "TOPLEFT", 0, -yOffset)
+                header:SetPoint("TOPRIGHT", frame.CardContainer, "TOPRIGHT", 0, -yOffset)
+                header.Accent:SetColorTexture(accent[1], accent[2], accent[3], 0.95)
+                header.Title:SetText(result.navTitle)
+                header:Show()
+                yOffset = yOffset + header:GetHeight() + 8
+                lastNavId = result.navId
+            end
+
+            rowCount = rowCount + 1
+            local row = EnsureSearchRow(rowCount)
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", frame.CardContainer, "TOPLEFT", 0, -yOffset)
+            row:SetPoint("TOPRIGHT", frame.CardContainer, "TOPRIGHT", 0, -yOffset)
+            row.Title:SetText(result.optionLabel)
+            row.Context:SetText(result.contextPath)
+            row.Meta:SetText(result.optionDescription ~= "" and result.optionDescription or ("Key: " .. result.optionKey))
+            row.OpenButton:SetScript("OnClick", function()
+                self:OpenPage(result.navId, result.path)
+            end)
+            row:Show()
+            yOffset = yOffset + row:GetHeight() + 8
+            shown = shown + 1
+        end
+
+        for index = headerCount + 1, #(frame.SearchHeaders or {}) do
+            frame.SearchHeaders[index]:Hide()
+        end
+        for index = rowCount + 1, #(frame.SearchRows or {}) do
+            frame.SearchRows[index]:Hide()
+        end
+
+        if not frame.SearchEmpty then
+            frame.SearchEmpty = frame.CardContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            frame.SearchEmpty:SetPoint("TOPLEFT", frame.CardContainer, "TOPLEFT", 12, -16)
+            frame.SearchEmpty:SetPoint("RIGHT", frame.CardContainer, "RIGHT", -12, 0)
+            frame.SearchEmpty:SetJustifyH("LEFT")
+            frame.SearchEmpty:SetTextColor(0.75, 0.77, 0.82)
+        end
+
+        if shown == 0 then
+            frame.SearchEmpty:SetText(
+            "No settings matched your search. Try a broader term like power, castbar, aura, or mover.")
+            frame.SearchEmpty:Show()
+            yOffset = 80
+        else
+            frame.SearchEmpty:Hide()
+        end
+
+        frame.CardContainer:SetWidth(innerWidth)
+        frame.CardContainer:SetHeight(math.max(180, yOffset + 16))
+        frame.DashboardScrollChild:SetHeight(math.max(frame.CardContainer:GetHeight() + 16, frame.Dashboard:GetHeight()))
+        frame.HeroMeta:SetText(string.format("Search results for '%s' (%d)%s", filter, #results,
+            #results > maxResults and string.format(" - showing top %d", maxResults) or ""))
+        frame.HeroMeta:Show()
+        return
+    end
+
+    HideSearchWidgets()
 
     for index, card in ipairs(FEATURE_CARDS) do
         local widget = frame.Cards[index]
@@ -1892,6 +2243,7 @@ function UI:RefreshDashboard()
     frame.CardContainer:SetHeight(math.max(cardHeight, containerHeight))
     frame.DashboardScrollChild:SetHeight(math.max(frame.CardContainer:GetHeight() + 16, frame.Dashboard:GetHeight()))
     frame.HeroMeta:SetText("")
+    frame.HeroMeta:Hide()
 end
 
 function UI:PlayConfiguredSound(soundKey)

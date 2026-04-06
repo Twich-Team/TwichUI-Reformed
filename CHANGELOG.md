@@ -15,6 +15,7 @@ Minor update and bufix releases will continue as I work to implement more new UI
 - Added a button to toggle a new appearance frame to the Interface Designer
 - Added a button to toggle the configuration interface from within the Interface Designer
 - Added a button to access the Aura Designer from within the Interface Designer
+- Enhanced the search function of the configuration interface to search within sections as well
 
 #### Other
 
