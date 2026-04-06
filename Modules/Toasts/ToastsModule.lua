@@ -825,9 +825,10 @@ function TM:DidKeystoneChange(previousState, currentState)
         return true
     end
 
+    -- Keystone "new key" detection should be stable: map + level define key identity.
+    -- Affix text can temporarily report unavailable and should not retrigger notifications.
     return previousState.mapID ~= currentState.mapID or
-        previousState.level ~= currentState.level or
-        previousState.affixText ~= currentState.affixText
+        previousState.level ~= currentState.level
 end
 
 function TM:CreateKeystoneNotificationWidget(keystoneInfo)
@@ -1262,6 +1263,12 @@ function TM:HandleKeystoneBagUpdate()
     if not self.hasKeystoneSnapshot then
         self.keystoneState = latestState
         self.hasKeystoneSnapshot = true
+        return
+    end
+
+    -- Ignore transient nil snapshots (API/bag scan jitter) to avoid false
+    -- "new keystone" notifications when the key state immediately rebounds.
+    if not latestState then
         return
     end
 

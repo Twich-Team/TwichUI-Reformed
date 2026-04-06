@@ -26,8 +26,6 @@
 
 ## Other
 
-- The notification we have for obtaining a new Mythic+ key will seemingly randomly play even though the key has not changed.
-
 ## Interface Designer
 
 ## Quality of Life

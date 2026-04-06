@@ -2,9 +2,12 @@
 
 This release focuses on a simplification of the configuration; a seemingly every growing task. Several optimizations have been included as well as a new feature: Particle layers in the Aura Watcher Designer! You can now configure particle effects on frames with aura conditions. For example, if I cast Regrowth on a player, I can configure leaves to appear on that player's frame.
 
+Minor update and bufix releases will continue as I work to implement more new UI-overhaul related logic (tooltips, maps, objective tracking, etc.).
+
 #### BugFixes
 
 - Fixed an issue preventing the position frame in the Interface Designer from properly changing the frame anchor
+- Attempt at fixing an issue where the notification for a new keystone will trigger at random times
 
 #### New
 
