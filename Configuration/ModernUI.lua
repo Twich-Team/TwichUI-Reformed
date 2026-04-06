@@ -321,6 +321,20 @@ local function JoinPath(path)
     return table.concat(path or {}, ".")
 end
 
+local function PathsEqual(left, right)
+    if #left ~= #right then
+        return false
+    end
+
+    for index = 1, #left do
+        if tostring(left[index]) ~= tostring(right[index]) then
+            return false
+        end
+    end
+
+    return true
+end
+
 local function BuildInfoPath(path, key)
     local info = ClonePath(path)
     info[#info + 1] = key
@@ -1241,6 +1255,7 @@ function UI:GetSearchResults(filter)
                             contextPath = concatPath(contextLabels),
                             optionKey = tostring(key),
                             path = ClonePath(path),
+                            optionPath = BuildInfoPath(path, key),
                             score = score,
                         }
                     end
@@ -1279,6 +1294,148 @@ function UI:GetSearchResults(filter)
     }
 
     return results
+end
+
+function UI:ShowSearchJumpIndicator(optionLabel, contextPath)
+    local frame = self:EnsureFrame()
+    if not frame.SearchJumpIndicator then
+        local indicator = CreatePanel(frame.ContentHeader, 0.98, 0.76, 0.22, 0.11, 0.42)
+        indicator:SetPoint("TOPRIGHT", frame.ContentHeader, "TOPRIGHT", -14, -12)
+        indicator:SetHeight(26)
+        indicator:SetWidth(380)
+        indicator:SetFrameLevel(frame.ContentHeader:GetFrameLevel() + 8)
+
+        indicator.Glow = indicator:CreateTexture(nil, "BACKGROUND")
+        indicator.Glow:SetAllPoints(indicator)
+        indicator.Glow:SetColorTexture(0.98, 0.76, 0.22, 0.08)
+
+        indicator.Text = indicator:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        indicator.Text:SetPoint("LEFT", indicator, "LEFT", 10, 0)
+        indicator.Text:SetPoint("RIGHT", indicator, "RIGHT", -10, 0)
+        indicator.Text:SetJustifyH("LEFT")
+        indicator.Text:SetTextColor(1, 0.95, 0.86)
+
+        indicator.Flash = indicator:CreateAnimationGroup()
+        local fadeIn = indicator.Flash:CreateAnimation("Alpha")
+        fadeIn:SetOrder(1)
+        fadeIn:SetFromAlpha(0)
+        fadeIn:SetToAlpha(1)
+        fadeIn:SetDuration(0.16)
+        local hold = indicator.Flash:CreateAnimation("Alpha")
+        hold:SetOrder(2)
+        hold:SetFromAlpha(1)
+        hold:SetToAlpha(1)
+        hold:SetDuration(1.0)
+        local pulse = indicator.Flash:CreateAnimation("Alpha")
+        pulse:SetOrder(3)
+        pulse:SetFromAlpha(1)
+        pulse:SetToAlpha(0.45)
+        pulse:SetDuration(0.24)
+        pulse:SetSmoothing("IN_OUT")
+        local pulseBack = indicator.Flash:CreateAnimation("Alpha")
+        pulseBack:SetOrder(4)
+        pulseBack:SetFromAlpha(0.45)
+        pulseBack:SetToAlpha(1)
+        pulseBack:SetDuration(0.22)
+        pulseBack:SetSmoothing("IN_OUT")
+        local fadeOut = indicator.Flash:CreateAnimation("Alpha")
+        fadeOut:SetOrder(5)
+        fadeOut:SetFromAlpha(1)
+        fadeOut:SetToAlpha(0)
+        fadeOut:SetDuration(0.38)
+        indicator.Flash:SetScript("OnFinished", function()
+            indicator:Hide()
+        end)
+
+        frame.SearchJumpIndicator = indicator
+    end
+
+    local indicator = frame.SearchJumpIndicator
+    local label = tostring(optionLabel or "Setting")
+    local context = tostring(contextPath or "")
+    if context ~= "" then
+        indicator.Text:SetText(string.format("Matched: %s  -  %s", label, context))
+    else
+        indicator.Text:SetText(string.format("Matched: %s", label))
+    end
+    indicator:SetAlpha(0)
+    indicator:Show()
+    indicator.Flash:Stop()
+    indicator.Flash:Play()
+
+    if frame.ContentAccent then
+        frame.ContentAccent:SetColorTexture(0.98, 0.76, 0.22, 1)
+    end
+end
+
+function UI:PulseMatchedOption(parent, startY, width, height)
+    if not parent or height <= 0 then
+        return
+    end
+
+    local pulse = self.searchOptionPulse
+    if not pulse then
+        pulse = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        pulse:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        pulse.Fill = pulse:CreateTexture(nil, "BACKGROUND")
+        pulse.Fill:SetAllPoints(pulse)
+        pulse.Fill:SetColorTexture(0.98, 0.76, 0.22, 0.18)
+
+        pulse.Anim = pulse:CreateAnimationGroup()
+        local fadeIn = pulse.Anim:CreateAnimation("Alpha")
+        fadeIn:SetOrder(1)
+        fadeIn:SetFromAlpha(0)
+        fadeIn:SetToAlpha(0.95)
+        fadeIn:SetDuration(0.14)
+        local pulseDown = pulse.Anim:CreateAnimation("Alpha")
+        pulseDown:SetOrder(2)
+        pulseDown:SetFromAlpha(0.95)
+        pulseDown:SetToAlpha(0.36)
+        pulseDown:SetDuration(0.32)
+        pulseDown:SetSmoothing("IN_OUT")
+        local pulseUp = pulse.Anim:CreateAnimation("Alpha")
+        pulseUp:SetOrder(3)
+        pulseUp:SetFromAlpha(0.36)
+        pulseUp:SetToAlpha(0.82)
+        pulseUp:SetDuration(0.26)
+        pulseUp:SetSmoothing("IN_OUT")
+        local fadeOut = pulse.Anim:CreateAnimation("Alpha")
+        fadeOut:SetOrder(4)
+        fadeOut:SetFromAlpha(0.82)
+        fadeOut:SetToAlpha(0)
+        fadeOut:SetDuration(0.36)
+        pulse.Anim:SetScript("OnFinished", function()
+            pulse:Hide()
+        end)
+
+        self.searchOptionPulse = pulse
+    end
+
+    pulse:SetParent(parent)
+    pulse:ClearAllPoints()
+    pulse:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -startY)
+    pulse:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -startY)
+    pulse:SetHeight(math.max(26, height - ROW_SPACING))
+    pulse:SetFrameLevel(parent:GetFrameLevel() + 10)
+    pulse:SetBackdropColor(0.98, 0.76, 0.22, 0.14)
+    pulse:SetBackdropBorderColor(0.98, 0.76, 0.22, 0.74)
+    pulse:SetAlpha(0)
+    pulse:Show()
+    pulse.Anim:Stop()
+    pulse.Anim:Play()
+end
+
+function UI:IsPendingSearchHighlight(path, key)
+    if not self.pendingSearchHighlightPath then
+        return false
+    end
+
+    return PathsEqual(self.pendingSearchHighlightPath, BuildInfoPath(path, key))
 end
 
 function UI:FindNavItem(id)
@@ -2121,7 +2278,9 @@ function UI:RefreshDashboard()
             row.Context:SetText(result.contextPath)
             row.Meta:SetText(result.optionDescription ~= "" and result.optionDescription or ("Key: " .. result.optionKey))
             row.OpenButton:SetScript("OnClick", function()
-                self:OpenPage(result.navId, result.path)
+                self.pendingSearchHighlightPath = ClonePath(result.optionPath or result.path)
+                self:OpenPage(result.navId, result.optionPath or result.path)
+                self:ShowSearchJumpIndicator(result.optionLabel, result.contextPath)
             end)
             row:Show()
             yOffset = yOffset + row:GetHeight() + 8
@@ -2145,7 +2304,7 @@ function UI:RefreshDashboard()
 
         if shown == 0 then
             frame.SearchEmpty:SetText(
-            "No settings matched your search. Try a broader term like power, castbar, aura, or mover.")
+                "No settings matched your search. Try a broader term like power, castbar, aura, or mover.")
             frame.SearchEmpty:Show()
             yOffset = 80
         else
@@ -4519,7 +4678,13 @@ function UI:RenderSection(parent, y, width, section, path, desiredPath, skipTitl
                     standardGroups[#standardGroups + 1] = entry
                 end
             else
+                local startY = y
                 y = self:RenderOption(parent, y, width, option, path, entry.key)
+                if self:IsPendingSearchHighlight(path, entry.key) then
+                    self.searchHighlightMatched = true
+                    self:PulseMatchedOption(parent, startY, width, y - startY)
+                    self.pendingSearchHighlightPath = nil
+                end
             end
         end
     end
@@ -4588,9 +4753,13 @@ function UI:RenderCurrentPage()
     root:SetSize(width, 1)
     self.pageRoot = root
     local y = 0
+    self.searchHighlightMatched = false
     y = self:RenderSection(root, y, width, section, rootPath, desiredPath, true)
     root:SetHeight(y + 8)
     frame.OptionsScrollChild:SetHeight(math.max(1, y + 8))
+    if self.pendingSearchHighlightPath and not self.searchHighlightMatched then
+        self.pendingSearchHighlightPath = nil
+    end
 
     self.isRenderingPage = false
     if self.pendingPageRender then
