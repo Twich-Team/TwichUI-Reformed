@@ -4,12 +4,15 @@ This release focuses on a simplification of the configuration; a seemingly every
 
 #### BugFixes
 
+- Fixed an issue preventing the position frame in the Interface Designer from properly changing the frame anchor
+
 #### New
 
 - Added the Particle layer type to the Aura Watcher Designer
 - Added a button to toggle a new appearance frame to the Interface Designer
 - Added a button to toggle the configuration interface from within the Interface Designer
 - Added a button to access the Aura Designer from within the Interface Designer
-- Cleaned up the Cast Bar designer so its easier to understand
 
 #### Other
+
+- Cleaned up the Cast Bar designer so its easier to understand

@@ -26,9 +26,9 @@
 
 ## Other
 
-## Interface Designer
+- The notification we have for obtaining a new Mythic+ key will seemingly randomly play even though the key has not changed.
 
-- Our positioning frame in the designer has buttons to change the anchor. This could be good, however it doesnt seem to actually do anything, it also has some weird behavior with hovering over entries stay a lighter gray than ones that havent been. We need to either fix the logic so the anchoring changes and stays, or remove the anchor logic from the position frame.
+## Interface Designer
 
 ## Quality of Life
 

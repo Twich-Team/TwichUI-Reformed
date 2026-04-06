@@ -1259,8 +1259,9 @@ function MoverModule:_GetInspector()
         end)
         abtn:SetScript("OnLeave", function(self)
             if not self._active then
-                self:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
-                self:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
+                local alpha = self._normalAlpha or 1
+                self:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], alpha)
+                self:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], alpha)
             end
             ScheduleHide()
         end)
@@ -1400,18 +1401,19 @@ function MoverModule:_GetInspector()
             local hasAnch = type(opts.setAnchor) == "function"
             for pt, abtn in pairs(panel._anchorBtns) do
                 abtn._active = (pt == curPt)
-                abtn:EnableMouse(hasAnch or type(opts.setPos) == "function")
+                local baseAlpha = hasAnch and 1 or 0.40
+                abtn._normalAlpha = baseAlpha
+                abtn:EnableMouse(hasAnch)
                 if abtn._active then
                     ApplyBackdrop(abtn,
                         C_ACCENT[1] * 0.20, C_ACCENT[2] * 0.20, C_ACCENT[3] * 0.20, 0.85,
                         C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 1)
                     abtn._fs:SetTextColor(C_ACCENT[1], C_ACCENT[2], C_ACCENT[3])
                 else
-                    local a = hasAnch and 1 or 0.40
                     ApplyBackdrop(abtn,
-                        C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], a,
-                        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], a)
-                    abtn._fs:SetTextColor(0.70, 0.72, 0.82, a)
+                        C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], baseAlpha,
+                        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], baseAlpha)
+                    abtn._fs:SetTextColor(0.70, 0.72, 0.82, baseAlpha)
                 end
             end
         end
@@ -3063,9 +3065,9 @@ function MoverModule:_BuildOverlay()
                         for _, s in ipairs(swatches) do RefreshSwatch(s.swatch, s.fill, s.key) end
                     end
                     ColorPickerFrame:SetupColorPickerAndShow({
-                        r = cr,
-                        g = cg,
-                        b = cb,
+                        r           = cr,
+                        g           = cg,
+                        b           = cb,
                         opacity     = ca,
                         hasOpacity  = hasAlpha,
                         swatchFunc  = applyColor,

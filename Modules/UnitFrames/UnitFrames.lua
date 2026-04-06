@@ -12209,34 +12209,54 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     end
 
     moversModule:RegisterMover("UF_" .. layoutKey, {
-        label        = LABELS[layoutKey] or BuildFrameName(layoutKey),
-        category     = "Unit Frames",
-        getFrame     = function() return frame end,
-        getX         = function()
+        label            = LABELS[layoutKey] or BuildFrameName(layoutKey),
+        category         = "Unit Frames",
+        getFrame         = function() return frame end,
+        getPoint         = function()
+            local layout = UnitFrames:GetLayoutSettings(layoutKey)
+            return layout.point or "BOTTOMLEFT"
+        end,
+        getRelativePoint = function()
+            local layout = UnitFrames:GetLayoutSettings(layoutKey)
+            return layout.relativePoint or (layout.point or "BOTTOMLEFT")
+        end,
+        getX             = function()
             return getLayoutX()
         end,
-        getY         = function()
+        getY             = function()
             return getLayoutY()
         end,
-        getW         = function()
+        getW             = function()
             return getLayoutWidth()
         end,
-        getH         = function()
+        getH             = function()
             return getLayoutHeight()
         end,
-        setPos       = function(x, y)
+        setPos           = function(x, y)
             local layout = UnitFrames:GetLayoutSettings(layoutKey)
-            layout.point = "BOTTOMLEFT"
-            layout.relativePoint = "BOTTOMLEFT"
+            local point = layout.point or "BOTTOMLEFT"
+            local relativePoint = layout.relativePoint or point
             layout.x = math.floor((x or 0) + 0.5)
             layout.y = math.floor((y or 0) + 0.5)
             if frame and frame.ClearAllPoints then
                 frame:ClearAllPoints()
-                frame:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", layout.x, layout.y)
+                frame:SetPoint(point, UIParent, relativePoint, layout.x, layout.y)
             end
         end,
-        setSize      = getSetSize(),
-        isEnabled    = function()
+        setAnchor        = function(point, x, y)
+            local layout = UnitFrames:GetLayoutSettings(layoutKey)
+            local anchorPoint = point or layout.point or "BOTTOMLEFT"
+            layout.point = anchorPoint
+            layout.relativePoint = anchorPoint
+            layout.x = math.floor((x or 0) + 0.5)
+            layout.y = math.floor((y or 0) + 0.5)
+            if frame and frame.ClearAllPoints then
+                frame:ClearAllPoints()
+                frame:SetPoint(layout.point, UIParent, layout.relativePoint, layout.x, layout.y)
+            end
+        end,
+        setSize          = getSetSize(),
+        isEnabled        = function()
             if isHeader then
                 local groupKey = layoutKey == "boss" and "boss" or layoutKey
                 local gs = UnitFrames:GetGroupSettings(groupKey)
@@ -12254,8 +12274,8 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             local us = UnitFrames:GetUnitSettings(layoutKey)
             return us and us.enabled ~= false
         end,
-        headerToggle = headerToggle,
-        extras       = extras,
+        headerToggle     = headerToggle,
+        extras           = extras,
     })
 end
 
@@ -14901,7 +14921,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         local assignedHint = detailPane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         assignedHint:SetPoint("TOPLEFT", assignedHeader, "BOTTOMLEFT", 0, -4)
         assignedHint:SetText(
-        "|cffffcc00Drag|r a spell from the left Spellbook onto a template row above, or onto this list. |cffff8888Right-click|r to unassign.")
+            "|cffffcc00Drag|r a spell from the left Spellbook onto a template row above, or onto this list. |cffff8888Right-click|r to unassign.")
 
         local assignedScroll = CreateFrame("ScrollFrame", nil, detailPane, "UIPanelScrollFrameTemplate")
         assignedScroll:SetPoint("TOPLEFT", assignedHint, "BOTTOMLEFT", 0, -8)
@@ -14922,7 +14942,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         emptyTemplates:SetPoint("CENTER", detailPane, "CENTER", 0, 40)
         emptyTemplates:SetJustifyH("CENTER")
         emptyTemplates:SetText(
-        "No template selected.\n|cffaaaaaa Click |cff19c9c7Add Template|r|cffaaaaaa above to create one,\nthen drag spells from the left pane onto it.|r")
+            "No template selected.\n|cffaaaaaa Click |cff19c9c7Add Template|r|cffaaaaaa above to create one,\nthen drag spells from the left pane onto it.|r")
         frame.emptyTemplates = emptyTemplates
     end
 
