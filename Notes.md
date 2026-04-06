@@ -18,9 +18,6 @@
 
 - In our attempts to fix issues with the interface designer, we made the background of our shared secure menu 100% opaque, can we please bring back slight transparency so the menus look nice.
 
-- Cast bar rules:
-  - Define how the cast bar looks for each school of spell or by spell itself; I could have water-themed cast bar for healing spells while having fire for fire spells.
-
 ## Unit Frames
 
 - Player frame fantasy art: Show fantasy art for player's class, race. Allow selection of art to show based on specialization. Fade in/out when changing

@@ -1062,6 +1062,95 @@ local function UpdateColorOverlayIndicator(frame, idx, cfg, isActive)
 end
 
 -- ============================================================
+-- Particle accent rendering
+-- ============================================================
+
+local function EnsureParticleAccent(frame, idx)
+    local state = frame._awState
+    state.particleAccents = state.particleAccents or {}
+    if not state.particleAccents[idx] then
+        local holder = CreateFrame("Frame", nil, frame)
+        holder:SetFrameStrata(frame:GetFrameStrata())
+        holder:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 5))
+        holder:SetAllPoints(frame)
+        holder:EnableMouse(false)
+        holder:Hide()
+
+        local accent = holder:CreateTexture(nil, "OVERLAY", nil, 1)
+        accent:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+        accent:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, 0)
+        accent:SetColorTexture(0.2, 0.82, 1.0, 0.95)
+        accent:SetWidth(2)
+        accent:Hide()
+
+        -- Reuses UnitFrames power-bar fantasy particle system so AuraWatcher
+        -- visuals match castbar/powerbar particle families and texture sets.
+        local particleState = {
+            frame = holder,
+            accent = accent,
+        }
+        state.particleAccents[idx] = particleState
+    end
+    return state.particleAccents[idx]
+end
+
+local function ResetParticleAccent(state)
+    if not state then
+        return
+    end
+
+    if state.frame and UnitFrames.ResetPowerBarFx then
+        state.frame._powerFxEnabled = false
+        UnitFrames:ResetPowerBarFx(state.frame)
+    end
+
+    if state.accent then
+        state.accent:Hide()
+    end
+
+    if state.frame then
+        state.frame:Hide()
+    end
+end
+
+local function UpdateParticleAccentIndicator(frame, idx, cfg, isActive)
+    local state = EnsureParticleAccent(frame, idx)
+    if not isActive then
+        ResetParticleAccent(state)
+        return
+    end
+
+    local inset = Clamp(tonumber(cfg.particleInset) or 0, -20, 24)
+    local accentWidth = Clamp(tonumber(cfg.accentWidth) or 2, 1, 12)
+    local color = type(cfg.particleColor) == "table" and cfg.particleColor
+        or type(cfg.borderColor) == "table" and cfg.borderColor
+        or { 0.2, 0.82, 1.0, 1 }
+    local accentAlpha = Clamp((tonumber(cfg.accentAlpha) or color[4] or 0.95), 0.05, 1)
+    local particleTheme = cfg.particleTheme or cfg.fantasyTheme or "holy"
+    local particleScale = Clamp(tonumber(cfg.particleEffectScale) or tonumber(cfg.fantasyEffectScale) or 1, 0.5, 3)
+
+    state.frame:ClearAllPoints()
+    state.frame:SetPoint("TOPLEFT", frame, "TOPLEFT", -inset, inset)
+    state.frame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", inset, -inset)
+
+    state.accent:ClearAllPoints()
+    state.accent:SetPoint("TOPLEFT", state.frame, "TOPLEFT", 0, 0)
+    state.accent:SetPoint("BOTTOMLEFT", state.frame, "BOTTOMLEFT", 0, 0)
+    state.accent:SetWidth(accentWidth)
+    state.accent:SetColorTexture(color[1], color[2], color[3], accentAlpha)
+    state.accent:Show()
+
+    if UnitFrames.EnsurePowerBarFx and UnitFrames.SyncPowerBarFx then
+        state.frame._powerFxEnabled = true
+        state.frame._powerFxTheme = particleTheme
+        state.frame._powerFxScale = particleScale
+        UnitFrames:SyncPowerBarFx(state.frame, false)
+    end
+
+    state.frame:Show()
+end
+
+-- ============================================================
 -- Public API
 -- ============================================================
 
@@ -1071,11 +1160,12 @@ local awFrameRegistry = setmetatable({}, { __mode = "k" })
 --- Called once per frame in StyleFrame. Creates the per-frame state table.
 function UnitFrames:AWAttach(frame)
     frame._awState = {
-        unitKey        = nil,
-        auraResults    = {},
-        iconContainers = {},
-        borders        = {},
-        overlays       = {},
+        unitKey         = nil,
+        auraResults     = {},
+        iconContainers  = {},
+        borders         = {},
+        overlays        = {},
+        particleAccents = {},
     }
 end
 
@@ -1141,26 +1231,43 @@ function UnitFrames:AWUpdate(frame)
                 UpdateIconIndicator(frame, idx, cfg, auras)
                 local bd = frame._awState.borders and frame._awState.borders[idx]
                 local ov = frame._awState.overlays and frame._awState.overlays[idx]
+                local pa = frame._awState.particleAccents and frame._awState.particleAccents[idx]
                 if bd then bd:Hide() end
                 if ov then ov:Hide() end
+                if pa then ResetParticleAccent(pa) end
             elseif itype == "border" then
                 UpdateBorderIndicator(frame, idx, cfg, active)
                 local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
+                local ov = frame._awState.overlays and frame._awState.overlays[idx]
+                local pa = frame._awState.particleAccents and frame._awState.particleAccents[idx]
+                if ic then
+                    SetIconContainerTimerActive(ic, false)
+                    ic:Hide()
+                end
+                if ov then ov:Hide() end
+                if pa then ResetParticleAccent(pa) end
+            elseif itype == "overlay" then
+                UpdateColorOverlayIndicator(frame, idx, cfg, active)
+                local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
+                local bd = frame._awState.borders and frame._awState.borders[idx]
+                local pa = frame._awState.particleAccents and frame._awState.particleAccents[idx]
+                if ic then
+                    SetIconContainerTimerActive(ic, false)
+                    ic:Hide()
+                end
+                if bd then bd:Hide() end
+                if pa then ResetParticleAccent(pa) end
+            elseif itype == "particle" then
+                UpdateParticleAccentIndicator(frame, idx, cfg, active)
+                local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
+                local bd = frame._awState.borders and frame._awState.borders[idx]
                 local ov = frame._awState.overlays and frame._awState.overlays[idx]
                 if ic then
                     SetIconContainerTimerActive(ic, false)
                     ic:Hide()
                 end
-                if ov then ov:Hide() end
-            elseif itype == "overlay" then
-                UpdateColorOverlayIndicator(frame, idx, cfg, active)
-                local ic = frame._awState.iconContainers and frame._awState.iconContainers[idx]
-                local bd = frame._awState.borders and frame._awState.borders[idx]
-                if ic then
-                    SetIconContainerTimerActive(ic, false)
-                    ic:Hide()
-                end
                 if bd then bd:Hide() end
+                if ov then ov:Hide() end
             end
             -- Process extra indicator layers (same aura condition, different visual)
             if cfg.extraLayers then
@@ -1171,26 +1278,43 @@ function UnitFrames:AWUpdate(frame)
                         UpdateIconIndicator(frame, ei, extraCfg, auras)
                         local bd2 = frame._awState.borders and frame._awState.borders[ei]
                         local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
+                        local pa2 = frame._awState.particleAccents and frame._awState.particleAccents[ei]
                         if bd2 then bd2:Hide() end
                         if ov2 then ov2:Hide() end
+                        if pa2 then ResetParticleAccent(pa2) end
                     elseif etype == "border" then
                         UpdateBorderIndicator(frame, ei, extraCfg, active)
                         local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
+                        local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
+                        local pa2 = frame._awState.particleAccents and frame._awState.particleAccents[ei]
+                        if ic2 then
+                            SetIconContainerTimerActive(ic2, false)
+                            ic2:Hide()
+                        end
+                        if ov2 then ov2:Hide() end
+                        if pa2 then ResetParticleAccent(pa2) end
+                    elseif etype == "overlay" then
+                        UpdateColorOverlayIndicator(frame, ei, extraCfg, active)
+                        local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
+                        local bd2 = frame._awState.borders and frame._awState.borders[ei]
+                        local pa2 = frame._awState.particleAccents and frame._awState.particleAccents[ei]
+                        if ic2 then
+                            SetIconContainerTimerActive(ic2, false)
+                            ic2:Hide()
+                        end
+                        if bd2 then bd2:Hide() end
+                        if pa2 then ResetParticleAccent(pa2) end
+                    elseif etype == "particle" then
+                        UpdateParticleAccentIndicator(frame, ei, extraCfg, active)
+                        local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
+                        local bd2 = frame._awState.borders and frame._awState.borders[ei]
                         local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
                         if ic2 then
                             SetIconContainerTimerActive(ic2, false)
                             ic2:Hide()
                         end
-                        if ov2 then ov2:Hide() end
-                    elseif etype == "overlay" then
-                        UpdateColorOverlayIndicator(frame, ei, extraCfg, active)
-                        local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
-                        local bd2 = frame._awState.borders and frame._awState.borders[ei]
-                        if ic2 then
-                            SetIconContainerTimerActive(ic2, false)
-                            ic2:Hide()
-                        end
                         if bd2 then bd2:Hide() end
+                        if ov2 then ov2:Hide() end
                     end
                 end
             end
@@ -1207,6 +1331,8 @@ function UnitFrames:AWUpdate(frame)
                 if bd2 then bd2:Hide() end
                 local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
                 if ov2 then ov2:Hide() end
+                local pa2 = frame._awState.particleAccents and frame._awState.particleAccents[ei]
+                if pa2 then ResetParticleAccent(pa2) end
             end
         else
             -- Hide primary visuals and all potential extra layer slots
@@ -1219,6 +1345,8 @@ function UnitFrames:AWUpdate(frame)
             if bd then bd:Hide() end
             local ov = frame._awState.overlays and frame._awState.overlays[idx]
             if ov then ov:Hide() end
+            local pa = frame._awState.particleAccents and frame._awState.particleAccents[idx]
+            if pa then ResetParticleAccent(pa) end
             for lj = 1, MAX_EXTRA_LAYERS do
                 local ei = MAX_INDICATORS * lj + idx
                 local ic2 = frame._awState.iconContainers and frame._awState.iconContainers[ei]
@@ -1230,6 +1358,8 @@ function UnitFrames:AWUpdate(frame)
                 if bd2 then bd2:Hide() end
                 local ov2 = frame._awState.overlays and frame._awState.overlays[ei]
                 if ov2 then ov2:Hide() end
+                local pa2 = frame._awState.particleAccents and frame._awState.particleAccents[ei]
+                if pa2 then ResetParticleAccent(pa2) end
             end
         end
     end
@@ -1259,6 +1389,11 @@ function UnitFrames:AWHideAll(frame)
     end
     for _, o in pairs(frame._awState.overlays or {}) do
         if o then o:Hide() end
+    end
+    for _, p in pairs(frame._awState.particleAccents or {}) do
+        if p then
+            ResetParticleAccent(p)
+        end
     end
 end
 
@@ -1295,6 +1430,8 @@ function UnitFrames:AWPreviewRender(frame, slotIdx, cfg)
         UpdateBorderIndicator(frame, slotIdx, cfg, true)
     elseif itype == "overlay" then
         UpdateColorOverlayIndicator(frame, slotIdx, cfg, true)
+    elseif itype == "particle" then
+        UpdateParticleAccentIndicator(frame, slotIdx, cfg, true)
     end
 end
 
