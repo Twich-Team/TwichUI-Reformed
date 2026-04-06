@@ -1069,10 +1069,14 @@ local function EnsureParticleAccent(frame, idx)
     local state = frame._awState
     state.particleAccents = state.particleAccents or {}
     if not state.particleAccents[idx] then
+        -- Holder is a direct child of the unit frame so that the explicit
+        -- Hide → Show cycle properly fires OnShow on holder, which lets
+        -- SyncPowerBarFx(force=true) initialize the particle layer correctly.
+        -- (Intermediate clip-parent frames break this because IsShown never
+        --  transitions when the parent is shown externally.)
         local holder = CreateFrame("Frame", nil, frame)
         holder:SetFrameStrata(frame:GetFrameStrata())
         holder:SetFrameLevel(math_max(1, frame:GetFrameLevel() + 5))
-        holder:SetAllPoints(frame)
         holder:EnableMouse(false)
         holder:Hide()
 
@@ -1086,7 +1090,7 @@ local function EnsureParticleAccent(frame, idx)
         -- Reuses UnitFrames power-bar fantasy particle system so AuraWatcher
         -- visuals match castbar/powerbar particle families and texture sets.
         local particleState = {
-            frame = holder,
+            frame  = holder,
             accent = accent,
         }
         state.particleAccents[idx] = particleState
@@ -1142,11 +1146,16 @@ local function UpdateParticleAccentIndicator(frame, idx, cfg, isActive)
 
     if UnitFrames.EnsurePowerBarFx and UnitFrames.SyncPowerBarFx then
         state.frame._powerFxEnabled = true
-        state.frame._powerFxTheme = particleTheme
-        state.frame._powerFxScale = particleScale
+        state.frame._powerFxTheme   = particleTheme
+        state.frame._powerFxScale   = particleScale
+        -- EnsurePowerBarFx (called inside SyncPowerBarFx) clears SetClipsChildren.
+        -- We re-apply it after so particles are kept within holder's bounds.
         UnitFrames:SyncPowerBarFx(state.frame, false)
+        state.frame:SetClipsChildren(true)
     end
 
+    -- Explicit Show() ensures IsShown transitions false → true, which fires
+    -- holder:OnShow → SyncPowerBarFx(true) → particleLayer:Show().
     state.frame:Show()
 end
 

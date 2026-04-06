@@ -41,6 +41,7 @@
   - Suppress ping spam
   - Supresses noises (Calamatous Carrion, etc.)
 - Group filtering tools
+- Loot feed
 
 ## No More ElvUI
 
