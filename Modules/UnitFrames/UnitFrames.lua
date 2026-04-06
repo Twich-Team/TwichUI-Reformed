@@ -13011,9 +13011,11 @@ do
                     shouldShow = (standalonePreviewMode or self:IsDesignerPreviewEnabled("castbar"))
                         and ((db.castbar and db.castbar.enabled ~= false) ~= false)
                 elseif key:match("^bossPreview") then
-                    shouldShow = standalonePreviewMode and (self:GetGroupSettings("boss").enabled ~= false)
+                    shouldShow = (standalonePreviewMode or self:IsDesignerPreviewEnabled("boss")) and
+                        (self:GetGroupSettings("boss").enabled ~= false)
                 elseif key == "bossAnchor" then
-                    shouldShow = standalonePreviewMode and (self:GetGroupSettings("boss").enabled ~= false)
+                    shouldShow = (standalonePreviewMode or self:IsDesignerPreviewEnabled("boss")) and
+                        (self:GetGroupSettings("boss").enabled ~= false)
                 elseif key == "player" or key == "target" or key == "targettarget" or key == "focus" or key == "pet" then
                     shouldShow = standalonePreviewMode and (self:GetUnitSettings(key).enabled ~= false)
                 elseif key == "party" or key == "raid" or key == "tank" then
@@ -14437,17 +14439,19 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         title:SetTextColor(1, 0.95, 0.82)
         frame.title = title
 
-        local subtitle = titleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-        subtitle:SetText(
-            "Drag spells onto a template to control the player castbar's color and particle look for that cast.")
-        subtitle:SetTextColor(0.55, 0.60, 0.68)
-
+        -- closeButton declared first so subtitle can anchor to its LEFT edge.
         local closeButton = CreateSpellStyleButton(titleBar, 72, 24, "Close")
         closeButton:SetPoint("RIGHT", titleBar, "RIGHT", -8, 0)
         closeButton:SetScript("OnClick", function()
             frame:Hide()
         end)
+
+        local subtitle = titleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+        subtitle:SetPoint("RIGHT", closeButton, "LEFT", -12, 0)
+        subtitle:SetText(
+            "|cff19c9c7Step 1:|r Create a Template (right pane)  →  |cff19c9c7Step 2:|r Drag spells from the Spellbook (left) onto a Template to control color and particle effects for that cast.")
+        subtitle:SetTextColor(0.55, 0.60, 0.68)
     end
 
     do
@@ -14461,11 +14465,21 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
 
         local spellHeader = leftPane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         spellHeader:SetPoint("TOPLEFT", leftPane, "TOPLEFT", 14, -14)
-        spellHeader:SetText("Spellbook")
+        spellHeader:SetText("|cff19c9c7Spellbook|r")
+
+        local spellHint = leftPane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        spellHint:SetPoint("TOPLEFT", spellHeader, "BOTTOMLEFT", 0, -4)
+        spellHint:SetPoint("RIGHT", leftPane, "RIGHT", -14, 0)
+        spellHint:SetJustifyH("LEFT")
+        spellHint:SetText(
+            "|cffffcc00Drag|r a spell from this list and drop it onto a template row (right pane) to assign it that template's color and particles."
+            .. " Right-click an assigned spell to unassign it.")
+        spellHint:SetWordWrap(true)
+        spellHint:SetMaxLines(3)
 
         local searchBox = CreateFrame("EditBox", nil, leftPane, "BackdropTemplate")
-        searchBox:SetPoint("TOPLEFT", spellHeader, "BOTTOMLEFT", 0, -10)
-        searchBox:SetPoint("TOPRIGHT", leftPane, "TOPRIGHT", -14, -36)
+        searchBox:SetPoint("TOPLEFT", spellHint, "BOTTOMLEFT", 0, -8)
+        searchBox:SetPoint("TOPRIGHT", leftPane, "TOPRIGHT", -14, 0)
         searchBox:SetHeight(24)
         ApplySpellStyleEditorBackdrop(searchBox, 0.98)
         searchBox:SetAutoFocus(false)
@@ -14518,10 +14532,24 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
 
         local templatesHeader = rightPane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         templatesHeader:SetPoint("TOPLEFT", rightPane, "TOPLEFT", 14, -14)
-        templatesHeader:SetText("Templates")
+        templatesHeader:SetText("|cff19c9c7Templates|r")
 
-        local addTemplate = CreateSpellStyleButton(rightPane, 108, 24, "Add Template")
-        addTemplate:SetPoint("TOPRIGHT", rightPane, "TOPRIGHT", -132, -12)
+        local templatesHint = rightPane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        templatesHint:SetPoint("TOPLEFT", templatesHeader, "BOTTOMLEFT", 0, -4)
+        templatesHint:SetText("Each template is a named preset with its own fill color and particle style.")
+
+        local addTemplate = CreateSpellStyleButton(rightPane, 130, 24, "＋ Add Template")
+        addTemplate:SetPoint("TOPRIGHT", rightPane, "TOPRIGHT", -120, -12)
+        addTemplate:SetScript("OnEnter", function(self)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+                GameTooltip:SetText("Add Template", 1, 0.95, 0.82, 1, true)
+                GameTooltip:AddLine("Create a new named preset. Then drag spells from the left pane onto it.",
+                    0.76, 0.80, 0.88, true)
+                GameTooltip:Show()
+            end
+        end)
+        addTemplate:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         addTemplate:SetScript("OnClick", function()
             local templateID = UnitFrames:CreateCastbarSpellTemplate()
             frame.selectedTemplateID = templateID
@@ -14529,8 +14557,18 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
             UnitFrames:RefreshCastbarSpellStyleDesigner()
         end)
 
-        local deleteTemplate = CreateSpellStyleButton(rightPane, 108, 24, "Delete")
+        local deleteTemplate = CreateSpellStyleButton(rightPane, 86, 24, "Delete")
         deleteTemplate:SetPoint("LEFT", addTemplate, "RIGHT", 8, 0)
+        deleteTemplate:SetScript("OnEnter", function(self)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+                GameTooltip:SetText("Delete Template", 1, 0.5, 0.5, 1, true)
+                GameTooltip:AddLine("Permanently remove the selected template and unassign all its spells.",
+                    0.76, 0.80, 0.88, true)
+                GameTooltip:Show()
+            end
+        end)
+        deleteTemplate:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         deleteTemplate:SetScript("OnClick", function()
             if frame.selectedTemplateID then
                 UnitFrames:DeleteCastbarSpellTemplate(frame.selectedTemplateID)
@@ -14542,8 +14580,8 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         frame.deleteTemplateButton = deleteTemplate
 
         local templateList = CreateFrame("Frame", nil, rightPane, "BackdropTemplate")
-        templateList:SetPoint("TOPLEFT", templatesHeader, "BOTTOMLEFT", 0, -10)
-        templateList:SetPoint("TOPRIGHT", rightPane, "TOPRIGHT", -14, -46)
+        templateList:SetPoint("TOPLEFT", templatesHint, "BOTTOMLEFT", 0, -10)
+        templateList:SetPoint("TOPRIGHT", rightPane, "TOPRIGHT", -14, 0)
         templateList:SetHeight(148)
         ApplySpellStyleEditorPanelBackdrop(templateList, 0.92)
         local templateListScroll = CreateFrame("ScrollFrame", nil, templateList, "UIPanelScrollFrameTemplate")
@@ -14653,12 +14691,22 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
 
         local colorLabel = detailPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         colorLabel:SetPoint("TOPLEFT", templateNameInput, "BOTTOMLEFT", 0, -14)
-        colorLabel:SetText("Fill Color")
+        colorLabel:SetText("|cff19c9c7Fill Color|r")
 
         local colorButton = CreateFrame("Button", nil, detailPane, "BackdropTemplate")
         colorButton:SetPoint("TOPLEFT", colorLabel, "BOTTOMLEFT", 0, -6)
         colorButton:SetSize(48, 22)
         ApplySpellStyleEditorBackdrop(colorButton, 1)
+        colorButton:SetScript("OnEnter", function(self)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+                GameTooltip:SetText("Fill Color", 1, 0.95, 0.82, 1, true)
+                GameTooltip:AddLine("The castbar bar fill color when a matched spell is being cast.",
+                    0.76, 0.80, 0.88, true)
+                GameTooltip:Show()
+            end
+        end)
+        colorButton:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         colorButton:SetScript("OnClick", function()
             if frame.selectedTemplateID then
                 UnitFrames:OpenCastbarSpellTemplateColorPicker(frame.selectedTemplateID)
@@ -14672,6 +14720,17 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
 
         local particlesToggle = CreateSpellStyleButton(detailPane, 160, 24, "Particles: On")
         particlesToggle:SetPoint("LEFT", colorButton, "RIGHT", 18, 0)
+        particlesToggle:SetScript("OnEnter", function(self)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+                GameTooltip:SetText("Fantasy Particles", 1, 0.95, 0.82, 1, true)
+                GameTooltip:AddLine(
+                    "Toggle fantasy particle effects on the castbar for spells assigned to this template.",
+                    0.76, 0.80, 0.88, true)
+                GameTooltip:Show()
+            end
+        end)
+        particlesToggle:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         particlesToggle:SetScript("OnClick", function()
             if not frame.selectedTemplateID then
                 return
@@ -14689,10 +14748,21 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
 
         local themeLabel = detailPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         themeLabel:SetPoint("TOPLEFT", colorButton, "BOTTOMLEFT", 0, -16)
-        themeLabel:SetText("Particle Theme")
+        themeLabel:SetText("|cff19c9c7Particle Theme|r")
 
         local themeMenuButton = CreateSpellStyleButton(detailPane, 250, 24, "Choose Theme")
         themeMenuButton:SetPoint("TOPLEFT", themeLabel, "BOTTOMLEFT", 0, -6)
+        themeMenuButton:SetScript("OnEnter", function(self)
+            if GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+                GameTooltip:SetText("Particle Theme", 1, 0.95, 0.82, 1, true)
+                GameTooltip:AddLine("Choose the fantasy effect style — Holy, Lunar, Fire, Frost, Shadow, etc.",
+                    0.76, 0.80, 0.88, true)
+                GameTooltip:AddLine("Requires Particles to be toggled On.", 0.55, 0.60, 0.68, true)
+                GameTooltip:Show()
+            end
+        end)
+        themeMenuButton:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
         themeMenuButton:SetScript("OnClick", function(self)
             if frame.selectedTemplateID then
                 UnitFrames:OpenCastbarSpellThemeSelector(self, frame.selectedTemplateID)
@@ -14702,7 +14772,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
 
         local effectLabel = detailPane:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         effectLabel:SetPoint("TOPLEFT", themeMenuButton, "BOTTOMLEFT", 0, -16)
-        effectLabel:SetText("Effect Size")
+        effectLabel:SetText("|cff19c9c7Effect Size|r")
 
         local effectShell = CreateFrame("Frame", nil, detailPane, "BackdropTemplate")
         effectShell:SetPoint("TOPLEFT", effectLabel, "BOTTOMLEFT", 0, -6)
@@ -14825,12 +14895,13 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
 
         local assignedHeader = detailPane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         assignedHeader:SetPoint("TOPLEFT", effectShell, "BOTTOMLEFT", 0, -18)
-        assignedHeader:SetText("Assigned Spells")
+        assignedHeader:SetText("|cff19c9c7Assigned Spells|r")
         frame.assignedHeader = assignedHeader
 
         local assignedHint = detailPane:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
         assignedHint:SetPoint("TOPLEFT", assignedHeader, "BOTTOMLEFT", 0, -4)
-        assignedHint:SetText("Right-click to clear a spell, or drag it onto another template.")
+        assignedHint:SetText(
+        "|cffffcc00Drag|r a spell from the left Spellbook onto a template row above, or onto this list. |cffff8888Right-click|r to unassign.")
 
         local assignedScroll = CreateFrame("ScrollFrame", nil, detailPane, "UIPanelScrollFrameTemplate")
         assignedScroll:SetPoint("TOPLEFT", assignedHint, "BOTTOMLEFT", 0, -8)
@@ -14849,7 +14920,9 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
 
         local emptyTemplates = detailPane:CreateFontString(nil, "OVERLAY", "GameFontDisable")
         emptyTemplates:SetPoint("CENTER", detailPane, "CENTER", 0, 40)
-        emptyTemplates:SetText("Create a template to start assigning spells.")
+        emptyTemplates:SetJustifyH("CENTER")
+        emptyTemplates:SetText(
+        "No template selected.\n|cffaaaaaa Click |cff19c9c7Add Template|r|cffaaaaaa above to create one,\nthen drag spells from the left pane onto it.|r")
         frame.emptyTemplates = emptyTemplates
     end
 
@@ -15740,6 +15813,7 @@ function UnitFrames:SetTestMode(enabled)
         db.testPreviewRaid = false
         db.testPreviewTank = false
         db.testPreviewCastbar = false
+        db.testPreviewBoss = false
     end
     self:RefreshPreviewVisibility()
     self:RefreshAllFrames()
@@ -15759,6 +15833,8 @@ function UnitFrames:IsDesignerPreviewEnabled(previewKey)
         return db.testPreviewTank == true
     elseif previewKey == "castbar" then
         return db.testPreviewCastbar == true
+    elseif previewKey == "boss" then
+        return db.testPreviewBoss == true
     end
 
     return false
@@ -15769,6 +15845,7 @@ function UnitFrames:HasAnyDesignerPreviewEnabled()
         or self:IsDesignerPreviewEnabled("raid")
         or self:IsDesignerPreviewEnabled("tank")
         or self:IsDesignerPreviewEnabled("castbar")
+        or self:IsDesignerPreviewEnabled("boss")
 end
 
 function UnitFrames:ClearDesignerPreviewModes()
@@ -15778,6 +15855,7 @@ function UnitFrames:ClearDesignerPreviewModes()
     db.testPreviewRaid = false
     db.testPreviewTank = false
     db.testPreviewCastbar = false
+    db.testPreviewBoss = false
     self:RefreshPreviewVisibility()
     self:RefreshAllFrames()
 end
@@ -15792,6 +15870,8 @@ function UnitFrames:SetTestPreviewGroupEnabled(groupKey, enabled)
         db.testPreviewTank = enabled == true
     elseif groupKey == "castbar" then
         db.testPreviewCastbar = enabled == true
+    elseif groupKey == "boss" then
+        db.testPreviewBoss = enabled == true
     else
         return
     end

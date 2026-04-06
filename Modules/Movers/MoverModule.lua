@@ -331,6 +331,49 @@ function MoverModule:_GetInspector()
 
     -- Hide on click-outside via overlay script (see _BuildOverlay)
     panel._activeKey = nil
+    panel._activePreviewKey = nil
+
+    local function ResolvePreviewKeyForMover(moverKey)
+        if moverKey == "UF_party" then
+            return "party"
+        elseif moverKey == "UF_raid" then
+            return "raid"
+        elseif moverKey == "UF_tank" then
+            return "tank"
+        elseif moverKey == "UF_boss" then
+            return "boss"
+        elseif moverKey == "UF_castbar" then
+            return "castbar"
+        end
+
+        return nil
+    end
+
+    local function SetPreviewEnabled(previewKey, enabled)
+        if not previewKey then
+            return
+        end
+
+        local unitFrames = T:GetModule("UnitFrames", true)
+        if unitFrames and type(unitFrames.SetTestPreviewGroupEnabled) == "function" then
+            unitFrames:SetTestPreviewGroupEnabled(previewKey, enabled == true)
+        end
+    end
+
+    local function ApplyActivePreviewFromMover(moverKey)
+        local nextPreviewKey = ResolvePreviewKeyForMover(moverKey)
+        local currentPreviewKey = panel._activePreviewKey
+
+        if currentPreviewKey and currentPreviewKey ~= nextPreviewKey then
+            SetPreviewEnabled(currentPreviewKey, false)
+        end
+
+        if nextPreviewKey then
+            SetPreviewEnabled(nextPreviewKey, true)
+        end
+
+        panel._activePreviewKey = nextPreviewKey
+    end
 
     local function CancelHide()
     end
@@ -355,6 +398,7 @@ function MoverModule:_GetInspector()
         if self._dock then
             self._dock:Hide()
         end
+        ApplyActivePreviewFromMover(nil)
         self._hovering = false
         self._dockSessionSide = nil
         self._activeKey = nil
@@ -526,48 +570,7 @@ function MoverModule:_GetInspector()
     end)
     dock._dockBtn = dockBtn
 
-    local dockAppearanceBtn = CreateFrame("Button", nil, dockHeaderContent, "BackdropTemplate")
-    dockAppearanceBtn:SetSize(98, 20)
-    dockAppearanceBtn:SetPoint("RIGHT", dockBtn, "LEFT", -6, 0)
-    dockAppearanceBtn:SetFrameStrata(dockHeaderFrame:GetFrameStrata())
-    dockAppearanceBtn:SetFrameLevel(dockHeaderContent:GetFrameLevel() + 4)
-    ApplyBackdrop(dockAppearanceBtn, C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1,
-        C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
-    local dockAppearanceBtnFS = dockAppearanceBtn:CreateFontString(nil, "OVERLAY")
-    dockAppearanceBtnFS:SetAllPoints(dockAppearanceBtn)
-    dockAppearanceBtnFS:SetJustifyH("CENTER")
-    dockAppearanceBtnFS:SetJustifyV("MIDDLE")
-    SetFont(dockAppearanceBtnFS, 10)
-    dockAppearanceBtnFS:SetText("Appearance")
-    dockAppearanceBtn._fs = dockAppearanceBtnFS
-    dockAppearanceBtn:SetScript("OnEnter", function(self)
-        self:SetBackdropColor(C_DOCK_COLOR_ACCENT[1] * 0.22, C_DOCK_COLOR_ACCENT[2] * 0.22,
-            C_DOCK_COLOR_ACCENT[3] * 0.22, 0.98)
-        self:SetBackdropBorderColor(C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.78)
-        if GameTooltip then
-            GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
-            GameTooltip:SetText("Appearance", 1, 0.95, 0.82, 1, true)
-            GameTooltip:AddLine("Open the Theme page so you can adjust TwichUI's global colors and overall look.",
-                0.76, 0.80, 0.88, true)
-            GameTooltip:Show()
-        end
-    end)
-    dockAppearanceBtn:SetScript("OnLeave", function(self)
-        self:SetBackdropColor(C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1)
-        self:SetBackdropBorderColor(C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1)
-        if GameTooltip then
-            GameTooltip:Hide()
-        end
-    end)
-    dockAppearanceBtn:SetScript("OnClick", function()
-        local configurationModule = T:GetModule("Configuration", true)
-        if configurationModule and configurationModule.OpenOptionsUI then
-            configurationModule:OpenOptionsUI("Theme")
-        elseif configurationModule and configurationModule.ToggleOptionsUI then
-            configurationModule:ToggleOptionsUI("Theme")
-        end
-    end)
-    dock._appearanceBtn = dockAppearanceBtn
+    -- Appearance button moved to the HUD top bar (see _BuildOverlay).
 
     local dockDivider = dock:CreateTexture(nil, "ARTWORK")
     dockDivider:SetHeight(1)
@@ -1476,6 +1479,7 @@ function MoverModule:_GetInspector()
         if not opts then
             panel:Hide(); return
         end
+        ApplyActivePreviewFromMover(key)
         local animatePanel = not panel:IsShown() or panel._lastAnimatedKey ~= key
         local animateDock = not dock:IsShown() or panel._lastAnimatedDockKey ~= key
         panel._activeKey = key
@@ -2946,8 +2950,744 @@ function MoverModule:_BuildOverlay()
         return button
     end
 
+    -- ── Appearance Panel (lazy-created, toggles below HUD) ───────────────
+    local appearancePanel
+    local function ToggleAppearancePanel()
+        if not appearancePanel then
+            appearancePanel = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+            appearancePanel:SetFrameStrata("TOOLTIP")
+            appearancePanel:SetFrameLevel(600)
+            appearancePanel:SetWidth(320)
+            ApplyBackdrop(appearancePanel, 0.06, 0.07, 0.10, 0.98,
+                C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.55)
+            appearancePanel:EnableMouse(true)
+
+            local panTitle = appearancePanel:CreateFontString(nil, "OVERLAY")
+            panTitle:SetPoint("TOPLEFT", appearancePanel, "TOPLEFT", 14, -12)
+            SetFont(panTitle, 12)
+            panTitle:SetText("Appearance")
+            panTitle:SetTextColor(C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3])
+
+            local panSub = appearancePanel:CreateFontString(nil, "OVERLAY")
+            panSub:SetPoint("TOPLEFT", panTitle, "BOTTOMLEFT", 0, -4)
+            SetFont(panSub, 9)
+            panSub:SetText("Adjust core TwichUI theme colors and style.")
+            panSub:SetTextColor(0.52, 0.58, 0.66)
+
+            local PAD        = 14
+            local ROW_H      = 32
+            local SELECT_H   = 38 -- rows that have a dropdown
+            local COLOR_ROWS = {
+                { key = "accentColor",     label = "Accent Color",  hasAlpha = false },
+                { key = "primaryColor",    label = "Primary Color", hasAlpha = false },
+                { key = "backgroundColor", label = "Background",    hasAlpha = true },
+                { key = "borderColor",     label = "Border",        hasAlpha = true },
+            }
+
+            local swatches   = {}
+
+            local function GetThemeColor(rowKey)
+                local theme = T:GetModule("Theme", true)
+                if not theme then return { 1, 1, 1 }, 1 end
+                if rowKey == "backgroundColor" then
+                    local db = theme:GetDB()
+                    local c  = db.backgroundColor or { 0.05, 0.06, 0.08 }
+                    return c, db.backgroundAlpha or 0.94
+                elseif rowKey == "borderColor" then
+                    local db = theme:GetDB()
+                    local c  = db.borderColor or { 0.24, 0.26, 0.32 }
+                    return c, db.borderAlpha or 0.85
+                else
+                    return theme:GetColor(rowKey), 1
+                end
+            end
+
+            local function SetThemeColor(rowKey, r, g, b, a)
+                local theme = T:GetModule("Theme", true)
+                if not theme then return end
+                if rowKey == "backgroundColor" then
+                    theme:Set("backgroundColor", { r, g, b })
+                    theme:Set("backgroundAlpha", a)
+                elseif rowKey == "borderColor" then
+                    theme:Set("borderColor", { r, g, b })
+                    theme:Set("borderAlpha", a)
+                else
+                    theme:Set(rowKey, { r, g, b })
+                end
+            end
+
+            local function RefreshSwatch(sw, fillTex, rowKey)
+                local c, a = GetThemeColor(rowKey)
+                fillTex:SetColorTexture(c[1] or 1, c[2] or 1, c[3] or 1, a or 1)
+                ApplyBackdrop(sw, 0.04, 0.04, 0.06, 0.92,
+                    C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.5)
+            end
+
+            local startY = -50
+            for i, row in ipairs(COLOR_ROWS) do
+                local y        = startY - (i - 1) * ROW_H
+                local rowKey   = row.key
+                local hasAlpha = row.hasAlpha
+
+                local lbl      = appearancePanel:CreateFontString(nil, "OVERLAY")
+                lbl:SetPoint("TOPLEFT", appearancePanel, "TOPLEFT", PAD, y)
+                SetFont(lbl, 10)
+                lbl:SetText(row.label)
+                lbl:SetTextColor(0.78, 0.84, 0.94)
+
+                local swatch = CreateFrame("Button", nil, appearancePanel, "BackdropTemplate")
+                swatch:SetSize(40, 20)
+                swatch:SetPoint("TOPRIGHT", appearancePanel, "TOPRIGHT", -PAD, y + 1)
+
+                local fill = swatch:CreateTexture(nil, "ARTWORK")
+                fill:SetPoint("TOPLEFT", swatch, "TOPLEFT", 2, -2)
+                fill:SetPoint("BOTTOMRIGHT", swatch, "BOTTOMRIGHT", -2, 2)
+                RefreshSwatch(swatch, fill, rowKey)
+
+                swatches[i] = { swatch = swatch, fill = fill, key = rowKey }
+
+                swatch:SetScript("OnClick", function()
+                    if not ColorPickerFrame or not ColorPickerFrame.SetupColorPickerAndShow then return end
+                    local c, a           = GetThemeColor(rowKey)
+                    local cr, cg, cb, ca = c[1] or 1, c[2] or 1, c[3] or 1, a or 1
+                    local function applyColor()
+                        local nr, ng, nb = ColorPickerFrame:GetColorRGB()
+                        local na = hasAlpha and ColorPickerFrame.GetColorAlpha
+                            and ColorPickerFrame:GetColorAlpha() or 1
+                        SetThemeColor(rowKey, nr, ng, nb, na)
+                        for _, s in ipairs(swatches) do RefreshSwatch(s.swatch, s.fill, s.key) end
+                    end
+                    local function cancelColor(prev)
+                        prev = prev or { r = cr, g = cg, b = cb, a = ca }
+                        SetThemeColor(rowKey, prev.r or cr, prev.g or cg, prev.b or cb, prev.a or ca)
+                        for _, s in ipairs(swatches) do RefreshSwatch(s.swatch, s.fill, s.key) end
+                    end
+                    ColorPickerFrame:SetupColorPickerAndShow({
+                        r = cr,
+                        g = cg,
+                        b = cb,
+                        opacity     = ca,
+                        hasOpacity  = hasAlpha,
+                        swatchFunc  = applyColor,
+                        func        = applyColor,
+                        opacityFunc = applyColor,
+                        cancelFunc  = cancelColor,
+                    })
+                end)
+
+                swatch:SetScript("OnEnter", function(self)
+                    self:SetBackdropColor(
+                        C_DOCK_COLOR_ACCENT[1] * 0.25, C_DOCK_COLOR_ACCENT[2] * 0.25,
+                        C_DOCK_COLOR_ACCENT[3] * 0.25, 0.98)
+                    self:SetBackdropBorderColor(
+                        C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.88)
+                    if GameTooltip then
+                        GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+                        GameTooltip:SetText(row.label, 1, 0.95, 0.82, 1, true)
+                        GameTooltip:AddLine(hasAlpha and "Click to choose color and opacity."
+                            or "Click to choose color.", 0.76, 0.80, 0.88, true)
+                        GameTooltip:Show()
+                    end
+                end)
+                swatch:SetScript("OnLeave", function(self)
+                    RefreshSwatch(self, fill, rowKey)
+                    if GameTooltip then GameTooltip:Hide() end
+                end)
+            end
+
+            -- ── Select-style rows (statusBarTexture, globalFont, classIconStyle) ──
+            local LSM = T.Libs and T.Libs.LSM
+
+            -- Helper: make a small cycling dropdown button
+            local selBaseY = startY - #COLOR_ROWS * ROW_H - 10
+
+            local function EnsureAppearanceSelectMenu()
+                if appearancePanel._selectMenu then
+                    return appearancePanel._selectMenu
+                end
+
+                local dismiss = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
+                dismiss:SetAllPoints(UIParent)
+                dismiss:SetFrameStrata("FULLSCREEN_DIALOG")
+                dismiss:SetFrameLevel(2)
+                dismiss:RegisterForClicks("AnyUp")
+                dismiss:Hide()
+
+                local menuFrame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+                menuFrame:SetFrameStrata("TOOLTIP")
+                menuFrame:SetFrameLevel(620)
+                menuFrame:SetToplevel(true)
+                menuFrame:SetClampedToScreen(true)
+                menuFrame:EnableMouse(true)
+                ApplyBackdrop(menuFrame, 0.03, 0.03, 0.05, 0.985,
+                    C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.30)
+                menuFrame:Hide()
+
+                local header = CreateFrame("Frame", nil, menuFrame, "BackdropTemplate")
+                header:SetPoint("TOPLEFT", menuFrame, "TOPLEFT", 6, -6)
+                header:SetPoint("TOPRIGHT", menuFrame, "TOPRIGHT", -6, -6)
+                header:SetHeight(24)
+                ApplyBackdrop(header, 0.08, 0.08, 0.11, 0.98,
+                    C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.18)
+
+                local headerTitle = menuFrame:CreateFontString(nil, "OVERLAY")
+                headerTitle:SetPoint("TOPLEFT", header, "TOPLEFT", 10, -5)
+                headerTitle:SetPoint("TOPRIGHT", header, "TOPRIGHT", -10, -5)
+                headerTitle:SetJustifyH("LEFT")
+                SetFont(headerTitle, 9)
+                headerTitle:SetTextColor(1, 0.95, 0.82)
+
+                local scroll = CreateFrame("ScrollFrame", nil, menuFrame, "UIPanelScrollFrameTemplate")
+                scroll:SetPoint("TOPLEFT", menuFrame, "TOPLEFT", 8, -34)
+                scroll:SetPoint("BOTTOMRIGHT", menuFrame, "BOTTOMRIGHT", -28, 8)
+                if T.Tools and T.Tools.UI and type(T.Tools.UI.SkinScrollBar) == "function" then
+                    T.Tools.UI.SkinScrollBar(scroll,
+                        { C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3] }, true, false)
+                end
+
+                local content = CreateFrame("Frame", nil, scroll)
+                content:SetSize(1, 1)
+                scroll:SetScrollChild(content)
+
+                local menu = {
+                    frame = menuFrame,
+                    dismiss = dismiss,
+                    title = headerTitle,
+                    scroll = scroll,
+                    content = content,
+                    rows = {},
+                    accent = { C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3] },
+                }
+
+                function menu:Hide()
+                    self.dismiss:Hide()
+                    self.frame:Hide()
+                end
+
+                dismiss:SetScript("OnClick", function()
+                    menu:Hide()
+                end)
+
+                local function EnsureRow(index)
+                    local row = menu.rows[index]
+                    if row then
+                        return row
+                    end
+
+                    row = CreateFrame("Button", nil, menu.content, "BackdropTemplate")
+                    row:SetHeight(22)
+                    row:RegisterForClicks("AnyUp")
+                    ApplyBackdrop(row, 0.08, 0.08, 0.11, 0.98,
+                        C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.12)
+
+                    local accent = row:CreateTexture(nil, "BORDER")
+                    accent:SetPoint("TOPLEFT", row, "TOPLEFT", 1, -1)
+                    accent:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 1, 1)
+                    accent:SetWidth(3)
+                    accent:SetColorTexture(C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0)
+                    row._accent = accent
+
+                    local previewBorder = CreateFrame("Frame", nil, row, "BackdropTemplate")
+                    previewBorder:SetSize(54, 12)
+                    previewBorder:SetPoint("LEFT", row, "LEFT", 10, 0)
+                    ApplyBackdrop(previewBorder, 0.06, 0.07, 0.10, 1,
+                        C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.24)
+                    previewBorder:Hide()
+
+                    local previewTex = previewBorder:CreateTexture(nil, "ARTWORK")
+                    previewTex:SetPoint("TOPLEFT", previewBorder, "TOPLEFT", 1, -1)
+                    previewTex:SetPoint("BOTTOMRIGHT", previewBorder, "BOTTOMRIGHT", -1, 1)
+                    previewTex:SetHorizTile(true)
+                    previewTex:SetVertTile(false)
+                    previewTex:SetVertexColor(1, 1, 1, 1)
+                    row._previewBorder = previewBorder
+                    row._previewTex = previewTex
+
+                    local text = row:CreateFontString(nil, "OVERLAY")
+                    text:SetPoint("LEFT", row, "LEFT", 10, 0)
+                    text:SetPoint("RIGHT", row, "RIGHT", -10, 0)
+                    text:SetJustifyH("LEFT")
+                    SetFont(text, 10)
+                    text:SetTextColor(0.92, 0.94, 0.96)
+                    row._text = text
+
+                    row:SetScript("OnEnter", function(self)
+                        self:SetBackdropColor(0.10, 0.10, 0.13, 0.98)
+                        self:SetBackdropBorderColor(menu.accent[1], menu.accent[2], menu.accent[3], 0.26)
+                        self._accent:SetColorTexture(menu.accent[1], menu.accent[2], menu.accent[3], 0.55)
+                    end)
+                    row:SetScript("OnLeave", function(self)
+                        if self._selected then
+                            self:SetBackdropColor(0.10, 0.10, 0.13, 0.98)
+                            self:SetBackdropBorderColor(menu.accent[1], menu.accent[2], menu.accent[3], 0.34)
+                            self._accent:SetColorTexture(menu.accent[1], menu.accent[2], menu.accent[3], 0.9)
+                        else
+                            self:SetBackdropColor(0.08, 0.08, 0.11, 0.98)
+                            self:SetBackdropBorderColor(menu.accent[1], menu.accent[2], menu.accent[3], 0.12)
+                            self._accent:SetColorTexture(menu.accent[1], menu.accent[2], menu.accent[3], 0)
+                        end
+                    end)
+
+                    menu.rows[index] = row
+                    return row
+                end
+
+                function menu:Open(anchor, menuTitle, items, selectedKey, onSelect, accent)
+                    if not anchor or not items or #items == 0 then
+                        self:Hide()
+                        return
+                    end
+
+                    self.accent = accent or { C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3] }
+                    self.title:SetText(menuTitle or "Select")
+                    local rowH = 23
+                    local maxVisible = 12
+                    local visibleRows = math.min(#items, maxVisible)
+                    local width = math.max(anchor:GetWidth() or 292, 292)
+                    local height = 40 + (visibleRows * rowH) + 8
+                    self.frame:SetSize(width, height)
+
+                    for index, item in ipairs(items) do
+                        local row = EnsureRow(index)
+                        row:ClearAllPoints()
+                        row:SetPoint("TOPLEFT", self.content, "TOPLEFT", 0, -((index - 1) * rowH))
+                        row:SetPoint("TOPRIGHT", self.content, "TOPRIGHT", 0, -((index - 1) * rowH))
+                        row._text:SetText(tostring(item.text or item.key or ""))
+                        row._selected = item.key == selectedKey
+                        if item.previewTexture and item.previewTexture ~= "" then
+                            row._previewBorder:Show()
+                            row._previewTex:SetTexture(item.previewTexture)
+                            row._text:ClearAllPoints()
+                            row._text:SetPoint("LEFT", row._previewBorder, "RIGHT", 8, 0)
+                            row._text:SetPoint("RIGHT", row, "RIGHT", -10, 0)
+                        else
+                            row._previewBorder:Hide()
+                            row._text:ClearAllPoints()
+                            row._text:SetPoint("LEFT", row, "LEFT", 10, 0)
+                            row._text:SetPoint("RIGHT", row, "RIGHT", -10, 0)
+                        end
+
+                        row:SetScript("OnClick", function()
+                            if type(onSelect) == "function" then
+                                onSelect(item.key)
+                            end
+                            menu:Hide()
+                        end)
+
+                        if row._selected then
+                            row:SetBackdropColor(0.10, 0.10, 0.13, 0.98)
+                            row:SetBackdropBorderColor(self.accent[1], self.accent[2], self.accent[3], 0.34)
+                            row._accent:SetColorTexture(self.accent[1], self.accent[2], self.accent[3], 0.9)
+                        else
+                            row:SetBackdropColor(0.08, 0.08, 0.11, 0.98)
+                            row:SetBackdropBorderColor(self.accent[1], self.accent[2], self.accent[3], 0.12)
+                            row._accent:SetColorTexture(self.accent[1], self.accent[2], self.accent[3], 0)
+                        end
+                        row:Show()
+                    end
+
+                    for index = #items + 1, #self.rows do
+                        self.rows[index]:Hide()
+                    end
+
+                    self.content:SetSize(width - 36, #items * rowH)
+                    self.scroll:SetVerticalScroll(0)
+                    self.frame:ClearAllPoints()
+                    self.frame:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
+                    self.dismiss:Show()
+                    self.frame:Raise()
+                    self.frame:Show()
+                end
+
+                appearancePanel._selectMenu = menu
+                return menu
+            end
+
+            local function MakeSelectRow(parentOffsetY, labelText, getter, setter, getOptions, sortFn, tooltipText)
+                local rowY = selBaseY + parentOffsetY
+                local lbl = appearancePanel:CreateFontString(nil, "OVERLAY")
+                lbl:SetPoint("TOPLEFT", appearancePanel, "TOPLEFT", PAD, rowY)
+                SetFont(lbl, 10)
+                lbl:SetText(labelText)
+                lbl:SetTextColor(0.78, 0.84, 0.94)
+
+                local btn = CreateFrame("Button", nil, appearancePanel, "BackdropTemplate")
+                btn:SetHeight(20)
+                btn:SetPoint("TOPLEFT", lbl, "BOTTOMLEFT", 0, -4)
+                btn:SetPoint("TOPRIGHT", appearancePanel, "TOPRIGHT", -PAD, 0)
+                ApplyBackdrop(btn, 0.08, 0.09, 0.13, 0.98,
+                    C_DOCK_COLOR_ACCENT[1] * 0.4, C_DOCK_COLOR_ACCENT[2] * 0.4,
+                    C_DOCK_COLOR_ACCENT[3] * 0.4, 0.8)
+
+                local btnLabel = btn:CreateFontString(nil, "OVERLAY")
+                btnLabel:SetPoint("LEFT", btn, "LEFT", 6, 0)
+                btnLabel:SetPoint("RIGHT", btn, "RIGHT", -6, 0)
+                btnLabel:SetJustifyH("LEFT")
+                SetFont(btnLabel, 9)
+                btnLabel:SetTextColor(0.88, 0.92, 0.98)
+
+                local function RefreshLabel()
+                    local cur = getter()
+                    local opts = getOptions()
+                    btnLabel:SetText(opts[cur] or cur or "—")
+                end
+                RefreshLabel()
+
+                btn:SetScript("OnClick", function()
+                    local opts = getOptions()
+                    local keys = {}
+                    for k in pairs(opts) do
+                        keys[#keys + 1] = k
+                    end
+                    if sortFn then
+                        table.sort(keys, sortFn)
+                    else
+                        table.sort(keys)
+                    end
+
+                    local items = {}
+                    for _, k in ipairs(keys) do
+                        local item = {
+                            key = k,
+                            text = tostring(opts[k] or k),
+                        }
+                        if labelText == "Status Bar Texture" and LSM and type(LSM.Fetch) == "function" then
+                            item.previewTexture = LSM:Fetch("statusbar", k, true)
+                        end
+                        items[#items + 1] = item
+                    end
+
+                    local menu = EnsureAppearanceSelectMenu()
+                    menu:Open(btn, labelText, items, getter(), function(selectedKey)
+                        setter(selectedKey)
+                        RefreshLabel()
+                    end, { C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3] })
+                end)
+
+                btn:SetScript("OnEnter", function(self)
+                    self:SetBackdropColor(
+                        C_DOCK_COLOR_ACCENT[1] * 0.22, C_DOCK_COLOR_ACCENT[2] * 0.22,
+                        C_DOCK_COLOR_ACCENT[3] * 0.22, 0.98)
+                    self:SetBackdropBorderColor(
+                        C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.9)
+                    if GameTooltip and tooltipText then
+                        GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+                        GameTooltip:SetText(labelText, 1, 0.95, 0.82, 1, true)
+                        GameTooltip:AddLine(tooltipText, 0.76, 0.80, 0.88, true)
+                        GameTooltip:AddLine("|cff19c9c7Click|r to open the options menu.", 0.55, 0.60, 0.68, true)
+                        GameTooltip:Show()
+                    end
+                end)
+                btn:SetScript("OnLeave", function(self)
+                    ApplyBackdrop(self, 0.08, 0.09, 0.13, 0.98,
+                        C_DOCK_COLOR_ACCENT[1] * 0.4, C_DOCK_COLOR_ACCENT[2] * 0.4,
+                        C_DOCK_COLOR_ACCENT[3] * 0.4, 0.8)
+                    if GameTooltip then GameTooltip:Hide() end
+                end)
+
+                return SELECT_H
+            end
+
+            local selY = 0
+
+            -- Status Bar Texture
+            selY = selY - MakeSelectRow(selY, "Status Bar Texture",
+                function()
+                    local theme = T:GetModule("Theme", true)
+                    return theme and theme:GetDB().statusBarTexture or "TwichUI-Smooth"
+                end,
+                function(value)
+                    local theme = T:GetModule("Theme", true)
+                    if not theme then return end
+                    theme:Set("statusBarTexture", value)
+                end,
+                function()
+                    if LSM then
+                        local textures = LSM:HashTable("statusbar")
+                        local names = {}
+                        for textureName in pairs(textures) do
+                            names[textureName] = textureName
+                        end
+                        return names
+                    end
+                    return { ["TwichUI-Smooth"] = "TwichUI-Smooth" }
+                end,
+                nil,
+                "Bar texture used across all TwichUI status bars.")
+
+            -- Global Font
+            selY = selY - MakeSelectRow(selY, "Global Font",
+                function()
+                    local theme = T:GetModule("Theme", true)
+                    return (theme and theme:GetDB().globalFont) or "__default"
+                end,
+                function(value)
+                    local theme = T:GetModule("Theme", true)
+                    if not theme then return end
+                    theme:Set("globalFont", value)
+                end,
+                function()
+                    local fonts = {}
+                    if LSM then
+                        for k, v in pairs(LSM:HashTable("font")) do fonts[k] = k end
+                    end
+                    fonts["__default"] = "Default (WoW System Font)"
+                    return fonts
+                end,
+                nil,
+                "Default font used across TwichUI data panels and frames.")
+
+            -- Class Icon Style
+            selY = selY - MakeSelectRow(selY, "Class Icon Style",
+                function()
+                    local theme = T:GetModule("Theme", true)
+                    return (theme and theme:GetDB().classIconStyle) or "default"
+                end,
+                function(value)
+                    local theme = T:GetModule("Theme", true)
+                    if not theme then return end
+                    theme:Set("classIconStyle", value)
+                end,
+                function()
+                    return { default = "Default", fabled = "Fabled", pixel = "Pixel" }
+                end,
+                function(a, b)
+                    local order = { default = 1, fabled = 2, pixel = 3 }
+                    return (order[a] or 99) < (order[b] or 99)
+                end,
+                "Style for class icons in chat, notifications, and tracking frames.")
+
+            -- Resize panel to fit all rows
+            local totalH = (-startY) + (#COLOR_ROWS * ROW_H) + (-selY) + PAD
+            appearancePanel:SetHeight(totalH)
+            -- Newly created frames are shown by default; start hidden so the first toggle opens it.
+            appearancePanel:Hide()
+        end
+
+        if appearancePanel:IsShown() then
+            if appearancePanel._selectMenu and appearancePanel._selectMenu.Hide then
+                appearancePanel._selectMenu:Hide()
+            end
+            appearancePanel:Hide()
+        else
+            appearancePanel:ClearAllPoints()
+            appearancePanel:SetPoint("TOP", hud, "BOTTOM", 0, 0)
+            appearancePanel:SetPoint("RIGHT", hud, "RIGHT", -628 + 104, 0)
+            appearancePanel:Show()
+            appearancePanel:Raise()
+        end
+    end
+
+    -- ── Appearance ───────────────────────────────────────────────────────
+    local appearanceBtn = MakeHudButton("Appearance", 104, -628, ToggleAppearancePanel,
+        { C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1 },
+        { C_DOCK_COLOR_ACCENT[1] * 0.45, C_DOCK_COLOR_ACCENT[2] * 0.45, C_DOCK_COLOR_ACCENT[3] * 0.45, 1 },
+        { C_DOCK_COLOR_ACCENT[1] * 0.22, C_DOCK_COLOR_ACCENT[2] * 0.22, C_DOCK_COLOR_ACCENT[3] * 0.22, 0.98 },
+        { C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3], 0.88 })
+    appearanceBtn._fs:SetTextColor(C_DOCK_COLOR_ACCENT[1], C_DOCK_COLOR_ACCENT[2], C_DOCK_COLOR_ACCENT[3])
+    appearanceBtn:HookScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+            GameTooltip:SetText("Appearance", 1, 0.95, 0.82, 1, true)
+            GameTooltip:AddLine("Quick access to TwichUI's key color settings.", 0.76, 0.80, 0.88, true)
+            GameTooltip:Show()
+        end
+    end)
+    appearanceBtn:HookScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+
+    -- ── Aura Designer ───────────────────────────────────────────────────
+    -- Small popup flyout listing all configurable frame types.
+    local auraFlyout = CreateFrame("Frame", nil, hud, "BackdropTemplate")
+    auraFlyout:SetFrameStrata("TOOLTIP")
+    auraFlyout:SetFrameLevel(600)
+    auraFlyout:SetWidth(160)
+    ApplyBackdrop(auraFlyout, 0.06, 0.07, 0.10, 0.98,
+        C_DOCK_SELECT_ACCENT[1], C_DOCK_SELECT_ACCENT[2], C_DOCK_SELECT_ACCENT[3], 0.55)
+    auraFlyout:Hide()
+    auraFlyout:EnableMouse(true)
+
+    -- previewKey = the SetTestPreviewGroupEnabled key (nil = no test mode for this frame type)
+    local auraFlyoutItems = {
+        { key = "partyMember", label = "Party Auras",  previewKey = "party" },
+        { key = "target",      label = "Target Auras", previewKey = nil },
+        { key = "raidMember",  label = "Raid Auras",   previewKey = "raid" },
+        { key = "tankMember",  label = "Tank Auras",   previewKey = "tank" },
+        { key = "player",      label = "Player Auras", previewKey = nil },
+        { key = "focus",       label = "Focus Auras",  previewKey = nil },
+        { key = "boss",        label = "Boss Auras",   previewKey = nil },
+    }
+    local flyoutItemH     = 24
+    local flyoutPad       = 6
+    auraFlyout:SetHeight(#auraFlyoutItems * flyoutItemH + flyoutPad * 2)
+
+    -- Track which previewKey is currently active so we can turn it off on re-selection.
+    local activeAuraPreviewKey = nil
+
+    local function SetAuraPreview(previewKey, enabled)
+        local uf = T:GetModule("UnitFrames", true)
+        if uf and type(uf.SetTestPreviewGroupEnabled) == "function" then
+            uf:SetTestPreviewGroupEnabled(previewKey, enabled)
+        end
+    end
+
+    local flyoutBtns = {}
+    for i, item in ipairs(auraFlyoutItems) do
+        local fb = CreateFrame("Button", nil, auraFlyout, "BackdropTemplate")
+        fb:SetHeight(flyoutItemH)
+        fb:SetPoint("TOPLEFT", auraFlyout, "TOPLEFT", flyoutPad, -(flyoutPad + (i - 1) * flyoutItemH))
+        fb:SetPoint("TOPRIGHT", auraFlyout, "TOPRIGHT", -flyoutPad, -(flyoutPad + (i - 1) * flyoutItemH))
+        ApplyBackdrop(fb, 0, 0, 0, 0, 0, 0, 0, 0)
+        local ffs = fb:CreateFontString(nil, "OVERLAY")
+        ffs:SetPoint("LEFT", fb, "LEFT", 8, 0)
+        SetFont(ffs, 10)
+        ffs:SetText(item.label)
+        ffs:SetTextColor(0.88, 0.92, 0.98)
+        -- Small indicator dot on the right edge for frames that have test mode
+        local dot
+        if item.previewKey then
+            dot = fb:CreateFontString(nil, "OVERLAY")
+            dot:SetPoint("RIGHT", fb, "RIGHT", -8, 0)
+            SetFont(dot, 8)
+            dot:SetText("●")
+            dot:SetTextColor(0.88, 0.92, 0.98, 0.3)
+        end
+        fb._fs  = ffs
+        fb._dot = dot
+        fb:SetScript("OnEnter", function(self)
+            self:SetBackdropColor(C_DOCK_SELECT_ACCENT[1] * 0.18, C_DOCK_SELECT_ACCENT[2] * 0.18,
+                C_DOCK_SELECT_ACCENT[3] * 0.18, 0.98)
+            self:SetBackdropBorderColor(C_DOCK_SELECT_ACCENT[1], C_DOCK_SELECT_ACCENT[2],
+                C_DOCK_SELECT_ACCENT[3], 0.55)
+            self._fs:SetTextColor(1, 1, 1)
+            if item.previewKey and GameTooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+                GameTooltip:SetText(item.label, 1, 0.95, 0.82, 1, true)
+                GameTooltip:AddLine("Test mode will activate automatically for these frames.",
+                    0.76, 0.80, 0.88, true)
+                GameTooltip:Show()
+            end
+        end)
+        fb:SetScript("OnLeave", function(self)
+            if activeAuraPreviewKey == item.previewKey and item.previewKey then
+                -- keep highlighted
+                self:SetBackdropColor(C_DOCK_SELECT_ACCENT[1] * 0.12, C_DOCK_SELECT_ACCENT[2] * 0.12,
+                    C_DOCK_SELECT_ACCENT[3] * 0.12, 0.98)
+                self:SetBackdropBorderColor(C_DOCK_SELECT_ACCENT[1], C_DOCK_SELECT_ACCENT[2],
+                    C_DOCK_SELECT_ACCENT[3], 0.4)
+            else
+                ApplyBackdrop(self, 0, 0, 0, 0, 0, 0, 0, 0)
+                self._fs:SetTextColor(0.88, 0.92, 0.98)
+            end
+            if GameTooltip then GameTooltip:Hide() end
+        end)
+        fb:SetScript("OnClick", function(self)
+            auraFlyout:Hide()
+            -- Disable previous test preview
+            if activeAuraPreviewKey and activeAuraPreviewKey ~= item.previewKey then
+                SetAuraPreview(activeAuraPreviewKey, false)
+                activeAuraPreviewKey = nil
+            end
+            -- Enable new test preview if this frame type supports it
+            if item.previewKey then
+                if activeAuraPreviewKey == item.previewKey then
+                    -- Already active — toggle off
+                    SetAuraPreview(item.previewKey, false)
+                    activeAuraPreviewKey = nil
+                else
+                    SetAuraPreview(item.previewKey, true)
+                    activeAuraPreviewKey = item.previewKey
+                end
+            else
+                activeAuraPreviewKey = nil
+            end
+            -- Open the AW designer
+            local uf = T:GetModule("UnitFrames", true)
+            if uf and type(uf.AWOpenDesigner) == "function" then
+                uf:AWOpenDesigner(item.key)
+            end
+        end)
+        flyoutBtns[i] = fb
+    end
+    -- When the AW designer is closed externally, also clear the active preview.
+    hud._clearAuraPreview = function()
+        if activeAuraPreviewKey then
+            SetAuraPreview(activeAuraPreviewKey, false)
+            activeAuraPreviewKey = nil
+        end
+    end
+    hud._auraFlyout = auraFlyout
+
+    local auraBtn = MakeHudButton("Aura Designer", 130, -762, function()
+            if auraFlyout:IsShown() then
+                auraFlyout:Hide()
+            else
+                auraFlyout:ClearAllPoints()
+                auraFlyout:SetPoint("TOP", hud, "BOTTOM", 0, 0)
+                auraFlyout:SetPoint("RIGHT", hud, "RIGHT", -762 + 130, 0)
+                auraFlyout:Show()
+                auraFlyout:Raise()
+            end
+        end,
+        { C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1 },
+        { C_DOCK_SELECT_ACCENT[1] * 0.45, C_DOCK_SELECT_ACCENT[2] * 0.45, C_DOCK_SELECT_ACCENT[3] * 0.45, 1 },
+        { C_DOCK_SELECT_ACCENT[1] * 0.18, C_DOCK_SELECT_ACCENT[2] * 0.18, C_DOCK_SELECT_ACCENT[3] * 0.18, 0.98 },
+        { C_DOCK_SELECT_ACCENT[1], C_DOCK_SELECT_ACCENT[2], C_DOCK_SELECT_ACCENT[3], 0.88 })
+    auraBtn._fs:SetTextColor(C_DOCK_SELECT_ACCENT[1], C_DOCK_SELECT_ACCENT[2], C_DOCK_SELECT_ACCENT[3])
+    auraBtn:HookScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+            GameTooltip:SetText("Aura Designer", 1, 0.95, 0.82, 1, true)
+            GameTooltip:AddLine(
+                "Open the Aura Watcher Designer to configure visual indicators\nfor auras on any unit frame type.",
+                0.76, 0.80, 0.88, true)
+            GameTooltip:Show()
+        end
+    end)
+    auraBtn:HookScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+    hud._auraBtn = auraBtn
+
+    -- ── Settings (opens full configuration panel) ────────────────────────
+    local settingsBtn = MakeHudButton("Settings", 80, -904, function()
+            local cfg = T:GetModule("Configuration", true)
+            if cfg and type(cfg.ToggleOptionsUI) == "function" then
+                cfg:ToggleOptionsUI()
+            elseif cfg and type(cfg.OpenOptionsUI) == "function" then
+                cfg:OpenOptionsUI()
+            end
+        end,
+        { C_BTN_BG[1], C_BTN_BG[2], C_BTN_BG[3], 1 },
+        { C_BTN_BD[1], C_BTN_BD[2], C_BTN_BD[3], 1 },
+        { C_ACCENT[1] * 0.18, C_ACCENT[2] * 0.18, C_ACCENT[3] * 0.18, 0.98 },
+        { C_ACCENT[1], C_ACCENT[2], C_ACCENT[3], 0.88 })
+    settingsBtn:HookScript("OnEnter", function(self)
+        if GameTooltip then
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
+            GameTooltip:SetText("Settings", 1, 0.95, 0.82, 1, true)
+            GameTooltip:AddLine("Open the full TwichUI configuration panel.", 0.76, 0.80, 0.88, true)
+            GameTooltip:Show()
+        end
+    end)
+    settingsBtn:HookScript("OnLeave", function()
+        if GameTooltip then GameTooltip:Hide() end
+    end)
+
+    -- Close open popups when clicking anywhere on the overlay
+    ov:HookScript("OnMouseDown", function()
+        if hud._auraFlyout and hud._auraFlyout:IsShown() then
+            hud._auraFlyout:Hide()
+        end
+        if appearancePanel and appearancePanel:IsShown() then
+            appearancePanel:Hide()
+        end
+    end)
+
     local addPanelBtn = MakeHudButton("Add Data Panel", 124, -498, function()
             local datatexts = T:GetModule("Datatexts", true)
+
             if not datatexts or type(datatexts.CreateCenteredDesignerPanel) ~= "function" then
                 return
             end
@@ -3093,6 +3833,11 @@ function MoverModule:Deactivate()
     local unitFrames = T:GetModule("UnitFrames", true)
     if unitFrames and type(unitFrames.ClearDesignerPreviewModes) == "function" then
         unitFrames:ClearDesignerPreviewModes()
+    end
+
+    -- Clear any lingering aura preview state tracked by the HUD flyout
+    if self._hud and type(self._hud._clearAuraPreview) == "function" then
+        self._hud._clearAuraPreview()
     end
 
     -- Hide all handles
