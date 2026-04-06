@@ -1064,7 +1064,7 @@ RefreshSlots = function()
                 icons    = "Icon Cluster",
                 border   = "Border Highlight",
                 overlay  = "Color Overlay",
-                particle = "Particle Accent",
+                particle = "Particle Effects",
             }
             card.typeBadge:SetText(typeLabels[cfg.type or "icons"] or cfg.type or "")
             card.anchorBadge:SetText(ANCHOR_SHORT[cfg.anchor or "TOPLEFT"] or "?")
@@ -1506,7 +1506,7 @@ RefreshDetailPanel = function()
     local LAYER_TAB_W = 110
     local tabRowY     = -PAD - 20 - 6 - nameExtraH -- just below title / label
     local tabX        = PAD
-    local typeLabels  = { icons = "Icon Cluster", border = "Border", overlay = "Overlay", particle = "Particle" }
+    local typeLabels  = { icons = "Icon Cluster", border = "Border", overlay = "Overlay", particle = "Particles" }
 
     local function LayerTabLabel(layerIdx)
         local lcfg
@@ -1858,7 +1858,7 @@ RefreshDetailPanel = function()
         { key = "icons",    label = "Icon Cluster" },
         { key = "border",   label = "Border Highlight" },
         { key = "overlay",  label = "Color Overlay" },
-        { key = "particle", label = "Particle Accent" },
+        { key = "particle", label = "Particle Effects" },
     }
     DetailLabel(detailPanel, "Indicator Type", col1X, row)
     local typeDD = DetailDropdown(detailPanel, typeItems, cfg.type or "icons", col1X, row - 14, 148, function(k)
@@ -1866,7 +1866,7 @@ RefreshDetailPanel = function()
         RefreshDetailPanel()
     end)
     AddTooltip(typeDD, "Indicator Type",
-        "Icon Cluster: shows aura icons.\nBorder Highlight: glows the frame border.\nColor Overlay: tints the entire frame.\nParticle Accent: uses existing castbar/powerbar fantasy particles with an accent stripe.")
+        "Icon Cluster: shows aura icons.\nBorder Highlight: glows the frame border.\nColor Overlay: tints the entire frame.\nParticle Effects: plays fantasy particle effects from the same library used by castbars and power bars.")
 
     -- Only Mine only makes sense on the primary layer (shares aura condition with slot)
     if selectedLayer == 1 then
@@ -2129,38 +2129,34 @@ RefreshDetailPanel = function()
             end)
         end
     elseif (cfg.type or "icons") == "particle" then
+        -- Keys and labels match CASTBAR_FANTASY_THEME_VALUES exactly.
         local particleThemeItems = {
-            { key = "holy",            label = "Holy" },
-            { key = "moon",            label = "Moon" },
-            { key = "nature",          label = "Nature" },
-            { key = "water",           label = "Water" },
-            { key = "fire",            label = "Fire" },
-            { key = "frost",           label = "Frost" },
-            { key = "arctic",          label = "Arctic" },
-            { key = "earth",           label = "Earth" },
-            { key = "arcane",          label = "Arcane" },
-            { key = "void",            label = "Void" },
-            { key = "shadow",          label = "Shadow" },
-            { key = "thunder",         label = "Thunder" },
-            { key = "felfire",         label = "Fel Fire" },
-            { key = "mistweaver",      label = "Mistweaver" },
-            { key = "mossystone",      label = "Mossystone" },
-            { key = "mossystone_icon", label = "Mossystone Icon" },
-            { key = "aim",             label = "Hunt" },
-            { key = "alliance",        label = "Alliance Sparkle" },
-            { key = "bronze",          label = "Bronze Sparkle" },
-            { key = "chaos",           label = "Chaos Gas" },
-            { key = "chiji",           label = "Chi-Ji" },
-            { key = "fishing",         label = "Fishing" },
-            { key = "fists",           label = "Fists" },
-            { key = "frostfire",       label = "Frostfire" },
-            { key = "herbalism",       label = "Herbalism" },
-            { key = "horde",           label = "Horde Sparkle" },
-            { key = "lumber",          label = "Lumber" },
-            { key = "mining",          label = "Mining" },
-            { key = "neutral",         label = "Neutral Sparkle" },
-            { key = "sacred",          label = "Sacred" },
-            { key = "arcaneum",        label = "Arcaneum" },
+            { key = "holy",       label = "Holy" },
+            { key = "sacred",     label = "Holy 2" },
+            { key = "moon",       label = "Lunar" },
+            { key = "arcane",     label = "Arcane" },
+            { key = "shadow",     label = "Shadow" },
+            { key = "void",       label = "Void" },
+            { key = "fire",       label = "Fire" },
+            { key = "felfire",    label = "Green Fire" },
+            { key = "frostfire",  label = "Purple Glow" },
+            { key = "arctic",     label = "Frost" },
+            { key = "earth",      label = "Earth" },
+            { key = "chiji",      label = "Soft Leaves" },
+            { key = "herbalism",  label = "Leaves" },
+            { key = "fists",      label = "Green & Blue Leaves" },
+            { key = "mistweaver", label = "Green Mist" },
+            { key = "mossystone", label = "Celestial Green" },
+            { key = "fishing",    label = "Water" },
+            { key = "neutral",    label = "Sparkle" },
+            { key = "alliance",   label = "Blue Sparkle" },
+            { key = "thunder",    label = "Blue Sparkle (Thunder)" },
+            { key = "bronze",     label = "Gold Sparkle" },
+            { key = "horde",      label = "Red Sparkle" },
+            { key = "lumber",     label = "Wood" },
+            { key = "mining",     label = "Rock" },
+            { key = "chaos",      label = "Green Gas" },
+            { key = "aim",        label = "Hunt" },
         }
 
         DetailLabel(detailPanel, "Particle Theme", col1X, row)
@@ -2181,26 +2177,12 @@ RefreshDetailPanel = function()
             end)
         row = row - 40
 
-        DetailSlider(detailPanel, "Accent Width", cfg.accentWidth or 2, 1, 10, 1,
-            col1X, row, 130, function(v)
-                EnsureLayerWritable().accentWidth = v
-                DeferredFlush()
-            end)
         DetailSlider(detailPanel, "Frame Inset", cfg.particleInset or 0, -20, 24, 1,
-            col1X + 148, row, 120, function(v)
+            col1X, row, 130, function(v)
                 EnsureLayerWritable().particleInset = v
                 DeferredFlush()
             end)
         row = row - 40
-
-        DetailLabel(detailPanel, "Accent Color", col1X, row)
-        DetailColorRow(col1X, row - 16, cfg.particleColor or cfg.borderColor, function(r, g, b, a)
-            local layer = EnsureLayerWritable()
-            layer.particleColor = { r, g, b, a or 1 }
-            layer.accentAlpha = a or 1
-            DeferredFlush()
-        end, { hasAlpha = true })
-        row = row - 44
     elseif (cfg.type or "icons") == "overlay" then
         -- Overlay Color
         DetailLabel(detailPanel, "Overlay Color", col1X, row)

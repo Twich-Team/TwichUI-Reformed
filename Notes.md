@@ -2,6 +2,8 @@
 
 - Enhanced search: Can we refactor our configuration UI search function to intelligently search the entire configuration for the keyword instead of just the section title. For example, If i were to search for "power" it might offer me power bar options for player, target, etc. It should clearly group the search results so the player understands what that configuration is for. For example, they should be able to tell that when they searched for power, the first result was for player power, not target power.
 
+- The castbar spell designer seems to work well, however its not very obvious how to use it to a random player. please do a pass on it to make it more obvious what to do, add tooltips, coloring, directions, simplification, etc to make it easy to use.
+
 ## Wizard
 
 - Test wizard process
@@ -28,6 +30,9 @@
 
 ## Interface Designer
 
+- The "Appearance" button that is at the top of the interface designer dock, i'd prefer that to be at the top of the interface designer, the header that has add data panel and other features.
+- In the interface designer, we need a way to access the aura designer for party, target, raid, and tank frames.
+
 ## Quality of Life
 
 - Automatically vendor grays (and eventually smarter logic to vendor low ilvl, etc.)
@@ -48,6 +53,7 @@
 ### MVP
 
 - Minimap
+- World map
 - Quest Tracker skinning (more horizon styled) (Mythic+ Timer will be integrated into this
 - Nameplates
 - Blizzard skinning

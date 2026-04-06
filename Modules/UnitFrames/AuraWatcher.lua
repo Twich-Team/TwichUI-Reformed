@@ -1062,7 +1062,7 @@ local function UpdateColorOverlayIndicator(frame, idx, cfg, isActive)
 end
 
 -- ============================================================
--- Particle accent rendering
+-- Particle rendering
 -- ============================================================
 
 local function EnsureParticleAccent(frame, idx)
@@ -1080,36 +1080,19 @@ local function EnsureParticleAccent(frame, idx)
         holder:EnableMouse(false)
         holder:Hide()
 
-        local accent = holder:CreateTexture(nil, "OVERLAY", nil, 1)
-        accent:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
-        accent:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, 0)
-        accent:SetColorTexture(0.2, 0.82, 1.0, 0.95)
-        accent:SetWidth(2)
-        accent:Hide()
-
         -- Reuses UnitFrames power-bar fantasy particle system so AuraWatcher
         -- visuals match castbar/powerbar particle families and texture sets.
-        local particleState = {
-            frame  = holder,
-            accent = accent,
-        }
-        state.particleAccents[idx] = particleState
+        state.particleAccents[idx] = { frame = holder }
     end
     return state.particleAccents[idx]
 end
 
 local function ResetParticleAccent(state)
-    if not state then
-        return
-    end
+    if not state then return end
 
     if state.frame and UnitFrames.ResetPowerBarFx then
         state.frame._powerFxEnabled = false
         UnitFrames:ResetPowerBarFx(state.frame)
-    end
-
-    if state.accent then
-        state.accent:Hide()
     end
 
     if state.frame then
@@ -1124,12 +1107,7 @@ local function UpdateParticleAccentIndicator(frame, idx, cfg, isActive)
         return
     end
 
-    local inset = Clamp(tonumber(cfg.particleInset) or 0, -20, 24)
-    local accentWidth = Clamp(tonumber(cfg.accentWidth) or 2, 1, 12)
-    local color = type(cfg.particleColor) == "table" and cfg.particleColor
-        or type(cfg.borderColor) == "table" and cfg.borderColor
-        or { 0.2, 0.82, 1.0, 1 }
-    local accentAlpha = Clamp((tonumber(cfg.accentAlpha) or color[4] or 0.95), 0.05, 1)
+    local inset         = Clamp(tonumber(cfg.particleInset) or 0, -20, 24)
     local particleTheme = cfg.particleTheme or cfg.fantasyTheme or "holy"
     local particleScale = Clamp(tonumber(cfg.particleEffectScale) or tonumber(cfg.fantasyEffectScale) or 1, 0.5, 3)
 
@@ -1137,19 +1115,12 @@ local function UpdateParticleAccentIndicator(frame, idx, cfg, isActive)
     state.frame:SetPoint("TOPLEFT", frame, "TOPLEFT", -inset, inset)
     state.frame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", inset, -inset)
 
-    state.accent:ClearAllPoints()
-    state.accent:SetPoint("TOPLEFT", state.frame, "TOPLEFT", 0, 0)
-    state.accent:SetPoint("BOTTOMLEFT", state.frame, "BOTTOMLEFT", 0, 0)
-    state.accent:SetWidth(accentWidth)
-    state.accent:SetColorTexture(color[1], color[2], color[3], accentAlpha)
-    state.accent:Show()
-
     if UnitFrames.EnsurePowerBarFx and UnitFrames.SyncPowerBarFx then
         state.frame._powerFxEnabled = true
         state.frame._powerFxTheme   = particleTheme
         state.frame._powerFxScale   = particleScale
         -- EnsurePowerBarFx (called inside SyncPowerBarFx) clears SetClipsChildren.
-        -- We re-apply it after so particles are kept within holder's bounds.
+        -- Re-apply it so particles stay within holder's bounds.
         UnitFrames:SyncPowerBarFx(state.frame, false)
         state.frame:SetClipsChildren(true)
     end
