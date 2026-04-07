@@ -4774,7 +4774,7 @@ function UnitFrames:ApplyAuraSettings(frame, unitKey)
         if aura.barMode == true and frame.AuraBars and frame.AuraBars:IsShown() then
             UnitFrames:RefreshAuraBarsForFrame(frame, capturedUK)
         end
-        UnitFrames:AWUpdate(frame)
+        UnitFrames:AWRequestUpdate(frame)
     end
 
     -- Configure custom aura watcher indicators for this frame/scope.

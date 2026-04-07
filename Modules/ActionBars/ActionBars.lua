@@ -2397,6 +2397,7 @@ function ActionBars:ClearButtonGlow(button)
     self:HidePixelGlow(button)
     self:HideProcGlow(button)
     self:HideNativeOverlayGlow(button)
+    button.__twichuiABGlowStyle = "none"
 end
 
 function ActionBars:ClearAllButtonGlows()
@@ -3376,26 +3377,36 @@ function ActionBars:UpdateButtonGlow(button)
 
     local style = self:GetGlowStyle()
     local active = self:IsButtonGlowActive(button)
+    local desiredStyle = active and style or "none"
+    local currentStyle = button.__twichuiABGlowStyle or "none"
+
+    if desiredStyle == currentStyle then
+        if desiredStyle == "pixel" then
+            self:UpdatePixelGlowLayout(button)
+        elseif desiredStyle == "proc" then
+            self:UpdateProcGlowLayout(button)
+        elseif desiredStyle == "button" then
+            local red, green, blue = self:GetGlowColor()
+            self:TintOverlayGlow(button, red, green, blue)
+        end
+        return
+    end
 
     self:ClearButtonGlow(button)
 
-    if style == "pixel" then
-        if active then
-            self:ShowPixelGlow(button)
-        end
-    elseif style == "proc" then
-        if active then
-            self:ShowProcGlow(button)
-        end
-    elseif style == "button" then
-        if active then
-            self:ShowActionButtonGlow(button)
-        end
-    elseif style == "blizzard" then
+    if desiredStyle == "pixel" then
+        self:ShowPixelGlow(button)
+    elseif desiredStyle == "proc" then
+        self:ShowProcGlow(button)
+    elseif desiredStyle == "button" then
+        self:ShowActionButtonGlow(button)
+    elseif desiredStyle == "blizzard" then
         if ActionButton_ShowOverlayGlow and ActionButton_HideOverlayGlow then
-            pcall(active and ActionButton_ShowOverlayGlow or ActionButton_HideOverlayGlow, button)
+            pcall(ActionButton_ShowOverlayGlow, button)
         end
     end
+
+    button.__twichuiABGlowStyle = desiredStyle
 end
 
 function ActionBars:UpdateAllButtonGlows()
@@ -3408,6 +3419,9 @@ end
 
 function ActionBars:SPELL_ACTIVATION_OVERLAY_GLOW_SHOW(_, spellID)
     if spellID then
+        if self.activeAlertSpells[spellID] == true then
+            return
+        end
         self.activeAlertSpells[spellID] = true
     end
     self:UpdateAllButtonGlows()
@@ -3415,6 +3429,9 @@ end
 
 function ActionBars:SPELL_ACTIVATION_OVERLAY_GLOW_HIDE(_, spellID)
     if spellID then
+        if self.activeAlertSpells[spellID] ~= true then
+            return
+        end
         self.activeAlertSpells[spellID] = nil
     end
     self:UpdateAllButtonGlows()

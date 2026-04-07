@@ -14,6 +14,9 @@ local QOL = T:GetModule("QualityOfLife")
 ---@field refreshQueued boolean|nil
 local Teleports = QOL:NewModule("Teleports", "AceEvent-3.0")
 
+local LegacyIsPlayerSpell = rawget(_G, "IsPlayerSpell")
+local LegacyIsSpellKnown = rawget(_G, "IsSpellKnown")
+
 local PLAYER_CLASS = select(2, UnitClass("player"))
 local PLAYER_RACE = select(2, UnitRace("player"))
 local PLAYER_FACTION = UnitFactionGroup("player")
@@ -25,7 +28,7 @@ local CURRENT_SEASON_DUNGEONS = {
     { spellID = 1254563, name = "Nexus-Point Xenas" },
     { spellID = 1254555, name = "Pit of Saron" },
     { spellID = 1254551, name = "Seat of the Triumvirate" },
-    { spellID = 1254557, name = "Skyreach" },
+    { spellID = 159898,  name = "Skyreach", altSpellID = 1254557 }, -- 159898 = WoD original; 1254557 = S2 TWW variant
     { spellID = 1254400, name = "Windrunner Spire" },
 }
 
@@ -160,6 +163,18 @@ local function IsSpellKnownSafe(spellID)
         return true
     end
 
+    if C_SpellBook and type(C_SpellBook.IsSpellKnown) == "function" and C_SpellBook.IsSpellKnown(spellID) then
+        return true
+    end
+
+    if type(LegacyIsPlayerSpell) == "function" and LegacyIsPlayerSpell(spellID) then
+        return true
+    end
+
+    if type(LegacyIsSpellKnown) == "function" and LegacyIsSpellKnown(spellID) then
+        return true
+    end
+
     if C_SpellBook and C_SpellBook.IsSpellInSpellBook then
         return C_SpellBook.IsSpellInSpellBook(spellID)
     end
@@ -204,34 +219,34 @@ local function GetEntryCooldown(entry)
         return 0
     end
 
-    local startTime, duration, isEnabled
-
-    if entry.spellID and C_Spell and C_Spell.GetSpellCooldown then
-        local info = C_Spell.GetSpellCooldown(entry.spellID)
-        if info then
-            startTime = info.startTime
-            duration = info.duration
-            isEnabled = info.isEnabled
-        end
-    elseif entry.itemID and C_Item and C_Item.GetItemCooldown then
-        startTime, duration, isEnabled = C_Item.GetItemCooldown(entry.itemID)
-    end
-
-    if not duration or duration <= 1.5 or isEnabled == false then
-        return 0
-    end
-
-    -- startTime from C_Spell.GetSpellCooldown is a "secret" value that carries Blizzard
-    -- taint.  Comparing it directly (e.g. startTime <= 0) propagates the taint into our
-    -- addon and causes a Lua error.  Use pcall for both the guard check and the remaining-
-    -- time calculation so that if the value is tainted the operation silently returns 0
-    -- rather than erroring and halting the frame render.
+    -- All values from C_Spell.GetSpellCooldown (startTime, duration) are "secret"
+    -- tainted values.  Any comparison against them must be inside a pcall or the
+    -- taint propagates into our addon and raises a Lua error.
     local ok, remaining = pcall(function()
+        local startTime, duration, isEnabled
+
+        if entry.spellID and C_Spell and C_Spell.GetSpellCooldown then
+            local info = C_Spell.GetSpellCooldown(entry.spellID)
+            if info then
+                startTime = info.startTime
+                duration = info.duration
+                isEnabled = info.isEnabled
+            end
+        elseif entry.itemID and C_Item and C_Item.GetItemCooldown then
+            startTime, duration, isEnabled = C_Item.GetItemCooldown(entry.itemID)
+        end
+
+        if not duration or duration <= 1.5 or isEnabled == false then
+            return 0
+        end
+
         if not startTime or startTime <= 0 then
             return 0
         end
+
         return math.max(0, (startTime + duration) - GetTime())
     end)
+
     if not ok then
         return 0
     end
@@ -654,12 +669,19 @@ local function EnsureRow(frame, index)
 end
 
 NormalizeSpellEntry = function(entry)
+    -- Prefer the primary spellID; fall back to altSpellID if the primary is unknown
+    local spellID = entry.spellID
+    local known = IsSpellKnownSafe(spellID)
+    if not known and entry.altSpellID and IsSpellKnownSafe(entry.altSpellID) then
+        spellID = entry.altSpellID
+        known = true
+    end
     return {
-        label = entry.name or GetSpellName(entry.spellID, entry.name),
-        icon = GetSpellIcon(entry.spellID),
-        spellID = entry.spellID,
-        known = IsSpellKnownSafe(entry.spellID),
-        uid = "spell:" .. tostring(entry.spellID),
+        label = entry.name or GetSpellName(spellID, entry.name),
+        icon = GetSpellIcon(spellID),
+        spellID = spellID,
+        known = known,
+        uid = "spell:" .. tostring(entry.spellID), -- always key by primary ID to avoid duplicates
     }
 end
 

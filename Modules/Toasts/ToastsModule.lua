@@ -926,6 +926,55 @@ function TM:SendDailyResetNotification()
     })
 end
 
+local function ResolveGroupFinderActivityAndTeleport(searchResultInfo, listingName)
+    local candidates = {}
+    local seen = {}
+
+    local function AddCandidate(name)
+        name = TrimText(name)
+        if name == "" or seen[name] then
+            return
+        end
+
+        seen[name] = true
+        candidates[#candidates + 1] = name
+    end
+
+    local activityIDs = searchResultInfo.activityIDs
+    if type(activityIDs) == "table" then
+        for _, activityID in ipairs(activityIDs) do
+            AddCandidate(GetGroupFinderActivityName(activityID))
+        end
+    end
+
+    local legacyActivityID = rawget(searchResultInfo, "activityID")
+    if type(legacyActivityID) == "number" then
+        AddCandidate(GetGroupFinderActivityName(legacyActivityID))
+    end
+
+    AddCandidate(listingName)
+
+    local fallbackName = candidates[1]
+    local bestName, bestTeleport = nil, nil
+    for _, candidate in ipairs(candidates) do
+        local teleportInfo = BuildGroupFinderTeleportInfo(candidate, listingName)
+        if teleportInfo and teleportInfo.known then
+            return candidate, teleportInfo
+        end
+
+        if not bestTeleport and teleportInfo then
+            bestName = candidate
+            bestTeleport = teleportInfo
+        end
+    end
+
+    if bestName then
+        return bestName, bestTeleport
+    end
+
+    return fallbackName, nil
+end
+
 function TM:BuildGroupFinderNotificationInfo(searchResultID)
     if type(searchResultID) ~= "number" or searchResultID <= 0 or not C_LFGList or type(C_LFGList.GetSearchResultInfo) ~= "function" then
         return nil
@@ -936,23 +985,8 @@ function TM:BuildGroupFinderNotificationInfo(searchResultID)
         return nil
     end
 
-    local activityName = nil
-    local activityIDs = searchResultInfo.activityIDs
-    if type(activityIDs) == "table" then
-        for _, activityID in ipairs(activityIDs) do
-            activityName = GetGroupFinderActivityName(activityID)
-            if activityName then
-                break
-            end
-        end
-    end
-
-    local legacyActivityID = rawget(searchResultInfo, "activityID")
-    if not activityName and type(legacyActivityID) == "number" then
-        activityName = GetGroupFinderActivityName(legacyActivityID)
-    end
-
     local listingName = TrimText(searchResultInfo.name)
+    local activityName, teleportInfo = ResolveGroupFinderActivityAndTeleport(searchResultInfo, listingName)
     if not activityName or activityName == "" then
         activityName = listingName ~= "" and listingName or "Unknown Activity"
     end
@@ -961,7 +995,7 @@ function TM:BuildGroupFinderNotificationInfo(searchResultID)
         searchResultID = searchResultID,
         activityName = activityName,
         listingName = listingName,
-        teleportInfo = BuildGroupFinderTeleportInfo(activityName, listingName),
+        teleportInfo = teleportInfo,
     }
 end
 

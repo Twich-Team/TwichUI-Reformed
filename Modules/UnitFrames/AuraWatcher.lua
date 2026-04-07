@@ -27,6 +27,7 @@ if not UnitFrames then return end
 -- ============================================================
 local CreateFrame            = _G.CreateFrame
 local GetTime                = _G.GetTime
+local C_Timer                = _G.C_Timer
 local C_UnitAuras            = _G.C_UnitAuras
 local setmetatable           = _G.setmetatable
 local math_max               = math.max
@@ -38,6 +39,7 @@ local Clamp                  = _G.Clamp or function(v, lo, hi) return math.max(l
 local MAX_INDICATORS         = 6   -- indicator slots per frame
 local MAX_ICONS              = 12  -- icon slots per indicator
 local TIMER_RATE             = 0.1 -- icon timer update frequency (seconds)
+local BORDER_ANIM_RATE       = 0.033 -- throttle border animation updates (~30 FPS)
 local FILTER_HELPFUL         = { "HELPFUL" }
 local FILTER_HARMFUL         = { "HARMFUL" }
 local FILTER_BOTH            = { "HELPFUL", "HARMFUL" }
@@ -946,6 +948,13 @@ local function UpdateBorderIndicator(frame, idx, cfg, isActive)
     if not border._onUpdateSet then
         border._onUpdateSet = true
         border:SetScript("OnUpdate", function(self2, elapsed)
+            self2._animElapsed = (self2._animElapsed or 0) + (elapsed or 0)
+            if self2._animElapsed < BORDER_ANIM_RATE then
+                return
+            end
+            elapsed = self2._animElapsed
+            self2._animElapsed = 0
+
             local at = self2._animType
             local sp = self2._animSpeed or 1.0
             local bc = self2._borderColor or { 1, 0.5, 0, 1 }
@@ -1155,7 +1164,41 @@ function UnitFrames:AWConfigure(frame, unitKey)
     if not frame._awState then return end
     frame._awState.unitKey = unitKey
     awFrameRegistry[frame] = true
-    self:AWUpdate(frame)
+    self:AWRequestUpdate(frame, true)
+end
+
+--- Request an aura watcher update. By default we coalesce updates to one pass per
+--- frame to avoid raid-time UNIT_AURA storm spikes.
+function UnitFrames:AWRequestUpdate(frame, immediate)
+    if not frame or not frame._awState then
+        return
+    end
+
+    local state = frame._awState
+    if immediate == true then
+        state._awUpdatePending = nil
+        self:AWUpdate(frame)
+        return
+    end
+
+    if state._awUpdatePending == true then
+        return
+    end
+    state._awUpdatePending = true
+
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, function()
+            if not frame or not frame._awState then
+                return
+            end
+
+            frame._awState._awUpdatePending = nil
+            UnitFrames:AWUpdate(frame)
+        end)
+    else
+        state._awUpdatePending = nil
+        self:AWUpdate(frame)
+    end
 end
 
 --- Force-update all registered frames — called after designer config changes.
