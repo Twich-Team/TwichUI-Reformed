@@ -1282,9 +1282,11 @@ function UI:_BuildLayoutContent(sf)
         card:SetScript("OnMouseUp", function()
             self.selectedLayout = layoutId
             self:_RefreshLayoutCards()
-            -- Apply layout live so user can see preview
+            -- Apply layout live so user can see preview.
+            -- Never apply chat during preview; it can overwrite player tweaks
+            -- before final wizard confirmation.
             SetupWizardModule:ApplyLayout(layoutId, {
-                applyChat = self.applyChatSetup ~= false,
+                applyChat = false,
             })
             ReseedPreview() -- re-set preview flags wiped by config snapshot
             if self.selectedTheme then
@@ -1313,7 +1315,7 @@ function UI:_BuildLayoutContent(sf)
     -- always reflect the selected layout before later wizard steps.
     if self.selectedLayout and SetupWizardModule:GetLayout(self.selectedLayout) then
         SetupWizardModule:ApplyLayout(self.selectedLayout, {
-            applyChat = self.applyChatSetup ~= false,
+            applyChat = false,
         })
         ReseedPreview() -- re-set preview flags wiped by config snapshot
         if self.selectedTheme then

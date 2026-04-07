@@ -7608,6 +7608,28 @@ local function CreateGlowContainer(frame, frameLevel)
     return glowContainer
 end
 
+local function StripFrameSettingsHintFromTooltip()
+    if not GameTooltip or type(GameTooltip.NumLines) ~= "function" then
+        return
+    end
+
+    local lineCount = GameTooltip:NumLines() or 0
+    for index = 1, lineCount do
+        local left = _G["GameTooltipTextLeft" .. index]
+        local right = _G["GameTooltipTextRight" .. index]
+        local text = left and left.GetText and left:GetText() or nil
+        if type(text) == "string" and text ~= "" then
+            local normalized = text:lower():gsub("-", " "):gsub("<", ""):gsub(">", "")
+            if normalized:find("right click for frame settings", 1, true) then
+                left:SetText("")
+                if right and right.SetText then
+                    right:SetText("")
+                end
+            end
+        end
+    end
+end
+
 local function IsHostileUnitForHighlight(unit)
     if not unit or unit == "" or not UnitExists(unit) then
         return false
@@ -13666,10 +13688,33 @@ function UnitFrames:StyleFrame(frame)
     frame:SetScript("OnEnter", function(self2)
         self2.isHovering = true
         UnitFrames:UpdateUnitHighlights(self2)
+
+        if UnitFrame_OnEnter then
+            pcall(UnitFrame_OnEnter, self2)
+            StripFrameSettingsHintFromTooltip()
+            return
+        end
+
+        local unit = self2.unit or (self2.GetAttribute and self2:GetAttribute("unit"))
+        if unit and UnitExists(unit) and GameTooltip then
+            GameTooltip:SetOwner(self2, "ANCHOR_RIGHT")
+            GameTooltip:SetUnit(unit)
+            StripFrameSettingsHintFromTooltip()
+            GameTooltip:Show()
+        end
     end)
     frame:SetScript("OnLeave", function(self2)
         self2.isHovering = false
         UnitFrames:UpdateUnitHighlights(self2)
+
+        if UnitFrame_OnLeave then
+            pcall(UnitFrame_OnLeave, self2)
+            return
+        end
+
+        if GameTooltip then
+            GameTooltip:Hide()
+        end
     end)
 
     self:ApplyFrameFonts(frame, unitKey)

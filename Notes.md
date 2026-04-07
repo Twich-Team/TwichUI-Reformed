@@ -1,3 +1,8 @@
+#
+
+- Leave vehicle
+- The text "Right click for frame settings" is still on the tooltip. Get rid of the tooltip text for the unit frames. keep the right click functionality
+
 ## Configuration
 
 - Enhanced search: Can we refactor our configuration UI search function to intelligently search the entire configuration for the keyword instead of just the section title. For example, If i were to search for "power" it might offer me power bar options for player, target, etc. It should clearly group the search results so the player understands what that configuration is for. For example, they should be able to tell that when they searched for power, the first result was for player power, not target power.

@@ -36,6 +36,9 @@ local NUM_PET_ACTION_SLOTS = _G.NUM_PET_ACTION_SLOTS or 10
 local NUM_STANCE_SLOTS = _G.NUM_STANCE_SLOTS or 10
 local C_Timer = _G.C_Timer
 local GetTime = _G.GetTime
+local CanExitVehicle = _G.CanExitVehicle
+local UnitHasVehicleUI = _G.UnitHasVehicleUI
+local UnitOnTaxi = _G.UnitOnTaxi
 local LibStub = _G.LibStub
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
 local ActionButton_ShowGrid = _G.ActionButton_ShowGrid
@@ -378,6 +381,62 @@ local function FormatFramePoint(frame)
         SafeDebugString(relativePoint),
         tonumber(xOffset) or 0,
         tonumber(yOffset) or 0)
+end
+
+local function EnsureVehicleExitButtonAnchored(button, holder)
+    if not button or not holder then
+        return
+    end
+
+    local function SyncVehicleExitVisibility()
+        local holderShown = holder and holder.IsShown and holder:IsShown() or false
+        local canExit = (type(CanExitVehicle) == "function" and CanExitVehicle() == true)
+            or (type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") == true)
+            or (type(UnitOnTaxi) == "function" and UnitOnTaxi("player") == true)
+        button:SetShown(holderShown and canExit)
+    end
+
+    button.__twichVehicleExitHolder = holder
+    button:SetParent(UIParent)
+    button:ClearAllPoints()
+    button:SetPoint("CENTER", holder, "CENTER", 0, 0)
+
+    if button.__twichVehicleExitBlizzardHooksCleared ~= true then
+        button.__twichVehicleExitBlizzardHooksCleared = true
+        button:SetScript("OnShow", nil)
+        button:SetScript("OnHide", nil)
+    end
+
+    if button.__twichVehicleExitHooked ~= true and hooksecurefunc then
+        button.__twichVehicleExitHooked = true
+        hooksecurefunc(button, "SetPoint", function(selfButton, _, relativeTo)
+            local desiredHolder = selfButton.__twichVehicleExitHolder
+            if desiredHolder and relativeTo ~= desiredHolder then
+                selfButton:ClearAllPoints()
+                selfButton:SetParent(UIParent)
+                selfButton:SetPoint("CENTER", desiredHolder, "CENTER", 0, 0)
+            end
+        end)
+    end
+
+    if holder.__twichVehicleExitVisibilityHooked ~= true then
+        holder.__twichVehicleExitVisibilityHooked = true
+        holder:HookScript("OnShow", function(selfHolder)
+            local vehicleButton = selfHolder.__twichVehicleExitButton
+            if vehicleButton then
+                SyncVehicleExitVisibility()
+            end
+        end)
+        holder:HookScript("OnHide", function(selfHolder)
+            local vehicleButton = selfHolder.__twichVehicleExitButton
+            if vehicleButton then
+                SyncVehicleExitVisibility()
+            end
+        end)
+    end
+
+    holder.__twichVehicleExitButton = button
+    SyncVehicleExitVisibility()
 end
 
 local function IsDebugEnabled()
@@ -3913,6 +3972,15 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
         return
     end
 
+    if barKey == "vehicleExit" then
+        if button.__twichuiABChrome then
+            button.__twichuiABChrome:Hide()
+        end
+        self:HideButtonHoverEffect(button)
+        self:HideFailedActionFeedback(button)
+        return
+    end
+
     local useMasque = actionBarDB.useMasque == true and Masque ~= nil
     local theme = T:GetModule("Theme", true)
     local primaryR, primaryG, primaryB = FetchThemeColor(theme, "primaryColor", { 0.10, 0.72, 0.74 })
@@ -4337,29 +4405,58 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
     end
 
     for index, button in ipairs(buttons) do
-        button:SetParent(holder)
+        if definition.key == "vehicleExit" then
+            EnsureVehicleExitButtonAnchored(button, holder)
+        else
+            button:SetParent(holder)
+        end
         button:ClearAllPoints()
         button:SetSize(buttonSize, buttonSize)
         button:SetFrameStrata("MEDIUM")
         button:SetFrameLevel(holder:GetFrameLevel() + 4)
 
         if index <= availableCount then
-            local row = floor((index - 1) / buttonsPerRow)
-            local column = (index - 1) % buttonsPerRow
-            button:SetPoint("TOPLEFT", holder, "TOPLEFT",
-                DEFAULT_HOLDER_PADDING + (column * (buttonSize + spacing)),
-                -DEFAULT_HOLDER_PADDING - (row * (buttonSize + spacing)))
+            if definition.key == "vehicleExit" then
+                button:SetPoint("CENTER", holder, "CENTER", 0, 0)
+            else
+                local row = floor((index - 1) / buttonsPerRow)
+                local column = (index - 1) % buttonsPerRow
+                button:SetPoint("TOPLEFT", holder, "TOPLEFT",
+                    DEFAULT_HOLDER_PADDING + (column * (buttonSize + spacing)),
+                    -DEFAULT_HOLDER_PADDING - (row * (buttonSize + spacing)))
+            end
             self:ApplyButtonStyle(button, actionBarDB, definition.key, barSettings)
 
             ApplyButtonGridState(button, actionBarDB.showGrid == true)
 
-            button:Show()
+            if definition.key == "vehicleExit" then
+                button:SetShown(holder:IsShown())
+            else
+                button:Show()
+            end
         else
             button:Hide()
         end
     end
 
-    self:ApplyVisibility(holder, barSettings)
+    if definition.key == "vehicleExit" then
+        pcall(UnregisterStateDriver, holder, "visibility")
+
+        local visibility = tostring(barSettings.visibility or "")
+        local hasVehicle = visibility:find("vehicleui", 1, true) ~= nil
+        local hasOverride = visibility:find("overridebar", 1, true) ~= nil
+        local hasPossess = visibility:find("possessbar", 1, true) ~= nil
+        if visibility == "" or (hasVehicle and not hasOverride and not hasPossess) then
+            visibility = "[vehicleui][overridebar][possessbar] show; hide"
+        end
+
+        local ok = pcall(RegisterStateDriver, holder, "visibility", visibility)
+        if not ok then
+            pcall(RegisterStateDriver, holder, "visibility", "[vehicleui][overridebar][possessbar] show; hide")
+        end
+    else
+        self:ApplyVisibility(holder, barSettings)
+    end
     holder:SetAlpha(self:GetTargetAlpha(barSettings, false))
     holder:Show()
 end
