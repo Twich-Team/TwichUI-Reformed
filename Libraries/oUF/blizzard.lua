@@ -2,16 +2,17 @@ local _, ns = ...
 local oUF = ns.oUF
 
 -- sourced from Blizzard_UnitFrame/Mainline/TargetFrame.lua
-local MAX_BOSS_FRAMES = _G.MAX_BOSS_FRAMES or 5
+local MAX_BOSS_FRAMES = rawget(_G, 'MAX_BOSS_FRAMES') or 5
 
 -- sourced from Blizzard_FrameXMLBase/Shared/Constants.lua
-local MEMBERS_PER_RAID_GROUP = _G.MEMBERS_PER_RAID_GROUP or 5
+local MEMBERS_PER_RAID_GROUP = rawget(_G, 'MEMBERS_PER_RAID_GROUP') or 5
 
 local hookedFrames = {}
 local hookedNameplates = {}
 local isArenaHooked = false
 local isBossHooked = false
 local isPartyHooked = false
+local reparentInProgress = {}
 
 local hiddenParent = CreateFrame('Frame', nil, UIParent)
 hiddenParent:SetAllPoints()
@@ -33,103 +34,135 @@ watcher:SetScript('OnEvent', function()
 	table.wipe(looseFrames)
 end)
 
+local function isAddonLoaded(name)
+	if (_G.C_AddOns and type(_G.C_AddOns.IsAddOnLoaded) == 'function') then
+		return _G.C_AddOns.IsAddOnLoaded(name)
+	end
+
+	local legacyIsAddOnLoaded = rawget(_G, 'IsAddOnLoaded')
+	if (type(legacyIsAddOnLoaded) == 'function') then
+		return legacyIsAddOnLoaded(name)
+	end
+
+	return false
+end
+
 local function resetParent(self, parent)
-	if(parent ~= hiddenParent) then
-		if(InCombatLockdown() and self:IsProtected()) then
+	if (reparentInProgress[self]) then
+		return
+	end
+
+	if (parent ~= hiddenParent) then
+		if (InCombatLockdown() and self:IsProtected()) then
 			looseFrames[self] = true
 		else
+			reparentInProgress[self] = true
 			self:SetParent(hiddenParent)
+			reparentInProgress[self] = nil
 		end
 	end
 end
 
+local function shouldSkipReparent(frame)
+	if (not frame) then
+		return false
+	end
+
+	if (frame == BossTargetFrameContainer) then
+		return isAddonLoaded('ElvUI') or isAddonLoaded('ElvUI_Libraries')
+	end
+
+	return false
+end
+
 local function handleFrame(baseName, doNotReparent, isNamePlate)
 	local frame
-	if(type(baseName) == 'string') then
+	if (type(baseName) == 'string') then
 		frame = _G[baseName]
 	else
 		frame = baseName
 	end
 
-	if(frame) then
+	if (frame) then
 		frame:UnregisterAllEvents()
-		if(isNamePlate) then
+		if (isNamePlate) then
 			-- TODO: remove this once we can adjust hitrects for nameplates
 			frame:SetAlpha(0)
 		else
 			frame:Hide()
 		end
 
-		if(not doNotReparent) then
+		if (not doNotReparent and not shouldSkipReparent(frame)) then
 			frame:SetParent(hiddenParent)
 
-			if(not hookedFrames[frame]) then
+			if (not hookedFrames[frame]) then
 				hooksecurefunc(frame, 'SetParent', resetParent)
 
 				hookedFrames[frame] = true
 			end
 		end
 
-		local health = frame.healthBar or frame.healthbar or frame.HealthBar or (frame.HealthBarsContainer and frame.HealthBarsContainer.healthBar)
-		if(health) then
+		local health = frame.healthBar or frame.healthbar or frame.HealthBar or
+		(frame.HealthBarsContainer and frame.HealthBarsContainer.healthBar)
+		if (health) then
 			health:UnregisterAllEvents()
 		end
 
 		local power = frame.manabar or frame.ManaBar
-		if(power) then
+		if (power) then
 			power:UnregisterAllEvents()
 		end
 
 		local castbar = frame.castBar or frame.spellbar or frame.CastingBarFrame
-		if(castbar) then
+		if (castbar) then
 			castbar:UnregisterAllEvents()
 		end
 
 		local altpowerbar = frame.powerBarAlt or frame.PowerBarAlt
-		if(altpowerbar) then
+		if (altpowerbar) then
 			altpowerbar:UnregisterAllEvents()
 		end
 
 		local buffFrame = frame.BuffFrame or frame.AurasFrame
-		if(buffFrame) then
+		if (buffFrame) then
 			buffFrame:UnregisterAllEvents()
 		end
 
 		local petFrame = frame.petFrame or frame.PetFrame
-		if(petFrame) then
+		if (petFrame) then
 			petFrame:UnregisterAllEvents()
 		end
 
 		local totFrame = frame.totFrame
-		if(totFrame) then
+		if (totFrame) then
 			totFrame:UnregisterAllEvents()
 		end
 
 		local ccRemoverFrame = frame.CcRemoverFrame
-		if(ccRemoverFrame) then
+		if (ccRemoverFrame) then
 			ccRemoverFrame:UnregisterAllEvents()
 		end
 
 		local debuffFrame = frame.DebuffFrame
-		if(debuffFrame) then
+		if (debuffFrame) then
 			debuffFrame:UnregisterAllEvents()
 		end
 	end
 end
 
 function oUF:DisableBlizzard(unit)
-	if(not unit) then return end
+	if (not unit) then return end
 
-	if(unit == 'player') then
+	if (unit == 'player') then
 		handleFrame(PlayerFrame)
-	elseif(unit == 'pet') then
+	elseif (unit == 'pet') then
 		handleFrame(PetFrame)
-	elseif(unit == 'target') then
+	elseif (unit == 'target') then
 		handleFrame(TargetFrame)
-	elseif(unit == 'focus') then
+	elseif (unit == 'focus') then
 		handleFrame(FocusFrame)
-	elseif(unit:match('boss%d?$')) then
-		if(not isBossHooked) then
+	elseif (unit:match('boss%d?$')) then
+		if (not isBossHooked) then
 			isBossHooked = true
 
 			-- it's needed because the layout manager can bring frames that are
@@ -147,8 +180,8 @@ function oUF:DisableBlizzard(unit)
 				handleFrame('Boss' .. i .. 'TargetFrame', true)
 			end
 		end
-	elseif(unit:match('party%d?$')) then
-		if(not isPartyHooked) then
+	elseif (unit:match('party%d?$')) then
+		if (not isPartyHooked) then
 			isPartyHooked = true
 
 			handleFrame(PartyFrame)
@@ -161,8 +194,8 @@ function oUF:DisableBlizzard(unit)
 				handleFrame('CompactPartyFrameMember' .. i)
 			end
 		end
-	elseif(unit:match('arena%d?$')) then
-		if(not isArenaHooked) then
+	elseif (unit:match('arena%d?$')) then
+		if (not isArenaHooked) then
 			isArenaHooked = true
 
 			handleFrame(CompactArenaFrame)
@@ -175,10 +208,10 @@ function oUF:DisableBlizzard(unit)
 end
 
 function oUF:DisableBlizzardNamePlate(frame)
-	if(not(frame and frame.UnitFrame)) then return end
-	if(frame.UnitFrame:IsForbidden()) then return end
+	if (not (frame and frame.UnitFrame)) then return end
+	if (frame.UnitFrame:IsForbidden()) then return end
 
-	if(not hookedNameplates[frame]) then
+	if (not hookedNameplates[frame]) then
 		-- BUG: the hit rect (for clicking) is tied to the original UnitFrame object on the
 		--      nameplate, so we can't hide it. instead we force it to be invisible, and adjust
 		--      the hit rect insets around it so it matches the nameplate object itself, but we
@@ -186,7 +219,7 @@ function oUF:DisableBlizzardNamePlate(frame)
 		-- TODO: remove this hack once we can adjust hitrects ourselves, coming in a later build
 		local locked = false
 		hooksecurefunc(frame.UnitFrame, 'SetAlpha', function(UnitFrame)
-			if(locked or UnitFrame:IsForbidden()) then return end
+			if (locked or UnitFrame:IsForbidden()) then return end
 			locked = true
 			UnitFrame:SetAlpha(0)
 			locked = false

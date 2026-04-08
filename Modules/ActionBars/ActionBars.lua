@@ -663,6 +663,40 @@ local function SuppressFrameRegions(frame)
     end
 end
 
+local function SuppressFrameTree(frame, visited)
+    if not frame then
+        return
+    end
+
+    visited = visited or {}
+    if visited[frame] then
+        return
+    end
+    visited[frame] = true
+
+    SuppressFrameRegions(frame)
+
+    if frame.GetChildren then
+        for _, child in ipairs({ frame:GetChildren() }) do
+            if child then
+                local childType = child.GetObjectType and child:GetObjectType() or nil
+                if childType == "Button" or childType == "CheckButton" then
+                    -- Leave actual button children alone; their icon/text/state art is managed
+                    -- separately and suppressing regions here strips the usable icon texture.
+                else
+                    SuppressFrameTree(child, visited)
+                    if child.SetAlpha then
+                        child:SetAlpha(0)
+                    end
+                    if child.Hide then
+                        child:Hide()
+                    end
+                end
+            end
+        end
+    end
+end
+
 local function GetButtonArtTextures(button)
     if not button then
         return {}
@@ -2869,22 +2903,8 @@ function ActionBars:UpdateButtonsForSpellID(spellID)
     end
 
     if self.spellButtonIndexDirty == true then
-        local style = self:GetGlowStyle()
-        local spellStateCache = {
-            [spellID] = self.activeAlertSpells[spellID] == true,
-        }
-        local matched = false
-
-        for _, fallbackButtons in pairs(self.barButtons) do
-            for _, button in ipairs(fallbackButtons) do
-                if self:GetButtonSpellID(button) == spellID then
-                    self:UpdateButtonGlow(button, style, spellStateCache)
-                    matched = true
-                end
-            end
-        end
-
-        return matched
+        self:ScheduleGlowSync(0.05)
+        return false
     end
 
     local index = self.spellButtonIndex
@@ -4609,7 +4629,7 @@ function ActionBars:QueueButtonStateRefresh()
             return
         end
 
-        ActionBars:RefreshButtonStates(ActionBars._pendingStateEvent or true)
+        ActionBars:RefreshButtonStates(ActionBars._pendingStateEvent or false)
         ActionBars._pendingStateEvent = nil
     end)
 end
@@ -4620,11 +4640,9 @@ function ActionBars:RefreshButtonStates(event)
         local eventNeedsGlow = event == "SPELLS_CHANGED"
             or event == "PLAYER_SPECIALIZATION_CHANGED"
             or event == "ACTIONBAR_SLOT_CHANGED"
-            or event == "UPDATE_BINDINGS"
         local existingNeedsGlow = existingEvent == "SPELLS_CHANGED"
             or existingEvent == "PLAYER_SPECIALIZATION_CHANGED"
             or existingEvent == "ACTIONBAR_SLOT_CHANGED"
-            or existingEvent == "UPDATE_BINDINGS"
 
         if eventNeedsGlow or not existingEvent or existingNeedsGlow ~= true then
             self._pendingStateEvent = event
@@ -4632,16 +4650,16 @@ function ActionBars:RefreshButtonStates(event)
 
         local delaySeconds = 0.04
         if event == "ACTIONBAR_UPDATE_STATE" or event == "ACTIONBAR_UPDATE_USABLE" then
-            delaySeconds = 0.18
+            delaySeconds = 0.24
         elseif event == "ACTIONBAR_SLOT_CHANGED" then
-            delaySeconds = 0.1
+            delaySeconds = 0.14
         end
         if self._pendingStateDelay == nil or delaySeconds > self._pendingStateDelay then
             self._pendingStateDelay = delaySeconds
         end
 
         if event == "SPELLS_CHANGED" or event == "PLAYER_SPECIALIZATION_CHANGED" or
-            event == "ACTIONBAR_SLOT_CHANGED" or event == "UPDATE_BINDINGS" then
+            event == "ACTIONBAR_SLOT_CHANGED" then
             self:MarkSpellButtonIndexDirty()
         end
         self:QueueButtonStateRefresh()
@@ -4659,12 +4677,8 @@ function ActionBars:RefreshButtonStates(event)
         or glowEvent == "SPELLS_CHANGED"
         or glowEvent == "PLAYER_SPECIALIZATION_CHANGED"
         or glowEvent == "ACTIONBAR_SLOT_CHANGED"
-        or glowEvent == "UPDATE_BINDINGS"
 
     local glowStyle = shouldRefreshGlow and self:GetGlowStyle() or nil
-    if shouldRefreshGlow and glowStyle ~= "none" then
-        self:EnsureSpellButtonIndex()
-    end
     local showGrid = db.showGrid == true
     local shouldUpdateGrid = self._cachedShowGrid ~= showGrid
     if shouldUpdateGrid then
@@ -4796,26 +4810,54 @@ function ActionBars:HideDefaultArt()
     for _, frameName in ipairs(BLIZZARD_FRAMES_TO_HIDE) do
         local frame = _G[frameName]
         if frame then
+            local capturedFrameName = frameName
+            local function ForceSuppressFrame(selfFrame)
+                if not (ActionBars and ActionBars.IsEnabled and ActionBars:IsEnabled()) then
+                    return
+                end
+
+                if selfFrame.__twichuiABSuppressing == true then
+                    return
+                end
+
+                selfFrame.__twichuiABSuppressing = true
+                pcall(function()
+                    if _G.UIPARENT_MANAGED_FRAME_POSITIONS then
+                        _G.UIPARENT_MANAGED_FRAME_POSITIONS[capturedFrameName] = nil
+                    end
+
+                    SuppressFrameTree(selfFrame)
+                    if ActionBars.blizzardHiddenRoot and selfFrame.GetParent and selfFrame:GetParent() ~= ActionBars.blizzardHiddenRoot then
+                        selfFrame:SetParent(ActionBars.blizzardHiddenRoot)
+                    end
+                    if selfFrame.SetAlpha then
+                        selfFrame:SetAlpha(0)
+                    end
+                    if selfFrame.Hide then
+                        selfFrame:Hide()
+                    end
+                end)
+                selfFrame.__twichuiABSuppressing = nil
+            end
+
             if frame.__twichuiABSuppressHooked ~= true and frame.HookScript then
                 frame.__twichuiABSuppressHooked = true
                 frame:HookScript("OnShow", function(selfFrame)
-                    if not (ActionBars and ActionBars.IsEnabled and ActionBars:IsEnabled()) then
-                        return
-                    end
-
-                    if _G.UIPARENT_MANAGED_FRAME_POSITIONS then
-                        _G.UIPARENT_MANAGED_FRAME_POSITIONS[frameName] = nil
-                    end
-
-                    pcall(function()
-                        SuppressFrameRegions(selfFrame)
-                        if ActionBars.blizzardHiddenRoot then
-                            selfFrame:SetParent(ActionBars.blizzardHiddenRoot)
-                        end
-                        selfFrame:SetAlpha(0)
-                        selfFrame:Hide()
-                    end)
+                    ForceSuppressFrame(selfFrame)
                 end)
+                if hooksecurefunc then
+                    hooksecurefunc(frame, "Show", ForceSuppressFrame)
+                    hooksecurefunc(frame, "SetShown", function(selfFrame, shown)
+                        if shown == true then
+                            ForceSuppressFrame(selfFrame)
+                        end
+                    end)
+                    hooksecurefunc(frame, "SetAlpha", function(selfFrame, alpha)
+                        if alpha and alpha > 0 then
+                            ForceSuppressFrame(selfFrame)
+                        end
+                    end)
+                end
             end
 
             self:CaptureFrameState(frame)
@@ -4829,10 +4871,7 @@ function ActionBars:HideDefaultArt()
                 frame.ignoreInLayout = true
             end
             local ok, err = pcall(function()
-                SuppressFrameRegions(frame)
-                frame:SetParent(self.blizzardHiddenRoot)
-                frame:SetAlpha(0)
-                frame:Hide()
+                ForceSuppressFrame(frame)
             end)
             if ok then
                 LogDebugf(false, "hide blizzard frame=%s shown=%s parent=%s",
@@ -4851,22 +4890,53 @@ function ActionBars:HideDefaultArt()
     for _, objectName in ipairs(BLIZZARD_OBJECTS_TO_HIDE) do
         local object = _G[objectName]
         if object then
+            local function ForceSuppressObject(selfObject)
+                if not (ActionBars and ActionBars.IsEnabled and ActionBars:IsEnabled()) then
+                    return
+                end
+
+                if selfObject.__twichuiABSuppressing == true then
+                    return
+                end
+
+                selfObject.__twichuiABSuppressing = true
+                pcall(function()
+                    if selfObject.GetObjectType and selfObject:GetObjectType() == "Frame" then
+                        SuppressFrameTree(selfObject)
+                        if ActionBars.blizzardHiddenRoot and selfObject.GetParent and selfObject:GetParent() ~= ActionBars.blizzardHiddenRoot then
+                            selfObject:SetParent(ActionBars.blizzardHiddenRoot)
+                        end
+                    else
+                        SuppressRegion(selfObject)
+                    end
+                    if selfObject.SetAlpha then
+                        selfObject:SetAlpha(0)
+                    end
+                    if selfObject.Hide then
+                        selfObject:Hide()
+                    end
+                end)
+                selfObject.__twichuiABSuppressing = nil
+            end
+
             if object.GetObjectType and object:GetObjectType() == "Frame" and object.__twichuiABSuppressHooked ~= true and object.HookScript then
                 object.__twichuiABSuppressHooked = true
                 object:HookScript("OnShow", function(selfObject)
-                    if not (ActionBars and ActionBars.IsEnabled and ActionBars:IsEnabled()) then
-                        return
-                    end
-
-                    pcall(function()
-                        SuppressFrameRegions(selfObject)
-                        if ActionBars.blizzardHiddenRoot then
-                            selfObject:SetParent(ActionBars.blizzardHiddenRoot)
-                        end
-                        selfObject:SetAlpha(0)
-                        selfObject:Hide()
-                    end)
+                    ForceSuppressObject(selfObject)
                 end)
+                if hooksecurefunc then
+                    hooksecurefunc(object, "Show", ForceSuppressObject)
+                    hooksecurefunc(object, "SetShown", function(selfObject, shown)
+                        if shown == true then
+                            ForceSuppressObject(selfObject)
+                        end
+                    end)
+                    hooksecurefunc(object, "SetAlpha", function(selfObject, alpha)
+                        if alpha and alpha > 0 then
+                            ForceSuppressObject(selfObject)
+                        end
+                    end)
+                end
             end
 
             local ok, err = pcall(function()
@@ -4875,20 +4945,10 @@ function ActionBars:HideDefaultArt()
                     for _, region in ipairs({ object:GetRegions() }) do
                         self:CaptureRegionState(region)
                     end
-                    SuppressFrameRegions(object)
+                    ForceSuppressObject(object)
                 else
                     self:CaptureRegionState(object)
-                    SuppressRegion(object)
-                end
-
-                if object.SetParent then
-                    object:SetParent(self.blizzardHiddenRoot)
-                end
-                if object.SetAlpha then
-                    object:SetAlpha(0)
-                end
-                if object.Hide then
-                    object:Hide()
+                    ForceSuppressObject(object)
                 end
             end)
 

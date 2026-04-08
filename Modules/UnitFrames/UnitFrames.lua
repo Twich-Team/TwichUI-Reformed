@@ -1702,10 +1702,26 @@ local function GetLSMTexture(name)
 end
 
 local function GetThemeModule()
-    return T:GetModule("Theme", true)
+    ---@diagnostic disable-next-line: inject-field
+    UnitFrames._themeModuleCache = UnitFrames._themeModuleCache or T:GetModule("Theme", true)
+    if UnitFrames._themeModuleCache and UnitFrames._themeModuleCache.GetColor and UnitFrames._themeModuleCache.Get then
+        return UnitFrames._themeModuleCache
+    end
+
+    ---@diagnostic disable-next-line: inject-field
+    UnitFrames._themeModuleCache = T:GetModule("Theme", true)
+    return UnitFrames._themeModuleCache
 end
 
 local function GetThemeColor(key, fallback)
+    local now = (GetTime and GetTime()) or 0
+    ---@diagnostic disable-next-line: inject-field
+    UnitFrames._themeColorCache = UnitFrames._themeColorCache or {}
+    local cached = UnitFrames._themeColorCache[key]
+    if cached and (now - (cached.t or 0)) < 0.25 then
+        return CopyColor(cached.v)
+    end
+
     local theme = GetThemeModule()
     if not theme or type(theme.GetColor) ~= "function" then
         return CopyColor(fallback)
@@ -1715,6 +1731,8 @@ local function GetThemeColor(key, fallback)
     if type(color) ~= "table" then
         return CopyColor(fallback)
     end
+
+    UnitFrames._themeColorCache[key] = { t = now, v = CopyColor(color) }
 
     return CopyColor(color)
 end
@@ -2591,7 +2609,7 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
         tostring(db.useClassColor == true),
     }, "|")
     local cachedPalette = paletteCache[cacheKey]
-    if cachedPalette and (now - (cachedPalette.t or 0)) < 0.25 then
+    if cachedPalette and (now - (cachedPalette.t or 0)) < 1.0 then
         return cachedPalette.v
     end
 
@@ -2650,8 +2668,7 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
         mode = "theme"
     end
 
-    local diagCfg = self:GetUFDiagnosticsConfig()
-    local logPaletteDetails = diagCfg and diagCfg.enabled == true and diagCfg.verbose == true
+    local logPaletteDetails = self._ufDiagEnabled == true and UFDiagnosticsVerboseEnabled(self)
 
     if mode == "custom" then
         if unitHealth and type(unitHealth.color) == "table" then
@@ -2707,7 +2724,6 @@ end
 -- Falls back to palette.power when mode = "powertype" but no mapping exists.
 function UnitFrames:ResolvePowerColor(unitKey, unit)
     local db            = self:GetDB()
-    local palette       = self:GetPalette(unitKey, unit)
 
     local resolvedScope = ResolveScopeByUnitKey(unitKey or "")
     local unitColors    = nil
@@ -2726,8 +2742,25 @@ function UnitFrames:ResolvePowerColor(unitKey, unit)
         or "custom"
 
     if mode == "powertype" then
+        local powerType = unit and UnitPowerType and UnitPowerType(unit) or -1
+        local cacheKey = table.concat({ tostring(unitKey or ""), tostring(unit or ""), tostring(powerType) }, "|")
+        local now = (GetTime and GetTime()) or 0
+        self._powerColorResolveCache = self._powerColorResolveCache or {}
+        local cached = self._powerColorResolveCache[cacheKey]
+        if cached and (now - (cached.t or 0)) < 0.2 then
+            return cached.v
+        end
+
         local ptColor = GetPowerTypeColor(unit, db)
-        if ptColor then return ptColor end
+        if ptColor then
+            self._powerColorResolveCache[cacheKey] = { t = now, v = ptColor }
+            return ptColor
+        end
+    end
+
+    local palette = self:GetPalette(unitKey, unit)
+    if mode == "powertype" then
+        return palette.power
     end
 
     return palette.power
@@ -2805,17 +2838,28 @@ end
 -- Returns whether the power bar should be shown for the given unitKey.
 -- Group member types always show power (per group config); single units read showPower.
 function UnitFrames:GetEffectiveShowPower(unitKey)
+    local cacheKey = tostring(unitKey or "")
+    local now = (GetTime and GetTime()) or 0
+    self._effectiveShowPowerCache = self._effectiveShowPowerCache or {}
+    local cached = self._effectiveShowPowerCache[cacheKey]
+    if cached and (now - (cached.t or 0)) < 0.5 then
+        return cached.v
+    end
+
+    local value = true
     if unitKey == "partyMember" then
-        return self:GetGroupSettings("party").showPower ~= false
+        value = self:GetGroupSettings("party").showPower ~= false
+    elseif unitKey == "raidMember" then
+        value = self:GetGroupSettings("raid").showPower ~= false
+    elseif unitKey == "tankMember" then
+        value = self:GetGroupSettings("tank").showPower ~= false
+    else
+        local key = (unitKey and unitKey:match("^boss")) and "boss" or (unitKey or "")
+        value = self:GetUnitSettings(key).showPower ~= false
     end
-    if unitKey == "raidMember" then
-        return self:GetGroupSettings("raid").showPower ~= false
-    end
-    if unitKey == "tankMember" then
-        return self:GetGroupSettings("tank").showPower ~= false
-    end
-    local key = (unitKey and unitKey:match("^boss")) and "boss" or (unitKey or "")
-    return self:GetUnitSettings(key).showPower ~= false
+
+    self._effectiveShowPowerCache[cacheKey] = { t = now, v = value }
+    return value
 end
 
 -- ---------------------------------------------------------------------------
@@ -6058,12 +6102,18 @@ function UnitFrames:ResetFantasyCastbarVisuals(castbar)
     end
     if fx.particles then
         for index = 1, #fx.particles do
-            ResetFantasyParticle(fx.particles[index])
+            local particle = fx.particles[index]
+            if particle and particle.active then
+                ResetFantasyParticle(particle)
+            end
         end
     end
     if fx.bolts then
         for index = 1, #fx.bolts do
-            ResetFantasyBolt(fx.bolts[index])
+            local bolt = fx.bolts[index]
+            if bolt and bolt.active then
+                ResetFantasyBolt(bolt)
+            end
         end
     end
 end
@@ -7551,7 +7601,7 @@ function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
     if fx.particleLayer and not fx.particleLayer:IsShown() then return end
 
     fx._updateAccumulator = (fx._updateAccumulator or 0) + (elapsed or 0)
-    if fx._updateAccumulator < (1 / 20) then
+    if fx._updateAccumulator < (1 / 16) then
         return
     end
 
@@ -8040,10 +8090,10 @@ function UnitFrames:RefreshHighlightFrames(enemyTargetLookup)
     if not enemyTargetLookup then
         local now = (GetTime and GetTime()) or 0
         local lastRefreshAt = self._lastHighlightRefreshAt or 0
-        if (now - lastRefreshAt) < 0.1 then
+        if (now - lastRefreshAt) < 0.16 then
             if self._highlightRefreshQueued ~= true and C_Timer and type(C_Timer.After) == "function" then
                 self._highlightRefreshQueued = true
-                C_Timer.After(0.1, function()
+                C_Timer.After(0.16, function()
                     if UnitFrames._highlightRefreshQueued ~= true then
                         return
                     end
@@ -8057,7 +8107,7 @@ function UnitFrames:RefreshHighlightFrames(enemyTargetLookup)
         self._lastHighlightRefreshAt = now
         local cachedLookup = self._cachedEnemyTargetLookup
         local cachedAt = self._cachedEnemyTargetLookupAt or 0
-        if cachedLookup and (now - cachedAt) < 0.1 then
+        if cachedLookup and (now - cachedAt) < 0.16 then
             enemyTargetLookup = cachedLookup
         else
             enemyTargetLookup = self:BuildEnemyTargetLookup()
@@ -8066,9 +8116,12 @@ function UnitFrames:RefreshHighlightFrames(enemyTargetLookup)
         end
     end
 
+    local db = self:GetDB()
+    local highlights = (db and db.highlights) or {}
+
     for _, frame in pairs(self.frames) do
         if frame then
-            self:UpdateUnitHighlights(frame, enemyTargetLookup)
+            self:UpdateUnitHighlights(frame, enemyTargetLookup, db, highlights)
         end
     end
 
@@ -8077,25 +8130,25 @@ function UnitFrames:RefreshHighlightFrames(enemyTargetLookup)
             for index = 1, select('#', header:GetChildren()) do
                 local child = select(index, header:GetChildren())
                 if child then
-                    self:UpdateUnitHighlights(child, enemyTargetLookup)
+                    self:UpdateUnitHighlights(child, enemyTargetLookup, db, highlights)
                 end
             end
         end
     end
 end
 
-function UnitFrames:UpdateUnitHighlights(frame, enemyTargetLookup)
+function UnitFrames:UpdateUnitHighlights(frame, enemyTargetLookup, db, highlights)
     if not frame then return end
-    local db = self:GetDB()
-    local highlights = db.highlights or {}
+    local dbRef = db or self:GetDB()
+    local highlightsRef = highlights or (dbRef.highlights or {})
     local unit = frame.unit or (frame.GetAttribute and frame:GetAttribute("unit"))
     local unitKey = frame._unitKey or unit
     -- Per-unit overrides stored at db.units[unitKey].highlights
-    local unitHL = (db.units and db.units[unitKey] and db.units[unitKey].highlights) or {}
-    local targetEnabled = highlights.showTarget ~= false and unitHL.showTarget ~= false
-    local mouseoverEnabled = highlights.showMouseover ~= false and unitHL.showMouseover ~= false
-    local threatEnabled = highlights.showThreat == true and unitHL.showThreat ~= false
-    local enemyTargetEnabled = highlights.showEnemyTarget == true and unitHL.showEnemyTarget ~= false
+    local unitHL = (dbRef.units and dbRef.units[unitKey] and dbRef.units[unitKey].highlights) or {}
+    local targetEnabled = highlightsRef.showTarget ~= false and unitHL.showTarget ~= false
+    local mouseoverEnabled = highlightsRef.showMouseover ~= false and unitHL.showMouseover ~= false
+    local threatEnabled = highlightsRef.showThreat == true and unitHL.showThreat ~= false
+    local enemyTargetEnabled = highlightsRef.showEnemyTarget == true and unitHL.showEnemyTarget ~= false
 
     local showTarget = false
     if targetEnabled and unit and unit ~= "" then
@@ -8118,11 +8171,10 @@ function UnitFrames:UpdateUnitHighlights(frame, enemyTargetLookup)
 
     local showMouseover = mouseoverEnabled and frame.isHovering and true or false
 
-    local stateKey = string.format("%d|%d|%d|%d",
-        showTarget and 1 or 0,
-        showThreat and 1 or 0,
-        showEnemyTarget and 1 or 0,
-        showMouseover and 1 or 0)
+    local stateKey = (showTarget and 1 or 0)
+        + (showThreat and 2 or 0)
+        + (showEnemyTarget and 4 or 0)
+        + (showMouseover and 8 or 0)
     if frame._twichHighlightStateKey == stateKey then
         return
     end
@@ -8137,26 +8189,26 @@ function UnitFrames:UpdateUnitHighlights(frame, enemyTargetLookup)
     if frame.TwichEnemyTargetGlow then frame.TwichEnemyTargetGlow:Hide() end
 
     if showTarget then
-        local c = highlights.targetColor or { 1.0, 0.82, 0.0, 0.9 }
-        local mode = highlights.targetMode or "border"
+        local c = highlightsRef.targetColor or { 1.0, 0.82, 0.0, 0.9 }
+        local mode = highlightsRef.targetMode or "border"
         ShowHighlightElements(frame.TwichTargetHighlight, frame.TwichTargetGlow, mode, c)
     end
 
     if showThreat then
-        local c = highlights.threatColor or { 1.0, 0.24, 0.18, 0.95 }
-        local mode = highlights.threatMode or "glow"
+        local c = highlightsRef.threatColor or { 1.0, 0.24, 0.18, 0.95 }
+        local mode = highlightsRef.threatMode or "glow"
         ShowHighlightElements(frame.TwichThreatHighlight, frame.TwichThreatGlow, mode, c)
     end
 
     if showEnemyTarget then
-        local c = highlights.enemyTargetColor or { 1.0, 0.55, 0.18, 0.85 }
-        local mode = highlights.enemyTargetMode or "border"
+        local c = highlightsRef.enemyTargetColor or { 1.0, 0.55, 0.18, 0.85 }
+        local mode = highlightsRef.enemyTargetMode or "border"
         ShowHighlightElements(frame.TwichEnemyTargetHighlight, frame.TwichEnemyTargetGlow, mode, c)
     end
 
     if frame.TwichMouseoverHighlight then
         if showMouseover then
-            local c = highlights.mouseoverColor or { 1.0, 1.0, 1.0, 0.08 }
+            local c = highlightsRef.mouseoverColor or { 1.0, 1.0, 1.0, 0.08 }
             frame.TwichMouseoverHighlight:SetBackdropColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 0.08)
             frame.TwichMouseoverHighlight:Show()
         else
