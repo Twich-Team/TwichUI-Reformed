@@ -10,4 +10,5 @@
     <Include file='Portals.lua' />
     <Include file='Goblin.lua' />
     <Include file='Gathering.lua' />
+    <Include file='Development.lua' />
 </Ui>

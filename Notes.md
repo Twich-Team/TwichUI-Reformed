@@ -1,7 +1,7 @@
 #
 
 - Leave vehicle
-- The text "Right click for frame settings" is still on the tooltip. Get rid of the tooltip text for the unit frames. keep the right click functionality
+- ✅ The text "Right click for frame settings" is still on the tooltip. Get rid of the tooltip text for the unit frames. keep the right click functionality
 
 ## Configuration
 
@@ -64,3 +64,7 @@
 ### Completion
 
 - Data bars (reputation, experience)
+
+## PERFORMANCE WED APR 8
+
+- Add a new data text for TwichUI Development. It will include a menu of development shortcuts, including opening the debugger, our error panel, opening bug sack, clearing bug sack, and all of our profiler functions

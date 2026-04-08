@@ -14,6 +14,12 @@ local T = unpack(TwichRx)
 ---@field Quest QuestTools
 ---@field Game GameTool
 ---@field ErrorLog TwichUIErrorLog
+
+---@class UISkins
+---@field Profiler TwichUIProfiler
+---@field ProfilerUI TwichUIProfilerUI
+---@field DebugConsole any
+---@field ErrorLogViewer any
 local Tools = T.Tools or {}
 T.Tools = Tools
 

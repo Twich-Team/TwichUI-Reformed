@@ -212,6 +212,79 @@ local function OpenConfigurationPanel(input)
         return
     end
 
+    if primaryCommand == "profile" then
+        local profiler = T.Tools and T.Tools.UI and T.Tools.UI.Profiler
+        if not profiler then
+            T:Print("[TwichUI] Profiler is unavailable")
+            return
+        end
+
+        local subCmd = remainder:match("^(%S+)"):lower() or "status"
+
+        if subCmd == "start" then
+            profiler:StartProfiling()
+            return
+        end
+
+        if subCmd == "stop" then
+            profiler:StopProfiling()
+            return
+        end
+
+        if subCmd == "report" then
+            local profilerUI = T.Tools and T.Tools.UI and T.Tools.UI.ProfilerUI
+            if profilerUI and type(profilerUI.Show) == "function" then
+                profilerUI:Show()
+            else
+                T:Print(profiler:GenerateReport())
+            end
+            return
+        end
+
+        if subCmd == "window" or subCmd == "ui" then
+            local profilerUI = T.Tools and T.Tools.UI and T.Tools.UI.ProfilerUI
+            if profilerUI and type(profilerUI.Show) == "function" then
+                profilerUI:Show()
+            else
+                T:Print("[TwichUI] Profiler UI is unavailable")
+            end
+            return
+        end
+
+        if subCmd == "export" then
+            local exportData = profiler:ExportData()
+            T:Print(exportData)
+            T:Print("\n|cff69b86fProfiler data exported above. Copy and save to a file for analysis.|r")
+            return
+        end
+
+        if subCmd == "clear" then
+            profiler:ClearProfiles()
+            return
+        end
+
+        if subCmd == "status" then
+            if profiler:IsActive() then
+                T:Print("|cff69b86fProfiler is currently ACTIVE|r - Use '/tui profile stop' to stop profiling")
+            else
+                T:Print("|cffff9a6cProfiler is currently INACTIVE|r - Use '/tui profile start' to begin profiling")
+            end
+            T:Print("Available commands:")
+            T:Print("  start   - Begin profiling")
+            T:Print("  stop    - End profiling")
+            T:Print("  report  - Open visual results window")
+            T:Print("  window  - Same as report")
+            T:Print("  export  - Copy raw data to chat")
+            T:Print("  clear   - Clear all profiling data")
+            T:Print("  status  - Show this help")
+            return
+        end
+
+        T:Print("[TwichUI] Unknown profile subcommand.")
+        T:Print("Use '/tui profile status' for available commands.")
+        return
+    end
+
     if primaryCommand == "movers" then
         local moversModule = T:GetModule("Movers", true)
         if not moversModule then
