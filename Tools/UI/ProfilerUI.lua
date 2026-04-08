@@ -130,6 +130,7 @@ end
 local function MakeProfileRow(parent)
     local row = CreateFrame("Button", nil, parent)
     row:SetHeight(CHART_ROW_H)
+    row:SetWidth(FRAME_W - 10)
     row:SetScript("OnEnter", function(self)
         if self.__tooltip then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -385,6 +386,8 @@ function ProfilerUI:Refresh()
     -- Get profile data
     local profileData = profiler:GetProfileData()
     local profiles = profileData.profiles or {}
+    T:Print(string.format("[PROFILEUI] Refresh called. ProfileData totalProfiles=%d, profiles array size=%d",
+        profileData.totalProfiles or 0, #profiles))
 
     -- Sort profiles
     if self.sortColumn == "name" then
@@ -442,7 +445,11 @@ function ProfilerUI:Refresh()
 
     -- Clear content
     local content = frame.__content
-    content:SetHeight(#profiles * CHART_ROW_H)
+    if not content then
+        return
+    end
+
+    content:SetHeight(math.max(CHART_ROW_H, #profiles * CHART_ROW_H))
 
     -- Recycle or create rows
     for i = 1, #profiles do
@@ -452,7 +459,9 @@ function ProfilerUI:Refresh()
             self.rowPool[i] = row
         end
 
+        row:ClearAllPoints()
         row:Show()
+        T:Print(string.format("[PROFILEUI] Row %d: %s (%.3f ms)", i, profiles[i].name, profiles[i].totalTime))
         if i == 1 then
             row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
         else
@@ -469,6 +478,9 @@ function ProfilerUI:Refresh()
 
     -- Update scroll
     frame.__scrollFrame:SetVerticalScroll(0)
+    content:Show()
+    frame:Show()
+    T:Print("[PROFILEUI] Frame refreshed and shown")
 end
 
 -- Toggle the frame visibility

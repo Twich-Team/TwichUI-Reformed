@@ -146,14 +146,14 @@ local function RegisterModuleForProfiling(name, tbl, functionNames)
         if type(originalFunc) == "function" then
             local profileName = name .. ":" .. funcName
 
-            -- Create a wrapper with method support (handles self argument)
-            local wrappedFunc = function(...)
+            -- Create a wrapper that properly preserves the self context for methods
+            local wrappedFunc = function(self, ...)
                 if not isProfilingActive then
-                    return originalFunc(...)
+                    return originalFunc(self, ...)
                 end
 
                 local scope = BeginScope(profileName)
-                local success, result = pcall(originalFunc, ...)
+                local success, result = pcall(originalFunc, self, ...)
                 EndScope(scope)
 
                 if not success then
@@ -164,8 +164,13 @@ local function RegisterModuleForProfiling(name, tbl, functionNames)
             end
 
             -- Store original and wrapper
-            hookedFunctions[profileName] = { original = originalFunc, wrapped = wrappedFunc, object = tbl, method =
-            funcName }
+            hookedFunctions[profileName] = {
+                original = originalFunc,
+                wrapped = wrappedFunc,
+                object = tbl,
+                method =
+                    funcName
+            }
             tbl[funcName] = wrappedFunc
         end
     end
@@ -190,57 +195,90 @@ local function StartProfiling()
     isProfilingActive = true
     profilingStartTime = debugprofilestop()
 
-    -- Ensure T is available
-    local T_current = GetT()
-    if not T_current or not T_current.GetModule then
-        T:Print("[TwichUI] Profiler error: T or GetModule not available. Profiling disabled.")
+    -- Use T that we already verified is available
+    if not T.GetModule then
+        T:Print("[TwichUI] Profiler error: T.GetModule not available. Profiling disabled.")
         isProfilingActive = false
         return
     end
 
+    -- Methods that are safe to auto-wrap (no problematic state dependencies)
+    -- These are primarily oUF frame methods that get called on every update
+    local SAFE_METHODS_TO_PROFILE = {
+        -- oUF element updates
+        "Update",
+        "UpdateAllElements",
+        "PostUpdate",
+        "ForceUpdate",
+        -- Unit frame specific apply methods (called on settings change)
+        "ApplyColors",
+        "ApplyFrameColors",
+        "ApplyFontObject",
+        "ApplyTextTags",
+        "ApplyFrameFonts",
+        "ApplyTextPositions",
+        "ApplyAuraSettings",
+        "ApplyClassBarSettings",
+        "ApplyStatusBarTexture",
+        "ApplyHealPredictionSettings",
+        "ApplyRoleIconSettings",
+        "ApplyStateIndicatorSettings",
+        "ApplyReadyCheckIndicatorSettings",
+        "ApplyInfoBarSettings",
+        "ApplyCustomFrameSettings",
+        -- Aura updates
+        "UpdateAuraRemainingText",
+        "UpdateRoleIcon",
+        "UpdateStateIndicator",
+        "UpdateReadyCheckIndicator",
+        "UpdatePowerBarForRole",
+        "RefreshAuraBarsForFrame",
+        -- Refresh methods
+        "Refresh",
+        "RefreshStateIndicatorFrames",
+        "RefreshReadyCheckIndicatorFrames",
+    }
+
     -- Auto-register key modules for profiling
     local modulesToProfile = {
-        { name = "Configuration",    methods = { "OnUpdate", "OnEvent" } },
-        { name = "Datatexts",        methods = { "OnUpdate", "OnEvent", "Refresh" } },
-        { name = "UnitFrames",       methods = { "OnUpdate", "OnEvent" } },
-        { name = "ActionBars",       methods = { "OnUpdate", "OnEvent", "Refresh" } },
-        { name = "ChatEnhancements", methods = { "OnUpdate", "OnEvent" } },
-        { name = "BestInSlot",       methods = { "OnUpdate", "OnEvent" } },
-        { name = "QualityOfLife",    methods = { "OnUpdate", "OnEvent" } },
-        { name = "SmartMount",       methods = { "OnUpdate", "OnEvent" } },
-        { name = "Chores",           methods = { "OnUpdate", "OnEvent" } },
-        { name = "EasyFish",         methods = { "OnUpdate", "OnEvent" } },
+        "Datatexts",
+        "UnitFrames",
+        "ActionBars",
+        "ChatEnhancements",
+        "Chores",
     }
 
     local registeredCount = 0
+    local wrappedCount = 0
     local failedModules = {}
 
-    for _, moduleInfo in ipairs(modulesToProfile) do
+    for _, moduleName in ipairs(modulesToProfile) do
         local ok, module = pcall(function()
-            return T_current:GetModule(moduleInfo.name, true)
+            return T:GetModule(moduleName, true)
         end)
 
         if ok and module then
-            -- Filter to only methods that exist
-            local methodsToProfile = {}
-            for _, methodName in ipairs(moduleInfo.methods) do
+            registeredCount = registeredCount + 1
+
+            -- Selectively wrap only safe methods that exist on this module
+            for _, methodName in ipairs(SAFE_METHODS_TO_PROFILE) do
                 if type(module[methodName]) == "function" then
-                    table.insert(methodsToProfile, methodName)
+                    RegisterModuleForProfiling(moduleName, module, { methodName })
+                    wrappedCount = wrappedCount + 1
                 end
             end
-
-            if #methodsToProfile > 0 then
-                RegisterModuleForProfiling(moduleInfo.name, module, methodsToProfile)
-                registeredCount = registeredCount + 1
-            end
         else
-            table.insert(failedModules, moduleInfo.name)
+            table.insert(failedModules, moduleName)
         end
     end
 
-    T:Print(string.format("[TwichUI] Profiling started. %d modules auto-registered.", registeredCount))
-    if registeredCount == 0 and #failedModules > 0 then
-        T:Print(string.format("[TwichUI] Debug: Failed to register modules: %s", table.concat(failedModules, ", ")))
+    if wrappedCount == 0 then
+        T:Print(string.format("[TwichUI] Profiling initialized with %d modules, but no safe methods found to wrap.",
+            registeredCount))
+        T:Print("[TwichUI] Try '/tui profile report' to view any manually-scoped data.")
+    else
+        T:Print(string.format("[TwichUI] Profiling started. %d modules loaded, %d methods wrapped.", registeredCount,
+            wrappedCount))
     end
 end
 

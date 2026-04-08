@@ -89,10 +89,8 @@ function DevDT:OnClick(panel, button)
                 text = "Open BugSack",
                 notCheckable = true,
                 func = function()
-                    if _G.BugSack and type(_G.BugSack.Open) == "function" then
-                        _G.BugSack:Open()
-                    elseif _G.SlashCmdList and _G.SlashCmdList.BugSack then
-                        _G.SlashCmdList.BugSack("")
+                    if _G.SlashCmdList and _G.SlashCmdList.BugSack then
+                        _G.SlashCmdList.BugSack("show")
                     end
                 end,
             })
@@ -101,12 +99,10 @@ function DevDT:OnClick(panel, button)
                 text = "Clear BugSack",
                 notCheckable = true,
                 func = function()
-                    if _G.BugSack and type(_G.BugSack.Clear) == "function" then
-                        _G.BugSack:Clear()
-                    elseif _G.SlashCmdList and _G.SlashCmdList.BugSack then
-                        _G.SlashCmdList.BugSack("clear")
+                    if _G.BugSack and type(_G.BugSack.Reset) == "function" then
+                        _G.BugSack:Reset()
+                        T:Print("[TwichUI] BugSack cleared")
                     end
-                    T:Print("[TwichUI] BugSack cleared")
                 end,
             })
         end
@@ -125,6 +121,8 @@ function DevDT:OnClick(panel, button)
             end
 
             local isActive = profiler:IsActive()
+            local profileData = profiler:GetProfileData()
+            local hasData = profileData and profileData.totalProfiles and profileData.totalProfiles > 0
 
             table.insert(menuList, {
                 text = isActive and "Stop Profiling" or "Start Profiling",
@@ -138,7 +136,8 @@ function DevDT:OnClick(panel, button)
                 end,
             })
 
-            if isActive then
+            -- Show report options if data exists (during or after profiling)
+            if hasData then
                 table.insert(menuList, {
                     text = "View Profile Report",
                     notCheckable = true,

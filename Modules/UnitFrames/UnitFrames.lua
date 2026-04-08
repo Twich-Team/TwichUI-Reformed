@@ -7609,42 +7609,10 @@ local function CreateGlowContainer(frame, frameLevel)
 end
 
 local function StripFrameSettingsHintFromTooltip()
-    if not GameTooltip or type(GameTooltip.NumLines) ~= "function" then
-        return
-    end
-
-    local lineCount = GameTooltip:NumLines() or 0
-    for index = 1, lineCount do
-        local left = _G["GameTooltipTextLeft" .. index]
-        local right = _G["GameTooltipTextRight" .. index]
-        if left and left.GetText then
-            -- Wrap in pcall to avoid taint issues with secure tooltips
-            local success, text = pcall(function()
-                return left:GetText() or ""
-            end)
-
-            if success and text and text ~= "" then
-                local success2, normalized = pcall(function()
-                    return text
-                        :gsub("|c%x%x%x%x%x%x%x%x", "")
-                        :gsub("|r", "")
-                        :gsub("<", "")
-                        :gsub(">", "")
-                        :gsub("%-", " ")
-                        :gsub("[^%w%s]", "")
-                        :gsub("%s+", " ")
-                        :lower()
-                end)
-
-                if success2 and normalized and normalized:find("right click for frame settings", 1, true) then
-                    pcall(left.SetText, left, "")
-                    if right and right.SetText then
-                        pcall(right.SetText, right, "")
-                    end
-                end
-            end
-        end
-    end
+    -- Disabled: This feature was causing taint violations in secure tooltip contexts.
+    -- The tooltip text stripping interacts poorly with WoW's tooltip security model.
+    -- Users can disable tooltips manually in unit frame settings if needed.
+    return
 end
 
 local function EnsureUnitFrameTooltipHintFilterInstalled()
@@ -15207,7 +15175,7 @@ do
         frame.templateListContent:SetHeight(math_max(1, -templateY + 6))
 
         local selectedTemplate = frame.selectedTemplateID and self:GetCastbarSpellTemplate(frame.selectedTemplateID) or
-        nil
+            nil
         frame.deleteTemplateButton:SetEnabled(selectedTemplate ~= nil)
         frame.emptyTemplates:SetShown(selectedTemplate == nil)
         frame.templateNameInput:SetEnabled(selectedTemplate ~= nil)
@@ -15229,7 +15197,7 @@ do
                 selectedTemplate.color[3],
                 selectedTemplate.color[4] or 1)
             frame.particlesToggle._fs:SetText(selectedTemplate.useParticles == true and "Particles: On" or
-            "Particles: Off")
+                "Particles: Off")
             frame.themeMenuButton._fs:SetText(ResolveCastbarTemplateThemeLabel(selectedTemplate.fantasyTheme))
             frame._suspendEffectSlider = true
             frame.effectSlider:SetValue(selectedTemplate.fantasyEffectScale or 1)
