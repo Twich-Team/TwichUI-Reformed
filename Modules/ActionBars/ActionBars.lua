@@ -2782,6 +2782,60 @@ function ActionBars:GetButtonSpellID(button)
     return nil
 end
 
+function ActionBars:RebuildSpellButtonIndex()
+    local index = self.spellButtonIndex
+    if not index then
+        index = {}
+        self.spellButtonIndex = index
+    end
+
+    if wipe then
+        wipe(index)
+    else
+        for key in pairs(index) do
+            index[key] = nil
+        end
+    end
+
+    for _, buttons in pairs(self.barButtons) do
+        for _, button in ipairs(buttons) do
+            local spellID = self:GetButtonSpellID(button)
+            button.__twichuiABSpellID = spellID
+            if spellID then
+                local spellButtons = index[spellID]
+                if not spellButtons then
+                    spellButtons = {}
+                    index[spellID] = spellButtons
+                end
+                spellButtons[#spellButtons + 1] = button
+            end
+        end
+    end
+end
+
+function ActionBars:UpdateButtonsForSpellID(spellID)
+    if not spellID then
+        return false
+    end
+
+    local index = self.spellButtonIndex
+    local buttons = index and index[spellID] or nil
+    if not buttons or #buttons == 0 then
+        return false
+    end
+
+    local style = self:GetGlowStyle()
+    local spellStateCache = {
+        [spellID] = self.activeAlertSpells[spellID] == true,
+    }
+
+    for _, button in ipairs(buttons) do
+        self:UpdateButtonGlow(button, style, spellStateCache)
+    end
+
+    return true
+end
+
 function ActionBars:IsButtonGlowActive(button, spellStateCache)
     local spellID = self:GetButtonSpellID(button)
     if not spellID then
@@ -3093,9 +3147,18 @@ function ActionBars:HandleFailedSpell(spellID)
         return false
     end
 
-    local matched = false
-    for _, buttons in pairs(self.barButtons) do
+    local index = self.spellButtonIndex
+    local buttons = index and index[spellID] or nil
+    if buttons and #buttons > 0 then
         for _, button in ipairs(buttons) do
+            self:ShowFailedActionFeedback(button)
+        end
+        return true
+    end
+
+    local matched = false
+    for _, fallbackButtons in pairs(self.barButtons) do
+        for _, button in ipairs(fallbackButtons) do
             if self:GetButtonSpellID(button) == spellID then
                 self:ShowFailedActionFeedback(button)
                 matched = true
@@ -3554,6 +3617,9 @@ function ActionBars:SPELL_ACTIVATION_OVERLAY_GLOW_SHOW(_, spellID)
             return
         end
         self.activeAlertSpells[spellID] = true
+        if self:UpdateButtonsForSpellID(spellID) then
+            return
+        end
     end
     self:UpdateAllButtonGlows()
 end
@@ -3564,6 +3630,9 @@ function ActionBars:SPELL_ACTIVATION_OVERLAY_GLOW_HIDE(_, spellID)
             return
         end
         self.activeAlertSpells[spellID] = nil
+        if self:UpdateButtonsForSpellID(spellID) then
+            return
+        end
     end
     self:UpdateAllButtonGlows()
 end
@@ -4291,6 +4360,7 @@ function ActionBars:QueueCooldownRefresh()
 end
 
 function ActionBars:QueueButtonStateRefresh()
+    local event = self._pendingStateEvent
     if self._buttonStateRefreshQueued == true then
         return
     end
@@ -4298,7 +4368,7 @@ function ActionBars:QueueButtonStateRefresh()
     self._buttonStateRefreshQueued = true
     if not (C_Timer and type(C_Timer.After) == "function") then
         self._buttonStateRefreshQueued = false
-        self:RefreshButtonStates(true)
+        self:RefreshButtonStates(event or true)
         return
     end
 
@@ -4313,12 +4383,14 @@ function ActionBars:QueueButtonStateRefresh()
             return
         end
 
-        ActionBars:RefreshButtonStates(true)
+        ActionBars:RefreshButtonStates(ActionBars._pendingStateEvent or true)
+        ActionBars._pendingStateEvent = nil
     end)
 end
 
 function ActionBars:RefreshButtonStates(event)
     if type(event) == "string" then
+        self._pendingStateEvent = event
         self:QueueButtonStateRefresh()
         return
     end
@@ -4328,13 +4400,28 @@ function ActionBars:RefreshButtonStates(event)
         return
     end
 
-    local glowStyle = self:GetGlowStyle()
+    local glowEvent = event
+    local shouldRefreshGlow = glowEvent == true
+        or glowEvent == nil
+        or glowEvent == "SPELLS_CHANGED"
+        or glowEvent == "PLAYER_SPECIALIZATION_CHANGED"
+        or glowEvent == "ACTIONBAR_SLOT_CHANGED"
+        or glowEvent == "ACTIONBAR_PAGE_CHANGED"
+        or glowEvent == "UPDATE_BINDINGS"
+
+    if shouldRefreshGlow then
+        self:RebuildSpellButtonIndex()
+    end
+
+    local glowStyle = shouldRefreshGlow and self:GetGlowStyle() or nil
     local showGrid = db.showGrid == true
-    local spellStateCache = {}
+    local spellStateCache = shouldRefreshGlow and {} or nil
     for barKey, buttons in pairs(self.barButtons) do
         local settings = self:GetBarSettings(barKey)
         for _, button in ipairs(buttons) do
-            self:UpdateButtonGlow(button, glowStyle, spellStateCache)
+            if shouldRefreshGlow then
+                self:UpdateButtonGlow(button, glowStyle, spellStateCache)
+            end
             if button.__twichuiShowGrid ~= showGrid then
                 button.__twichuiShowGrid = showGrid
                 ApplyButtonGridState(button, showGrid)
@@ -4346,7 +4433,9 @@ function ActionBars:RefreshButtonStates(event)
         end
     end
 
-    self:ScheduleGlowSync(0.05)
+    if shouldRefreshGlow then
+        self:ScheduleGlowSync(0.05)
+    end
 end
 
 function ActionBars:GetTargetAlpha(barSettings, hovered)
