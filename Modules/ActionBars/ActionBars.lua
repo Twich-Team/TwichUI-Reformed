@@ -1060,6 +1060,7 @@ function ActionBars:InvalidateDBCache()
     _dbCache = nil
     if self then
         self._barSettingsCache = nil
+        self._cooldownBarState = nil
     end
 end
 
@@ -1100,6 +1101,7 @@ function ActionBars:OnInitialize()
     self.keybindModeActive = false
     self.bindingsChanged = false
     self._cooldownRefreshQueued = false
+    self._cooldownBarState = {}
 
     self:CreateInfrastructure()
 
@@ -1193,6 +1195,7 @@ function ActionBars:OnDisable()
     self.pendingDisable = false
     self.pendingRefresh = false
     self._cooldownRefreshQueued = false
+    self._cooldownBarState = nil
     self.lastActionAttempt = nil
     self.lastSpellAttempt = nil
     self:InvalidateDBCache()
@@ -2779,13 +2782,29 @@ function ActionBars:GetButtonSpellID(button)
     return nil
 end
 
-function ActionBars:IsButtonGlowActive(button)
+function ActionBars:IsButtonGlowActive(button, spellStateCache)
     local spellID = self:GetButtonSpellID(button)
     if not spellID then
         return false
     end
 
-    return (IsSpellOverlayed and IsSpellOverlayed(spellID) == true) or self.activeAlertSpells[spellID] == true
+    if spellStateCache then
+        local cached = spellStateCache[spellID]
+        if cached ~= nil then
+            return cached
+        end
+    end
+
+    local isActive = self.activeAlertSpells[spellID] == true
+    if not isActive and IsSpellOverlayed then
+        isActive = IsSpellOverlayed(spellID) == true
+    end
+
+    if spellStateCache then
+        spellStateCache[spellID] = isActive
+    end
+
+    return isActive
 end
 
 function ActionBars:GetGlowStyle()
@@ -3471,21 +3490,30 @@ function ActionBars:HideNativeOverlayGlow(button)
     end
 end
 
-function ActionBars:UpdateButtonGlow(button, cachedStyle)
+function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
     if not button then
         return
     end
 
     local style = cachedStyle or self:GetGlowStyle()
-    local active = self:IsButtonGlowActive(button)
+    local active = self:IsButtonGlowActive(button, spellStateCache)
     local desiredStyle = active and style or "none"
     local currentStyle = button.__twichuiABGlowStyle or "none"
 
     if desiredStyle == currentStyle then
+        local width, height = button:GetWidth(), button:GetHeight()
+        local sizeChanged = button.__twichuiGlowW ~= width or button.__twichuiGlowH ~= height
+        button.__twichuiGlowW = width
+        button.__twichuiGlowH = height
+
         if desiredStyle == "pixel" then
-            self:UpdatePixelGlowLayout(button)
+            if sizeChanged then
+                self:UpdatePixelGlowLayout(button)
+            end
         elseif desiredStyle == "proc" then
-            self:UpdateProcGlowLayout(button)
+            if sizeChanged then
+                self:UpdateProcGlowLayout(button)
+            end
         elseif desiredStyle == "button" then
             local red, green, blue = self:GetGlowColor()
             self:TintOverlayGlow(button, red, green, blue)
@@ -3512,9 +3540,10 @@ end
 
 function ActionBars:UpdateAllButtonGlows()
     local style = self:GetGlowStyle()
+    local spellStateCache = {}
     for _, buttons in pairs(self.barButtons) do
         for _, button in ipairs(buttons) do
-            self:UpdateButtonGlow(button, style)
+            self:UpdateButtonGlow(button, style, spellStateCache)
         end
     end
 end
@@ -4216,10 +4245,20 @@ function ActionBars:ApplyCooldownSettings()
         return
     end
 
+    self._cooldownBarState = self._cooldownBarState or {}
+    local hideCountdown = db.showCooldownText ~= true
+
     for barKey, buttons in pairs(self.barButtons) do
         local settings = self:GetBarSettings(barKey)
-        for _, button in ipairs(buttons) do
-            self:ApplyCooldownSettingsToButton(button, db, settings)
+        local showSwipe = db.showCooldownSwipe == true and
+            (not settings or settings.showCooldownSwipe ~= false)
+        local signature = (showSwipe and "1" or "0") .. ":" .. (hideCountdown and "1" or "0")
+
+        if self._cooldownBarState[barKey] ~= signature then
+            for _, button in ipairs(buttons) do
+                self:ApplyCooldownSettingsToButton(button, db, settings)
+            end
+            self._cooldownBarState[barKey] = signature
         end
     end
 end
@@ -4291,12 +4330,15 @@ function ActionBars:RefreshButtonStates(event)
 
     local glowStyle = self:GetGlowStyle()
     local showGrid = db.showGrid == true
+    local spellStateCache = {}
     for barKey, buttons in pairs(self.barButtons) do
         local settings = self:GetBarSettings(barKey)
         for _, button in ipairs(buttons) do
-            self:ApplyCooldownSettingsToButton(button, db, settings)
-            self:UpdateButtonGlow(button, glowStyle)
-            ApplyButtonGridState(button, showGrid)
+            self:UpdateButtonGlow(button, glowStyle, spellStateCache)
+            if button.__twichuiShowGrid ~= showGrid then
+                button.__twichuiShowGrid = showGrid
+                ApplyButtonGridState(button, showGrid)
+            end
         end
         local holder = self.holders[barKey]
         if holder and settings then

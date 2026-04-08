@@ -1999,18 +1999,34 @@ function UnitFrames:CheckAuraMatchesFilter(mode, data)
     return AuraMatchesDisplayMode(mode, data)
 end
 
+function UnitFrames:InvalidateDBCache()
+    self._optionsCacheUF = nil
+    self._dbCacheUF = nil
+end
+
 function UnitFrames:GetOptions()
+    if self._optionsCacheUF then
+        return self._optionsCacheUF
+    end
+
     local configuration = T:GetModule("Configuration")
-    return configuration and configuration.Options and configuration.Options.UnitFrames or nil
+    self._optionsCacheUF = configuration and configuration.Options and configuration.Options.UnitFrames or nil
+    return self._optionsCacheUF
 end
 
 function UnitFrames:GetDB()
-    local options = self:GetOptions()
-    if options and type(options.GetDB) == "function" then
-        return options:GetDB()
+    if self._dbCacheUF then
+        return self._dbCacheUF
     end
 
-    return {}
+    local options = self:GetOptions()
+    if options and type(options.GetDB) == "function" then
+        self._dbCacheUF = options:GetDB()
+        return self._dbCacheUF
+    end
+
+    self._dbCacheUF = {}
+    return self._dbCacheUF
 end
 
 local function ResolveCastbarSpellTemplateTheme(theme)
@@ -4582,7 +4598,7 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey, force)
         local auraSignature = BuildAuraBarSignature(auraList, maxBars)
         local sameOk, isSame = pcall(function()
             return container._twichAuraBarStyleSignature == styleSignature and
-            container._twichAuraBarSignature == auraSignature
+                container._twichAuraBarSignature == auraSignature
         end)
         if sameOk and isSame then
             return
@@ -13591,6 +13607,7 @@ function UnitFrames:OnThemeChanged()
 end
 
 function UnitFrames:OnConfigRestored()
+    self:InvalidateDBCache()
     self:RefreshAllFrames()
 end
 
@@ -16129,6 +16146,7 @@ function UnitFrames:ApplyMasqueSettings()
 end
 
 function UnitFrames:OnDisable()
+    self:InvalidateDBCache()
     self:UnregisterMessage("TWICH_THEME_CHANGED")
     self:UnregisterMessage("TWICH_CONFIG_RESTORED")
     self:UnregisterAllEvents()

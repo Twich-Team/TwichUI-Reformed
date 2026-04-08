@@ -62,6 +62,61 @@ ProfilerUI.rowPool = ProfilerUI.rowPool or {}
 ProfilerUI.sortColumn = "totalTime"
 ProfilerUI.sortDescending = true
 
+local COLUMN_ORDER = { "name", "calls", "totalTime", "avgTime", "maxTime", "memAvg", "memMax", "visual" }
+local COLUMN_DEFAULT_WIDTHS = {
+    name = 290,
+    calls = 60,
+    totalTime = 70,
+    avgTime = 70,
+    maxTime = 70,
+    memAvg = 70,
+    memMax = 70,
+    visual = 90,
+}
+local COLUMN_MIN_WIDTHS = {
+    name = 140,
+    calls = 48,
+    totalTime = 58,
+    avgTime = 58,
+    maxTime = 58,
+    memAvg = 58,
+    memMax = 58,
+    visual = 60,
+}
+local COLUMN_GAP_AFTER = {
+    name = 16,
+    calls = 12,
+    totalTime = 10,
+    avgTime = 10,
+    maxTime = 10,
+    memAvg = 10,
+    memMax = 10,
+}
+
+local function CopyColumnWidths(src)
+    return {
+        name = src.name,
+        calls = src.calls,
+        totalTime = src.totalTime,
+        avgTime = src.avgTime,
+        maxTime = src.maxTime,
+        memAvg = src.memAvg,
+        memMax = src.memMax,
+        visual = src.visual,
+    }
+end
+
+ProfilerUI.columnWidths = ProfilerUI.columnWidths or CopyColumnWidths(COLUMN_DEFAULT_WIDTHS)
+
+local function GetEffectiveColumnWidths(showMemory)
+    local widths = CopyColumnWidths(ProfilerUI.columnWidths)
+    if not showMemory then
+        widths.visual = widths.visual + widths.memAvg + widths.memMax + (COLUMN_GAP_AFTER.memAvg or 0) +
+            (COLUMN_GAP_AFTER.memMax or 0)
+    end
+    return widths
+end
+
 -- Utility: Create a colored panel
 local function Panel(parent, r, g, b, a, br, bg_, bb, ba)
     local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
@@ -226,6 +281,140 @@ local function MakeProfileRow(parent)
     return row
 end
 
+local function ApplyColumnLayoutToRow(row, widths, showMemory)
+    if not row then
+        return
+    end
+
+    row.__name:ClearAllPoints()
+    row.__name:SetPoint("LEFT", row, "LEFT", 6, 0)
+    row.__name:SetWidth(widths.name)
+
+    row.__calls:ClearAllPoints()
+    row.__calls:SetPoint("LEFT", row.__name, "RIGHT", COLUMN_GAP_AFTER.name, 0)
+    row.__calls:SetWidth(widths.calls)
+
+    row.__total:ClearAllPoints()
+    row.__total:SetPoint("LEFT", row.__calls, "RIGHT", COLUMN_GAP_AFTER.calls, 0)
+    row.__total:SetWidth(widths.totalTime)
+
+    row.__avg:ClearAllPoints()
+    row.__avg:SetPoint("LEFT", row.__total, "RIGHT", COLUMN_GAP_AFTER.totalTime, 0)
+    row.__avg:SetWidth(widths.avgTime)
+
+    row.__max:ClearAllPoints()
+    row.__max:SetPoint("LEFT", row.__avg, "RIGHT", COLUMN_GAP_AFTER.avgTime, 0)
+    row.__max:SetWidth(widths.maxTime)
+
+    row.__memAvg:ClearAllPoints()
+    row.__memAvg:SetPoint("LEFT", row.__max, "RIGHT", COLUMN_GAP_AFTER.maxTime, 0)
+    row.__memAvg:SetWidth(widths.memAvg)
+
+    row.__memMax:ClearAllPoints()
+    row.__memMax:SetPoint("LEFT", row.__memAvg, "RIGHT", COLUMN_GAP_AFTER.memAvg, 0)
+    row.__memMax:SetWidth(widths.memMax)
+
+    if showMemory then
+        row.__memAvg:Show()
+        row.__memMax:Show()
+        row.__bar:ClearAllPoints()
+        row.__bar:SetPoint("LEFT", row.__memMax, "RIGHT", COLUMN_GAP_AFTER.memMax, 0)
+    else
+        row.__memAvg:Hide()
+        row.__memMax:Hide()
+        row.__bar:ClearAllPoints()
+        row.__bar:SetPoint("LEFT", row.__max, "RIGHT", COLUMN_GAP_AFTER.maxTime, 0)
+    end
+
+    row.__bar:SetWidth(widths.visual)
+end
+
+local function ApplyColumnLayoutToHeaders(frame, widths, showMemory)
+    if not frame or not frame.__headers or not frame.__headerPanel then
+        return
+    end
+
+    local headers = frame.__headers
+    local panel = frame.__headerPanel
+    local x = 6
+
+    local function PlaceHeader(key)
+        local header = headers[key]
+        if not header then
+            return
+        end
+        header:ClearAllPoints()
+        header:SetPoint("LEFT", panel, "LEFT", x, 0)
+        header:SetWidth(widths[key])
+        if key == "memAvg" or key == "memMax" then
+            header:SetShown(showMemory)
+        else
+            header:Show()
+        end
+        x = x + widths[key] + (COLUMN_GAP_AFTER[key] or 0)
+    end
+
+    PlaceHeader("name")
+    PlaceHeader("calls")
+    PlaceHeader("totalTime")
+    PlaceHeader("avgTime")
+    PlaceHeader("maxTime")
+    if showMemory then
+        PlaceHeader("memAvg")
+        PlaceHeader("memMax")
+    end
+    PlaceHeader("visual")
+end
+
+local function UpdateColumnResizerPositions(frame, widths, showMemory)
+    if not frame or not frame.__columnResizers or not frame.__headerPanel then
+        return
+    end
+
+    local panel = frame.__headerPanel
+    local x = 6
+    for _, key in ipairs(COLUMN_ORDER) do
+        local w = widths[key]
+        local gap = COLUMN_GAP_AFTER[key]
+        if w then
+            x = x + w
+        end
+
+        if gap then
+            local resizer = frame.__columnResizers[key]
+            if resizer then
+                local hide = (not showMemory) and (key == "maxTime" or key == "memAvg" or key == "memMax")
+                if hide then
+                    resizer:Hide()
+                else
+                    resizer:Show()
+                    resizer:ClearAllPoints()
+                    resizer:SetPoint("TOPLEFT", panel, "TOPLEFT", x + math.floor(gap / 2) - 3, 0)
+                end
+            end
+            x = x + gap
+        end
+    end
+end
+
+local function ApplyColumnLayout(frame)
+    if not frame then
+        return
+    end
+
+    local showMemory = frame.__memoryEnabled == true
+    local widths = GetEffectiveColumnWidths(showMemory)
+    ApplyColumnLayoutToHeaders(frame, widths, showMemory)
+    UpdateColumnResizerPositions(frame, widths, showMemory)
+
+    for i = 1, #ProfilerUI.rowPool do
+        local row = ProfilerUI.rowPool[i]
+        if row and row:IsShown() then
+            ApplyColumnLayoutToRow(row, widths, showMemory)
+        end
+    end
+end
+
 -- Populate a row with profile data
 local function PopulateProfileRow(row, profile, maxTime, showMemory)
     if not row or not profile then
@@ -278,7 +467,8 @@ local function PopulateProfileRow(row, profile, maxTime, showMemory)
     -- Update bar
     maxTime = maxTime or 1
     local ratio = math.min(1, profile.totalTime / maxTime)
-    row.__barFill:SetWidth(90 * ratio)
+    local innerBarWidth = math.max(1, (row.__bar:GetWidth() or 90) - 2)
+    row.__barFill:SetWidth(innerBarWidth * ratio)
     row.__barFill:SetBackdropColor(color[1], color[2], color[3], 0.8)
 end
 
@@ -351,6 +541,7 @@ local function BuildFrame()
     headerPanel:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT", 0, 0)
     headerPanel:SetHeight(26)
     headerPanel:SetFrameLevel(titleBar:GetFrameLevel() + 2)
+    frame.__headerPanel = headerPanel
 
     local function MakeHeaderBtn(anchorFrame, anchorPoint, text, width, column)
         local btn = CreateFrame("Button", nil, headerPanel)
@@ -389,28 +580,28 @@ local function BuildFrame()
         return btn
     end
 
-    local nameHeader = MakeHeaderBtn(headerPanel, "LEFT", "Function Name", 290, "name")
+    local nameHeader = MakeHeaderBtn(headerPanel, "LEFT", "Function Name", COLUMN_DEFAULT_WIDTHS.name, "name")
     nameHeader:SetPoint("LEFT", headerPanel, "LEFT", 6, 0)
 
-    local callsHeader = MakeHeaderBtn(nameHeader, "TOPRIGHT", "Calls", 60, "calls")
+    local callsHeader = MakeHeaderBtn(nameHeader, "TOPRIGHT", "Calls", COLUMN_DEFAULT_WIDTHS.calls, "calls")
     callsHeader:SetPoint("LEFT", nameHeader, "RIGHT", 16, 0)
 
-    local totalHeader = MakeHeaderBtn(callsHeader, "TOPRIGHT", "Total (ms)", 70, "totalTime")
+    local totalHeader = MakeHeaderBtn(callsHeader, "TOPRIGHT", "Total (ms)", COLUMN_DEFAULT_WIDTHS.totalTime, "totalTime")
     totalHeader:SetPoint("LEFT", callsHeader, "RIGHT", 12, 0)
 
-    local avgHeader = MakeHeaderBtn(totalHeader, "TOPRIGHT", "Avg (ms)", 70, "avgTime")
+    local avgHeader = MakeHeaderBtn(totalHeader, "TOPRIGHT", "Avg (ms)", COLUMN_DEFAULT_WIDTHS.avgTime, "avgTime")
     avgHeader:SetPoint("LEFT", totalHeader, "RIGHT", 10, 0)
 
-    local maxHeader = MakeHeaderBtn(avgHeader, "TOPRIGHT", "Max (ms)", 70, "maxTime")
+    local maxHeader = MakeHeaderBtn(avgHeader, "TOPRIGHT", "Max (ms)", COLUMN_DEFAULT_WIDTHS.maxTime, "maxTime")
     maxHeader:SetPoint("LEFT", avgHeader, "RIGHT", 10, 0)
 
-    local memAvgHeader = MakeHeaderBtn(maxHeader, "TOPRIGHT", "Mem Avg", 70, "memAvg")
+    local memAvgHeader = MakeHeaderBtn(maxHeader, "TOPRIGHT", "Mem Avg", COLUMN_DEFAULT_WIDTHS.memAvg, "memAvg")
     memAvgHeader:SetPoint("LEFT", maxHeader, "RIGHT", 10, 0)
 
-    local memMaxHeader = MakeHeaderBtn(memAvgHeader, "TOPRIGHT", "Mem Max", 70, "memMax")
+    local memMaxHeader = MakeHeaderBtn(memAvgHeader, "TOPRIGHT", "Mem Max", COLUMN_DEFAULT_WIDTHS.memMax, "memMax")
     memMaxHeader:SetPoint("LEFT", memAvgHeader, "RIGHT", 10, 0)
 
-    local barHeader = MakeHeaderBtn(memMaxHeader, "TOPRIGHT", "Visual", 90, "visual")
+    local barHeader = MakeHeaderBtn(memMaxHeader, "TOPRIGHT", "Visual", COLUMN_DEFAULT_WIDTHS.visual, "visual")
     barHeader:SetPoint("LEFT", memMaxHeader, "RIGHT", 10, 0)
 
     frame.__headers = {
@@ -428,6 +619,77 @@ local function BuildFrame()
     memAvgHeader.__label:SetText(memAvgHeader.__baseText)
     memMaxHeader.__baseText = "Mem Max (KB)"
     memMaxHeader.__label:SetText(memMaxHeader.__baseText)
+
+    frame.__columnResizers = {}
+    do
+        local function AddResizer(leftKey, rightKey)
+            local key = leftKey
+            local handle = CreateFrame("Button", nil, headerPanel)
+            handle:SetSize(6, 26)
+            handle:SetFrameLevel(headerPanel:GetFrameLevel() + 4)
+            handle:EnableMouse(true)
+            handle:SetScript("OnEnter", function(self)
+                self:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
+                self:SetBackdropColor(CLR_ACCENT[1], CLR_ACCENT[2], CLR_ACCENT[3], 0.25)
+            end)
+            handle:SetScript("OnLeave", function(self)
+                self:SetBackdrop(nil)
+            end)
+            handle:SetScript("OnMouseDown", function()
+                local leftWidth = ProfilerUI.columnWidths[leftKey]
+                local rightWidth = ProfilerUI.columnWidths[rightKey]
+                if not leftWidth or not rightWidth then
+                    return
+                end
+
+                local scale = UIParent:GetScale() or 1
+                local cursorX = (GetCursorPosition() or 0) / scale
+                local panelLeft = headerPanel:GetLeft() or 0
+                ProfilerUI.__columnDrag = {
+                    leftKey = leftKey,
+                    rightKey = rightKey,
+                    startX = cursorX - panelLeft,
+                    startLeft = leftWidth,
+                    startRight = rightWidth,
+                }
+                frame:SetScript("OnUpdate", function(selfFrame)
+                    local drag = ProfilerUI.__columnDrag
+                    if not drag then
+                        selfFrame:SetScript("OnUpdate", nil)
+                        return
+                    end
+
+                    local sc = UIParent:GetScale() or 1
+                    local curX = (GetCursorPosition() or 0) / sc
+                    local pLeft = headerPanel:GetLeft() or 0
+                    local xPos = curX - pLeft
+                    local delta = xPos - drag.startX
+                    local minLeft = COLUMN_MIN_WIDTHS[drag.leftKey] or 40
+                    local minRight = COLUMN_MIN_WIDTHS[drag.rightKey] or 40
+                    local total = drag.startLeft + drag.startRight
+                    local newLeft = math.max(minLeft, math.min(total - minRight, drag.startLeft + delta))
+                    local newRight = total - newLeft
+
+                    ProfilerUI.columnWidths[drag.leftKey] = newLeft
+                    ProfilerUI.columnWidths[drag.rightKey] = newRight
+                    ApplyColumnLayout(frame)
+                end)
+            end)
+            handle:SetScript("OnMouseUp", function()
+                ProfilerUI.__columnDrag = nil
+                frame:SetScript("OnUpdate", nil)
+            end)
+            frame.__columnResizers[key] = handle
+        end
+
+        AddResizer("name", "calls")
+        AddResizer("calls", "totalTime")
+        AddResizer("totalTime", "avgTime")
+        AddResizer("avgTime", "maxTime")
+        AddResizer("maxTime", "memAvg")
+        AddResizer("memAvg", "memMax")
+        AddResizer("memMax", "visual")
+    end
 
     -- Scrollable content area
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "BackdropTemplate")
@@ -480,6 +742,7 @@ local function BuildFrame()
                 end
             end
         end
+        ApplyColumnLayout(self)
     end)
 
     -- Enable mouse wheel scrolling
@@ -594,6 +857,7 @@ function ProfilerUI:Refresh()
         isActive,
         memoryEnabled and "|cff69b86fON|r" or "|cffff9a6cOFF|r"))
     if frame.__headers and frame.__headers.memAvg and frame.__headers.memMax then
+        frame.__memoryEnabled = memoryEnabled
         frame.__headers.memAvg:SetShown(memoryEnabled)
         frame.__headers.memMax:SetShown(memoryEnabled)
     end
@@ -633,6 +897,7 @@ function ProfilerUI:Refresh()
             row:SetPoint("TOPLEFT", self.rowPool[i - 1], "BOTTOMLEFT", 0, 0)
         end
 
+        ApplyColumnLayoutToRow(row, GetEffectiveColumnWidths(memoryEnabled), memoryEnabled)
         PopulateProfileRow(row, profiles[i], maxTime, memoryEnabled)
     end
 
@@ -643,6 +908,7 @@ function ProfilerUI:Refresh()
 
     -- Update scroll
     frame.__scrollFrame:SetVerticalScroll(0)
+    ApplyColumnLayout(frame)
     content:Show()
 end
 
