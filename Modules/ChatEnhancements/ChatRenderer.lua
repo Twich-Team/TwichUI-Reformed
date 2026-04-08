@@ -256,6 +256,27 @@ local function ApplyResolvedFont(fontString, fontName, size, r, g, b, flags)
     end
 end
 
+local function ApplyResolvedFontCached(fontString, cacheKey, fontName, size, r, g, b, flags)
+    if not fontString then
+        return
+    end
+
+    local signature = table.concat({
+        tostring(fontName or ""),
+        tostring(size or 12),
+        tostring(r or 1),
+        tostring(g or 1),
+        tostring(b or 1),
+        tostring(flags or ""),
+    }, "|")
+
+    local key = "__twichuiFontSig_" .. tostring(cacheKey or "default")
+    if fontString[key] ~= signature then
+        ApplyResolvedFont(fontString, fontName, size, r, g, b, flags)
+        fontString[key] = signature
+    end
+end
+
 local function StripMarkup(text)
     if text == nil then
         return ""
@@ -350,6 +371,10 @@ function ChatRendererModule:RefreshSettings()
     else
         self.settings.timestampWidth = 0
     end
+
+    local keywords = self.settings.keywords or {}
+    self._keywordMatchToken = (self.settings.keywordHighlightEnabled and "1" or "0") ..
+    "|" .. table.concat(keywords, "\31")
 end
 
 --- Measure the pixel width needed to display the timestamp at the current font and format.
@@ -404,7 +429,7 @@ function ChatRendererModule:CacheClassFromEvent(chatEvent, message, sender, lang
                     end
                 end
                 if needsLayout then
-                    self:RelayoutRenderer(renderer)
+                    self:QueueRelayout(renderer)
                 end
             end
         end
@@ -435,6 +460,40 @@ function ChatRendererModule:MessageMatchesKeyword(message)
         if body:find(kw, 1, true) then return true end
     end
     return false
+end
+
+function ChatRendererModule:GetEntryKeywordMatch(entry)
+    if not entry then
+        return false
+    end
+
+    local token = self._keywordMatchToken or ""
+    if entry._keywordMatchToken ~= token then
+        entry._keywordMatch = self:MessageMatchesKeyword(entry.message)
+        entry._keywordMatchToken = token
+    end
+
+    return entry._keywordMatch == true
+end
+
+function ChatRendererModule:QueueRelayout(renderer)
+    if not renderer or renderer._relayoutQueued then
+        return
+    end
+
+    renderer._relayoutQueued = true
+    C_Timer.After(0, function()
+        if not renderer then
+            return
+        end
+
+        renderer._relayoutQueued = false
+        if not renderer.entries or not renderer.Viewport then
+            return
+        end
+
+        ChatRendererModule:RelayoutRenderer(renderer)
+    end)
 end
 
 function ChatRendererModule:GetViewportTopInset()
@@ -1232,7 +1291,7 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
 
     -- Keyword match highlight: override the row background and accent bar with a warm tint.
     -- Also change the row border to the keyword color so it stands out more clearly.
-    local kwMatch = self:MessageMatchesKeyword(entry.message)
+    local kwMatch = self:GetEntryKeywordMatch(entry)
     row.isKeywordMatch = kwMatch
     if kwMatch then
         local hc = self.settings.keywordHighlightColor or {}
@@ -1258,7 +1317,8 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
     row.Timestamp:SetWidth(mathMax(0, timestampWidth - 10))
     row.Timestamp:SetShown(timestampsEnabled)
     if timestampsEnabled then
-        ApplyResolvedFont(row.Timestamp, self.settings.chatFont, mathMax(10, (self.settings.chatFontSize or 13) - 2),
+        ApplyResolvedFontCached(row.Timestamp, "timestamp", self.settings.chatFont,
+            mathMax(10, (self.settings.chatFontSize or 13) - 2),
             TEXT_MUTED[1], TEXT_MUTED[2], TEXT_MUTED[3], "")
         row.Timestamp:SetText(grouped and "" or date(self.settings.timestampFormat, entry.timestamp))
     else
@@ -1299,7 +1359,8 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
     -- shrink its width by the same amount so text doesn't overflow the row edge.
     local effectiveLabelWidth = iconShown and mathMax(50, bodyWidth - CLASS_ICON_LABEL_OFFSET) or bodyWidth
     row.Label:SetWidth(effectiveLabelWidth)
-    ApplyResolvedFont(row.Label, self.settings.chatFont, self.settings.chatFontSize, entry.r, entry.g, entry.b, "")
+    ApplyResolvedFontCached(row.Label, "label", self.settings.chatFont, self.settings.chatFontSize, entry.r, entry.g,
+        entry.b, "")
     row.Label:SetText(entry.text or "")
     row.Label:SetTextColor(entry.r, entry.g, entry.b)
     row.entry = entry
@@ -1315,6 +1376,51 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
     entry.animateIn = false
 end
 
+function ChatRendererModule:GetRendererLayoutKey(renderer)
+    if not renderer or not renderer.Viewport then
+        return nil
+    end
+
+    local width = renderer.Viewport:GetWidth()
+    return string.format("%.2f|%d|%d|%d|%d|%s|%s",
+        width,
+        self.settings.timestampsEnabled and 1 or 0,
+        self.settings.timestampWidth or DEFAULT_TIMESTAMP_WIDTH,
+        self.settings.rowGap or DEFAULT_ROW_GAP,
+        self.settings.chatFontSize or 13,
+        self.settings.chatFont or "",
+        self.settings.showClassIcons and "1" or "0")
+end
+
+function ChatRendererModule:GetRendererBodyWidth(renderer)
+    if not renderer or not renderer.Viewport then
+        return nil
+    end
+
+    local width = renderer.Viewport:GetWidth() - (SCROLLBAR_WIDTH + 10)
+    local timestampWidth = self.settings.timestampsEnabled and (self.settings.timestampWidth or DEFAULT_TIMESTAMP_WIDTH) or
+    0
+    return mathMax(70, width - timestampWidth - 18)
+end
+
+function ChatRendererModule:GetEntryIconOffset(entry)
+    if not (self.settings.showClassIcons and entry and entry.speakerKey) then
+        return 0
+    end
+
+    local classToken = self:GetSpeakerClassToken(entry.speakerKey)
+    if not classToken then
+        return 0
+    end
+
+    local TwichTextures = T.Tools and T.Tools.Textures
+    if TwichTextures and TwichTextures.ApplyClassTexture then
+        return CLASS_ICON_LABEL_OFFSET
+    end
+
+    return 0
+end
+
 function ChatRendererModule:RelayoutRenderer(renderer)
     if not renderer then
         return
@@ -1326,32 +1432,23 @@ function ChatRendererModule:RelayoutRenderer(renderer)
     end
 
     local timestampWidth = self.settings.timestampsEnabled and (self.settings.timestampWidth or DEFAULT_TIMESTAMP_WIDTH) or
-        0
-    -- bodyWidth is the shared content column width.
-    local bodyWidth = mathMax(70, width - timestampWidth - 18)
+    0
+    local bodyWidth = self:GetRendererBodyWidth(renderer)
+    if not bodyWidth then
+        return
+    end
+    renderer._layoutKey = self:GetRendererLayoutKey(renderer)
+    renderer._layoutBodyWidth = bodyWidth
     local offsetY = CONTENT_TOP_PADDING
     local previousEntry = nil
     local rowGap = self.settings.rowGap or DEFAULT_ROW_GAP
     local groupedRowGap = mathMax(1, math.floor(rowGap * 0.4))
+    renderer._layoutRowGap = rowGap
+    renderer._layoutGroupedRowGap = groupedRowGap
 
     for index, entry in ipairs(renderer.entries) do
-        -- Mirror the icon-offset logic from RefreshRow so the measurement width
-        -- matches the actual label width used when rendering.  If a class icon
-        -- will be shown, the label is CLASS_ICON_LABEL_OFFSET narrower than
-        -- bodyWidth, causing multi-line wrapping that wasn't captured by a
-        -- measurement taken at the full bodyWidth.  This was the root cause of
-        -- rows not expanding vertically when messages wrapped (most noticeable
-        -- in dungeons where every instance-chat sender has a cached class icon).
-        local iconOffset = 0
-        if self.settings.showClassIcons and entry.speakerKey then
-            local classToken = self:GetSpeakerClassToken(entry.speakerKey)
-            if classToken then
-                local TwichTextures = T.Tools and T.Tools.Textures
-                if TwichTextures and TwichTextures.ApplyClassTexture then
-                    iconOffset = CLASS_ICON_LABEL_OFFSET
-                end
-            end
-        end
+        -- Measure with the same width that RefreshRow will use for the label.
+        local iconOffset = self:GetEntryIconOffset(entry)
         local effectiveBodyWidth = mathMax(50, bodyWidth - iconOffset)
         if entry.measuredWidth ~= effectiveBodyWidth then
             self:MeasureEntry(renderer, entry, effectiveBodyWidth)
@@ -1378,12 +1475,6 @@ function ChatRendererModule:RelayoutRenderer(renderer)
     renderer.totalHeight = mathMax(renderer.Viewport:GetHeight(), offsetY + CONTENT_BOTTOM_PADDING)
     renderer.Content:SetHeight(renderer.totalHeight)
     self:UpdateScrollState(renderer)
-    for index, entry in ipairs(renderer.entries) do
-        local row = renderer.rows and renderer.rows[index] or nil
-        if row and row:IsShown() then
-            self:UpdateRowOpacity(renderer, row, entry)
-        end
-    end
 end
 
 function ChatRendererModule:RebuildGrouping(renderer)
@@ -1585,15 +1676,121 @@ function ChatRendererModule:PushMessage(frame, message, r, g, b, accessID)
     renderer.entries[#renderer.entries + 1] = entry
 
     local cap = (self.settings and self.settings.historyLimit) or ROW_CAP
+    local didUpdateScrollState = false
     if #renderer.entries > cap then
-        table.remove(renderer.entries, 1)
-        self:RebuildGrouping(renderer)
+        local layoutKey = self:GetRendererLayoutKey(renderer)
+        local layoutBodyWidth = renderer._layoutBodyWidth
+        local canFastRotate = layoutKey and renderer._layoutKey == layoutKey and layoutBodyWidth and layoutBodyWidth > 0 and
+            renderer.rows and #renderer.rows >= (#renderer.entries - 1)
+
+        if canFastRotate then
+            local entries = renderer.entries
+            local rows = renderer.rows
+            local oldFirst = entries[1]
+            local oldSecond = entries[2]
+            local shiftDelta = 0
+            if oldFirst and oldSecond and oldFirst.yOffset and oldSecond.yOffset then
+                shiftDelta = oldSecond.yOffset - oldFirst.yOffset
+            else
+                local rowGap = renderer._layoutRowGap or (self.settings.rowGap or DEFAULT_ROW_GAP)
+                shiftDelta = (oldFirst and oldFirst.rowHeight or 0) + rowGap
+            end
+
+            table.remove(entries, 1)
+            local recycledRow = table.remove(rows, 1)
+            rows[#rows + 1] = recycledRow
+
+            local remainingCount = #entries
+            for index = 1, remainingCount - 1 do
+                local keptEntry = entries[index]
+                if keptEntry then
+                    keptEntry.yOffset = (keptEntry.yOffset or 0) - shiftDelta
+                    if index == 1 then
+                        keptEntry.groupedWithPrevious = false
+                    end
+
+                    local keptRow = rows[index]
+                    if keptRow then
+                        keptRow:ClearAllPoints()
+                        keptRow:SetPoint("TOPLEFT", renderer.Content, "TOPLEFT", 0, -keptEntry.yOffset)
+                        keptRow:SetPoint("TOPRIGHT", renderer.Content, "TOPRIGHT", 0, -keptEntry.yOffset)
+                        keptRow:SetHeight(keptEntry.rowHeight or keptRow:GetHeight())
+                        keptRow.entry = keptEntry
+                    end
+                end
+            end
+
+            local rowGap = renderer._layoutRowGap or (self.settings.rowGap or DEFAULT_ROW_GAP)
+            local groupedRowGap = renderer._layoutGroupedRowGap or mathMax(1, math.floor(rowGap * 0.4))
+            local previousKept = entries[remainingCount - 1]
+            local spacing = previousKept and (entry.groupedWithPrevious and groupedRowGap or rowGap) or 0
+            local previousBottom = previousKept and ((previousKept.yOffset or CONTENT_TOP_PADDING) +
+                (previousKept.rowHeight or 0)) or CONTENT_TOP_PADDING
+            entry.yOffset = previousKept and (previousBottom + spacing) or CONTENT_TOP_PADDING
+
+            local iconOffset = self:GetEntryIconOffset(entry)
+            local effectiveBodyWidth = mathMax(50, layoutBodyWidth - iconOffset)
+            if entry.measuredWidth ~= effectiveBodyWidth then
+                self:MeasureEntry(renderer, entry, effectiveBodyWidth)
+                entry.measuredWidth = effectiveBodyWidth
+            end
+
+            if entries[1] and rows[1] then
+                self:RefreshRow(renderer, rows[1], entries[1], layoutBodyWidth)
+            end
+
+            local lastRow = rows[remainingCount] or self:EnsureRow(renderer, remainingCount)
+            self:RefreshRow(renderer, lastRow, entry, layoutBodyWidth)
+
+            renderer.totalHeight = mathMax(renderer.Viewport:GetHeight(),
+                entry.yOffset + entry.rowHeight + CONTENT_BOTTOM_PADDING)
+            renderer.Content:SetHeight(renderer.totalHeight)
+            self:UpdateScrollState(renderer)
+            didUpdateScrollState = true
+        else
+            table.remove(renderer.entries, 1)
+            self:RebuildGrouping(renderer)
+            self:RelayoutRenderer(renderer)
+            didUpdateScrollState = true
+        end
+    else
+        local layoutKey = self:GetRendererLayoutKey(renderer)
+        local layoutBodyWidth = renderer._layoutBodyWidth
+        local canFastAppend = layoutKey and renderer._layoutKey == layoutKey and layoutBodyWidth and layoutBodyWidth > 0
+
+        if canFastAppend then
+            local iconOffset = self:GetEntryIconOffset(entry)
+            local effectiveBodyWidth = mathMax(50, layoutBodyWidth - iconOffset)
+            if entry.measuredWidth ~= effectiveBodyWidth then
+                self:MeasureEntry(renderer, entry, effectiveBodyWidth)
+                entry.measuredWidth = effectiveBodyWidth
+            end
+
+            local rowGap = renderer._layoutRowGap or (self.settings.rowGap or DEFAULT_ROW_GAP)
+            local groupedRowGap = renderer._layoutGroupedRowGap or mathMax(1, math.floor(rowGap * 0.4))
+            local spacing = previousEntry and (entry.groupedWithPrevious and groupedRowGap or rowGap) or 0
+            local previousBottom = previousEntry and ((previousEntry.yOffset or CONTENT_TOP_PADDING) +
+                (previousEntry.rowHeight or 0)) or CONTENT_TOP_PADDING
+            local rowTop = previousEntry and (previousBottom + spacing) or CONTENT_TOP_PADDING
+            entry.yOffset = rowTop
+
+            local row = self:EnsureRow(renderer, #renderer.entries)
+            self:RefreshRow(renderer, row, entry, layoutBodyWidth)
+
+            renderer.totalHeight = mathMax(renderer.Viewport:GetHeight(),
+                rowTop + entry.rowHeight + CONTENT_BOTTOM_PADDING)
+            renderer.Content:SetHeight(renderer.totalHeight)
+            self:UpdateScrollState(renderer)
+            didUpdateScrollState = true
+        else
+            self:RelayoutRenderer(renderer)
+            didUpdateScrollState = true
+        end
     end
 
-    self:RelayoutRenderer(renderer)
     if stickToBottom then
         self:ScrollToBottom(renderer)
-    else
+    elseif not didUpdateScrollState then
         self:UpdateScrollState(renderer)
     end
 end
@@ -1675,6 +1872,11 @@ function ChatRendererModule:EnsureRenderer(frame)
     renderer.Content:SetPoint("TOPLEFT", renderer.Viewport, "TOPLEFT", 0, 0)
     renderer.Content:SetWidth(mathMax(1, renderer.Viewport:GetWidth() - (SCROLLBAR_WIDTH + 6)))
     renderer.Content:SetHeight(renderer.Viewport:GetHeight())
+
+    renderer._layoutKey = self:GetRendererLayoutKey(renderer)
+    renderer._layoutBodyWidth = self:GetRendererBodyWidth(renderer)
+    renderer._layoutRowGap = self.settings.rowGap or DEFAULT_ROW_GAP
+    renderer._layoutGroupedRowGap = mathMax(1, math.floor((self.settings.rowGap or DEFAULT_ROW_GAP) * 0.4))
 
     renderer.MeasureLabel = renderer:CreateFontString(nil, "ARTWORK")
     renderer.MeasureLabel:SetParent(UIParent)

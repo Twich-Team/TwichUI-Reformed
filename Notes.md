@@ -67,4 +67,6 @@
 
 ## PERFORMANCE WED APR 8
 
-- Add a new data text for TwichUI Development. It will include a menu of development shortcuts, including opening the debugger, our error panel, opening bug sack, clearing bug sack, and all of our profiler functions
+- Can we make it so that i can resize the columns in the profiler results
+
+- Please add an experience datatext, showing the players experience required to achieve the next level. make the display configurable in the datatext options

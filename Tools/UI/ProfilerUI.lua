@@ -628,12 +628,18 @@ local function BuildFrame()
             handle:SetSize(6, 26)
             handle:SetFrameLevel(headerPanel:GetFrameLevel() + 4)
             handle:EnableMouse(true)
+            handle.__hoverFill = handle:CreateTexture(nil, "BACKGROUND")
+            handle.__hoverFill:SetAllPoints(handle)
+            handle.__hoverFill:SetColorTexture(CLR_ACCENT[1], CLR_ACCENT[2], CLR_ACCENT[3], 0)
             handle:SetScript("OnEnter", function(self)
-                self:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
-                self:SetBackdropColor(CLR_ACCENT[1], CLR_ACCENT[2], CLR_ACCENT[3], 0.25)
+                if self.__hoverFill then
+                    self.__hoverFill:SetAlpha(0.25)
+                end
             end)
             handle:SetScript("OnLeave", function(self)
-                self:SetBackdrop(nil)
+                if self.__hoverFill then
+                    self.__hoverFill:SetAlpha(0)
+                end
             end)
             handle:SetScript("OnMouseDown", function()
                 local leftWidth = ProfilerUI.columnWidths[leftKey]

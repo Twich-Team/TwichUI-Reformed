@@ -1102,6 +1102,8 @@ function ActionBars:OnInitialize()
     self.bindingsChanged = false
     self._cooldownRefreshQueued = false
     self._cooldownBarState = {}
+    self.spellButtonIndex = {}
+    self.spellButtonIndexDirty = true
 
     self:CreateInfrastructure()
 
@@ -2501,6 +2503,9 @@ function ActionBars:ClearButtonGlow(button)
     self:HidePixelGlow(button)
     self:HideProcGlow(button)
     self:HideNativeOverlayGlow(button)
+    button.__twichuiABOverlayTintR = nil
+    button.__twichuiABOverlayTintG = nil
+    button.__twichuiABOverlayTintB = nil
     button.__twichuiABGlowStyle = "none"
 end
 
@@ -2766,6 +2771,7 @@ function ActionBars:GetButtonSpellID(button)
 
     local directSpellID = button.spellID or button.spellId or (button.GetSpellId and button:GetSpellId()) or nil
     if directSpellID then
+        button.__twichuiABSpellID = directSpellID
         return directSpellID
     end
 
@@ -2774,12 +2780,42 @@ function ActionBars:GetButtonSpellID(button)
         return nil
     end
 
-    local actionType, actionID = GetActionInfo(action)
-    if actionType == "spell" then
-        return actionID
+    if button.__twichuiABSpellIDAction == action and button.__twichuiABSpellIDResolved == true then
+        return button.__twichuiABSpellID
     end
 
-    return nil
+    local actionType, actionID = GetActionInfo(action)
+    local resolvedSpellID = nil
+    if actionType == "spell" then
+        resolvedSpellID = actionID
+    end
+
+    button.__twichuiABSpellID = resolvedSpellID
+    button.__twichuiABSpellIDAction = action
+    button.__twichuiABSpellIDResolved = true
+
+    return resolvedSpellID
+end
+
+function ActionBars:MarkSpellButtonIndexDirty()
+    self.spellButtonIndexDirty = true
+
+    for _, buttons in pairs(self.barButtons or {}) do
+        for _, button in ipairs(buttons) do
+            button.__twichuiABSpellIDAction = nil
+            button.__twichuiABSpellIDResolved = nil
+            button.__twichuiABSpellID = nil
+        end
+    end
+end
+
+function ActionBars:EnsureSpellButtonIndex()
+    if self.spellButtonIndexDirty ~= true and self.spellButtonIndex then
+        return
+    end
+
+    self:RebuildSpellButtonIndex()
+    self.spellButtonIndexDirty = false
 end
 
 function ActionBars:RebuildSpellButtonIndex()
@@ -2818,6 +2854,10 @@ function ActionBars:UpdateButtonsForSpellID(spellID)
         return false
     end
 
+    if self.spellButtonIndexDirty == true then
+        return false
+    end
+
     local index = self.spellButtonIndex
     local buttons = index and index[spellID] or nil
     if not buttons or #buttons == 0 then
@@ -2837,7 +2877,13 @@ function ActionBars:UpdateButtonsForSpellID(spellID)
 end
 
 function ActionBars:IsButtonGlowActive(button, spellStateCache)
-    local spellID = self:GetButtonSpellID(button)
+    local spellID = button and button.__twichuiABSpellID or nil
+    if spellID == nil then
+        spellID = self:GetButtonSpellID(button)
+        if button then
+            button.__twichuiABSpellID = spellID
+        end
+    end
     if not spellID then
         return false
     end
@@ -3496,6 +3542,10 @@ function ActionBars:TintOverlayGlow(button, red, green, blue)
             texture:SetVertexColor(red, green, blue, 1)
         end
     end
+
+    button.__twichuiABOverlayTintR = red
+    button.__twichuiABOverlayTintG = green
+    button.__twichuiABOverlayTintB = blue
 end
 
 function ActionBars:ShowActionButtonGlow(button)
@@ -3579,7 +3629,10 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
             end
         elseif desiredStyle == "button" then
             local red, green, blue = self:GetGlowColor()
-            self:TintOverlayGlow(button, red, green, blue)
+            if button.__twichuiABOverlayTintR ~= red or button.__twichuiABOverlayTintG ~= green or
+                button.__twichuiABOverlayTintB ~= blue then
+                self:TintOverlayGlow(button, red, green, blue)
+            end
         end
         return
     end
@@ -3861,6 +3914,7 @@ function ActionBars:GetButtonsForDefinition(definition)
     end
 
     self.barButtons[definition.key] = buttons
+    self:MarkSpellButtonIndexDirty()
     return buttons
 end
 
@@ -4391,6 +4445,10 @@ end
 function ActionBars:RefreshButtonStates(event)
     if type(event) == "string" then
         self._pendingStateEvent = event
+        if event == "SPELLS_CHANGED" or event == "PLAYER_SPECIALIZATION_CHANGED" or
+            event == "ACTIONBAR_SLOT_CHANGED" or event == "ACTIONBAR_PAGE_CHANGED" then
+            self:MarkSpellButtonIndexDirty()
+        end
         self:QueueButtonStateRefresh()
         return
     end
@@ -4410,7 +4468,7 @@ function ActionBars:RefreshButtonStates(event)
         or glowEvent == "UPDATE_BINDINGS"
 
     if shouldRefreshGlow then
-        self:RebuildSpellButtonIndex()
+        self:EnsureSpellButtonIndex()
     end
 
     local glowStyle = shouldRefreshGlow and self:GetGlowStyle() or nil
