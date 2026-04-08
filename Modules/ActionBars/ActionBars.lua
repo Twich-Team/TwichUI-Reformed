@@ -1039,13 +1039,25 @@ local function RefreshBlizzardLayout()
     end
 end
 
+local _optionsCache = nil
+local _dbCache = nil
+
 function ActionBars:GetOptions()
-    return ConfigurationModule and ConfigurationModule.Options and ConfigurationModule.Options.ActionBars
+    if _optionsCache then return _optionsCache end
+    _optionsCache = ConfigurationModule and ConfigurationModule.Options and ConfigurationModule.Options.ActionBars
+    return _optionsCache
 end
 
 function ActionBars:GetDB()
+    if _dbCache then return _dbCache end
     local options = self:GetOptions()
-    return options and options.GetDB and options:GetDB() or nil
+    _dbCache = options and options.GetDB and options:GetDB() or nil
+    return _dbCache
+end
+
+function ActionBars:InvalidateDBCache()
+    _optionsCache = nil
+    _dbCache = nil
 end
 
 function ActionBars:GetBarSettings(barKey)
@@ -1164,6 +1176,7 @@ function ActionBars:OnDisable()
     self.pendingRefresh = false
     self.lastActionAttempt = nil
     self.lastSpellAttempt = nil
+    self:InvalidateDBCache()
     self:ClearMasqueGroups()
     self:RestoreOriginalLayout()
     RefreshBlizzardLayout()
@@ -2274,11 +2287,21 @@ function ActionBars:CreateInfrastructure()
 end
 
 function ActionBars:GetButtonIcon(button)
-    return button and (button.icon or button.Icon or _G[button:GetName() .. "Icon"]) or nil
+    if not button then return nil end
+    if button.__twichuiIconCached then return button.__twichuiIcon end
+    local icon = button.icon or button.Icon or (button.GetName and _G[button:GetName() .. "Icon"]) or nil
+    button.__twichuiIcon = icon
+    button.__twichuiIconCached = true
+    return icon
 end
 
 function ActionBars:GetButtonCooldown(button)
-    return button and (button.cooldown or button.Cooldown or _G[button:GetName() .. "Cooldown"]) or nil
+    if not button then return nil end
+    if button.__twichuiCooldownCached then return button.__twichuiCooldown end
+    local cd = button.cooldown or button.Cooldown or (button.GetName and _G[button:GetName() .. "Cooldown"]) or nil
+    button.__twichuiCooldown = cd
+    button.__twichuiCooldownCached = true
+    return cd
 end
 
 function ActionBars:GetButtonHotKey(button)
@@ -3429,12 +3452,12 @@ function ActionBars:HideNativeOverlayGlow(button)
     end
 end
 
-function ActionBars:UpdateButtonGlow(button)
+function ActionBars:UpdateButtonGlow(button, cachedStyle)
     if not button then
         return
     end
 
-    local style = self:GetGlowStyle()
+    local style = cachedStyle or self:GetGlowStyle()
     local active = self:IsButtonGlowActive(button)
     local desiredStyle = active and style or "none"
     local currentStyle = button.__twichuiABGlowStyle or "none"
@@ -3469,9 +3492,10 @@ function ActionBars:UpdateButtonGlow(button)
 end
 
 function ActionBars:UpdateAllButtonGlows()
+    local style = self:GetGlowStyle()
     for _, buttons in pairs(self.barButtons) do
         for _, button in ipairs(buttons) do
-            self:UpdateButtonGlow(button)
+            self:UpdateButtonGlow(button, style)
         end
     end
 end
@@ -4162,10 +4186,10 @@ function ActionBars:ApplyCooldownSettings()
         return
     end
 
-    for _, buttons in pairs(self.barButtons) do
+    for barKey, buttons in pairs(self.barButtons) do
+        local settings = self:GetBarSettings(barKey)
         for _, button in ipairs(buttons) do
-            local barKey = button:GetParent() and button:GetParent().barKey or nil
-            self:ApplyCooldownSettingsToButton(button, db, barKey and self:GetBarSettings(barKey) or nil)
+            self:ApplyCooldownSettingsToButton(button, db, settings)
         end
     end
 end
@@ -4208,12 +4232,14 @@ function ActionBars:RefreshButtonStates(event)
         return
     end
 
+    local glowStyle = self:GetGlowStyle()
+    local showGrid = db.showGrid == true
     for barKey, buttons in pairs(self.barButtons) do
         local settings = self:GetBarSettings(barKey)
         for _, button in ipairs(buttons) do
             self:ApplyCooldownSettingsToButton(button, db, settings)
-            self:UpdateButtonGlow(button)
-            ApplyButtonGridState(button, db.showGrid == true)
+            self:UpdateButtonGlow(button, glowStyle)
+            ApplyButtonGridState(button, showGrid)
         end
         local holder = self.holders[barKey]
         if holder and settings then
