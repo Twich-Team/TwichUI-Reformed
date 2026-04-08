@@ -123,6 +123,7 @@ function DevDT:OnClick(panel, button)
             local isActive = profiler:IsActive()
             local profileData = profiler:GetProfileData()
             local hasData = profileData and profileData.totalProfiles and profileData.totalProfiles > 0
+            local memoryEnabled = profiler.IsMemoryProfilingEnabled and profiler.IsMemoryProfilingEnabled() == true
 
             table.insert(menuList, {
                 text = isActive and "Stop Profiling" or "Start Profiling",
@@ -134,6 +135,22 @@ function DevDT:OnClick(panel, button)
                         profiler:StartProfiling()
                     end
                 end,
+            })
+
+            table.insert(menuList, {
+                text = memoryEnabled and "Disable Memory Metrics" or "Enable Memory Metrics",
+                notCheckable = true,
+                func = function()
+                    if profiler.SetMemoryProfilingEnabled then
+                        profiler.SetMemoryProfilingEnabled(not memoryEnabled)
+                    end
+                end,
+            })
+
+            table.insert(menuList, {
+                text = string.format("Memory Metrics: %s", memoryEnabled and "ON" or "OFF"),
+                notCheckable = true,
+                disabled = true,
             })
 
             -- Show report options if data exists (during or after profiling)

@@ -219,7 +219,9 @@ local function OpenConfigurationPanel(input)
             return
         end
 
-        local subCmd = remainder:match("^(%S+)"):lower() or "status"
+        local subCmd, subArgs = remainder:match("^(%S+)%s*(.-)%s*$")
+        subCmd = (subCmd and subCmd:lower()) or "status"
+        subArgs = subArgs or ""
 
         if subCmd == "start" then
             profiler:StartProfiling()
@@ -258,6 +260,42 @@ local function OpenConfigurationPanel(input)
             return
         end
 
+        if subCmd == "memory" then
+            local mode = tostring(subArgs or ""):lower()
+            if mode == "" or mode == "status" then
+                local enabled = profiler.IsMemoryProfilingEnabled and profiler.IsMemoryProfilingEnabled() == true
+                T:Print(string.format("[TwichUI] Profiler memory metrics: %s",
+                    enabled and "|cff69b86fENABLED|r" or "|cffff9a6cDISABLED|r"))
+                T:Print("Usage: /tui profile memory on|off|toggle|status")
+                return
+            end
+
+            if mode == "toggle" then
+                local enabled = profiler.IsMemoryProfilingEnabled and profiler.IsMemoryProfilingEnabled() == true
+                if profiler.SetMemoryProfilingEnabled then
+                    profiler.SetMemoryProfilingEnabled(not enabled)
+                end
+                return
+            end
+
+            if mode == "on" or mode == "enable" then
+                if profiler.SetMemoryProfilingEnabled then
+                    profiler.SetMemoryProfilingEnabled(true)
+                end
+                return
+            end
+
+            if mode == "off" or mode == "disable" then
+                if profiler.SetMemoryProfilingEnabled then
+                    profiler.SetMemoryProfilingEnabled(false)
+                end
+                return
+            end
+
+            T:Print("[TwichUI] Usage: /tui profile memory on|off|toggle|status")
+            return
+        end
+
         if subCmd == "clear" then
             profiler:ClearProfiles()
             return
@@ -269,12 +307,17 @@ local function OpenConfigurationPanel(input)
             else
                 T:Print("|cffff9a6cProfiler is currently INACTIVE|r - Use '/tui profile start' to begin profiling")
             end
+            if profiler.IsMemoryProfilingEnabled then
+                local enabled = profiler.IsMemoryProfilingEnabled() == true
+                T:Print(string.format("  memory  - %s", enabled and "enabled" or "disabled"))
+            end
             T:Print("Available commands:")
             T:Print("  start   - Begin profiling")
             T:Print("  stop    - End profiling")
             T:Print("  report  - Open visual results window")
             T:Print("  window  - Same as report")
             T:Print("  export  - Copy raw data to chat")
+            T:Print("  memory  - Memory metrics (on|off|toggle|status)")
             T:Print("  clear   - Clear all profiling data")
             T:Print("  status  - Show this help")
             return

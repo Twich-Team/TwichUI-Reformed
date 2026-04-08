@@ -2409,6 +2409,32 @@ function UnitFrames:ApplyHealPredictionSettings(frame, unitKey)
     local texture = (textureName and textureName ~= "") and GetLSMTexture(textureName) or GetThemeTexture()
     local health = frame.Health
     local element = frame.HealthPrediction
+    if health and element then
+        element._twichLastRuntimeWidth = math_floor((health:GetWidth() or 0) + 0.5)
+    end
+
+    -- Avoid reapplying identical style/layout on every HealthPrediction PostUpdate tick.
+    local healthWidth = (health and health.GetWidth and health:GetWidth()) or 0
+    local styleKey = table.concat({
+        tostring(texture or ""),
+        tostring(cfg.enabled == true),
+        tostring(cfg.showPlayer == true),
+        tostring(cfg.showOthers == true),
+        tostring(cfg.showHealAbsorb == true),
+        string.format("%.3f", cfg.maxOverflow or 0),
+        string.format("%.3f,%.3f,%.3f,%.3f", cfg.playerColor[1] or 1, cfg.playerColor[2] or 1, cfg.playerColor[3] or 1,
+            cfg.playerColor[4] or 1),
+        string.format("%.3f,%.3f,%.3f,%.3f", cfg.otherColor[1] or 1, cfg.otherColor[2] or 1, cfg.otherColor[3] or 1,
+            cfg.otherColor[4] or 1),
+        string.format("%.3f,%.3f,%.3f,%.3f", cfg.healAbsorbColor[1] or 1, cfg.healAbsorbColor[2] or 1,
+            cfg.healAbsorbColor[3] or 1, cfg.healAbsorbColor[4] or 1),
+        tostring(math_floor((healthWidth or 0) + 0.5)),
+    }, "|")
+
+    if element._twichStyleKey == styleKey then
+        return
+    end
+    element._twichStyleKey = styleKey
 
     element.incomingHealOverflow = cfg.maxOverflow
     if element.values and element.values.SetIncomingHealOverflowPercent then
@@ -2913,6 +2939,8 @@ function UnitFrames:ApplyStateIndicatorSettings(frame, unitKey, indicatorKey)
     local host = frame[hostKey]
     local icon = frame[textureKey]
     local cfg = self:GetStateIndicatorConfig(unitKey, indicatorKey)
+    frame._twichStateIndicatorEnabled = frame._twichStateIndicatorEnabled or {}
+    frame._twichStateIndicatorEnabled[indicatorKey] = cfg.enabled == true
 
     if not cfg.enabled then
         icon:Hide()
@@ -2987,8 +3015,15 @@ function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
         return
     end
 
-    local cfg = self:GetStateIndicatorConfig(unitKey, indicatorKey)
-    if not cfg.enabled then
+    local cachedEnabled = frame and frame._twichStateIndicatorEnabled and frame._twichStateIndicatorEnabled
+        [indicatorKey]
+    local cfg = nil
+    if cachedEnabled == nil then
+        cfg = self:GetStateIndicatorConfig(unitKey, indicatorKey)
+        cachedEnabled = cfg.enabled == true
+    end
+
+    if not cachedEnabled then
         icon:Hide()
         if host then
             host:Hide()
@@ -3017,16 +3052,20 @@ function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
             shouldShow = false -- no preview for summon
         end
     elseif unit and UnitExists(unit) then
-        if indicatorKey == "combatIndicator" then
+        if indicatorKey == "restingIndicator" and unit ~= "player" then
+            shouldShow = false
+        elseif indicatorKey == "spiritIndicator" and unit ~= "player" then
+            shouldShow = false
+        elseif indicatorKey == "summonIndicator" and unit ~= "player" then
+            shouldShow = false
+        elseif indicatorKey == "combatIndicator" then
             local okCombat, inCombat = pcall(_G.UnitAffectingCombat, unit)
             shouldShow = okCombat and inCombat == true
         elseif indicatorKey == "restingIndicator" then
-            local okPlayer, isPlayer = pcall(_G.UnitIsUnit, unit, "player")
-            shouldShow = okPlayer and isPlayer == true and _G.IsResting and _G.IsResting() == true
+            shouldShow = _G.IsResting and _G.IsResting() == true
         elseif indicatorKey == "spiritIndicator" then
-            local okPlayer, isPlayer = pcall(_G.UnitIsPlayer, unit)
             local okDead, isDead = pcall(_G.UnitIsDeadOrGhost, unit)
-            shouldShow = okPlayer and isPlayer == true and okDead and isDead == true
+            shouldShow = okDead and isDead == true
         elseif indicatorKey == "offlineIndicator" then
             local okConn, isConn = pcall(_G.UnitIsConnected, unit)
             shouldShow = okConn and isConn == false
@@ -3034,14 +3073,19 @@ function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
             local okRes, hasRes = pcall(_G.UnitHasIncomingResurrectSpell, unit)
             shouldShow = okRes and hasRes == true
         elseif indicatorKey == "summonIndicator" then
-            local okUnit, isPlayer = pcall(_G.UnitIsUnit, unit, "player")
-            if okUnit and isPlayer == true and _G.C_InboundSummon then
+            if _G.C_InboundSummon then
                 local okSummon, hasSummon = pcall(_G.C_InboundSummon.HasInboundSummon)
                 shouldShow = okSummon and hasSummon == true
             end
         end
     end
 
+    frame._twichStateIndicatorShown = frame._twichStateIndicatorShown or {}
+    if frame._twichStateIndicatorShown[indicatorKey] == shouldShow then
+        return
+    end
+
+    frame._twichStateIndicatorShown[indicatorKey] = shouldShow
     if shouldShow then
         icon:Show()
     else
@@ -3049,15 +3093,40 @@ function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
     end
 end
 
-function UnitFrames:RefreshStateIndicatorFrames()
+local STATE_INDICATOR_KEYS = {
+    "combatIndicator",
+    "restingIndicator",
+    "spiritIndicator",
+    "offlineIndicator",
+    "resurrectIndicator",
+    "summonIndicator",
+}
+
+local STATE_INDICATOR_KEYS_BY_EVENT = {
+    UNIT_CONNECTION = { "offlineIndicator" },
+    INCOMING_RESURRECT_CHANGED = { "resurrectIndicator" },
+    PLAYER_UPDATE_RESTING = { "restingIndicator" },
+    PLAYER_REGEN_DISABLED = { "combatIndicator" },
+    PLAYER_REGEN_ENABLED = { "combatIndicator" },
+}
+
+local function UnitMatchesFrame(frame, unit)
+    if not unit then
+        return true
+    end
+
+    local frameUnit = ResolveFrameUnit(frame)
+    return frameUnit == unit
+end
+
+function UnitFrames:RefreshStateIndicatorFrames(unit, indicatorKeys)
+    local keys = indicatorKeys or STATE_INDICATOR_KEYS
     for _, frame in pairs(self.frames) do
-        if frame then
-            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "combatIndicator")
-            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "restingIndicator")
-            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "spiritIndicator")
-            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "offlineIndicator")
-            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "resurrectIndicator")
-            self:UpdateStateIndicator(frame, frame._unitKey or ResolveFrameUnit(frame), "summonIndicator")
+        if frame and UnitMatchesFrame(frame, unit) then
+            local frameUnitKey = frame._unitKey or ResolveFrameUnit(frame)
+            for _, indicatorKey in ipairs(keys) do
+                self:UpdateStateIndicator(frame, frameUnitKey, indicatorKey)
+            end
         end
     end
 
@@ -3065,13 +3134,11 @@ function UnitFrames:RefreshStateIndicatorFrames()
         if header then
             for index = 1, select('#', header:GetChildren()) do
                 local child = select(index, header:GetChildren())
-                if child then
-                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "combatIndicator")
-                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "restingIndicator")
-                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "spiritIndicator")
-                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "offlineIndicator")
-                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "resurrectIndicator")
-                    self:UpdateStateIndicator(child, child._unitKey or ResolveFrameUnit(child), "summonIndicator")
+                if child and UnitMatchesFrame(child, unit) then
+                    local childUnitKey = child._unitKey or ResolveFrameUnit(child)
+                    for _, indicatorKey in ipairs(keys) do
+                        self:UpdateStateIndicator(child, childUnitKey, indicatorKey)
+                    end
                 end
             end
         end
@@ -3096,6 +3163,8 @@ function UnitFrames:ApplyReadyCheckIndicatorSettings(frame, unitKey)
     local host = frame[READY_CHECK_INDICATOR_DEF.hostKey]
     local icon = frame[READY_CHECK_INDICATOR_DEF.textureKey]
     local cfg = self:GetReadyCheckIndicatorConfig(unitKey)
+    frame._twichReadyCheckEnabled = cfg.enabled == true
+    frame._twichReadyCheckIconType = cfg.iconType or "standard"
 
     if not cfg.enabled then
         icon:Hide()
@@ -3138,11 +3207,22 @@ function UnitFrames:UpdateReadyCheckIndicator(frame, unitKey)
         return
     end
 
-    local cfg = self:GetReadyCheckIndicatorConfig(unitKey)
-    if not cfg.enabled then
+    local cfg = nil
+    local enabled = frame and frame._twichReadyCheckEnabled
+    local iconType = frame and frame._twichReadyCheckIconType or "standard"
+    if enabled == nil then
+        cfg = self:GetReadyCheckIndicatorConfig(unitKey)
+        enabled = cfg.enabled == true
+        iconType = cfg.iconType or "standard"
+    end
+
+    if not enabled then
         icon:Hide()
         if host then
             host:Hide()
+        end
+        if frame then
+            frame._twichReadyCheckLastStatus = nil
         end
         return
     end
@@ -3163,10 +3243,25 @@ function UnitFrames:UpdateReadyCheckIndicator(frame, unitKey)
 
     if status ~= "ready" and status ~= "notready" and status ~= "waiting" then
         icon:Hide()
+        if frame then
+            frame._twichReadyCheckLastStatus = nil
+        end
         return
     end
 
-    local art = GetReadyCheckArt(cfg.iconType, status) or GetReadyCheckArt("standard", status)
+    if frame and frame._twichReadyCheckLastStatus == status and frame._twichReadyCheckLastIconType == iconType then
+        if not icon:IsShown() then
+            icon:Show()
+        end
+        return
+    end
+
+    if frame then
+        frame._twichReadyCheckLastStatus = status
+        frame._twichReadyCheckLastIconType = iconType
+    end
+
+    local art = GetReadyCheckArt(iconType, status) or GetReadyCheckArt("standard", status)
     if not art then
         icon:Hide()
         return
@@ -3187,7 +3282,12 @@ function UnitFrames:UpdateReadyCheckIndicator(frame, unitKey)
         return
     end
 
-    icon:SetSize(GetScaledIconSize(cfg.size, art, 8, 64))
+    local sizeCfg = cfg and cfg.size or nil
+    if sizeCfg == nil then
+        cfg = cfg or self:GetReadyCheckIndicatorConfig(unitKey)
+        sizeCfg = cfg.size
+    end
+    icon:SetSize(GetScaledIconSize(sizeCfg, art, 8, 64))
     icon:Show()
 end
 
@@ -3230,6 +3330,12 @@ function UnitFrames:ApplyRoleIconSettings(frame, unitKey)
     local icon = frame.TwichRoleIcon
     local host = frame.TwichRoleIconHost or frame
     local cfg = self:GetRoleIconConfig(unitKey)
+    frame._twichRoleIconCfg = {
+        enabled = cfg.enabled == true,
+        filter = cfg.filter or "all",
+        iconType = cfg.iconType or "standard",
+        size = cfg.size,
+    }
 
     if not cfg.enabled then
         icon:Hide()
@@ -3293,8 +3399,25 @@ function UnitFrames:UpdateRoleIcon(frame, unitKey)
     local icon = frame and frame.TwichRoleIcon
     if not icon then return end
 
-    local cfg = self:GetRoleIconConfig(unitKey)
+    local cfg = frame and frame._twichRoleIconCfg
+    if not cfg then
+        local resolvedCfg = self:GetRoleIconConfig(unitKey)
+        cfg = {
+            enabled = resolvedCfg.enabled == true,
+            filter = resolvedCfg.filter or "all",
+            iconType = resolvedCfg.iconType or "standard",
+            size = resolvedCfg.size,
+        }
+        if frame then
+            frame._twichRoleIconCfg = cfg
+        end
+    end
+
     if not cfg.enabled then
+        if frame then
+            frame._twichRoleIconLastShow = false
+            frame._twichRoleIconLastRole = nil
+        end
         icon:Hide(); return
     end
 
@@ -3329,12 +3452,25 @@ function UnitFrames:UpdateRoleIcon(frame, unitKey)
     end
 
     if show then
+        if frame and frame._twichRoleIconLastShow == true and frame._twichRoleIconLastRole == displayRole and
+            frame._twichRoleIconLastIconType == cfg.iconType then
+            if not icon:IsShown() then
+                icon:Show()
+            end
+            return
+        end
+
         local art = GetRoleIconArt(cfg.iconType, displayRole) or GetRoleIconArt("standard", displayRole)
         if art and art.atlas then
             icon:SetAtlas(art.atlas, false)
             icon:SetTexCoord(0, 1, 0, 1)
             icon:SetSize(GetScaledRoleIconSize(cfg.size, art))
             icon:Show()
+            if frame then
+                frame._twichRoleIconLastShow = true
+                frame._twichRoleIconLastRole = displayRole
+                frame._twichRoleIconLastIconType = cfg.iconType
+            end
         elseif art and art.texture then
             icon:SetTexture(art.texture)
             if art.texCoord then
@@ -3344,11 +3480,24 @@ function UnitFrames:UpdateRoleIcon(frame, unitKey)
             end
             icon:SetSize(GetScaledRoleIconSize(cfg.size, art))
             icon:Show()
+            if frame then
+                frame._twichRoleIconLastShow = true
+                frame._twichRoleIconLastRole = displayRole
+                frame._twichRoleIconLastIconType = cfg.iconType
+            end
         else
             icon:Hide()
+            if frame then
+                frame._twichRoleIconLastShow = false
+                frame._twichRoleIconLastRole = nil
+            end
         end
     else
         icon:Hide()
+        if frame then
+            frame._twichRoleIconLastShow = false
+            frame._twichRoleIconLastRole = nil
+        end
     end
 end
 
@@ -3783,6 +3932,8 @@ function UnitFrames:ApplyClassBarColors(frame, colorObject)
     end
 end
 
+local FONT_PATH_CACHE = {}
+
 function UnitFrames:ApplyFontObject(fontString, size, fontName, textStyle)
     if not fontString then return end
 
@@ -3791,21 +3942,49 @@ function UnitFrames:ApplyFontObject(fontString, size, fontName, textStyle)
     local resolvedFont = fontName or (theme and theme.Get and theme:Get("globalFont")) or nil
     local path = nil
 
-    if LSM and type(LSM.Fetch) == "function" and resolvedFont and resolvedFont ~= "__default" and resolvedFont ~= "" then
+    if resolvedFont and FONT_PATH_CACHE[resolvedFont] then
+        path = FONT_PATH_CACHE[resolvedFont]
+    end
+
+    if not path and LSM and type(LSM.Fetch) == "function" and resolvedFont and resolvedFont ~= "__default" and resolvedFont ~= "" then
         local ok, fetched = pcall(LSM.Fetch, LSM, "font", resolvedFont)
         if ok and type(fetched) == "string" and fetched ~= "" then
             path = fetched
+            FONT_PATH_CACHE[resolvedFont] = fetched
         end
     end
 
     if not path then path = _G.STANDARD_TEXT_FONT end
 
-    fontString:SetFont(path, size or 11, ResolveOutlineFlags(textStyle and textStyle.outlineMode or "OUTLINE"))
+    local fontSize = size or 11
+    local outline = ResolveOutlineFlags(textStyle and textStyle.outlineMode or "OUTLINE")
+    local shadowEnabled = textStyle and textStyle.shadowEnabled == true
+    local sc = shadowEnabled and (type(textStyle.shadowColor) == "table" and textStyle.shadowColor or { 0, 0, 0, 0.85 })
+        or { 0, 0, 0, 0 }
+    local sx = shadowEnabled and (tonumber(textStyle.shadowOffsetX) or 1) or 0
+    local sy = shadowEnabled and (tonumber(textStyle.shadowOffsetY) or -1) or 0
+    local sig = table.concat({
+        tostring(path),
+        tostring(fontSize),
+        tostring(outline or ""),
+        tostring(sc[1] or 0),
+        tostring(sc[2] or 0),
+        tostring(sc[3] or 0),
+        tostring(sc[4] or 0),
+        tostring(sx),
+        tostring(sy),
+    }, "|")
 
-    if textStyle and textStyle.shadowEnabled == true then
-        local sc = type(textStyle.shadowColor) == "table" and textStyle.shadowColor or { 0, 0, 0, 0.85 }
+    if fontString._twichFontSig == sig then
+        return
+    end
+    fontString._twichFontSig = sig
+
+    fontString:SetFont(path, fontSize, outline)
+
+    if shadowEnabled then
         fontString:SetShadowColor(sc[1] or 0, sc[2] or 0, sc[3] or 0, sc[4] or 0.85)
-        fontString:SetShadowOffset(tonumber(textStyle.shadowOffsetX) or 1, tonumber(textStyle.shadowOffsetY) or -1)
+        fontString:SetShadowOffset(sx, sy)
     else
         fontString:SetShadowColor(0, 0, 0, 0)
         fontString:SetShadowOffset(0, 0)
@@ -4326,9 +4505,32 @@ local function CollectAuraData(list, scratch, unit, unitKey, auraFilter, maxCoun
     end
 end
 
-function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
+local function BuildAuraBarSignature(auraList, maxBars)
+    local count = math_min(maxBars, #auraList)
+    local signature = tostring(count)
+    for i = 1, count do
+        local data = auraList[i]
+        local auraInstanceID = tonumber(data and data.auraInstanceID) or 0
+        local spellId = tonumber(data and data.spellId) or 0
+        local applications = tonumber(data and data.applications) or 0
+        local duration = tonumber(data and data.duration) or 0
+        local expirationTime = tonumber(data and data.expirationTime) or 0
+        signature = signature .. "|" .. string.format("%s:%s:%s:%s:%s",
+            auraInstanceID,
+            spellId,
+            applications,
+            duration,
+            expirationTime)
+    end
+    return signature
+end
+
+function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey, force)
     if not frame.AuraBars then return end
     self:UFDiagBump("auraBarRefreshCalls", 1)
+    if frame._isTestPreview ~= true and frame.IsShown and not frame:IsShown() then
+        return
+    end
     local unit = ResolveFrameUnit(frame)
     if not unit and not frame._isTestPreview then return end
     local aura                        = self:GetAuraConfigFor(unitKey)
@@ -4363,6 +4565,34 @@ function UnitFrames:RefreshAuraBarsForFrame(frame, unitKey)
         if #auraList < maxBars then
             CollectAuraData(auraList, container._twichAuraBarScratch, unit, unitKey, "HARMFUL", maxBars - #auraList,
                 onlyMine, filter, auraElement)
+        end
+    end
+
+    if force ~= true then
+        local styleSignature = table.concat({
+            tostring(maxBars),
+            tostring(barH),
+            tostring(spacing),
+            tostring(frameWidth),
+            tostring(showTime),
+            tostring(showStacks),
+            tostring(filter),
+            tostring(onlyMine),
+        }, "|")
+        local auraSignature = BuildAuraBarSignature(auraList, maxBars)
+        local sameOk, isSame = pcall(function()
+            return container._twichAuraBarStyleSignature == styleSignature and
+            container._twichAuraBarSignature == auraSignature
+        end)
+        if sameOk and isSame then
+            return
+        end
+        container._twichAuraBarStyleSignature = styleSignature
+        local setOk = pcall(function()
+            container._twichAuraBarSignature = auraSignature
+        end)
+        if not setOk then
+            container._twichAuraBarSignature = nil
         end
     end
 
@@ -4790,13 +5020,6 @@ function UnitFrames:ApplyClassBarSettings(frame, unitKey)
     UFDebugVerbose(self, string.format("ApplyClassBarSettings: unitKey=%s enabled=%s matchFrameWidth=%s cfgWidth=%s",
         tostring(unitKey), tostring(enabled), tostring(cfg.matchFrameWidth), tostring(cfg.width)))
 
-    -- ForceUpdate first so oUF shows/hides the correct individual bars based on
-    -- the player's current class resource count. We then read back how many are
-    -- actually shown and use that as the segment count for layout calculations.
-    -- Guard flag prevents ForceUpdate from re-entering this function via PostUpdate.
-    frame.ClassPower._applyingSettings = true
-    if frame.ClassPower.ForceUpdate then frame.ClassPower:ForceUpdate() end
-    frame.ClassPower._applyingSettings = nil
     local maxBars = #frame.ClassPower
     local segmentCount = 0
     for i = 1, maxBars do
@@ -4804,7 +5027,18 @@ function UnitFrames:ApplyClassBarSettings(frame, unitKey)
             segmentCount = segmentCount + 1
         end
     end
-    if segmentCount == 0 then segmentCount = maxBars end
+    if segmentCount == 0 then
+        -- ForceUpdate only when bars are not initialized yet.
+        frame.ClassPower._applyingSettings = true
+        if frame.ClassPower.ForceUpdate then frame.ClassPower:ForceUpdate() end
+        frame.ClassPower._applyingSettings = nil
+        for i = 1, maxBars do
+            if frame.ClassPower[i] and frame.ClassPower[i]:IsShown() then
+                segmentCount = segmentCount + 1
+            end
+        end
+        if segmentCount == 0 then segmentCount = maxBars end
+    end
     UFDebugVerbose(self, string.format("ApplyClassBarSettings: maxBars=%d segmentCount=%d frameWidth=%.1f",
         maxBars, segmentCount, frame:GetWidth()))
 
@@ -4814,11 +5048,30 @@ function UnitFrames:ApplyClassBarSettings(frame, unitKey)
     else
         width = Clamp(cfg.width or math_max(frame:GetWidth(), 260), 40, 600)
     end
-    local height    = Clamp(cfg.height or 10, 4, 40)
-    local spacing   = Clamp(cfg.spacing or 2, 0, 40)
-    local texName   = (db.texture and db.texture ~= "") and db.texture or nil
-    local texture   = texName and GetLSMTexture(texName) or GetThemeTexture()
-    local container = frame.ClassPower.container
+    local height          = Clamp(cfg.height or 10, 4, 40)
+    local spacing         = Clamp(cfg.spacing or 2, 0, 40)
+    local texName         = (db.texture and db.texture ~= "") and db.texture or nil
+    local texture         = texName and GetLSMTexture(texName) or GetThemeTexture()
+    local container       = frame.ClassPower.container
+
+    local layoutSignature = table.concat({
+        tostring(enabled),
+        tostring(width),
+        tostring(height),
+        tostring(spacing),
+        tostring(texture),
+        tostring(cfg.point or "TOPLEFT"),
+        tostring(cfg.relativePoint or "BOTTOMLEFT"),
+        tostring(tonumber(cfg.xOffset) or 0),
+        tostring(tonumber(cfg.yOffset) or -2),
+        tostring(segmentCount),
+    }, "|")
+
+    if frame.ClassPower._twichLayoutSignature == layoutSignature then
+        return
+    end
+    frame.ClassPower._twichLayoutSignature = layoutSignature
+
     container:ClearAllPoints()
     container:SetPoint(
         cfg.point or "TOPLEFT", frame,
@@ -12698,7 +12951,7 @@ do
         local auraCfg = self:GetAuraConfigFor(unitKey)
         if auraCfg.enabled ~= false then
             if auraCfg.barMode == true then
-                self:RefreshAuraBarsForFrame(frame, unitKey)
+                self:RefreshAuraBarsForFrame(frame, unitKey, true)
             else
                 self:RefreshPreviewAuraIcons(frame, unitKey)
             end
@@ -13423,7 +13676,18 @@ function UnitFrames:StyleFrame(frame)
         healAbsorb = healAbsorb,
         incomingHealOverflow = HEAL_PREDICTION_DEFAULTS.maxOverflow,
         PostUpdate = function(element)
-            UnitFrames:ApplyHealPredictionSettings(element.__owner, capturedUnitKey)
+            local owner = element and element.__owner
+            if not owner or not owner.Health then
+                return
+            end
+
+            local width = math_floor((owner.Health:GetWidth() or 0) + 0.5)
+            if element._twichLastRuntimeWidth == width then
+                return
+            end
+
+            element._twichLastRuntimeWidth = width
+            UnitFrames:ApplyHealPredictionSettings(owner, capturedUnitKey)
         end,
     }
 
@@ -15609,19 +15873,19 @@ function UnitFrames:OnUnitTargetChanged()
     self:RefreshHighlightFrames()
 end
 
-function UnitFrames:OnUnitConnectionChanged()
-    self:RefreshStateIndicatorFrames()
+function UnitFrames:OnUnitConnectionChanged(_, unit)
+    self:RefreshStateIndicatorFrames(unit, STATE_INDICATOR_KEYS_BY_EVENT.UNIT_CONNECTION)
 end
 
-function UnitFrames:OnResurrectChanged()
-    self:RefreshStateIndicatorFrames()
+function UnitFrames:OnResurrectChanged(_, unit)
+    self:RefreshStateIndicatorFrames(unit, STATE_INDICATOR_KEYS_BY_EVENT.INCOMING_RESURRECT_CHANGED)
 end
 
-function UnitFrames:OnSummonChanged()
-    self:RefreshStateIndicatorFrames()
+function UnitFrames:OnSummonChanged(_, unit)
+    self:RefreshStateIndicatorFrames(unit, { "summonIndicator" })
 end
 
-function UnitFrames:OnUnitFlagsChanged()
+function UnitFrames:OnUnitFlagsChanged(event, unit)
     if self._pendingHeaderClickCastRefresh and not InCombatLockdown() then
         self:RefreshHeaderClickCastSupport()
     end
@@ -15632,11 +15896,22 @@ function UnitFrames:OnUnitFlagsChanged()
         return
     end
 
-    self:RefreshStateIndicatorFrames()
+    -- PLAYER_REGEN_* events don't provide a unit.
+    if event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
+        self:RefreshStateIndicatorFrames(nil, STATE_INDICATOR_KEYS_BY_EVENT[event] or { "combatIndicator" })
+        return
+    end
+
+    if event == "UNIT_FLAGS" then
+        self:RefreshStateIndicatorFrames(unit, { "combatIndicator", "spiritIndicator" })
+        return
+    end
+
+    self:RefreshStateIndicatorFrames(unit, STATE_INDICATOR_KEYS)
 end
 
 function UnitFrames:OnPlayerRestingChanged()
-    self:RefreshStateIndicatorFrames()
+    self:RefreshStateIndicatorFrames(nil, STATE_INDICATOR_KEYS_BY_EVENT.PLAYER_UPDATE_RESTING)
 end
 
 function UnitFrames:OnReadyCheckChanged()

@@ -13,6 +13,10 @@ local function GetDebugConsole()
     return T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
 end
 
+local function GetProfiler()
+    return T.Tools and T.Tools.UI and T.Tools.UI.Profiler
+end
+
 local function OpenDebugSource(sourceKey)
     local console = GetDebugConsole()
     if console and console.Show then
@@ -27,11 +31,11 @@ local function BuildDebugConsoleConfiguration()
 
     local section = W.NewConfigurationSection(96, "Debug Console")
     section.args = {
-        title   = W.TitleWidget(0, "Debug Console"),
-        desc    = W.Description(5,
+        title    = W.TitleWidget(0, "Debug Console"),
+        desc     = W.Description(5,
             "The TwichUI Debug Console collects diagnostic logs from internal modules. " ..
             "Open it to inspect live state, copy reports for bug reports, or clear logs."),
-        actions = W.IGroup(10, "Actions", {
+        actions  = W.IGroup(10, "Actions", {
             open = {
                 type  = "execute",
                 order = 0,
@@ -75,7 +79,82 @@ local function BuildDebugConsoleConfiguration()
                 end,
             },
         }),
-        sources = W.IGroup(20, "Registered Sources", {
+        profiler = W.IGroup(15, "Profiler", {
+            memoryEnabled = {
+                type = "toggle",
+                order = 0,
+                name = "Enable Memory Metrics",
+                desc = "Track per-call memory deltas (KB) during profiling sessions. Keep disabled for lowest overhead.",
+                get = function()
+                    local profiler = GetProfiler()
+                    return profiler and profiler.IsMemoryProfilingEnabled and profiler.IsMemoryProfilingEnabled() or
+                    false
+                end,
+                set = function(_, value)
+                    local profiler = GetProfiler()
+                    if profiler and profiler.SetMemoryProfilingEnabled then
+                        profiler.SetMemoryProfilingEnabled(value == true)
+                    end
+                end,
+            },
+            start = {
+                type = "execute",
+                order = 10,
+                name = "Start Profiling",
+                desc = "Start profiling now.",
+                func = function()
+                    local profiler = GetProfiler()
+                    if profiler and profiler.StartProfiling then
+                        profiler:StartProfiling()
+                    end
+                end,
+            },
+            stop = {
+                type = "execute",
+                order = 11,
+                name = "Stop Profiling",
+                desc = "Stop profiling and keep captured data for report/export.",
+                func = function()
+                    local profiler = GetProfiler()
+                    if profiler and profiler.StopProfiling then
+                        profiler:StopProfiling()
+                    end
+                end,
+            },
+            clear = {
+                type = "execute",
+                order = 12,
+                name = "Clear Profiling Data",
+                desc = "Clear all collected profile samples.",
+                confirm = true,
+                confirmText = "Clear profiling data?",
+                func = function()
+                    local profiler = GetProfiler()
+                    if profiler and profiler.ClearProfiles then
+                        profiler:ClearProfiles()
+                    end
+                end,
+            },
+            status = {
+                type = "description",
+                order = 20,
+                name = function()
+                    local profiler = GetProfiler()
+                    if not profiler then
+                        return "|cffff9a6cProfiler unavailable.|r"
+                    end
+                    local active = profiler.IsActive and profiler:IsActive() == true
+                    local memory = profiler.IsMemoryProfilingEnabled and profiler.IsMemoryProfilingEnabled() == true
+                    local profileData = profiler.GetProfileData and profiler:GetProfileData() or nil
+                    local count = profileData and profileData.totalProfiles or 0
+                    return string.format("Status: %s | Memory: %s | Profiles: %d",
+                        active and "|cff69b86fACTIVE|r" or "|cffff9a6cINACTIVE|r",
+                        memory and "|cff69b86fON|r" or "|cffff9a6cOFF|r",
+                        count)
+                end,
+            },
+        }),
+        sources  = W.IGroup(20, "Registered Sources", {
             list = {
                 type  = "description",
                 order = 0,

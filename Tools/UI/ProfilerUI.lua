@@ -41,6 +41,10 @@ local CLR_BORDER = { 0.20, 0.25, 0.30 }
 
 local FRAME_W = 920
 local FRAME_H = 700
+local FRAME_MIN_W = 820
+local FRAME_MIN_H = 520
+local FRAME_MAX_W = 1600
+local FRAME_MAX_H = 1100
 local TITLEBAR_H = 52
 local ROW_H = 36
 local CHART_ROW_H = 28
@@ -115,6 +119,11 @@ local function FormatMs(ms)
     end
 end
 
+local function FormatKB(kb)
+    kb = tonumber(kb) or 0
+    return format("%.2f", kb)
+end
+
 -- Get severity color based on execution time
 local function GetSeverityColor(ms)
     if ms < 0.5 then
@@ -145,42 +154,56 @@ local function MakeProfileRow(parent)
     -- Name
     local name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     name:SetPoint("LEFT", row, "LEFT", 6, 0)
-    name:SetWidth(250)
+    name:SetWidth(230)
     name:SetJustifyH("LEFT")
     row.__name = name
 
     -- Calls
     local calls = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    calls:SetPoint("LEFT", name, "RIGHT", 30, 0)
+    calls:SetPoint("LEFT", name, "RIGHT", 16, 0)
     calls:SetWidth(60)
     calls:SetJustifyH("RIGHT")
     row.__calls = calls
 
     -- Total time
     local total = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    total:SetPoint("LEFT", calls, "RIGHT", 20, 0)
+    total:SetPoint("LEFT", calls, "RIGHT", 12, 0)
     total:SetWidth(70)
     total:SetJustifyH("RIGHT")
     row.__total = total
 
     -- Average time
     local avg = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    avg:SetPoint("LEFT", total, "RIGHT", 20, 0)
+    avg:SetPoint("LEFT", total, "RIGHT", 10, 0)
     avg:SetWidth(70)
     avg:SetJustifyH("RIGHT")
     row.__avg = avg
 
     -- Max time
     local maxVal = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    maxVal:SetPoint("LEFT", avg, "RIGHT", 20, 0)
+    maxVal:SetPoint("LEFT", avg, "RIGHT", 10, 0)
     maxVal:SetWidth(70)
     maxVal:SetJustifyH("RIGHT")
     row.__max = maxVal
 
+    -- Memory average delta (KB)
+    local memAvg = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    memAvg:SetPoint("LEFT", maxVal, "RIGHT", 10, 0)
+    memAvg:SetWidth(70)
+    memAvg:SetJustifyH("RIGHT")
+    row.__memAvg = memAvg
+
+    -- Memory max delta (KB)
+    local memMax = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    memMax:SetPoint("LEFT", memAvg, "RIGHT", 10, 0)
+    memMax:SetWidth(70)
+    memMax:SetJustifyH("RIGHT")
+    row.__memMax = memMax
+
     -- Visual bar
     local bar = CreateFrame("Frame", nil, row, "BackdropTemplate")
-    bar:SetPoint("LEFT", maxVal, "RIGHT", 10, 0)
-    bar:SetWidth(120)
+    bar:SetPoint("LEFT", memMax, "RIGHT", 10, 0)
+    bar:SetWidth(90)
     bar:SetHeight(8)
     bar:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
@@ -204,7 +227,7 @@ local function MakeProfileRow(parent)
 end
 
 -- Populate a row with profile data
-local function PopulateProfileRow(row, profile, maxTime)
+local function PopulateProfileRow(row, profile, maxTime, showMemory)
     if not row or not profile then
         return
     end
@@ -217,14 +240,36 @@ local function PopulateProfileRow(row, profile, maxTime)
     row.__max:SetText(FormatMs(profile.maxTime))
 
     -- Update tooltip
-    row.__tooltip = format(
-        "%s\nTotal: %.3f ms | Avg: %.3f ms | Min: %.3f ms | Max: %.3f ms",
-        profile.name,
-        profile.totalTime,
-        profile.averageTime,
-        profile.minTime,
-        profile.maxTime
-    )
+    if showMemory then
+        row.__memAvg:SetText(FormatKB(profile.memoryAverageDelta))
+        row.__memMax:SetText(FormatKB(profile.memoryMaxDelta))
+        row.__memAvg:Show()
+        row.__memMax:Show()
+        row.__tooltip = format(
+            "%s\nTotal: %.3f ms | Avg: %.3f ms | Min: %.3f ms | Max: %.3f ms\nMem Avg: %.3f KB | Mem Max: %.3f KB | Mem Last: %.3f KB",
+            profile.name,
+            profile.totalTime,
+            profile.averageTime,
+            profile.minTime,
+            profile.maxTime,
+            tonumber(profile.memoryAverageDelta) or 0,
+            tonumber(profile.memoryMaxDelta) or 0,
+            tonumber(profile.memoryLastDelta) or 0
+        )
+    else
+        row.__memAvg:SetText("-")
+        row.__memMax:SetText("-")
+        row.__memAvg:Hide()
+        row.__memMax:Hide()
+        row.__tooltip = format(
+            "%s\nTotal: %.3f ms | Avg: %.3f ms | Min: %.3f ms | Max: %.3f ms",
+            profile.name,
+            profile.totalTime,
+            profile.averageTime,
+            profile.minTime,
+            profile.maxTime
+        )
+    end
 
     -- Color text based on severity
     local color = GetSeverityColor(profile.maxTime)
@@ -233,7 +278,7 @@ local function PopulateProfileRow(row, profile, maxTime)
     -- Update bar
     maxTime = maxTime or 1
     local ratio = math.min(1, profile.totalTime / maxTime)
-    row.__barFill:SetWidth(120 * ratio)
+    row.__barFill:SetWidth(90 * ratio)
     row.__barFill:SetBackdropColor(color[1], color[2], color[3], 0.8)
 end
 
@@ -255,6 +300,17 @@ local function BuildFrame()
     frame:SetBackdropColor(CLR_BG_DEEP[1], CLR_BG_DEEP[2], CLR_BG_DEEP[3], 0.95)
     frame:SetBackdropBorderColor(CLR_ACCENT[1], CLR_ACCENT[2], CLR_ACCENT[3], 0.6)
     frame:SetMovable(true)
+    frame:SetResizable(true)
+    if frame.SetResizeBounds then
+        frame:SetResizeBounds(FRAME_MIN_W, FRAME_MIN_H, FRAME_MAX_W, FRAME_MAX_H)
+    else
+        if frame.SetMinResize then
+            frame:SetMinResize(FRAME_MIN_W, FRAME_MIN_H)
+        end
+        if frame.SetMaxResize then
+            frame:SetMaxResize(FRAME_MAX_W, FRAME_MAX_H)
+        end
+    end
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
@@ -307,6 +363,17 @@ local function BuildFrame()
         label:SetJustifyV("MIDDLE")
         label:SetText(text)
         label:SetTextColor(CLR_ACCENT[1], CLR_ACCENT[2], CLR_ACCENT[3])
+        btn.__label = label
+        btn.__baseText = text
+        btn.__column = column
+        btn:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+            GameTooltip:AddLine("Sort by " .. (self.__baseText or "column"), CLR_ACCENT[1], CLR_ACCENT[2], CLR_ACCENT[3])
+            GameTooltip:Show()
+        end)
+        btn:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
 
         btn:SetScript("OnClick", function()
             if ProfilerUI.sortColumn == column then
@@ -325,19 +392,41 @@ local function BuildFrame()
     nameHeader:SetPoint("LEFT", headerPanel, "LEFT", 6, 0)
 
     local callsHeader = MakeHeaderBtn(nameHeader, "TOPRIGHT", "Calls", 60, "calls")
-    callsHeader:SetPoint("LEFT", nameHeader, "RIGHT", 30, 0)
+    callsHeader:SetPoint("LEFT", nameHeader, "RIGHT", 16, 0)
 
     local totalHeader = MakeHeaderBtn(callsHeader, "TOPRIGHT", "Total (ms)", 70, "totalTime")
-    totalHeader:SetPoint("LEFT", callsHeader, "RIGHT", 20, 0)
+    totalHeader:SetPoint("LEFT", callsHeader, "RIGHT", 12, 0)
 
     local avgHeader = MakeHeaderBtn(totalHeader, "TOPRIGHT", "Avg (ms)", 70, "avgTime")
-    avgHeader:SetPoint("LEFT", totalHeader, "RIGHT", 20, 0)
+    avgHeader:SetPoint("LEFT", totalHeader, "RIGHT", 10, 0)
 
     local maxHeader = MakeHeaderBtn(avgHeader, "TOPRIGHT", "Max (ms)", 70, "maxTime")
-    maxHeader:SetPoint("LEFT", avgHeader, "RIGHT", 20, 0)
+    maxHeader:SetPoint("LEFT", avgHeader, "RIGHT", 10, 0)
 
-    local barHeader = MakeHeaderBtn(maxHeader, "TOPRIGHT", "Visual", 120, "visual")
-    barHeader:SetPoint("LEFT", maxHeader, "RIGHT", 10, 0)
+    local memAvgHeader = MakeHeaderBtn(maxHeader, "TOPRIGHT", "Mem Avg", 70, "memAvg")
+    memAvgHeader:SetPoint("LEFT", maxHeader, "RIGHT", 10, 0)
+
+    local memMaxHeader = MakeHeaderBtn(memAvgHeader, "TOPRIGHT", "Mem Max", 70, "memMax")
+    memMaxHeader:SetPoint("LEFT", memAvgHeader, "RIGHT", 10, 0)
+
+    local barHeader = MakeHeaderBtn(memMaxHeader, "TOPRIGHT", "Visual", 90, "visual")
+    barHeader:SetPoint("LEFT", memMaxHeader, "RIGHT", 10, 0)
+
+    frame.__headers = {
+        name = nameHeader,
+        calls = callsHeader,
+        totalTime = totalHeader,
+        avgTime = avgHeader,
+        maxTime = maxHeader,
+        memAvg = memAvgHeader,
+        memMax = memMaxHeader,
+        visual = barHeader,
+    }
+
+    memAvgHeader.__baseText = "Mem Avg (KB)"
+    memAvgHeader.__label:SetText(memAvgHeader.__baseText)
+    memMaxHeader.__baseText = "Mem Max (KB)"
+    memMaxHeader.__label:SetText(memMaxHeader.__baseText)
 
     -- Scrollable content area
     local scrollFrame = CreateFrame("ScrollFrame", nil, frame, "BackdropTemplate")
@@ -360,6 +449,37 @@ local function BuildFrame()
     scrollFrame:SetScrollChild(content)
     frame.__scrollFrame = scrollFrame
     frame.__content = content
+
+    -- Resize grip
+    local resizeGrip = CreateFrame("Button", nil, frame)
+    resizeGrip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
+    resizeGrip:SetSize(18, 18)
+    resizeGrip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    resizeGrip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    resizeGrip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    resizeGrip:SetScript("OnMouseDown", function()
+        frame:StartSizing("BOTTOMRIGHT")
+    end)
+    resizeGrip:SetScript("OnMouseUp", function()
+        frame:StopMovingOrSizing()
+        ProfilerUI:Refresh()
+    end)
+    frame.__resizeGrip = resizeGrip
+
+    frame:SetScript("OnSizeChanged", function(self)
+        if self.__content then
+            self.__content:SetWidth(math.max(200, self:GetWidth() - 6))
+        end
+        if self.__scrollFrame then
+            local available = math.max(40, self.__scrollFrame:GetWidth() - 6)
+            for i = 1, #ProfilerUI.rowPool do
+                local row = ProfilerUI.rowPool[i]
+                if row then
+                    row:SetWidth(available)
+                end
+            end
+        end
+    end)
 
     -- Enable mouse wheel scrolling
     scrollFrame:EnableMouseWheel(true)
@@ -422,6 +542,26 @@ function ProfilerUI:Refresh()
                 return a.maxTime < b.maxTime
             end
         end)
+    elseif self.sortColumn == "memAvg" then
+        table.sort(profiles, function(a, b)
+            local av = tonumber(a.memoryAverageDelta) or 0
+            local bv = tonumber(b.memoryAverageDelta) or 0
+            if self.sortDescending then
+                return av > bv
+            else
+                return av < bv
+            end
+        end)
+    elseif self.sortColumn == "memMax" then
+        table.sort(profiles, function(a, b)
+            local av = tonumber(a.memoryMaxDelta) or 0
+            local bv = tonumber(b.memoryMaxDelta) or 0
+            if self.sortDescending then
+                return av > bv
+            else
+                return av < bv
+            end
+        end)
     else -- totalTime
         table.sort(profiles, function(a, b)
             if self.sortDescending then
@@ -432,9 +572,30 @@ function ProfilerUI:Refresh()
         end)
     end
 
+    if frame.__headers then
+        local activeArrow = self.sortDescending and " v" or " ^"
+        for key, header in pairs(frame.__headers) do
+            if header and header.__label and header.__baseText then
+                local labelText = header.__baseText
+                if key == self.sortColumn then
+                    labelText = labelText .. activeArrow
+                end
+                header.__label:SetText(labelText)
+            end
+        end
+    end
+
     -- Update status
     local isActive = profileData.isActive and "|cff69b86f◌ RECORDING|r" or "|cffff9a6cSTOPPED|r"
-    frame.__status:SetText(format("%d profiles | %s", profileData.totalProfiles, isActive))
+    local memoryEnabled = profileData.memoryProfilingEnabled == true
+    frame.__status:SetText(format("%d profiles | %s | Memory: %s",
+        profileData.totalProfiles,
+        isActive,
+        memoryEnabled and "|cff69b86fON|r" or "|cffff9a6cOFF|r"))
+    if frame.__headers and frame.__headers.memAvg and frame.__headers.memMax then
+        frame.__headers.memAvg:SetShown(memoryEnabled)
+        frame.__headers.memMax:SetShown(memoryEnabled)
+    end
 
     -- Calculate max time for bar scaling
     local maxTime = 0
@@ -463,6 +624,7 @@ function ProfilerUI:Refresh()
         end
 
         row:ClearAllPoints()
+        row:SetWidth(math.max(40, frame.__scrollFrame:GetWidth() - 6))
         row:Show()
         if i == 1 then
             row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
@@ -470,7 +632,7 @@ function ProfilerUI:Refresh()
             row:SetPoint("TOPLEFT", self.rowPool[i - 1], "BOTTOMLEFT", 0, 0)
         end
 
-        PopulateProfileRow(row, profiles[i], maxTime)
+        PopulateProfileRow(row, profiles[i], maxTime, memoryEnabled)
     end
 
     -- Hide unused rows
