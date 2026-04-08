@@ -1058,11 +1058,28 @@ end
 function ActionBars:InvalidateDBCache()
     _optionsCache = nil
     _dbCache = nil
+    if self then
+        self._barSettingsCache = nil
+    end
 end
 
 function ActionBars:GetBarSettings(barKey)
+    if not barKey then
+        return nil
+    end
+
+    self._barSettingsCache = self._barSettingsCache or {}
+    local cached = self._barSettingsCache[barKey]
+    if cached ~= nil then
+        return cached
+    end
+
     local options = self:GetOptions()
-    return options and options.GetBarSettings and options:GetBarSettings(barKey) or nil
+    local settings = options and options.GetBarSettings and options:GetBarSettings(barKey) or nil
+    if settings then
+        self._barSettingsCache[barKey] = settings
+    end
+    return settings
 end
 
 function ActionBars:OnInitialize()
@@ -1082,6 +1099,7 @@ function ActionBars:OnInitialize()
     self.pendingDisable = false
     self.keybindModeActive = false
     self.bindingsChanged = false
+    self._cooldownRefreshQueued = false
 
     self:CreateInfrastructure()
 
@@ -1127,7 +1145,7 @@ function ActionBars:OnEnable()
     self:RegisterEvent("ACTIONBAR_SLOT_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("ACTIONBAR_UPDATE_STATE", "RefreshButtonStates")
     self:RegisterEvent("ACTIONBAR_UPDATE_USABLE", "RefreshButtonStates")
-    self:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN", "ApplyCooldownSettings")
+    self:RegisterEvent("ACTIONBAR_UPDATE_COOLDOWN", "QueueCooldownRefresh")
     self:RegisterEvent("UNIT_SPELLCAST_SENT")
     self:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
     self:RegisterEvent("UNIT_SPELLCAST_FAILED")
@@ -1174,6 +1192,7 @@ function ActionBars:OnDisable()
 
     self.pendingDisable = false
     self.pendingRefresh = false
+    self._cooldownRefreshQueued = false
     self.lastActionAttempt = nil
     self.lastSpellAttempt = nil
     self:InvalidateDBCache()
@@ -4159,15 +4178,21 @@ function ActionBars:ApplyCooldownSettingsToButton(button, actionBarDB, barSettin
 
     local showSwipe = actionBarDB.showCooldownSwipe == true and
         (not barSettings or barSettings.showCooldownSwipe ~= false)
+    local hideCountdown = actionBarDB.showCooldownText ~= true
     local icon = self:GetButtonIcon(button)
 
-    if icon then
+    if button.__twichuiCooldownObj == cooldown and button.__twichuiCooldownIcon == icon and
+        button.__twichuiCooldownShowSwipe == showSwipe and button.__twichuiCooldownHideNumbers == hideCountdown then
+        return
+    end
+
+    if icon and button.__twichuiCooldownIcon ~= icon then
         cooldown:ClearAllPoints()
         cooldown:SetAllPoints(icon)
     end
 
     if cooldown.SetHideCountdownNumbers then
-        cooldown:SetHideCountdownNumbers(actionBarDB.showCooldownText ~= true)
+        cooldown:SetHideCountdownNumbers(hideCountdown)
     end
     if cooldown.SetDrawSwipe then
         cooldown:SetDrawSwipe(showSwipe)
@@ -4178,6 +4203,11 @@ function ActionBars:ApplyCooldownSettingsToButton(button, actionBarDB, barSettin
     if cooldown.SetDrawBling then
         cooldown:SetDrawBling(false)
     end
+
+    button.__twichuiCooldownObj = cooldown
+    button.__twichuiCooldownIcon = icon
+    button.__twichuiCooldownShowSwipe = showSwipe
+    button.__twichuiCooldownHideNumbers = hideCountdown
 end
 
 function ActionBars:ApplyCooldownSettings()
@@ -4192,6 +4222,33 @@ function ActionBars:ApplyCooldownSettings()
             self:ApplyCooldownSettingsToButton(button, db, settings)
         end
     end
+end
+
+function ActionBars:QueueCooldownRefresh()
+    if self._cooldownRefreshQueued == true then
+        return
+    end
+
+    self._cooldownRefreshQueued = true
+    if not (C_Timer and type(C_Timer.After) == "function") then
+        self._cooldownRefreshQueued = false
+        self:ApplyCooldownSettings()
+        return
+    end
+
+    C_Timer.After(0, function()
+        if ActionBars._cooldownRefreshQueued ~= true then
+            return
+        end
+
+        ActionBars._cooldownRefreshQueued = false
+        local db = ActionBars:GetDB()
+        if not db or db.enabled == false or not ActionBars:IsEnabled() then
+            return
+        end
+
+        ActionBars:ApplyCooldownSettings()
+    end)
 end
 
 function ActionBars:QueueButtonStateRefresh()

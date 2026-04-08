@@ -1820,29 +1820,41 @@ function ChatRendererModule:EnsureRenderer(frame)
         selfRenderer.fadeElapsed = (selfRenderer.fadeElapsed or 0) + elapsed
         if selfRenderer.fadeElapsed >= 0.05 then
             selfRenderer.fadeElapsed = 0
-            -- Hoist renderer-level checks out of the per-row loop; these are the same
-            -- for every row and were previously recomputed 1M+ times per session.
             local settings = ChatRendererModule.settings
             local animationsEnabled = settings and settings.animationsEnabled
-            local skipToFull = not (settings and settings.messageFadesEnabled)
+            local now = GetTime()
+            local fadesEnabled = settings and settings.messageFadesEnabled
+            local skipToFull = not fadesEnabled
                 or (selfRenderer.scrollOffset or 0) > 2
                 or (selfRenderer.Viewport and selfRenderer.Viewport.IsMouseOver and selfRenderer.Viewport:IsMouseOver())
                 or (selfRenderer.IsMouseOver and selfRenderer:IsMouseOver())
+
+            local targetAlpha = 1
+            if not skipToFull then
+                local age = now - (selfRenderer.unhoveredAt or now)
+                local delay = settings.messageFadeDelay or 45
+                if age > delay then
+                    local duration = mathMax(1, settings.messageFadeDuration or 6)
+                    local progress = mathMin(1, (age - delay) / duration)
+                    local minAlpha = mathMax(0, mathMin(1, settings.messageFadeMinAlpha or 0.55))
+                    targetAlpha = minAlpha + (1 - minAlpha) * (1 - progress)
+                end
+            end
+
             local entries = selfRenderer.entries
             local rows = selfRenderer.rows
             if entries and rows then
                 for index, entry in ipairs(entries) do
                     local row = rows[index]
                     if row and row:IsShown() then
-                        if skipToFull then
-                            -- All rows should be full opacity; still honour per-row animate-in guards.
-                            if not ((entry.animateIn and animationsEnabled)
-                                    or (row.FadeIn and row.FadeIn.IsPlaying and row.FadeIn:IsPlaying())
-                                    or row.TwichUIAnimatingIn) then
+                        if not ((entry.animateIn and animationsEnabled)
+                                or (row.FadeIn and row.FadeIn.IsPlaying and row.FadeIn:IsPlaying())
+                                or row.TwichUIAnimatingIn) then
+                            if skipToFull or row:IsMouseOver() then
                                 row:SetAlpha(1)
+                            else
+                                row:SetAlpha(targetAlpha)
                             end
-                        else
-                            ChatRendererModule:UpdateRowOpacity(selfRenderer, row, entry)
                         end
                     end
                 end
