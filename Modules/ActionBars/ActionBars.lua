@@ -2478,10 +2478,16 @@ function ActionBars:HideBindOverlay()
 end
 
 function ActionBars:ScheduleGlowSync(delaySeconds)
+    if self._glowSyncQueued == true then
+        return
+    end
+
     local token = (self.glowSyncToken or 0) + 1
     self.glowSyncToken = token
+    self._glowSyncQueued = true
 
     C_Timer.After(delaySeconds or 0.1, function()
+        ActionBars._glowSyncQueued = nil
         if ActionBars.glowSyncToken ~= token then
             return
         end
@@ -2879,6 +2885,9 @@ end
 function ActionBars:IsButtonGlowActive(button, spellStateCache)
     local spellID = button and button.__twichuiABSpellID or nil
     if spellID == nil then
+        if button and button.__twichuiABSpellIDResolved == true then
+            return false
+        end
         spellID = self:GetButtonSpellID(button)
         if button then
             button.__twichuiABSpellID = spellID
@@ -3609,6 +3618,14 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
     end
 
     local style = cachedStyle or self:GetGlowStyle()
+    if style == "none" then
+        if (button.__twichuiABGlowStyle or "none") ~= "none" then
+            self:ClearButtonGlow(button)
+        end
+        button.__twichuiABGlowStyle = "none"
+        return
+    end
+
     local active = self:IsButtonGlowActive(button, spellStateCache)
     local desiredStyle = active and style or "none"
     local currentStyle = button.__twichuiABGlowStyle or "none"
@@ -4491,7 +4508,7 @@ function ActionBars:RefreshButtonStates(event)
         end
     end
 
-    if shouldRefreshGlow then
+    if shouldRefreshGlow and (glowStyle == "button" or glowStyle == "blizzard") then
         self:ScheduleGlowSync(0.05)
     end
 end
@@ -4828,7 +4845,9 @@ function ActionBars:RefreshAll()
     end
 
     self:ApplyMasqueSettings(actionBarDB)
-    self:RefreshButtonStates()
-    self:UpdateAllButtonGlows()
-    self:ScheduleGlowSync(0.15)
+    self:RefreshButtonStates(true)
+    local glowStyle = self:GetGlowStyle()
+    if glowStyle == "button" or glowStyle == "blizzard" then
+        self:ScheduleGlowSync(0.15)
+    end
 end

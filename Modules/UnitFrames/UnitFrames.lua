@@ -7084,6 +7084,14 @@ function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
         return
     end
 
+    fx._updateAccumulator = (fx._updateAccumulator or 0) + (elapsed or 0)
+    if fx._updateAccumulator < (1 / 50) then
+        return
+    end
+
+    elapsed = math_min(0.08, fx._updateAccumulator)
+    fx._updateAccumulator = 0
+
     self:SyncFantasyCastbarVisuals(castbar)
     if not castbar:IsShown() or not fx.overlay:IsShown() then
         return
@@ -7503,6 +7511,14 @@ end
 function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
     local fx = powerBar and powerBar.TwichPowerFx
     if not fx or not fx.enabled then return end
+
+    fx._updateAccumulator = (fx._updateAccumulator or 0) + (elapsed or 0)
+    if fx._updateAccumulator < (1 / 45) then
+        return
+    end
+
+    elapsed = math_min(0.1, fx._updateAccumulator)
+    fx._updateAccumulator = 0
 
     local effectScale = fx.effectScale or 1
     local family = GetFantasyThemeEffectFamily(fx.theme)
@@ -14078,9 +14094,17 @@ function UnitFrames:StartStandaloneCastbarUpdates()
 
     castbar._twichCastbarUpdating = true
     castbar:SetScript("OnUpdate", function(_, elapsed)
+        castbar._twichCastbarUpdateAccumulator = (castbar._twichCastbarUpdateAccumulator or 0) + (elapsed or 0)
+        if castbar._twichCastbarUpdateAccumulator < (1 / 60) then
+            return
+        end
+
+        local tickElapsed = math_min(0.08, castbar._twichCastbarUpdateAccumulator)
+        castbar._twichCastbarUpdateAccumulator = 0
+
         UnitFrames:UFDiagBump("castbarUpdateTicks", 1)
         UnitFrames:UpdateCastbarElapsed()
-        UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed or 0)
+        UnitFrames:OnFantasyCastbarUpdate(castbar, tickElapsed)
         UnitFrames:UFDiagMaybeReport("castbar")
     end)
 end
@@ -14092,6 +14116,7 @@ function UnitFrames:StopStandaloneCastbarUpdates()
     end
 
     castbar._twichCastbarUpdating = nil
+    castbar._twichCastbarUpdateAccumulator = nil
     castbar:SetScript("OnUpdate", nil)
 end
 
