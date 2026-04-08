@@ -2564,6 +2564,19 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
         resolvedScope = ResolveScopeByUnitKey(unitKey)
     end
 
+    local resolvedClassToken = nil
+    if unit then
+        local _, classToken = UnitClass(unit)
+        resolvedClassToken = classToken
+    end
+    if not resolvedClassToken and unitKey == "player" then
+        local _, classToken = UnitClass("player")
+        resolvedClassToken = classToken
+    end
+    if not resolvedClassToken then
+        resolvedClassToken = mockClass
+    end
+
     local paletteCache = self._paletteCache
     if not paletteCache then
         paletteCache = {}
@@ -2573,8 +2586,7 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
     local cacheKey = table.concat({
         tostring(resolvedScope),
         tostring(unitKey or ""),
-        tostring(unit or ""),
-        tostring(mockClass or ""),
+        tostring(resolvedClassToken or ""),
         tostring(db.useThemeAccentHealth == true),
         tostring(db.useClassColor == true),
     }, "|")
@@ -2655,21 +2667,7 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
                 palette.health[1], palette.health[2], palette.health[3]))
         end
     elseif mode == "class" then
-        local classToken = nil
-        if unit then
-            -- Call UnitClass directly — it returns nil for non-player units so no
-            -- UnitIsPlayer pre-check is needed. Removing that check means party/raid
-            -- member frames no longer depend on UnitIsPlayer returning truthy.
-            local _, ct = UnitClass(unit)
-            classToken = ct
-        end
-        if not classToken and unitKey == "player" then
-            -- Fallback for player-scoped frames when the unit string wasn't passed.
-            local _, ct = UnitClass("player")
-            classToken = ct
-        end
-        -- Fall back to the caller-supplied mock class (used by test mode previews).
-        if not classToken then classToken = mockClass end
+        local classToken = resolvedClassToken
         local classColor = nil
         if classToken then
             -- Prefer the modern namespaced API (available since BFA). Fall back to the
@@ -7110,7 +7108,7 @@ function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
     end
 
     fx._updateAccumulator = (fx._updateAccumulator or 0) + (elapsed or 0)
-    if fx._updateAccumulator < (1 / 24) then
+    if fx._updateAccumulator < (1 / 20) then
         return
     end
 
@@ -7553,7 +7551,7 @@ function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
     if fx.particleLayer and not fx.particleLayer:IsShown() then return end
 
     fx._updateAccumulator = (fx._updateAccumulator or 0) + (elapsed or 0)
-    if fx._updateAccumulator < (1 / 24) then
+    if fx._updateAccumulator < (1 / 20) then
         return
     end
 

@@ -1104,6 +1104,8 @@ function ActionBars:OnInitialize()
     self._cooldownBarState = {}
     self.spellButtonIndex = {}
     self.spellButtonIndexDirty = true
+    self._defaultArtHiddenApplied = false
+    self._themeStyleToken = 0
 
     self:CreateInfrastructure()
 
@@ -1228,6 +1230,7 @@ function ActionBars:PLAYER_REGEN_ENABLED()
 end
 
 function ActionBars:OnThemeChanged()
+    self._themeStyleToken = (self._themeStyleToken or 0) + 1
     self:RequestRefresh()
 end
 
@@ -3124,6 +3127,14 @@ function ActionBars:UpdateFailedActionFeedbackLayout(button)
     local red, green, blue = self:GetFailedActionFeedbackColor()
     local icon = self:GetButtonIcon(button)
     local target = icon or button
+    local targetW = target and target.GetWidth and target:GetWidth() or 0
+    local targetH = target and target.GetHeight and target:GetHeight() or 0
+    local signature = string.format("%.3f|%.3f|%.3f|%.1f|%.1f|%s",
+        red, green, blue, targetW, targetH, tostring(target))
+    if feedback.__twichuiABFailureLayoutSig == signature then
+        return
+    end
+    feedback.__twichuiABFailureLayoutSig = signature
 
     if feedback.SetFrameLevel then
         feedback:SetFrameLevel(button:GetFrameLevel() + 6)
@@ -3133,12 +3144,15 @@ function ActionBars:UpdateFailedActionFeedbackLayout(button)
     feedback:SetPoint("TOPLEFT", button, "TOPLEFT", -2, 2)
     feedback:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 2, -2)
 
-    feedback:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
-    })
+    if feedback.__twichuiABBackdropInit ~= true then
+        feedback:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        feedback.__twichuiABBackdropInit = true
+    end
     feedback:SetBackdropColor(0, 0, 0, 0)
     feedback:SetBackdropBorderColor(red, green, blue, 0.95)
 
@@ -3868,6 +3882,8 @@ function ActionBars:RestoreOriginalLayout()
         end
     end
 
+    self._defaultArtHiddenApplied = false
+
     for button, state in pairs(self.originalButtons) do
         if button and state then
             if state.parent then
@@ -4220,12 +4236,34 @@ function ActionBars:ApplyHolderStyle(holder, barSettings)
     local bgR, bgG, bgB = FetchThemeColor(theme, "backgroundColor", { 0.05, 0.06, 0.08 })
     local accentR, accentG, accentB = FetchThemeColor(theme, "accentColor", { 0.96, 0.76, 0.24 })
 
-    holder:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
-    })
+    local signature = table.concat({
+        tostring(barSettings.backdrop ~= false),
+        tostring(barSettings.showBorder ~= false),
+        tostring(barSettings.showAccent ~= false),
+        string.format("%.3f", primaryR),
+        string.format("%.3f", primaryG),
+        string.format("%.3f", primaryB),
+        string.format("%.3f", bgR),
+        string.format("%.3f", bgG),
+        string.format("%.3f", bgB),
+        string.format("%.3f", accentR),
+        string.format("%.3f", accentG),
+        string.format("%.3f", accentB),
+    }, "|")
+    if holder.__twichuiABHolderStyleSig == signature then
+        return
+    end
+    holder.__twichuiABHolderStyleSig = signature
+
+    if holder.__twichuiABHolderBackdropInit ~= true then
+        holder:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        holder.__twichuiABHolderBackdropInit = true
+    end
     holder:SetBackdropColor(bgR, bgG, bgB, barSettings.backdrop == false and 0 or 0.82)
     holder:SetBackdropBorderColor(primaryR, primaryG, primaryB,
         (barSettings.backdrop == false or barSettings.showBorder == false) and 0 or 0.45)
@@ -4268,6 +4306,29 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
     local accentR, accentG, accentB = FetchThemeColor(theme, "accentColor", { 0.96, 0.76, 0.24 })
     local bgR, bgG, bgB = FetchThemeColor(theme, "backgroundColor", { 0.05, 0.06, 0.08 })
 
+    local styleSignature = table.concat({
+        tostring(barKey or ""),
+        tostring(useMasque),
+        tostring(barSettings and barSettings.showBorder ~= false),
+        tostring(barSettings and barSettings.showAccent ~= false),
+        string.format("%.3f", primaryR),
+        string.format("%.3f", primaryG),
+        string.format("%.3f", primaryB),
+        string.format("%.3f", accentR),
+        string.format("%.3f", accentG),
+        string.format("%.3f", accentB),
+        string.format("%.3f", bgR),
+        string.format("%.3f", bgG),
+        string.format("%.3f", bgB),
+    }, "|")
+    if button.__twichuiABStyleSignature == styleSignature then
+        self:ApplyTypography(button, actionBarDB)
+        self:ApplyCooldownSettingsToButton(button, actionBarDB, barSettings)
+        self:UpdateButtonGlow(button)
+        return
+    end
+    button.__twichuiABStyleSignature = styleSignature
+
     local icon = self:GetButtonIcon(button)
     if icon then
         icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -4307,12 +4368,15 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
         chrome:SetFrameLevel(max(0, button:GetFrameLevel() - 1))
     end
 
-    chrome:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
-    })
+    if chrome.__twichuiABBackdropInit ~= true then
+        chrome:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        chrome.__twichuiABBackdropInit = true
+    end
     chrome:SetBackdropColor(bgR, bgG, bgB, useMasque and 0 or 0.92)
     chrome:SetBackdropBorderColor(primaryR, primaryG, primaryB,
         (useMasque or (barSettings and barSettings.showBorder == false)) and 0 or 0.42)
@@ -4364,6 +4428,25 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
 end
 
 function ActionBars:ApplyTypography(button, actionBarDB)
+    local styleToken = table.concat({
+        tostring(actionBarDB.textFont or ""),
+        tostring(actionBarDB.fontOutline or "NONE"),
+        tostring(actionBarDB.textShadow == true),
+        tostring(actionBarDB.hotkeyFontSize or ""),
+        tostring(actionBarDB.countFontSize or ""),
+        tostring(actionBarDB.macroFontSize or ""),
+        tostring(actionBarDB.showHotkeys == true),
+        tostring(actionBarDB.showCounts == true),
+        tostring(actionBarDB.showMacroNames == true),
+        tostring(actionBarDB.useThemeTextColor == true),
+        tostring(actionBarDB.customTextColor and table.concat(actionBarDB.customTextColor, ",") or ""),
+        tostring(self._themeStyleToken or 0),
+    }, "|")
+    if button.__twichuiABTypographyToken == styleToken then
+        return
+    end
+    button.__twichuiABTypographyToken = styleToken
+
     local fontPath = self:ResolveFont(actionBarDB.textFont)
     local fontFlags = actionBarDB.fontOutline ~= "NONE" and (actionBarDB.fontOutline or "") or ""
     local textR, textG, textB = self:GetResolvedTextColor(actionBarDB)
@@ -4706,6 +4789,10 @@ function ActionBars:ApplyVisibility(holder, barSettings)
 end
 
 function ActionBars:HideDefaultArt()
+    if self._defaultArtHiddenApplied == true then
+        return
+    end
+
     for _, frameName in ipairs(BLIZZARD_FRAMES_TO_HIDE) do
         local frame = _G[frameName]
         if frame then
@@ -4814,6 +4901,8 @@ function ActionBars:HideDefaultArt()
             end
         end
     end
+
+    self._defaultArtHiddenApplied = true
 end
 
 function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
@@ -4826,10 +4915,42 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
     local availableCount = self:GetButtonCountForDefinition(definition, buttons)
     local enabled = barSettings.enabled == true and availableCount > 0
 
+    local clampedScale = ClampNumber(barSettings.scale, 0.5, 2, 1)
+    local clampedButtonSize = ClampNumber(barSettings.buttonSize, 22, 64, definition.fallbackButtonSize)
+    local clampedButtonsPerRow = ClampNumber(barSettings.buttonsPerRow, 1, max(1, availableCount),
+        definition.fallbackButtonsPerRow)
+    local clampedSpacing = ClampNumber(actionBarDB.buttonSpacing, 0, 20, 4)
+    local layoutSignature = table.concat({
+        tostring(enabled),
+        tostring(barSettings.point or "BOTTOM"),
+        tostring(barSettings.relativePoint or barSettings.point or "BOTTOM"),
+        tostring(barSettings.x or 0),
+        tostring(barSettings.y or 0),
+        tostring(clampedScale),
+        tostring(ClampNumber(barSettings.alpha, 0.05, 1, 1)),
+        tostring(availableCount),
+        tostring(clampedButtonSize),
+        tostring(clampedButtonsPerRow),
+        tostring(clampedSpacing),
+        tostring(actionBarDB.showGrid == true),
+        tostring(actionBarDB.useMasque == true and Masque ~= nil),
+        tostring(barSettings.backdrop ~= false),
+        tostring(barSettings.showBorder ~= false),
+        tostring(barSettings.showAccent ~= false),
+        tostring(barSettings.visibility or DEFAULT_VISIBILITY),
+        tostring(self._themeStyleToken or 0),
+    }, "|")
+
+    if holder.__twichuiABLayoutSig == layoutSignature then
+        holder:SetAlpha(self:GetTargetAlpha(barSettings, false))
+        return
+    end
+    holder.__twichuiABLayoutSig = layoutSignature
+
     holder:ClearAllPoints()
     holder:SetPoint(barSettings.point or "BOTTOM", UIParent, barSettings.relativePoint or barSettings.point or "BOTTOM",
         barSettings.x or 0, barSettings.y or 0)
-    holder:SetScale(ClampNumber(barSettings.scale, 0.5, 2, 1))
+    holder:SetScale(clampedScale)
     holder:SetFrameLevel(30)
 
     self:ApplyHolderStyle(holder, barSettings)
@@ -4846,9 +4967,9 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
         return
     end
 
-    local buttonSize = ClampNumber(barSettings.buttonSize, 22, 64, definition.fallbackButtonSize)
-    local buttonsPerRow = ClampNumber(barSettings.buttonsPerRow, 1, availableCount, definition.fallbackButtonsPerRow)
-    local spacing = ClampNumber(actionBarDB.buttonSpacing, 0, 20, 4)
+    local buttonSize = clampedButtonSize
+    local buttonsPerRow = clampedButtonsPerRow
+    local spacing = clampedSpacing
     local rows = ceil(availableCount / buttonsPerRow)
     local width = (buttonsPerRow * buttonSize) + ((buttonsPerRow - 1) * spacing) + (DEFAULT_HOLDER_PADDING * 2)
     local height = (rows * buttonSize) + ((rows - 1) * spacing) + (DEFAULT_HOLDER_PADDING * 2)

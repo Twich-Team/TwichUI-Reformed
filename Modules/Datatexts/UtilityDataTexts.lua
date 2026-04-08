@@ -23,6 +23,7 @@ local GetAddOnMemoryUsage = _G.GetAddOnMemoryUsage
 local GetFramerate = _G.GetFramerate
 local GetGameTime = _G.GetGameTime
 local GetLatestThreeSenders = _G.GetLatestThreeSenders
+local GetMaxPlayerLevel = _G.GetMaxPlayerLevel
 local GetLootSpecialization = _G.GetLootSpecialization
 local GetNetStats = _G.GetNetStats
 local GetNumSpecializations = _G.GetNumSpecializations
@@ -30,7 +31,9 @@ local GetServerTime = _G.GetServerTime
 local GetSpecialization = _G.GetSpecialization
 local GetSpecializationInfo = _G.GetSpecializationInfo
 local GetTime = _G.GetTime
+local GetXPExhaustion = _G.GetXPExhaustion
 local HasNewMail = _G.HasNewMail
+local IsXPUserDisabled = _G.IsXPUserDisabled
 local C_Mail = _G.C_Mail
 local C_Timer = _G.C_Timer
 local IsControlKeyDown = _G.IsControlKeyDown
@@ -42,6 +45,9 @@ local ToggleCharacter = _G.ToggleCharacter
 local ToggleFriendsFrame = _G.ToggleFriendsFrame
 local ToggleCalendar = _G.ToggleCalendar
 local TogglePlayerSpellsFrame = _G.TogglePlayerSpellsFrame
+local UnitLevel = _G.UnitLevel
+local UnitXP = _G.UnitXP
+local UnitXPMax = _G.UnitXPMax
 local UpdateAddOnMemoryUsage = _G.UpdateAddOnMemoryUsage
 
 local C_AddOns = _G.C_AddOns
@@ -206,6 +212,140 @@ local function TimeSettings()
         showDailyReset = db.showDailyReset ~= false,
         showWeeklyReset = db.showWeeklyReset ~= false,
     }
+end
+
+local function ExperienceSettings()
+    local db = GetDatatextDB("experience")
+    return {
+        displayMode = type(db.displayMode) == "string" and db.displayMode or "REMAINING",
+        showLabel = db.showLabel ~= false,
+        useShortNumbers = db.useShortNumbers ~= false,
+        showRestedOnText = db.showRestedOnText == true,
+        showRestedInTooltip = db.showRestedInTooltip ~= false,
+    }
+end
+
+local function GetPlayerMaxLevel()
+    if type(GetMaxPlayerLevel) == "function" then
+        local value = GetMaxPlayerLevel()
+        if type(value) == "number" and value > 0 then
+            return value
+        end
+    end
+
+    if _G.C_PlayerInfo and type(_G.C_PlayerInfo.GetMaxLevelForPlayerExpansion) == "function" then
+        local value = _G.C_PlayerInfo.GetMaxLevelForPlayerExpansion()
+        if type(value) == "number" and value > 0 then
+            return value
+        end
+    end
+
+    local fallback = tonumber(_G.MAX_PLAYER_LEVEL)
+    if fallback and fallback > 0 then
+        return fallback
+    end
+
+    return nil
+end
+
+local function GetPlayerExperienceState()
+    local currentLevel = type(UnitLevel) == "function" and (UnitLevel("player") or 0) or 0
+    local maxLevel = GetPlayerMaxLevel()
+    local atMaxLevel = (type(maxLevel) == "number" and maxLevel > 0 and currentLevel >= maxLevel) or false
+
+    if atMaxLevel then
+        return {
+            level = currentLevel,
+            maxLevel = maxLevel,
+            atMaxLevel = true,
+            xpLocked = type(IsXPUserDisabled) == "function" and IsXPUserDisabled() == true or false,
+        }
+    end
+
+    local currentXP = type(UnitXP) == "function" and (UnitXP("player") or 0) or 0
+    local maxXP = type(UnitXPMax) == "function" and (UnitXPMax("player") or 0) or 0
+    if maxXP <= 0 then
+        maxXP = 1
+    end
+
+    local remainingXP = math.max(0, maxXP - currentXP)
+    local progressPercent = (currentXP / maxXP) * 100
+    local remainingPercent = (remainingXP / maxXP) * 100
+    local restedXP = type(GetXPExhaustion) == "function" and (GetXPExhaustion() or 0) or 0
+    if restedXP < 0 then
+        restedXP = 0
+    end
+
+    return {
+        level = currentLevel,
+        maxLevel = maxLevel,
+        atMaxLevel = false,
+        currentXP = currentXP,
+        maxXP = maxXP,
+        remainingXP = remainingXP,
+        progressPercent = progressPercent,
+        remainingPercent = remainingPercent,
+        restedXP = restedXP,
+        restedPercent = (restedXP / maxXP) * 100,
+        xpLocked = type(IsXPUserDisabled) == "function" and IsXPUserDisabled() == true or false,
+    }
+end
+
+local function FormatExperienceValue(value, useShortNumbers)
+    local numericValue = math.max(0, floor((tonumber(value) or 0) + 0.5))
+    if useShortNumbers then
+        return FormatQuantity(numericValue)
+    end
+
+    if type(BreakUpLargeNumbers) == "function" then
+        return BreakUpLargeNumbers(numericValue)
+    end
+
+    return tostring(numericValue)
+end
+
+local function BuildExperienceDatatextText(settings, state)
+    if state.atMaxLevel then
+        return settings.showLabel and "XP Max" or "Max"
+    end
+
+    local displayMode = settings.displayMode
+    local valueText
+    if displayMode == "CURRENT_MAX" then
+        valueText = format("%s / %s",
+            FormatExperienceValue(state.currentXP, settings.useShortNumbers),
+            FormatExperienceValue(state.maxXP, settings.useShortNumbers))
+    elseif displayMode == "CURRENT_PERCENT" then
+        valueText = format("%s (%s)",
+            FormatExperienceValue(state.currentXP, settings.useShortNumbers),
+            FormatPercent(state.progressPercent))
+    elseif displayMode == "REMAINING_PERCENT" then
+        valueText = format("%s (%s)",
+            FormatExperienceValue(state.remainingXP, settings.useShortNumbers),
+            FormatPercent(state.remainingPercent))
+    else
+        valueText = FormatExperienceValue(state.remainingXP, settings.useShortNumbers)
+    end
+
+    local parts = {}
+    if settings.showLabel then
+        parts[#parts + 1] = "XP"
+    end
+    parts[#parts + 1] = valueText
+
+    if settings.showRestedOnText and state.restedXP > 0 then
+        parts[#parts + 1] = T.Tools.Text.Color(T.Tools.Colors.GRAY,
+            "+" .. FormatExperienceValue(state.restedXP, settings.useShortNumbers) .. " R")
+    end
+
+    return table.concat(parts, " ")
+end
+
+local function SetExperiencePanelText(panel)
+    local settings = ExperienceSettings()
+    local state = GetPlayerExperienceState()
+    local text = BuildExperienceDatatextText(settings, state)
+    SetPanelText(panel, text, "experience", 0.45, 0.78, 1, 1)
 end
 
 local function SpecSettings()
@@ -1840,6 +1980,84 @@ function TimeDT:OnInitialize()
         onEventFunc = DataTextModule:CreateBoundCallback(self, "OnEvent"),
         onUpdateFunc = DataTextModule:CreateBoundCallback(self, "OnUpdate"),
         onClickFunc = DataTextModule:CreateBoundCallback(self, "OnClick"),
+        onEnterFunc = DataTextModule:CreateBoundCallback(self, "OnEnter"),
+        onLeaveFunc = DataTextModule:CreateBoundCallback(self, "OnLeave"),
+        module = self,
+    }
+
+    DataTextModule:Inform(self.definition)
+end
+
+---@class ExperienceDataText : AceModule
+local ExperienceDT = DataTextModule:NewModule("ExperienceDataText")
+
+function ExperienceDT:OnEvent(panel)
+    SetExperiencePanelText(panel)
+end
+
+function ExperienceDT:OnEnter()
+    local tooltip = DataTextModule:GetElvUITooltip()
+    if not tooltip then
+        return
+    end
+
+    local settings = ExperienceSettings()
+    local state = GetPlayerExperienceState()
+    tooltip:ClearLines()
+    tooltip:AddLine("Experience")
+
+    if state.atMaxLevel then
+        tooltip:AddLine(" ")
+        tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.GRAY, "You are at max level."))
+    else
+        tooltip:AddLine(" ")
+        tooltip:AddDoubleLine("Current",
+            format("%s / %s",
+                FormatExperienceValue(state.currentXP, false),
+                FormatExperienceValue(state.maxXP, false)),
+            1, 1, 1, 1, 1, 1)
+        tooltip:AddDoubleLine("Remaining",
+            FormatExperienceValue(state.remainingXP, false),
+            1, 1, 1, 1, 1, 1)
+        tooltip:AddDoubleLine("Progress", FormatPercent(state.progressPercent), 1, 1, 1, 1, 1, 1)
+
+        if settings.showRestedInTooltip and state.restedXP > 0 then
+            tooltip:AddDoubleLine("Rested",
+                format("%s (%s)",
+                    FormatExperienceValue(state.restedXP, false),
+                    FormatPercent(state.restedPercent)),
+                0.75, 0.78, 0.84, 1, 1, 1)
+        end
+    end
+
+    if state.xpLocked then
+        tooltip:AddLine(" ")
+        tooltip:AddLine(T.Tools.Text.Color(T.Tools.Colors.WARNING, "Experience gain is currently disabled."))
+    end
+
+    DataTextModule:ShowDatatextTooltip(tooltip)
+end
+
+function ExperienceDT:OnLeave()
+    local tooltip = DataTextModule:GetActiveDatatextTooltip()
+    if tooltip and tooltip.Hide then
+        DataTextModule:HideDatatextTooltip(tooltip)
+    end
+end
+
+function ExperienceDT:OnInitialize()
+    self.definition = {
+        name = "TwichUI: Experience",
+        prettyName = "Experience",
+        events = {
+            "PLAYER_XP_UPDATE",
+            "UPDATE_EXHAUSTION",
+            "PLAYER_LEVEL_UP",
+            "PLAYER_ENTERING_WORLD",
+        },
+        onEventFunc = DataTextModule:CreateBoundCallback(self, "OnEvent"),
+        onUpdateFunc = nil,
+        onClickFunc = nil,
         onEnterFunc = DataTextModule:CreateBoundCallback(self, "OnEnter"),
         onLeaveFunc = DataTextModule:CreateBoundCallback(self, "OnLeave"),
         module = self,

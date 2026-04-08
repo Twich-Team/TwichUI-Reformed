@@ -1130,6 +1130,104 @@ local function BuildTimeConfiguration()
     }
 end
 
+local function BuildExperienceConfiguration()
+    local W = ConfigurationModule.Widgets
+    return {
+        type = "group",
+        name = "Experience",
+        order = 5.5,
+        args = {
+            title = W.TitleWidget(0, "Experience"),
+            desc = W.Description(1,
+                "Shows your progress toward the next level with configurable display modes for remaining or current experience."),
+            display = W.IGroup(10, "Display", {
+                displayMode = {
+                    type = "select",
+                    name = "Display Mode",
+                    desc = "Choose how the experience datatext is shown.",
+                    order = 1,
+                    values = {
+                        REMAINING = "Remaining",
+                        REMAINING_PERCENT = "Remaining + Percent",
+                        CURRENT_MAX = "Current / Max",
+                        CURRENT_PERCENT = "Current + Percent",
+                    },
+                    get = function()
+                        local db = Options:GetDatatextDB("experience")
+                        return db.displayMode or "REMAINING"
+                    end,
+                    set = function(_, value)
+                        local db = Options:GetDatatextDB("experience")
+                        db.displayMode = value or "REMAINING"
+                        RefreshNamedDatatext("TwichUI: Experience")
+                    end,
+                },
+                showLabel = {
+                    type = "toggle",
+                    name = "Show XP Label",
+                    desc = "Prefix the value with an XP label.",
+                    order = 2,
+                    get = function()
+                        local db = Options:GetDatatextDB("experience")
+                        return db.showLabel ~= false
+                    end,
+                    set = function(_, value)
+                        local db = Options:GetDatatextDB("experience")
+                        db.showLabel = value == true
+                        RefreshNamedDatatext("TwichUI: Experience")
+                    end,
+                },
+                useShortNumbers = {
+                    type = "toggle",
+                    name = "Use Short Numbers",
+                    desc = "Use compact number formatting on the datatext (for example: 12.4k).",
+                    order = 3,
+                    get = function()
+                        local db = Options:GetDatatextDB("experience")
+                        return db.useShortNumbers ~= false
+                    end,
+                    set = function(_, value)
+                        local db = Options:GetDatatextDB("experience")
+                        db.useShortNumbers = value == true
+                        RefreshNamedDatatext("TwichUI: Experience")
+                    end,
+                },
+                showRestedOnText = {
+                    type = "toggle",
+                    name = "Show Rested on Text",
+                    desc = "Append rested experience to the datatext when available.",
+                    order = 4,
+                    get = function()
+                        local db = Options:GetDatatextDB("experience")
+                        return db.showRestedOnText == true
+                    end,
+                    set = function(_, value)
+                        local db = Options:GetDatatextDB("experience")
+                        db.showRestedOnText = value == true
+                        RefreshNamedDatatext("TwichUI: Experience")
+                    end,
+                },
+                showRestedInTooltip = {
+                    type = "toggle",
+                    name = "Show Rested in Tooltip",
+                    desc = "Display rested experience details in the tooltip.",
+                    order = 5,
+                    get = function()
+                        local db = Options:GetDatatextDB("experience")
+                        return db.showRestedInTooltip ~= false
+                    end,
+                    set = function(_, value)
+                        local db = Options:GetDatatextDB("experience")
+                        db.showRestedInTooltip = value == true
+                    end,
+                },
+            }),
+            colors = BuildInlineColorGroup(W, 20, "experience", "TwichUI: Experience", "Custom Tint",
+                { 0.45, 0.78, 1, 1 }),
+        },
+    }
+end
+
 local function BuildSystemConfiguration()
     local W = ConfigurationModule.Widgets
     return {
@@ -2769,6 +2867,7 @@ local function BuildDatatextConfiguration()
             desc = AW.Description(1,
                 "Tune the content, colors, tooltip behavior, and shortcuts for each datatext."),
             time = BuildTimeConfiguration(),
+            experience = BuildExperienceConfiguration(),
             system = BuildSystemConfiguration(),
             mail = BuildMailConfiguration(),
             friends = BuildFriendsConfiguration(),
