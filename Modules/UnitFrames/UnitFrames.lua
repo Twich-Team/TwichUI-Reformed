@@ -2541,6 +2541,7 @@ function UnitFrames:ApplyPreviewHealPrediction(frame, unitKey, state)
 end
 
 function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
+    local now = (GetTime and GetTime()) or 0
     local db = self:GetDB()
     db.colors = db.colors or {}
     db.colors.scopes = db.colors.scopes or {}
@@ -2561,6 +2562,25 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
         and resolvedScope ~= "tank" and resolvedScope ~= "boss" then
         unitKey = resolvedScope
         resolvedScope = ResolveScopeByUnitKey(unitKey)
+    end
+
+    local paletteCache = self._paletteCache
+    if not paletteCache then
+        paletteCache = {}
+        self._paletteCache = paletteCache
+    end
+
+    local cacheKey = table.concat({
+        tostring(resolvedScope),
+        tostring(unitKey or ""),
+        tostring(unit or ""),
+        tostring(mockClass or ""),
+        tostring(db.useThemeAccentHealth == true),
+        tostring(db.useClassColor == true),
+    }, "|")
+    local cachedPalette = paletteCache[cacheKey]
+    if cachedPalette and (now - (cachedPalette.t or 0)) < 0.25 then
+        return cachedPalette.v
     end
 
     db.colors.scopes[resolvedScope] = db.colors.scopes[resolvedScope] or {}
@@ -2678,6 +2698,7 @@ function UnitFrames:GetPalette(scopeOrUnitKey, unit, mockClass)
         end
     end
 
+    paletteCache[cacheKey] = { t = now, v = palette }
     return palette
 end
 
@@ -8021,10 +8042,10 @@ function UnitFrames:RefreshHighlightFrames(enemyTargetLookup)
     if not enemyTargetLookup then
         local now = (GetTime and GetTime()) or 0
         local lastRefreshAt = self._lastHighlightRefreshAt or 0
-        if (now - lastRefreshAt) < 0.05 then
+        if (now - lastRefreshAt) < 0.1 then
             if self._highlightRefreshQueued ~= true and C_Timer and type(C_Timer.After) == "function" then
                 self._highlightRefreshQueued = true
-                C_Timer.After(0.05, function()
+                C_Timer.After(0.1, function()
                     if UnitFrames._highlightRefreshQueued ~= true then
                         return
                     end
@@ -8036,7 +8057,15 @@ function UnitFrames:RefreshHighlightFrames(enemyTargetLookup)
             return
         end
         self._lastHighlightRefreshAt = now
-        enemyTargetLookup = self:BuildEnemyTargetLookup()
+        local cachedLookup = self._cachedEnemyTargetLookup
+        local cachedAt = self._cachedEnemyTargetLookupAt or 0
+        if cachedLookup and (now - cachedAt) < 0.1 then
+            enemyTargetLookup = cachedLookup
+        else
+            enemyTargetLookup = self:BuildEnemyTargetLookup()
+            self._cachedEnemyTargetLookup = enemyTargetLookup
+            self._cachedEnemyTargetLookupAt = now
+        end
     end
 
     for _, frame in pairs(self.frames) do
@@ -8070,6 +8099,37 @@ function UnitFrames:UpdateUnitHighlights(frame, enemyTargetLookup)
     local threatEnabled = highlights.showThreat == true and unitHL.showThreat ~= false
     local enemyTargetEnabled = highlights.showEnemyTarget == true and unitHL.showEnemyTarget ~= false
 
+    local showTarget = false
+    if targetEnabled and unit and unit ~= "" then
+        local ok, isUnit = pcall(_G.UnitIsUnit, unit, "target")
+        showTarget = ok and isUnit == true
+    end
+
+    local showThreat = false
+    if threatEnabled and unit and unit ~= "" then
+        local threatStatus = UnitThreatSituation(unit)
+        showThreat = threatStatus and threatStatus >= 2
+    end
+
+    local showEnemyTarget = false
+    if enemyTargetEnabled and unit and unit ~= "" then
+        local unitGuid = ReadSafeUnitGUID(unit)
+        local targetedLookup = enemyTargetLookup or self:BuildEnemyTargetLookup()
+        showEnemyTarget = unitGuid and targetedLookup[unitGuid] and true or false
+    end
+
+    local showMouseover = mouseoverEnabled and frame.isHovering and true or false
+
+    local stateKey = string.format("%d|%d|%d|%d",
+        showTarget and 1 or 0,
+        showThreat and 1 or 0,
+        showEnemyTarget and 1 or 0,
+        showMouseover and 1 or 0)
+    if frame._twichHighlightStateKey == stateKey then
+        return
+    end
+    frame._twichHighlightStateKey = stateKey
+
     -- Reset both target elements before deciding which to show
     if frame.TwichTargetHighlight then frame.TwichTargetHighlight:Hide() end
     if frame.TwichTargetGlow then frame.TwichTargetGlow:Hide() end
@@ -8078,40 +8138,26 @@ function UnitFrames:UpdateUnitHighlights(frame, enemyTargetLookup)
     if frame.TwichEnemyTargetHighlight then frame.TwichEnemyTargetHighlight:Hide() end
     if frame.TwichEnemyTargetGlow then frame.TwichEnemyTargetGlow:Hide() end
 
-    if targetEnabled then
-        local showTarget = false
-        if unit and unit ~= "" then
-            local ok, isUnit = pcall(_G.UnitIsUnit, unit, "target")
-            showTarget = ok and isUnit == true
-        end
-        if showTarget then
-            local c = highlights.targetColor or { 1.0, 0.82, 0.0, 0.9 }
-            local mode = highlights.targetMode or "border"
-            ShowHighlightElements(frame.TwichTargetHighlight, frame.TwichTargetGlow, mode, c)
-        end
+    if showTarget then
+        local c = highlights.targetColor or { 1.0, 0.82, 0.0, 0.9 }
+        local mode = highlights.targetMode or "border"
+        ShowHighlightElements(frame.TwichTargetHighlight, frame.TwichTargetGlow, mode, c)
     end
 
-    if threatEnabled and unit and unit ~= "" then
-        local threatStatus = UnitThreatSituation(unit)
-        if threatStatus and threatStatus >= 2 then
-            local c = highlights.threatColor or { 1.0, 0.24, 0.18, 0.95 }
-            local mode = highlights.threatMode or "glow"
-            ShowHighlightElements(frame.TwichThreatHighlight, frame.TwichThreatGlow, mode, c)
-        end
+    if showThreat then
+        local c = highlights.threatColor or { 1.0, 0.24, 0.18, 0.95 }
+        local mode = highlights.threatMode or "glow"
+        ShowHighlightElements(frame.TwichThreatHighlight, frame.TwichThreatGlow, mode, c)
     end
 
-    if enemyTargetEnabled and unit and unit ~= "" then
-        local unitGuid = ReadSafeUnitGUID(unit)
-        local targetedLookup = enemyTargetLookup or self:BuildEnemyTargetLookup()
-        if unitGuid and targetedLookup[unitGuid] then
-            local c = highlights.enemyTargetColor or { 1.0, 0.55, 0.18, 0.85 }
-            local mode = highlights.enemyTargetMode or "border"
-            ShowHighlightElements(frame.TwichEnemyTargetHighlight, frame.TwichEnemyTargetGlow, mode, c)
-        end
+    if showEnemyTarget then
+        local c = highlights.enemyTargetColor or { 1.0, 0.55, 0.18, 0.85 }
+        local mode = highlights.enemyTargetMode or "border"
+        ShowHighlightElements(frame.TwichEnemyTargetHighlight, frame.TwichEnemyTargetGlow, mode, c)
     end
 
     if frame.TwichMouseoverHighlight then
-        if mouseoverEnabled and frame.isHovering then
+        if showMouseover then
             local c = highlights.mouseoverColor or { 1.0, 1.0, 1.0, 0.08 }
             frame.TwichMouseoverHighlight:SetBackdropColor(c[1] or 1, c[2] or 1, c[3] or 1, c[4] or 0.08)
             frame.TwichMouseoverHighlight:Show()
@@ -8189,6 +8235,7 @@ function UnitFrames:ApplyHighlightSettings(frame)
     if frame.TwichEnemyTargetGlow then
         ApplyGlowFrame(frame.TwichEnemyTargetGlow, enemyTargetWidth)
     end
+    frame._twichHighlightStateKey = nil
     self:UpdateUnitHighlights(frame)
 end
 
@@ -16011,7 +16058,12 @@ function UnitFrames:OnThreatChanged()
     self:RefreshHighlightFrames()
 end
 
-function UnitFrames:OnUnitTargetChanged()
+function UnitFrames:OnUnitTargetChanged(_, unit)
+    if unit and unit ~= "target" and unit ~= "focus" and
+        not unit:match("^boss%d+$") and not unit:match("^arena%d+$") and not unit:match("^nameplate%d+$")
+    then
+        return
+    end
     self:RefreshHighlightFrames()
 end
 

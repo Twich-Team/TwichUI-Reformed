@@ -1660,9 +1660,86 @@ function ChatRendererModule:MarkCombatDeferredRelayout(frame, renderer, stickToB
     self.combatDeferredRelayoutFrames = self.combatDeferredRelayoutFrames or {}
     self.combatDeferredRelayoutFrames[frame] = true
     renderer._combatDeferredRelayout = true
+    if renderer._combatDeferredStartIndex == nil then
+        renderer._combatDeferredStartIndex = #renderer.entries
+    end
     if stickToBottom then
         renderer._combatDeferredStickToBottom = true
     end
+end
+
+function ChatRendererModule:ApplyDeferredCombatAppend(renderer)
+    if not renderer then
+        return false
+    end
+
+    if renderer._combatDeferredTrimmed == true then
+        return false
+    end
+
+    local startIndex = tonumber(renderer._combatDeferredStartIndex) or 0
+    if startIndex <= 1 then
+        return false
+    end
+
+    local layoutKey = self:GetRendererLayoutKey(renderer)
+    local bodyWidth = renderer._layoutBodyWidth
+    if not layoutKey or renderer._layoutKey ~= layoutKey or not bodyWidth or bodyWidth <= 0 then
+        return false
+    end
+
+    local entries = renderer.entries or {}
+    local entryCount = #entries
+    if startIndex > entryCount then
+        return true
+    end
+
+    local rowGap = renderer._layoutRowGap or (self.settings.rowGap or DEFAULT_ROW_GAP)
+    local groupedRowGap = renderer._layoutGroupedRowGap or mathMax(1, math.floor(rowGap * 0.4))
+    local previousEntry = entries[startIndex - 1]
+
+    for index = startIndex, entryCount do
+        local entry = entries[index]
+        if entry then
+            if index == 1 then
+                entry.groupedWithPrevious = false
+            else
+                local prev = entries[index - 1]
+                entry.groupedWithPrevious = prev ~= nil and prev.speakerKey ~= nil and
+                prev.speakerKey == entry.speakerKey
+            end
+
+            local iconOffset = self:GetEntryIconOffset(entry)
+            local effectiveBodyWidth = mathMax(50, bodyWidth - iconOffset)
+            if entry.measuredWidth ~= effectiveBodyWidth then
+                self:MeasureEntry(renderer, entry, effectiveBodyWidth)
+                entry.measuredWidth = effectiveBodyWidth
+            end
+
+            local spacing = previousEntry and (entry.groupedWithPrevious and groupedRowGap or rowGap) or 0
+            local previousBottom = previousEntry and
+                ((previousEntry.yOffset or CONTENT_TOP_PADDING) + (previousEntry.rowHeight or 0)) or CONTENT_TOP_PADDING
+            entry.yOffset = previousEntry and (previousBottom + spacing) or CONTENT_TOP_PADDING
+
+            local row = self:EnsureRow(renderer, index)
+            self:RefreshRow(renderer, row, entry, bodyWidth)
+            previousEntry = entry
+        end
+    end
+
+    for index = entryCount + 1, #(renderer.rows or {}) do
+        local row = renderer.rows[index]
+        if row then
+            row:Hide()
+        end
+    end
+
+    renderer.totalHeight = mathMax(renderer.Viewport:GetHeight(),
+        (previousEntry and ((previousEntry.yOffset or CONTENT_TOP_PADDING) + (previousEntry.rowHeight or 0)) or CONTENT_TOP_PADDING) +
+        CONTENT_BOTTOM_PADDING)
+    renderer.Content:SetHeight(renderer.totalHeight)
+    self:UpdateScrollState(renderer)
+    return true
 end
 
 function ChatRendererModule:FlushCombatDeferredRelayouts()
@@ -1696,7 +1773,12 @@ function ChatRendererModule:FlushCombatDeferredRelayouts()
                 renderer._combatDeferredRelayout = true
             else
                 renderer._combatDeferredRelayout = nil
-                self:RelayoutRenderer(renderer)
+                local appliedFastDeferred = self:ApplyDeferredCombatAppend(renderer)
+                if not appliedFastDeferred then
+                    self:RelayoutRenderer(renderer)
+                end
+                renderer._combatDeferredStartIndex = nil
+                renderer._combatDeferredTrimmed = nil
 
                 if renderer._combatDeferredStickToBottom then
                     renderer._combatDeferredStickToBottom = nil
@@ -1738,6 +1820,7 @@ function ChatRendererModule:PushMessage(frame, message, r, g, b, accessID)
             if renderer.entries[1] then
                 renderer.entries[1].groupedWithPrevious = false
             end
+            renderer._combatDeferredTrimmed = true
         end
 
         self:MarkCombatDeferredRelayout(frame, renderer, stickToBottom)
@@ -2247,7 +2330,17 @@ function ChatRendererModule:RefreshFrame(frame)
 
     do
         local accentR, accentG, accentB = self:GetShellAccentColor()
-        renderer:SetParent(frame)
+        -- Avoid unconditional reparenting: this can taint/trigger protected blocks
+        -- during combat lifecycle refreshes even when the parent is already correct.
+        local currentParent = renderer.GetParent and renderer:GetParent() or nil
+        if currentParent ~= frame then
+            if InCombatLockdown and InCombatLockdown() then
+                self.combatDeferredRefreshFrames = self.combatDeferredRefreshFrames or {}
+                self.combatDeferredRefreshFrames[frame] = true
+                return
+            end
+            renderer:SetParent(frame)
+        end
         renderer:SetAllPoints(frame)
         renderer:SetFrameLevel(frame:GetFrameLevel() + 10)
         if renderer.LiveButton then

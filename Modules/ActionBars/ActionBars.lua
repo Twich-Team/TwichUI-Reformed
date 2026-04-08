@@ -1278,6 +1278,11 @@ function ActionBars:QueueRefreshAll()
         return
     end
 
+    local now = (GetTime and GetTime()) or 0
+    local minInterval = 0.2
+    local lastRefreshAt = self._lastRefreshAllAt or 0
+    local delaySeconds = math.max(0, minInterval - (now - lastRefreshAt))
+
     self._fullRefreshQueued = true
     if not (C_Timer and type(C_Timer.After) == "function") then
         self._fullRefreshQueued = false
@@ -1285,7 +1290,7 @@ function ActionBars:QueueRefreshAll()
         return
     end
 
-    C_Timer.After(0, function()
+    C_Timer.After(delaySeconds, function()
         if ActionBars._fullRefreshQueued ~= true then
             return
         end
@@ -4532,12 +4537,10 @@ function ActionBars:RefreshButtonStates(event)
         local eventNeedsGlow = event == "SPELLS_CHANGED"
             or event == "PLAYER_SPECIALIZATION_CHANGED"
             or event == "ACTIONBAR_SLOT_CHANGED"
-            or event == "ACTIONBAR_PAGE_CHANGED"
             or event == "UPDATE_BINDINGS"
         local existingNeedsGlow = existingEvent == "SPELLS_CHANGED"
             or existingEvent == "PLAYER_SPECIALIZATION_CHANGED"
             or existingEvent == "ACTIONBAR_SLOT_CHANGED"
-            or existingEvent == "ACTIONBAR_PAGE_CHANGED"
             or existingEvent == "UPDATE_BINDINGS"
 
         if eventNeedsGlow or not existingEvent or existingNeedsGlow ~= true then
@@ -4546,16 +4549,16 @@ function ActionBars:RefreshButtonStates(event)
 
         local delaySeconds = 0.04
         if event == "ACTIONBAR_UPDATE_STATE" or event == "ACTIONBAR_UPDATE_USABLE" then
-            delaySeconds = 0.14
+            delaySeconds = 0.18
         elseif event == "ACTIONBAR_SLOT_CHANGED" then
-            delaySeconds = 0.08
+            delaySeconds = 0.1
         end
         if self._pendingStateDelay == nil or delaySeconds > self._pendingStateDelay then
             self._pendingStateDelay = delaySeconds
         end
 
         if event == "SPELLS_CHANGED" or event == "PLAYER_SPECIALIZATION_CHANGED" or
-            event == "ACTIONBAR_SLOT_CHANGED" or event == "ACTIONBAR_PAGE_CHANGED" then
+            event == "ACTIONBAR_SLOT_CHANGED" or event == "UPDATE_BINDINGS" then
             self:MarkSpellButtonIndexDirty()
         end
         self:QueueButtonStateRefresh()
@@ -4573,7 +4576,6 @@ function ActionBars:RefreshButtonStates(event)
         or glowEvent == "SPELLS_CHANGED"
         or glowEvent == "PLAYER_SPECIALIZATION_CHANGED"
         or glowEvent == "ACTIONBAR_SLOT_CHANGED"
-        or glowEvent == "ACTIONBAR_PAGE_CHANGED"
         or glowEvent == "UPDATE_BINDINGS"
 
     local glowStyle = shouldRefreshGlow and self:GetGlowStyle() or nil
@@ -4997,6 +4999,7 @@ function ActionBars:RefreshAll()
         return
     end
 
+    self._lastRefreshAllAt = (GetTime and GetTime()) or 0
     self.pendingRefresh = false
 
     self:HideDefaultArt()
