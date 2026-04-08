@@ -7619,7 +7619,15 @@ local function StripFrameSettingsHintFromTooltip()
         local right = _G["GameTooltipTextRight" .. index]
         local text = left and left.GetText and left:GetText() or nil
         if type(text) == "string" and text ~= "" then
-            local normalized = text:lower():gsub("-", " "):gsub("<", ""):gsub(">", "")
+            local normalized = text
+                :gsub("|c%x%x%x%x%x%x%x%x", "")
+                :gsub("|r", "")
+                :gsub("<", "")
+                :gsub(">", "")
+                :gsub("%-", " ")
+                :gsub("[^%w%s]", "")
+                :gsub("%s+", " ")
+                :lower()
             if normalized:find("right click for frame settings", 1, true) then
                 left:SetText("")
                 if right and right.SetText then
@@ -7628,6 +7636,26 @@ local function StripFrameSettingsHintFromTooltip()
             end
         end
     end
+end
+
+local function EnsureUnitFrameTooltipHintFilterInstalled()
+    if not GameTooltip or GameTooltip.__twichFrameSettingsHintFilterInstalled == true then
+        return
+    end
+
+    GameTooltip.__twichFrameSettingsHintFilterInstalled = true
+    local tooltipDataProcessor = _G.TooltipDataProcessor
+    local tooltipDataType = _G.Enum and _G.Enum.TooltipDataType
+    if tooltipDataProcessor and tooltipDataType and type(tooltipDataProcessor.AddTooltipPostCall) == "function" then
+        tooltipDataProcessor.AddTooltipPostCall(tooltipDataType.Unit, function(tooltip)
+            if tooltip == GameTooltip then
+                StripFrameSettingsHintFromTooltip()
+            end
+        end)
+    end
+    GameTooltip:HookScript("OnShow", function()
+        StripFrameSettingsHintFromTooltip()
+    end)
 end
 
 local function IsHostileUnitForHighlight(unit)
@@ -12324,20 +12352,21 @@ function UnitFrames:RegisterDetachedPowerLayoutFrame(unitKey)
 end
 
 do
-    local PREVIEW_NAMES = {
-        "Aeloria", "Bromm", "Cyrene", "Dathor", "Elyndra", "Fenrik", "Galen", "Hestia", "Ilya", "Jorren",
-        "Kaelis", "Lyra", "Marek", "Nyssa", "Orin", "Perrin", "Quilla", "Riven", "Sylas", "Tarin",
+    local Preview = {
+        names = {
+            "Aeloria", "Bromm", "Cyrene", "Dathor", "Elyndra", "Fenrik", "Galen", "Hestia", "Ilya", "Jorren",
+            "Kaelis", "Lyra", "Marek", "Nyssa", "Orin", "Perrin", "Quilla", "Riven", "Sylas", "Tarin",
+        },
+        castIcons = {
+            136243, 135963, 135734, 136208, 237561,
+        },
     }
 
-    local PREVIEW_CAST_ICONS = {
-        136243, 135963, 135734, 136208, 237561,
-    }
-
-    local function GetPreviewIndexFromLabel(label)
+    function Preview.GetIndexFromLabel(label)
         return tonumber(type(label) == "string" and label:match("(%d+)$")) or 1
     end
 
-    local function GetPreviewRoleForUnitKey(unitKey, index)
+    function Preview.GetRoleForUnitKey(unitKey, index)
         if unitKey == "tankMember" then
             return "TANK"
         end
@@ -12362,9 +12391,9 @@ do
         return "DAMAGER"
     end
 
-    local function BuildPreviewUnitState(unitKey, label, mockClass)
-        local index = GetPreviewIndexFromLabel(label)
-        local role = GetPreviewRoleForUnitKey(unitKey, index)
+    function Preview.BuildUnitState(unitKey, label, mockClass)
+        local index = Preview.GetIndexFromLabel(label)
+        local role = Preview.GetRoleForUnitKey(unitKey, index)
         local isDead = (unitKey == "partyMember" or unitKey == "raidMember" or unitKey == "tankMember") and index == 2
         local healthMax = 1000000 + (index * 125000)
         local healthCur = math_max(1, math.floor(healthMax * (0.42 + ((index % 4) * 0.12))))
@@ -12372,7 +12401,7 @@ do
         local powerCur = math_max(1, math.floor(powerMax * (0.25 + ((index % 5) * 0.13))))
         local castDuration = 2.6 + ((index % 3) * 0.4)
         local castProgress = castDuration * 0.62
-        local name = label or PREVIEW_NAMES[((index - 1) % #PREVIEW_NAMES) + 1]
+        local name = label or Preview.names[((index - 1) % #Preview.names) + 1]
 
         if unitKey == "player" then
             name = UnitName("player") or "Player"
@@ -12410,7 +12439,7 @@ do
             powerMax = powerMax,
             level = 80,
             castName = (role == "HEALER" and "Flash Heal") or (role == "TANK" and "Shield Slam") or "Chaos Bolt",
-            castIcon = PREVIEW_CAST_ICONS[((index - 1) % #PREVIEW_CAST_ICONS) + 1],
+            castIcon = Preview.castIcons[((index - 1) % #Preview.castIcons) + 1],
             castDuration = castDuration,
             castProgress = castProgress,
             incomingPlayer = math.floor(healthMax * 0.12),
@@ -12425,7 +12454,7 @@ do
         }
     end
 
-    local function FormatPreviewNumber(value)
+    function Preview.FormatNumber(value)
         local numeric = tonumber(value) or 0
         if BreakUpLargeNumbers then
             return BreakUpLargeNumbers(math.floor(numeric + 0.5))
@@ -12433,7 +12462,7 @@ do
         return tostring(math.floor(numeric + 0.5))
     end
 
-    local function BuildPreviewTagText(tag, state)
+    function Preview.BuildTagText(tag, state)
         if not state then return "" end
         local text = tostring(tag or "")
         local hpPercent = string.format("%d%%",
@@ -12445,10 +12474,10 @@ do
             return string.sub(state.name or "", 1, tonumber(length) or 0)
         end)
         text = text:gsub("%[name%]", state.name or "")
-        text = text:gsub("%[curhp%]", FormatPreviewNumber(state.healthCur))
-        text = text:gsub("%[curpp%]", FormatPreviewNumber(state.powerCur))
-        text = text:gsub("%[missinghp%]", FormatPreviewNumber((state.healthMax or 0) - (state.healthCur or 0)))
-        text = text:gsub("%[missingpp%]", FormatPreviewNumber((state.powerMax or 0) - (state.powerCur or 0)))
+        text = text:gsub("%[curhp%]", Preview.FormatNumber(state.healthCur))
+        text = text:gsub("%[curpp%]", Preview.FormatNumber(state.powerCur))
+        text = text:gsub("%[missinghp%]", Preview.FormatNumber((state.healthMax or 0) - (state.healthCur or 0)))
+        text = text:gsub("%[missingpp%]", Preview.FormatNumber((state.powerMax or 0) - (state.powerCur or 0)))
         text = text:gsub("%[perhp.-%]", hpPercent)
         text = text:gsub("%[perpp.-%]", ppPercent)
         text = text:gsub("%[level%]", tostring(state.level or 80))
@@ -12457,7 +12486,7 @@ do
         return text:gsub("^%s+", ""):gsub("%s+$", "")
     end
 
-    local function BuildPreviewAuraList(state)
+    function Preview.BuildAuraList(state)
         local now = GetTime()
         return {
             {
@@ -12506,7 +12535,7 @@ do
         local maxIcons = math_max(1, math.floor(tonumber(aura.maxIcons) or 8))
         local filter = aura.filter or "ALL"
         local onlyMine = aura.onlyMine == true
-        local source = frame and frame._testAuraList or BuildPreviewAuraList(frame and frame._testState)
+        local source = frame and frame._testAuraList or Preview.BuildAuraList(frame and frame._testState)
         local filtered = {}
         for _, data in ipairs(source) do
             if data and ((not onlyMine) or data.isPlayerAura == true) and AuraMatchesDisplayMode(filter, data) then
@@ -12593,11 +12622,11 @@ do
     function UnitFrames:ApplyPreviewFrameData(frame, unitKey, label, mockClass)
         if not frame then return end
 
-        local state = BuildPreviewUnitState(unitKey, label, mockClass)
+        local state = Preview.BuildUnitState(unitKey, label, mockClass)
         frame._testState = state
         frame._testRole = state.role
         frame._testMockClass = mockClass
-        frame._testAuraList = BuildPreviewAuraList(state)
+        frame._testAuraList = Preview.BuildAuraList(state)
         frame._testInCombat = state.inCombat == true
         frame._testIsDead = state.isDead == true
         frame._testIsResting = state.isResting == true and state.inCombat ~= true
@@ -12615,14 +12644,14 @@ do
 
         local textCfg = self:GetTextConfigFor(unitKey)
         if frame.Name then
-            frame.Name:SetText(BuildPreviewTagText(BuildNameTag(textCfg.nameFormat, textCfg.customNameTag), state))
+            frame.Name:SetText(Preview.BuildTagText(BuildNameTag(textCfg.nameFormat, textCfg.customNameTag), state))
         end
         if frame.HealthValue then
-            frame.HealthValue:SetText(BuildPreviewTagText(BuildHealthTag(textCfg.healthFormat, textCfg.customHealthTag),
+            frame.HealthValue:SetText(Preview.BuildTagText(BuildHealthTag(textCfg.healthFormat, textCfg.customHealthTag),
                 state))
         end
         if frame.PowerValue then
-            frame.PowerValue:SetText(BuildPreviewTagText(BuildPowerTag(textCfg.powerFormat, textCfg.customPowerTag),
+            frame.PowerValue:SetText(Preview.BuildTagText(BuildPowerTag(textCfg.powerFormat, textCfg.customPowerTag),
                 state))
         end
 
@@ -12681,7 +12710,7 @@ do
                 local tc = cfg.texts[i]
                 if fs and tc and fs:IsShown() then
                     if tc.tag and tc.tag ~= "" then
-                        fs:SetText(BuildPreviewTagText(tc.tag, state))
+                        fs:SetText(Preview.BuildTagText(tc.tag, state))
                     else
                         fs:SetText(state.infoTexts and state.infoTexts[i] or "")
                     end
@@ -13688,10 +13717,15 @@ function UnitFrames:StyleFrame(frame)
     frame:SetScript("OnEnter", function(self2)
         self2.isHovering = true
         UnitFrames:UpdateUnitHighlights(self2)
+        EnsureUnitFrameTooltipHintFilterInstalled()
 
         if UnitFrame_OnEnter then
             pcall(UnitFrame_OnEnter, self2)
             StripFrameSettingsHintFromTooltip()
+            if C_Timer and type(C_Timer.After) == "function" then
+                C_Timer.After(0, StripFrameSettingsHintFromTooltip)
+                C_Timer.After(0.05, StripFrameSettingsHintFromTooltip)
+            end
             return
         end
 
@@ -13700,6 +13734,10 @@ function UnitFrames:StyleFrame(frame)
             GameTooltip:SetOwner(self2, "ANCHOR_RIGHT")
             GameTooltip:SetUnit(unit)
             StripFrameSettingsHintFromTooltip()
+            if C_Timer and type(C_Timer.After) == "function" then
+                C_Timer.After(0, StripFrameSettingsHintFromTooltip)
+                C_Timer.After(0.05, StripFrameSettingsHintFromTooltip)
+            end
             GameTooltip:Show()
         end
     end)
@@ -14016,7 +14054,10 @@ function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
     end
 end
 
-local function ApplySpellStyleEditorBackdrop(frame, bgAlpha)
+do
+local SpellStyleEditor = {}
+
+function SpellStyleEditor.ApplyBackdrop(frame, bgAlpha)
     if not frame or type(frame.SetBackdrop) ~= "function" then
         return
     end
@@ -14030,7 +14071,7 @@ local function ApplySpellStyleEditorBackdrop(frame, bgAlpha)
     frame:SetBackdropBorderColor(0.98, 0.76, 0.22, 0.18)
 end
 
-local function ApplySpellStyleEditorPanelBackdrop(frame, bgAlpha)
+function SpellStyleEditor.ApplyPanelBackdrop(frame, bgAlpha)
     if not frame or type(frame.SetBackdrop) ~= "function" then
         return
     end
@@ -14045,7 +14086,7 @@ local function ApplySpellStyleEditorPanelBackdrop(frame, bgAlpha)
     frame:SetBackdropBorderColor(0, 0, 0, 0.18)
 end
 
-local function AddSpellStyleAccent(frame, red, green, blue, width)
+function SpellStyleEditor.AddAccent(frame, red, green, blue, width)
     if not frame then
         return nil
     end
@@ -14058,7 +14099,7 @@ local function AddSpellStyleAccent(frame, red, green, blue, width)
     return accent
 end
 
-local function StyleSpellStyleListRow(row, height)
+function SpellStyleEditor.StyleListRow(row, height)
     if row.__twichStyled then
         return
     end
@@ -14078,12 +14119,12 @@ local function StyleSpellStyleListRow(row, height)
     row.hover:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -1, 1)
     row.hover:SetColorTexture(1, 1, 1, 0.04)
 
-    row.accentBar = AddSpellStyleAccent(row, 0.10, 0.79, 0.77, 3)
+    row.accentBar = SpellStyleEditor.AddAccent(row, 0.10, 0.79, 0.77, 3)
     row.accentBar:SetAlpha(0)
     row.__twichStyled = true
 end
 
-local function SetSpellStyleListRowSelected(row, selected, accentColor)
+function SpellStyleEditor.SetRowSelected(row, selected, accentColor)
     if not row then
         return
     end
@@ -14105,7 +14146,7 @@ local function SetSpellStyleListRowSelected(row, selected, accentColor)
     end
 end
 
-local function UpdateSpellStyleTemplateRowIcons(row, spellEntries)
+function SpellStyleEditor.UpdateTemplateRowIcons(row, spellEntries)
     if not row then
         return
     end
@@ -14324,10 +14365,10 @@ function UnitFrames:OpenCastbarSpellThemeSelector(anchorButton, templateID)
     })
 end
 
-local function CreateSpellStyleButton(parent, width, height, text)
+function SpellStyleEditor.CreateButton(parent, width, height, text)
     local button = CreateFrame("Button", nil, parent, "BackdropTemplate")
     button:SetSize(width, height)
-    ApplySpellStyleEditorBackdrop(button, 0.98)
+    SpellStyleEditor.ApplyBackdrop(button, 0.98)
 
     local fs = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     fs:SetPoint("CENTER", button, "CENTER", 0, 0)
@@ -14465,7 +14506,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
     frame:SetMovable(true)
     frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
-    ApplySpellStyleEditorBackdrop(frame, 0.985)
+    SpellStyleEditor.ApplyBackdrop(frame, 0.985)
     frame:SetClampedToScreen(true)
     frame:SetScript("OnDragStart", function(self)
         self:StartMoving()
@@ -14486,8 +14527,8 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         titleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 6, -6)
         titleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
         titleBar:SetHeight(50)
-        ApplySpellStyleEditorPanelBackdrop(titleBar, 0.98)
-        AddSpellStyleAccent(titleBar, 0.98, 0.76, 0.22, 4)
+        SpellStyleEditor.ApplyPanelBackdrop(titleBar, 0.98)
+        SpellStyleEditor.AddAccent(titleBar, 0.98, 0.76, 0.22, 4)
         titleBar:EnableMouse(true)
         titleBar:RegisterForDrag("LeftButton")
         titleBar:SetScript("OnDragStart", function()
@@ -14505,7 +14546,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         frame.title = title
 
         -- closeButton declared first so subtitle can anchor to its LEFT edge.
-        local closeButton = CreateSpellStyleButton(titleBar, 72, 24, "Close")
+        local closeButton = SpellStyleEditor.CreateButton(titleBar, 72, 24, "Close")
         closeButton:SetPoint("RIGHT", titleBar, "RIGHT", -8, 0)
         closeButton:SetScript("OnClick", function()
             frame:Hide()
@@ -14524,8 +14565,8 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         leftPane:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -68)
         leftPane:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 14, 14)
         leftPane:SetWidth(410)
-        ApplySpellStyleEditorPanelBackdrop(leftPane, 0.94)
-        AddSpellStyleAccent(leftPane, 0.10, 0.79, 0.77, 3)
+        SpellStyleEditor.ApplyPanelBackdrop(leftPane, 0.94)
+        SpellStyleEditor.AddAccent(leftPane, 0.10, 0.79, 0.77, 3)
         frame.leftPane = leftPane
 
         local spellHeader = leftPane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -14546,7 +14587,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         searchBox:SetPoint("TOPLEFT", spellHint, "BOTTOMLEFT", 0, -8)
         searchBox:SetPoint("TOPRIGHT", leftPane, "TOPRIGHT", -14, 0)
         searchBox:SetHeight(24)
-        ApplySpellStyleEditorBackdrop(searchBox, 0.98)
+        SpellStyleEditor.ApplyBackdrop(searchBox, 0.98)
         searchBox:SetAutoFocus(false)
         searchBox:SetFontObject(GameFontHighlightSmall)
         searchBox:SetTextInsets(8, 8, 0, 0)
@@ -14591,8 +14632,8 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         local rightPane = CreateFrame("Frame", nil, frame, "BackdropTemplate")
         rightPane:SetPoint("TOPLEFT", frame.leftPane, "TOPRIGHT", 12, 0)
         rightPane:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
-        ApplySpellStyleEditorPanelBackdrop(rightPane, 0.94)
-        AddSpellStyleAccent(rightPane, 0.10, 0.79, 0.77, 3)
+        SpellStyleEditor.ApplyPanelBackdrop(rightPane, 0.94)
+        SpellStyleEditor.AddAccent(rightPane, 0.10, 0.79, 0.77, 3)
         frame.rightPane = rightPane
 
         local templatesHeader = rightPane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -14603,7 +14644,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         templatesHint:SetPoint("TOPLEFT", templatesHeader, "BOTTOMLEFT", 0, -4)
         templatesHint:SetText("Each template is a named preset with its own fill color and particle style.")
 
-        local addTemplate = CreateSpellStyleButton(rightPane, 130, 24, "＋ Add Template")
+        local addTemplate = SpellStyleEditor.CreateButton(rightPane, 130, 24, "+ Add Template")
         addTemplate:SetPoint("TOPRIGHT", rightPane, "TOPRIGHT", -120, -12)
         addTemplate:SetScript("OnEnter", function(self)
             if GameTooltip then
@@ -14622,7 +14663,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
             UnitFrames:RefreshCastbarSpellStyleDesigner()
         end)
 
-        local deleteTemplate = CreateSpellStyleButton(rightPane, 86, 24, "Delete")
+        local deleteTemplate = SpellStyleEditor.CreateButton(rightPane, 86, 24, "Delete")
         deleteTemplate:SetPoint("LEFT", addTemplate, "RIGHT", 8, 0)
         deleteTemplate:SetScript("OnEnter", function(self)
             if GameTooltip then
@@ -14648,7 +14689,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         templateList:SetPoint("TOPLEFT", templatesHint, "BOTTOMLEFT", 0, -10)
         templateList:SetPoint("TOPRIGHT", rightPane, "TOPRIGHT", -14, 0)
         templateList:SetHeight(148)
-        ApplySpellStyleEditorPanelBackdrop(templateList, 0.92)
+        SpellStyleEditor.ApplyPanelBackdrop(templateList, 0.92)
         local templateListScroll = CreateFrame("ScrollFrame", nil, templateList, "UIPanelScrollFrameTemplate")
         templateListScroll:SetPoint("TOPLEFT", templateList, "TOPLEFT", 8, -8)
         templateListScroll:SetPoint("BOTTOMRIGHT", templateList, "BOTTOMRIGHT", -28, 8)
@@ -14667,7 +14708,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         local detailPane = CreateFrame("Frame", nil, rightPane, "BackdropTemplate")
         detailPane:SetPoint("TOPLEFT", templateList, "BOTTOMLEFT", 0, -12)
         detailPane:SetPoint("BOTTOMRIGHT", rightPane, "BOTTOMRIGHT", -14, 0)
-        ApplySpellStyleEditorPanelBackdrop(detailPane, 0.92)
+        SpellStyleEditor.ApplyPanelBackdrop(detailPane, 0.92)
         frame.detailPane = detailPane
 
         local detailTitle = detailPane:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -14679,9 +14720,9 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         previewPanel:SetPoint("TOPLEFT", detailTitle, "BOTTOMLEFT", 0, -10)
         previewPanel:SetPoint("TOPRIGHT", detailPane, "TOPRIGHT", -14, -36)
         previewPanel:SetHeight(76)
-        ApplySpellStyleEditorBackdrop(previewPanel, 0.98)
+        SpellStyleEditor.ApplyBackdrop(previewPanel, 0.98)
         previewPanel:SetBackdropBorderColor(0.10, 0.79, 0.77, 0.28)
-        local previewAccent = AddSpellStyleAccent(previewPanel, 0.10, 0.79, 0.77, 3)
+        local previewAccent = SpellStyleEditor.AddAccent(previewPanel, 0.10, 0.79, 0.77, 3)
         previewPanel.accent = previewAccent
 
         local previewLabel = previewPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -14739,7 +14780,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         templateNameInput:SetAutoFocus(false)
         templateNameInput:SetFontObject(GameFontHighlightSmall)
         templateNameInput:SetTextInsets(8, 8, 0, 0)
-        ApplySpellStyleEditorBackdrop(templateNameInput, 0.98)
+        SpellStyleEditor.ApplyBackdrop(templateNameInput, 0.98)
         templateNameInput:SetScript("OnEnterPressed", function(self)
             self:ClearFocus()
         end)
@@ -14761,7 +14802,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         local colorButton = CreateFrame("Button", nil, detailPane, "BackdropTemplate")
         colorButton:SetPoint("TOPLEFT", colorLabel, "BOTTOMLEFT", 0, -6)
         colorButton:SetSize(48, 22)
-        ApplySpellStyleEditorBackdrop(colorButton, 1)
+        SpellStyleEditor.ApplyBackdrop(colorButton, 1)
         colorButton:SetScript("OnEnter", function(self)
             if GameTooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_BOTTOMLEFT")
@@ -14783,7 +14824,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         colorButton.preview = colorPreview
         frame.colorButton = colorButton
 
-        local particlesToggle = CreateSpellStyleButton(detailPane, 160, 24, "Particles: On")
+        local particlesToggle = SpellStyleEditor.CreateButton(detailPane, 160, 24, "Particles: On")
         particlesToggle:SetPoint("LEFT", colorButton, "RIGHT", 18, 0)
         particlesToggle:SetScript("OnEnter", function(self)
             if GameTooltip then
@@ -14815,7 +14856,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         themeLabel:SetPoint("TOPLEFT", colorButton, "BOTTOMLEFT", 0, -16)
         themeLabel:SetText("|cff19c9c7Particle Theme|r")
 
-        local themeMenuButton = CreateSpellStyleButton(detailPane, 250, 24, "Choose Theme")
+        local themeMenuButton = SpellStyleEditor.CreateButton(detailPane, 250, 24, "Choose Theme")
         themeMenuButton:SetPoint("TOPLEFT", themeLabel, "BOTTOMLEFT", 0, -6)
         themeMenuButton:SetScript("OnEnter", function(self)
             if GameTooltip then
@@ -14843,14 +14884,14 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         effectShell:SetPoint("TOPLEFT", effectLabel, "BOTTOMLEFT", 0, -6)
         effectShell:SetPoint("TOPRIGHT", detailPane, "TOPRIGHT", -14, 0)
         effectShell:SetHeight(56)
-        ApplySpellStyleEditorPanelBackdrop(effectShell, 0.96)
+        SpellStyleEditor.ApplyPanelBackdrop(effectShell, 0.96)
         effectShell:SetBackdropBorderColor(0.98, 0.76, 0.22, 0.14)
         frame.effectShell = effectShell
 
         local effectValueShell = CreateFrame("Frame", nil, effectShell, "BackdropTemplate")
         effectValueShell:SetPoint("TOPRIGHT", effectShell, "TOPRIGHT", -8, -7)
         effectValueShell:SetSize(72, 24)
-        ApplySpellStyleEditorBackdrop(effectValueShell, 0.98)
+        SpellStyleEditor.ApplyBackdrop(effectValueShell, 0.98)
         frame.effectValueShell = effectValueShell
 
         local effectValueEdit = CreateFrame("EditBox", nil, effectValueShell)
@@ -14995,7 +15036,7 @@ function UnitFrames:EnsureCastbarSpellStyleDesigner()
         local dragGhost = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
         dragGhost:SetSize(220, 28)
         dragGhost:SetFrameStrata("TOOLTIP")
-        ApplySpellStyleEditorBackdrop(dragGhost, 0.98)
+        SpellStyleEditor.ApplyBackdrop(dragGhost, 0.98)
         local dragIcon = dragGhost:CreateTexture(nil, "ARTWORK")
         dragIcon:SetPoint("LEFT", dragGhost, "LEFT", 4, 0)
         dragIcon:SetSize(20, 20)
@@ -15052,7 +15093,7 @@ function UnitFrames:RefreshCastbarSpellStyleDesigner()
         local row = frame._spellButtons[index]
         if not row then
             row = CreateFrame("Button", nil, frame.spellsContent, "BackdropTemplate")
-            StyleSpellStyleListRow(row, 42)
+            SpellStyleEditor.StyleListRow(row, 42)
             row:RegisterForDrag("LeftButton")
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetPoint("LEFT", row, "LEFT", 10, 0)
@@ -15092,7 +15133,7 @@ function UnitFrames:RefreshCastbarSpellStyleDesigner()
         row.meta:SetText(assignedTemplate and
             (assignedTemplate.name .. "  ·  " .. ResolveCastbarTemplateThemeLabel(assignedTemplate.fantasyTheme)) or
             spellEntry.tabName or "Unassigned")
-        SetSpellStyleListRowSelected(row, assignedTemplate ~= nil, { 0.10, 0.79, 0.77 })
+        SpellStyleEditor.SetRowSelected(row, assignedTemplate ~= nil, { 0.10, 0.79, 0.77 })
         row:Show()
         spellY = spellY - 34
     end
@@ -15109,7 +15150,7 @@ function UnitFrames:RefreshCastbarSpellStyleDesigner()
         local row = frame._templateRows[index]
         if not row then
             row = CreateFrame("Button", nil, frame.templateListContent, "BackdropTemplate")
-            StyleSpellStyleListRow(row, 46)
+            SpellStyleEditor.StyleListRow(row, 46)
             row.name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 12, -8)
             row.name:SetPoint("RIGHT", row, "RIGHT", -14, -8)
@@ -15144,8 +15185,8 @@ function UnitFrames:RefreshCastbarSpellStyleDesigner()
         row.meta:SetText(string.format("%s  ·  %.2fx  ·  %d spells",
             ResolveCastbarTemplateThemeLabel(template.fantasyTheme),
             template.fantasyEffectScale or 1, self:GetCastbarAssignedSpellCount(template.id)))
-        UpdateSpellStyleTemplateRowIcons(row, templateAssignedSpells)
-        SetSpellStyleListRowSelected(row, frame.selectedTemplateID == template.id, { 0.98, 0.76, 0.22 })
+        SpellStyleEditor.UpdateTemplateRowIcons(row, templateAssignedSpells)
+        SpellStyleEditor.SetRowSelected(row, frame.selectedTemplateID == template.id, { 0.98, 0.76, 0.22 })
         row:Show()
         templateY = templateY - 46
     end
@@ -15208,7 +15249,7 @@ function UnitFrames:RefreshCastbarSpellStyleDesigner()
         local row = frame._assignedButtons[index]
         if not row then
             row = CreateFrame("Button", nil, frame.assignedContent, "BackdropTemplate")
-            StyleSpellStyleListRow(row, 34)
+            SpellStyleEditor.StyleListRow(row, 34)
             row:RegisterForDrag("LeftButton")
             row.icon = row:CreateTexture(nil, "ARTWORK")
             row.icon:SetPoint("LEFT", row, "LEFT", 10, 0)
@@ -15238,7 +15279,7 @@ function UnitFrames:RefreshCastbarSpellStyleDesigner()
         row.spellEntry = spellEntry
         row.icon:SetTexture(spellEntry.icon or 136243)
         row.name:SetText(spellEntry.name or ("Spell " .. tostring(spellEntry.spellID)))
-        SetSpellStyleListRowSelected(row, false, { 0.10, 0.79, 0.77 })
+        SpellStyleEditor.SetRowSelected(row, false, { 0.10, 0.79, 0.77 })
         row:Show()
         assignedY = assignedY - 32
     end
@@ -15253,6 +15294,8 @@ function UnitFrames:OpenCastbarSpellStyleDesigner()
     frame:Show()
     frame:Raise()
     self:RefreshCastbarSpellStyleDesigner()
+end
+
 end
 
 function UnitFrames:SpawnSingleFrame(oUF, unit, key)
