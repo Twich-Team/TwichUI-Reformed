@@ -1754,12 +1754,19 @@ end
 
 function TimeDT:OnUpdate(panel, elapsed)
     panel.__twichuiTimeUpdate = (panel.__twichuiTimeUpdate or 0) + elapsed
-    local settings = TimeSettings()
-    local interval = settings.showSeconds and UPDATE_FAST or UPDATE_SLOW
+    local interval = panel.__twichuiTimeInterval or UPDATE_SLOW
     if panel.__twichuiTimeUpdate < interval then
         return
     end
-    panel.__twichuiTimeUpdate = 0
+
+    local settings = TimeSettings()
+    interval = settings.showSeconds and UPDATE_FAST or UPDATE_SLOW
+    panel.__twichuiTimeInterval = interval
+    if panel.__twichuiTimeUpdate < interval then
+        return
+    end
+
+    panel.__twichuiTimeUpdate = panel.__twichuiTimeUpdate - interval
     SetPanelText(panel,
         FormatClockText(settings.localTime, settings.twentyFourHour, settings.showSeconds, settings.showAmPm), "time")
 end

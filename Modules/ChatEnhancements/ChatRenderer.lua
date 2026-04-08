@@ -374,7 +374,7 @@ function ChatRendererModule:RefreshSettings()
 
     local keywords = self.settings.keywords or {}
     self._keywordMatchToken = (self.settings.keywordHighlightEnabled and "1" or "0") ..
-    "|" .. table.concat(keywords, "\31")
+        "|" .. table.concat(keywords, "\31")
 end
 
 --- Measure the pixel width needed to display the timestamp at the current font and format.
@@ -1399,7 +1399,7 @@ function ChatRendererModule:GetRendererBodyWidth(renderer)
 
     local width = renderer.Viewport:GetWidth() - (SCROLLBAR_WIDTH + 10)
     local timestampWidth = self.settings.timestampsEnabled and (self.settings.timestampWidth or DEFAULT_TIMESTAMP_WIDTH) or
-    0
+        0
     return mathMax(70, width - timestampWidth - 18)
 end
 
@@ -1432,7 +1432,7 @@ function ChatRendererModule:RelayoutRenderer(renderer)
     end
 
     local timestampWidth = self.settings.timestampsEnabled and (self.settings.timestampWidth or DEFAULT_TIMESTAMP_WIDTH) or
-    0
+        0
     local bodyWidth = self:GetRendererBodyWidth(renderer)
     if not bodyWidth then
         return
@@ -1652,6 +1652,61 @@ function ChatRendererModule:HandlePersistedHistorySave()
     self:PersistAllFrameHistories()
 end
 
+function ChatRendererModule:MarkCombatDeferredRelayout(frame, renderer, stickToBottom)
+    if not frame or not renderer then
+        return
+    end
+
+    self.combatDeferredRelayoutFrames = self.combatDeferredRelayoutFrames or {}
+    self.combatDeferredRelayoutFrames[frame] = true
+    renderer._combatDeferredRelayout = true
+    if stickToBottom then
+        renderer._combatDeferredStickToBottom = true
+    end
+end
+
+function ChatRendererModule:FlushCombatDeferredRelayouts()
+    if InCombatLockdown and InCombatLockdown() then
+        return
+    end
+
+    local pendingRefresh = self.combatDeferredRefreshFrames
+    if pendingRefresh then
+        self.combatDeferredRefreshFrames = nil
+        for frame in pairs(pendingRefresh) do
+            if frame then
+                self:RefreshFrame(frame)
+            end
+        end
+    end
+
+    local pending = self.combatDeferredRelayoutFrames
+    if not pending then
+        return
+    end
+
+    self.combatDeferredRelayoutFrames = nil
+    for frame in pairs(pending) do
+        local renderer = frame and frame.TwichUICustomRenderer
+        if renderer and renderer._combatDeferredRelayout == true then
+            if frame.IsShown and not frame:IsShown() then
+                -- Hidden frames can safely defer relayout until they become visible.
+                self.combatDeferredRelayoutFrames = self.combatDeferredRelayoutFrames or {}
+                self.combatDeferredRelayoutFrames[frame] = true
+                renderer._combatDeferredRelayout = true
+            else
+                renderer._combatDeferredRelayout = nil
+                self:RelayoutRenderer(renderer)
+
+                if renderer._combatDeferredStickToBottom then
+                    renderer._combatDeferredStickToBottom = nil
+                    self:ScrollToBottom(renderer)
+                end
+            end
+        end
+    end
+end
+
 function ChatRendererModule:PushMessage(frame, message, r, g, b, accessID)
     local renderer = frame and frame.TwichUICustomRenderer
     if not renderer then
@@ -1676,6 +1731,19 @@ function ChatRendererModule:PushMessage(frame, message, r, g, b, accessID)
     renderer.entries[#renderer.entries + 1] = entry
 
     local cap = (self.settings and self.settings.historyLimit) or ROW_CAP
+
+    if InCombatLockdown and InCombatLockdown() then
+        if #renderer.entries > cap then
+            table.remove(renderer.entries, 1)
+            if renderer.entries[1] then
+                renderer.entries[1].groupedWithPrevious = false
+            end
+        end
+
+        self:MarkCombatDeferredRelayout(frame, renderer, stickToBottom)
+        return
+    end
+
     local didUpdateScrollState = false
     if #renderer.entries > cap then
         local layoutKey = self:GetRendererLayoutKey(renderer)
@@ -2166,6 +2234,12 @@ function ChatRendererModule:RefreshFrame(frame)
         return
     end
 
+    if InCombatLockdown and InCombatLockdown() then
+        self.combatDeferredRefreshFrames = self.combatDeferredRefreshFrames or {}
+        self.combatDeferredRefreshFrames[frame] = true
+        return
+    end
+
     local renderer = self:EnsureRenderer(frame)
     if not renderer then
         return
@@ -2262,6 +2336,8 @@ function ChatRendererModule:HookChatFrame(frame)
         if selfFrame.TwichUICustomRenderer then
             selfFrame.TwichUICustomRenderer:SetShown(ChatRendererModule:IsEnabled())
             ChatRendererModule:RelayoutRenderer(selfFrame.TwichUICustomRenderer)
+            selfFrame.TwichUICustomRenderer._combatDeferredRelayout = nil
+            selfFrame.TwichUICustomRenderer._combatDeferredStickToBottom = nil
             if ChatRendererModule:IsEnabled() and #(selfFrame.TwichUICustomRenderer.entries or {}) == 0 then
                 local restored = false
                 if ChatRendererModule:HasPersistedHistory(selfFrame) then
@@ -2444,6 +2520,7 @@ function ChatRendererModule:OnEnable()
     self:RefreshSettings()
     self:InstallFrameHooks()
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "HandleLifecycleRefresh")
+    self:RegisterEvent("PLAYER_REGEN_ENABLED", "FlushCombatDeferredRelayouts")
     self:RegisterEvent("PLAYER_LOGOUT", "HandlePersistedHistorySave")
     self:RegisterEvent("UPDATE_CHAT_WINDOWS", "HandleLifecycleRefresh")
     self:RegisterEvent("UPDATE_FLOATING_CHAT_WINDOWS", "HandleLifecycleRefresh")
@@ -2486,6 +2563,7 @@ function ChatRendererModule:OnDisable()
     end
     self:CancelLifecycleRefreshes()
     self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+    self:UnregisterEvent("PLAYER_REGEN_ENABLED")
     self:UnregisterEvent("PLAYER_LOGOUT")
     self:UnregisterEvent("UPDATE_CHAT_WINDOWS")
     self:UnregisterEvent("UPDATE_FLOATING_CHAT_WINDOWS")

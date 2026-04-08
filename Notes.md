@@ -67,6 +67,49 @@
 
 ## PERFORMANCE WED APR 8
 
+- Keybinding not working
+
 - Can we make it so that i can resize the columns in the profiler results
 
 - Please add an experience datatext, showing the players experience required to achieve the next level. make the display configurable in the datatext options
+
+- I can see the default blizzard artwork for i think action bars, like the extra action button or vehicle artwork or something flash on and off occasionally.
+
+1x [ADDON_ACTION_BLOCKED] AddOn 'TwichUI_Reformed' tried to call the protected function 'Frame:SetParent()'.
+[!BugGrabber/BugGrabber.lua]:540: in function '?'
+[!BugGrabber/BugGrabber.lua]:524: in function <!BugGrabber/BugGrabber.lua:524>
+[C]: in function 'SetParent'
+[TwichUI_Reformed/Modules/ChatEnhancements/ChatRenderer.lua]:2236: in function 'RefreshFrame'
+[TwichUI_Reformed/Modules/ChatEnhancements/ChatStyling.lua]:2875: in function 'ApplyChatFonts'
+[TwichUI_Reformed/Modules/ChatEnhancements/ChatStyling.lua]:2972: in function 'RefreshAllVisuals'
+[TwichUI_Reformed/Modules/ChatEnhancements/ChatStyling.lua]:3030: in function 'HandleLifecycleRefresh'
+[TwichUI_Reformed/Modules/ChatEnhancements/ChatStyling.lua]:3049: in function '?'
+[!!AddonProfiler/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua]:109: in function <...ler/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua:109>
+[C]: ?
+[!!AddonProfiler/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua]:19: in function <...ler/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua:15>
+[!!AddonProfiler/libs/CallbackHandler-1.0/CallbackHandler-1.0.lua]:54: in function 'Fire'
+[ElvUI_Libraries/Game/Shared/Ace3/AceEvent-3.0/AceEvent-3.0.lua]:120: in function <...aries/Game/Shared/Ace3/AceEvent-3.0/AceEvent-3.0.lua:119>
+
+Locals:
+self = <table> {
+}
+event = "ADDON_ACTION_BLOCKED"
+addonName = "TwichUI_Reformed"
+addonFunc = "Frame:SetParent()"
+name = "TwichUI_Reformed"
+badAddons = <table> {
+TwichUI_Reformed = true
+}
+L = <table> {
+NO_DISPLAY_2 = "|cffffff00The standard display is called BugSack, and can probably be found on the same site where you found !BugGrabber.|r"
+ERROR_DETECTED = "%s |cffffff00captured, click the link for more information.|r"
+BUGGRABBER_STOPPED = "|cffffff00There are too many errors in your UI. As a result, your game experience may be degraded. Disable or update the failing addons if you don't want to see this message again.|r"
+USAGE = "|cffffff00Usage: /buggrabber <1-%d>.|r"
+STOP_NAG = "|cffffff00!BugGrabber will not nag about missing a display addon again until next patch.|r"
+NO_DISPLAY_STOP = "|cffffff00If you don't want to be reminded about this again, run /stopnag.|r"
+NO_DISPLAY_1 = "|cffffff00You seem to be running !BugGrabber with no display addon to go along with it. Although a slash command is provided for accessing error reports, a display can help you manage these errors in a more convenient way.|r"
+ERROR_UNABLE = "|cffffff00!BugGrabber is unable to retrieve errors from other players by itself. Please install BugSack or a similar display addon that might give you this functionality.|r"
+ADDON_CALL_PROTECTED = "[%s] AddOn '%s' tried to call the protected function '%s'."
+}
+
+w

@@ -2861,7 +2861,22 @@ function ActionBars:UpdateButtonsForSpellID(spellID)
     end
 
     if self.spellButtonIndexDirty == true then
-        return false
+        local style = self:GetGlowStyle()
+        local spellStateCache = {
+            [spellID] = self.activeAlertSpells[spellID] == true,
+        }
+        local matched = false
+
+        for _, fallbackButtons in pairs(self.barButtons) do
+            for _, button in ipairs(fallbackButtons) do
+                if self:GetButtonSpellID(button) == spellID then
+                    self:UpdateButtonGlow(button, style, spellStateCache)
+                    matched = true
+                end
+            end
+        end
+
+        return matched
     end
 
     local index = self.spellButtonIndex
@@ -2906,7 +2921,20 @@ function ActionBars:IsButtonGlowActive(button, spellStateCache)
 
     local isActive = self.activeAlertSpells[spellID] == true
     if not isActive and IsSpellOverlayed then
-        isActive = IsSpellOverlayed(spellID) == true
+        local now = (GetTime and GetTime()) or 0
+        local cache = self._overlayedSpellStateCache
+        if not cache then
+            cache = {}
+            self._overlayedSpellStateCache = cache
+        end
+
+        local cachedState = cache[spellID]
+        if cachedState and (now - (cachedState.t or 0)) < 0.15 then
+            isActive = cachedState.v == true
+        else
+            isActive = IsSpellOverlayed(spellID) == true
+            cache[spellID] = { v = isActive, t = now }
+        end
     end
 
     if spellStateCache then
@@ -3630,6 +3658,10 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
     local desiredStyle = active and style or "none"
     local currentStyle = button.__twichuiABGlowStyle or "none"
 
+    if desiredStyle == "none" and currentStyle == "none" then
+        return
+    end
+
     if desiredStyle == currentStyle then
         local width, height = button:GetWidth(), button:GetHeight()
         local sizeChanged = button.__twichuiGlowW ~= width or button.__twichuiGlowH ~= height
@@ -3673,6 +3705,38 @@ end
 
 function ActionBars:UpdateAllButtonGlows()
     local style = self:GetGlowStyle()
+    if style == "none" then
+        for _, buttons in pairs(self.barButtons) do
+            for _, button in ipairs(buttons) do
+                if (button.__twichuiABGlowStyle or "none") ~= "none" then
+                    self:ClearButtonGlow(button)
+                    button.__twichuiABGlowStyle = "none"
+                end
+            end
+        end
+        return
+    end
+
+    local now = (GetTime and GetTime()) or 0
+    local lastRefreshAt = self._lastFullGlowRefreshAt or 0
+    if (now - lastRefreshAt) < 0.08 then
+        self:ScheduleGlowSync(0.08)
+        return
+    end
+    self._lastFullGlowRefreshAt = now
+
+    if style ~= "blizzard" and next(self.activeAlertSpells or {}) == nil then
+        for _, buttons in pairs(self.barButtons) do
+            for _, button in ipairs(buttons) do
+                if (button.__twichuiABGlowStyle or "none") ~= "none" then
+                    self:ClearButtonGlow(button)
+                    button.__twichuiABGlowStyle = "none"
+                end
+            end
+        end
+        return
+    end
+
     local spellStateCache = {}
     for _, buttons in pairs(self.barButtons) do
         for _, button in ipairs(buttons) do
@@ -4431,6 +4495,7 @@ function ActionBars:QueueCooldownRefresh()
 end
 
 function ActionBars:QueueButtonStateRefresh()
+    local delaySeconds = self._pendingStateDelay or 0
     local event = self._pendingStateEvent
     if self._buttonStateRefreshQueued == true then
         return
@@ -4439,16 +4504,18 @@ function ActionBars:QueueButtonStateRefresh()
     self._buttonStateRefreshQueued = true
     if not (C_Timer and type(C_Timer.After) == "function") then
         self._buttonStateRefreshQueued = false
+        self._pendingStateDelay = nil
         self:RefreshButtonStates(event or true)
         return
     end
 
-    C_Timer.After(0, function()
+    C_Timer.After(delaySeconds, function()
         if ActionBars._buttonStateRefreshQueued ~= true then
             return
         end
 
         ActionBars._buttonStateRefreshQueued = false
+        ActionBars._pendingStateDelay = nil
         local db = ActionBars:GetDB()
         if not db or db.enabled == false or not ActionBars:IsEnabled() then
             return
@@ -4461,7 +4528,32 @@ end
 
 function ActionBars:RefreshButtonStates(event)
     if type(event) == "string" then
-        self._pendingStateEvent = event
+        local existingEvent = self._pendingStateEvent
+        local eventNeedsGlow = event == "SPELLS_CHANGED"
+            or event == "PLAYER_SPECIALIZATION_CHANGED"
+            or event == "ACTIONBAR_SLOT_CHANGED"
+            or event == "ACTIONBAR_PAGE_CHANGED"
+            or event == "UPDATE_BINDINGS"
+        local existingNeedsGlow = existingEvent == "SPELLS_CHANGED"
+            or existingEvent == "PLAYER_SPECIALIZATION_CHANGED"
+            or existingEvent == "ACTIONBAR_SLOT_CHANGED"
+            or existingEvent == "ACTIONBAR_PAGE_CHANGED"
+            or existingEvent == "UPDATE_BINDINGS"
+
+        if eventNeedsGlow or not existingEvent or existingNeedsGlow ~= true then
+            self._pendingStateEvent = event
+        end
+
+        local delaySeconds = 0.04
+        if event == "ACTIONBAR_UPDATE_STATE" or event == "ACTIONBAR_UPDATE_USABLE" then
+            delaySeconds = 0.14
+        elseif event == "ACTIONBAR_SLOT_CHANGED" then
+            delaySeconds = 0.08
+        end
+        if self._pendingStateDelay == nil or delaySeconds > self._pendingStateDelay then
+            self._pendingStateDelay = delaySeconds
+        end
+
         if event == "SPELLS_CHANGED" or event == "PLAYER_SPECIALIZATION_CHANGED" or
             event == "ACTIONBAR_SLOT_CHANGED" or event == "ACTIONBAR_PAGE_CHANGED" then
             self:MarkSpellButtonIndexDirty()
@@ -4484,27 +4576,59 @@ function ActionBars:RefreshButtonStates(event)
         or glowEvent == "ACTIONBAR_PAGE_CHANGED"
         or glowEvent == "UPDATE_BINDINGS"
 
-    if shouldRefreshGlow then
+    local glowStyle = shouldRefreshGlow and self:GetGlowStyle() or nil
+    if shouldRefreshGlow and glowStyle ~= "none" then
         self:EnsureSpellButtonIndex()
     end
-
-    local glowStyle = shouldRefreshGlow and self:GetGlowStyle() or nil
     local showGrid = db.showGrid == true
-    local spellStateCache = shouldRefreshGlow and {} or nil
+    local shouldUpdateGrid = self._cachedShowGrid ~= showGrid
+    if shouldUpdateGrid then
+        self._cachedShowGrid = showGrid
+    end
+
+    if not shouldRefreshGlow and not shouldUpdateGrid then
+        for barKey, _ in pairs(self.barButtons) do
+            local settings = self:GetBarSettings(barKey)
+            local holder = self.holders[barKey]
+            if holder and settings then
+                local targetAlpha = self:GetTargetAlpha(settings, false)
+                if holder.__twichuiTargetAlpha ~= targetAlpha then
+                    holder.__twichuiTargetAlpha = targetAlpha
+                    holder:SetAlpha(targetAlpha)
+                end
+            end
+        end
+        return
+    end
+
+    local hasActiveAlertSpells = next(self.activeAlertSpells or {}) ~= nil
+    local skipGlowEvaluation = shouldRefreshGlow and glowStyle ~= "blizzard" and hasActiveAlertSpells ~= true
+    local spellStateCache = (shouldRefreshGlow and not skipGlowEvaluation) and {} or nil
     for barKey, buttons in pairs(self.barButtons) do
         local settings = self:GetBarSettings(barKey)
         for _, button in ipairs(buttons) do
             if shouldRefreshGlow then
-                self:UpdateButtonGlow(button, glowStyle, spellStateCache)
+                if skipGlowEvaluation then
+                    if (button.__twichuiABGlowStyle or "none") ~= "none" then
+                        self:ClearButtonGlow(button)
+                        button.__twichuiABGlowStyle = "none"
+                    end
+                else
+                    self:UpdateButtonGlow(button, glowStyle, spellStateCache)
+                end
             end
-            if button.__twichuiShowGrid ~= showGrid then
+            if shouldUpdateGrid and button.__twichuiShowGrid ~= showGrid then
                 button.__twichuiShowGrid = showGrid
                 ApplyButtonGridState(button, showGrid)
             end
         end
         local holder = self.holders[barKey]
         if holder and settings then
-            holder:SetAlpha(self:GetTargetAlpha(settings, false))
+            local targetAlpha = self:GetTargetAlpha(settings, false)
+            if holder.__twichuiTargetAlpha ~= targetAlpha then
+                holder.__twichuiTargetAlpha = targetAlpha
+                holder:SetAlpha(targetAlpha)
+            end
         end
     end
 
@@ -4583,6 +4707,28 @@ function ActionBars:HideDefaultArt()
     for _, frameName in ipairs(BLIZZARD_FRAMES_TO_HIDE) do
         local frame = _G[frameName]
         if frame then
+            if frame.__twichuiABSuppressHooked ~= true and frame.HookScript then
+                frame.__twichuiABSuppressHooked = true
+                frame:HookScript("OnShow", function(selfFrame)
+                    if not (ActionBars and ActionBars.IsEnabled and ActionBars:IsEnabled()) then
+                        return
+                    end
+
+                    if _G.UIPARENT_MANAGED_FRAME_POSITIONS then
+                        _G.UIPARENT_MANAGED_FRAME_POSITIONS[frameName] = nil
+                    end
+
+                    pcall(function()
+                        SuppressFrameRegions(selfFrame)
+                        if ActionBars.blizzardHiddenRoot then
+                            selfFrame:SetParent(ActionBars.blizzardHiddenRoot)
+                        end
+                        selfFrame:SetAlpha(0)
+                        selfFrame:Hide()
+                    end)
+                end)
+            end
+
             self:CaptureFrameState(frame)
             for _, region in ipairs({ frame:GetRegions() }) do
                 self:CaptureRegionState(region)
@@ -4616,6 +4762,24 @@ function ActionBars:HideDefaultArt()
     for _, objectName in ipairs(BLIZZARD_OBJECTS_TO_HIDE) do
         local object = _G[objectName]
         if object then
+            if object.GetObjectType and object:GetObjectType() == "Frame" and object.__twichuiABSuppressHooked ~= true and object.HookScript then
+                object.__twichuiABSuppressHooked = true
+                object:HookScript("OnShow", function(selfObject)
+                    if not (ActionBars and ActionBars.IsEnabled and ActionBars:IsEnabled()) then
+                        return
+                    end
+
+                    pcall(function()
+                        SuppressFrameRegions(selfObject)
+                        if ActionBars.blizzardHiddenRoot then
+                            selfObject:SetParent(ActionBars.blizzardHiddenRoot)
+                        end
+                        selfObject:SetAlpha(0)
+                        selfObject:Hide()
+                    end)
+                end)
+            end
+
             local ok, err = pcall(function()
                 if object.GetObjectType and object:GetObjectType() == "Frame" then
                     self:CaptureFrameState(object)

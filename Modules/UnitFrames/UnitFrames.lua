@@ -7084,20 +7084,31 @@ function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
         return
     end
 
+    if not castbar:IsShown() or not (fx.overlay and fx.overlay:IsShown()) then
+        return
+    end
+
     fx._updateAccumulator = (fx._updateAccumulator or 0) + (elapsed or 0)
-    if fx._updateAccumulator < (1 / 50) then
+    if fx._updateAccumulator < (1 / 24) then
         return
     end
 
     elapsed = math_min(0.08, fx._updateAccumulator)
     fx._updateAccumulator = 0
 
-    self:SyncFantasyCastbarVisuals(castbar)
-    if not castbar:IsShown() or not fx.overlay:IsShown() then
-        return
+    fx._syncAccumulator = (fx._syncAccumulator or 0) + elapsed
+    if fx._syncAccumulator >= (1 / 20) then
+        fx._syncAccumulator = 0
+        self:SyncFantasyCastbarVisuals(castbar)
     end
 
     fx.clock = (fx.clock or 0) + (elapsed or 0)
+    fx._maintenanceAccumulator = (fx._maintenanceAccumulator or 0) + elapsed
+    local runMaintenance = false
+    if fx._maintenanceAccumulator >= 0.12 then
+        fx._maintenanceAccumulator = 0
+        runMaintenance = true
+    end
 
     local width = fx.width or math_max(1, castbar:GetWidth() or 1)
     local height = fx.height or math_max(1, castbar:GetHeight() or 1)
@@ -7220,7 +7231,7 @@ function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
             SpawnFantasyFrontParticle(fx, frontX)
             SpawnFantasyEmberParticle(fx, frontX, "metal")
         end
-        if fx.theme == "mistweaver" and CountFantasyParticles(fx, "mist") < 3 then
+        if runMaintenance and fx.theme == "mistweaver" and CountFantasyParticles(fx, "mist") < 3 then
             SpawnFantasyMistParticle(fx)
         end
         if visualProgress < 0.87 and fx.glowAccumulator >= (0.024 / densityScale) then
@@ -7231,26 +7242,28 @@ function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
             end
         end
     elseif family == "earth" then
-        local rockCount = 0
-        local debrisCount = 0
-        for index = 1, #fx.particles do
-            local particle = fx.particles[index]
-            if particle.active and particle.kind == "earth-orbiter" then
-                if particle.isRock then
-                    rockCount = rockCount + 1
-                else
-                    debrisCount = debrisCount + 1
+        if runMaintenance then
+            local rockCount = 0
+            local debrisCount = 0
+            for index = 1, #fx.particles do
+                local particle = fx.particles[index]
+                if particle.active and particle.kind == "earth-orbiter" then
+                    if particle.isRock then
+                        rockCount = rockCount + 1
+                    else
+                        debrisCount = debrisCount + 1
+                    end
                 end
             end
-        end
 
-        while rockCount < 4 do
-            SpawnFantasyEarthOrbiter(fx, true)
-            rockCount = rockCount + 1
-        end
-        while debrisCount < 14 do
-            SpawnFantasyEarthOrbiter(fx, false)
-            debrisCount = debrisCount + 1
+            while rockCount < 4 do
+                SpawnFantasyEarthOrbiter(fx, true)
+                rockCount = rockCount + 1
+            end
+            while debrisCount < 14 do
+                SpawnFantasyEarthOrbiter(fx, false)
+                debrisCount = debrisCount + 1
+            end
         end
 
         if visualProgress > 0.02 and visualProgress < 0.87 and fx.frontAccumulator >= (0.035 / densityScale) then
@@ -7290,8 +7303,10 @@ function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
             end
         end
     elseif family == "frost" then
-        while CountFantasyParticles(fx, "mist") < (fx.theme == "arctic" and 4 or fx.theme == "frostfire" and 4 or 3) do
-            SpawnFantasyMistParticle(fx)
+        if runMaintenance then
+            while CountFantasyParticles(fx, "mist") < (fx.theme == "arctic" and 4 or fx.theme == "frostfire" and 4 or 3) do
+                SpawnFantasyMistParticle(fx)
+            end
         end
         if visualProgress < 0.92 and fx.frontAccumulator >= (0.06 / densityScale) then
             fx.frontAccumulator = 0
@@ -7313,12 +7328,14 @@ function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
             fx.rippleAccumulator = 0
             SpawnFantasyRippleParticle(fx)
         end
-        if fx.theme == "fishing" and CountFantasyParticles(fx, "mist") < 2 then
+        if runMaintenance and fx.theme == "fishing" and CountFantasyParticles(fx, "mist") < 2 then
             SpawnFantasyMistParticle(fx)
         end
     elseif family == "arcane" then
-        while CountFantasyParticles(fx, "rune") < (fx.theme == "arcaneum" and 3 or 2) do
-            SpawnFantasyRuneParticle(fx)
+        if runMaintenance then
+            while CountFantasyParticles(fx, "rune") < (fx.theme == "arcaneum" and 3 or 2) do
+                SpawnFantasyRuneParticle(fx)
+            end
         end
         if visualProgress < 0.87 and fx.glowAccumulator >= (0.025 / densityScale) then
             fx.glowAccumulator = 0
@@ -7327,7 +7344,7 @@ function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
             end
         end
     elseif family == "void" then
-        if CountFantasyParticles(fx, "vortex") < 1 then
+        if runMaintenance and CountFantasyParticles(fx, "vortex") < 1 then
             SpawnFantasyVortexParticle(fx)
         end
         if visualProgress < 0.90 and fx.frontAccumulator >= (0.025 / densityScale) then
@@ -7511,13 +7528,15 @@ end
 function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
     local fx = powerBar and powerBar.TwichPowerFx
     if not fx or not fx.enabled then return end
+    if not powerBar:IsShown() then return end
+    if fx.particleLayer and not fx.particleLayer:IsShown() then return end
 
     fx._updateAccumulator = (fx._updateAccumulator or 0) + (elapsed or 0)
-    if fx._updateAccumulator < (1 / 45) then
+    if fx._updateAccumulator < (1 / 24) then
         return
     end
 
-    elapsed = math_min(0.1, fx._updateAccumulator)
+    elapsed = math_min(0.12, fx._updateAccumulator)
     fx._updateAccumulator = 0
 
     local effectScale = fx.effectScale or 1
@@ -7533,6 +7552,12 @@ function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
     fx.streamAccumulator = (fx.streamAccumulator or 0) + elapsed
     fx.glowAccumulator = (fx.glowAccumulator or 0) + elapsed
     fx.rippleAccumulator = (fx.rippleAccumulator or 0) + elapsed
+    fx._maintenanceAccumulator = (fx._maintenanceAccumulator or 0) + elapsed
+    local runMaintenance = false
+    if fx._maintenanceAccumulator >= 0.2 then
+        fx._maintenanceAccumulator = 0
+        runMaintenance = true
+    end
 
     if family == "holy" or family == "moon" then
         if fx.ambientAccumulator >= (0.18 / math_max(0.5, effectScale)) then
@@ -7544,7 +7569,7 @@ function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
             fx.streamAccumulator = 0
             SpawnFantasyNatureStream(fx)
         end
-        if family == "monk" and fx.theme == "mistweaver" and CountFantasyParticles(fx, "mist") < 2 then
+        if runMaintenance and family == "monk" and fx.theme == "mistweaver" and CountFantasyParticles(fx, "mist") < 2 then
             SpawnFantasyMistParticle(fx)
         end
     elseif family == "fire" then
@@ -7553,23 +7578,27 @@ function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
             SpawnFantasyFireAmbient(fx)
         end
     elseif family == "frost" then
-        while CountFantasyParticles(fx, "mist") < (fx.theme == "arctic" and 3 or fx.theme == "frostfire" and 3 or 2) do
-            SpawnFantasyMistParticle(fx)
+        if runMaintenance then
+            while CountFantasyParticles(fx, "mist") < (fx.theme == "arctic" and 3 or fx.theme == "frostfire" and 3 or 2) do
+                SpawnFantasyMistParticle(fx)
+            end
         end
     elseif family == "water" then
         if fx.rippleAccumulator >= ((fx.theme == "fishing" and 0.34 or 0.45) / densityScale) then
             fx.rippleAccumulator = 0
             SpawnFantasyRippleParticle(fx)
         end
-        if (fx.theme == "fishing" or fx.theme == "mossystone" or fx.theme == "mossystone_icon") and CountFantasyParticles(fx, "mist") < 2 then
+        if runMaintenance and (fx.theme == "fishing" or fx.theme == "mossystone" or fx.theme == "mossystone_icon") and CountFantasyParticles(fx, "mist") < 2 then
             SpawnFantasyMistParticle(fx)
         end
     elseif family == "arcane" then
-        while CountFantasyParticles(fx, "rune") < (fx.theme == "arcaneum" and 3 or 2) do
-            SpawnFantasyRuneParticle(fx)
+        if runMaintenance then
+            while CountFantasyParticles(fx, "rune") < (fx.theme == "arcaneum" and 3 or 2) do
+                SpawnFantasyRuneParticle(fx)
+            end
         end
     elseif family == "void" then
-        if CountFantasyParticles(fx, "vortex") < 1 then
+        if runMaintenance and CountFantasyParticles(fx, "vortex") < 1 then
             SpawnFantasyVortexParticle(fx)
         end
         if fx.ambientAccumulator >= (0.24 / densityScale) then
@@ -7577,25 +7606,28 @@ function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
             SpawnFantasyEmberParticle(fx, roamX(), family)
         end
     elseif family == "earth" then
-        local rockCount = 0
-        local debrisCount = 0
-        for index = 1, #fx.particles do
-            local particle = fx.particles[index]
-            if particle.active and particle.kind == "earth-orbiter" then
-                if particle.isRock then
-                    rockCount = rockCount + 1
-                else
-                    debrisCount = debrisCount + 1
+        if runMaintenance then
+            local rockCount = 0
+            local debrisCount = 0
+            for index = 1, #fx.particles do
+                local particle = fx.particles[index]
+                if particle.active and particle.kind == "earth-orbiter" then
+                    if particle.isRock then
+                        rockCount = rockCount + 1
+                    else
+                        debrisCount = debrisCount + 1
+                    end
                 end
             end
-        end
-        while rockCount < 3 do
-            SpawnFantasyEarthOrbiter(fx, true)
-            rockCount = rockCount + 1
-        end
-        while debrisCount < 8 do
-            SpawnFantasyEarthOrbiter(fx, false)
-            debrisCount = debrisCount + 1
+
+            while rockCount < 3 do
+                SpawnFantasyEarthOrbiter(fx, true)
+                rockCount = rockCount + 1
+            end
+            while debrisCount < 8 do
+                SpawnFantasyEarthOrbiter(fx, false)
+                debrisCount = debrisCount + 1
+            end
         end
     elseif family == "gather" or family == "metal" then
         if fx.ambientAccumulator >= (0.20 / densityScale) then
@@ -7638,20 +7670,37 @@ function UnitFrames:ApplyPowerBarFxSettings(frame, unitKey)
     self:SyncPowerBarFx(frame.Power, true)
 end
 
-function UnitFrames:ApplyCastbarValue(bar, value, maxValue)
+function UnitFrames:ApplyCastbarValue(bar, value, maxValue, skipSync)
     if not bar or not bar.SetMinMaxValues or not bar.SetValue then return end
+
+    local maxSafe = math_max(0.001, tonumber(maxValue) or 0)
+    local valueSafe = Clamp(tonumber(value) or 0, 0, maxSafe)
+    if bar.__twichCastbarLastValue ~= nil and bar.__twichCastbarLastMax ~= nil and
+        math_abs((bar.__twichCastbarLastValue or 0) - valueSafe) < 0.0005 and
+        math_abs((bar.__twichCastbarLastMax or 0) - maxSafe) < 0.0005
+    then
+        return
+    end
+
+    bar.__twichCastbarLastValue = valueSafe
+    bar.__twichCastbarLastMax = maxSafe
+
     local sm = self:GetCastbarSmoothingMethod()
     bar.smoothing = sm
-    pcall(bar.SetMinMaxValues, bar, 0, maxValue)
+    pcall(bar.SetMinMaxValues, bar, 0, maxSafe)
     if sm then
-        local ok = pcall(bar.SetValue, bar, value, sm)
+        local ok = pcall(bar.SetValue, bar, valueSafe, sm)
         if ok then
-            self:SyncFantasyCastbarVisuals(bar)
+            if skipSync ~= true then
+                self:SyncFantasyCastbarVisuals(bar)
+            end
             return
         end
     end
-    pcall(bar.SetValue, bar, value)
-    self:SyncFantasyCastbarVisuals(bar)
+    pcall(bar.SetValue, bar, valueSafe)
+    if skipSync ~= true then
+        self:SyncFantasyCastbarVisuals(bar)
+    end
 end
 
 function UnitFrames:ResolveStandaloneCastbarAppearance(settings, palette, spellTemplate)
@@ -7969,7 +8018,26 @@ function UnitFrames:BuildEnemyTargetLookup()
 end
 
 function UnitFrames:RefreshHighlightFrames(enemyTargetLookup)
-    enemyTargetLookup = enemyTargetLookup or self:BuildEnemyTargetLookup()
+    if not enemyTargetLookup then
+        local now = (GetTime and GetTime()) or 0
+        local lastRefreshAt = self._lastHighlightRefreshAt or 0
+        if (now - lastRefreshAt) < 0.05 then
+            if self._highlightRefreshQueued ~= true and C_Timer and type(C_Timer.After) == "function" then
+                self._highlightRefreshQueued = true
+                C_Timer.After(0.05, function()
+                    if UnitFrames._highlightRefreshQueued ~= true then
+                        return
+                    end
+
+                    UnitFrames._highlightRefreshQueued = false
+                    UnitFrames:RefreshHighlightFrames(UnitFrames:BuildEnemyTargetLookup())
+                end)
+            end
+            return
+        end
+        self._lastHighlightRefreshAt = now
+        enemyTargetLookup = self:BuildEnemyTargetLookup()
+    end
 
     for _, frame in pairs(self.frames) do
         if frame then
@@ -14095,7 +14163,7 @@ function UnitFrames:StartStandaloneCastbarUpdates()
     castbar._twichCastbarUpdating = true
     castbar:SetScript("OnUpdate", function(_, elapsed)
         castbar._twichCastbarUpdateAccumulator = (castbar._twichCastbarUpdateAccumulator or 0) + (elapsed or 0)
-        if castbar._twichCastbarUpdateAccumulator < (1 / 60) then
+        if castbar._twichCastbarUpdateAccumulator < (1 / 40) then
             return
         end
 
@@ -14238,6 +14306,7 @@ function UnitFrames:RefreshCastbarStyle()
     local palette = self:GetPalette("player", "player")
     local text = self:GetTextConfigFor("player")
     self:ApplyStandaloneCastbarAppearance(castbar, settings, palette, text)
+    castbar.__twichuiCastbarAppearanceApplied = true
     self:SyncFantasyCastbarVisuals(castbar, true)
 end
 
@@ -14253,6 +14322,7 @@ function UnitFrames:UpdateCastbarElapsed()
     if now >= state.endTime then
         self:ApplyCastbarValue(castbar, duration, duration)
         if castbar.timeText then castbar.timeText:SetText("0.0") end
+        castbar.__twichCastbarLastTenths = 0
         self:StopStandaloneCastbarUpdates()
         castbar:Hide()
         self._castbarState = nil
@@ -14261,9 +14331,14 @@ function UnitFrames:UpdateCastbarElapsed()
 
     local elapsed = now - state.startTime
     local timeValue = state.reverse and (duration - elapsed) or elapsed
-    self:ApplyCastbarValue(castbar, timeValue, duration)
+    self:ApplyCastbarValue(castbar, timeValue, duration, true)
     if castbar.timeText then
-        castbar.timeText:SetText(string.format("%.1f", state.endTime - now))
+        local remaining = math_max(0, state.endTime - now)
+        local tenths = math_floor((remaining * 10) + 0.5)
+        if castbar.__twichCastbarLastTenths ~= tenths then
+            castbar.__twichCastbarLastTenths = tenths
+            castbar.timeText:SetText(string.format("%.1f", tenths / 10))
+        end
     end
 end
 
@@ -14278,14 +14353,20 @@ function UnitFrames:BeginCastbar(name, icon, startMS, endMS, reverse, spellID)
     if castbar.icon then castbar.icon:SetTexture(icon or 136243) end
     local duration = math_max(0.001, endSec - startSec)
     castbar._twichReverse = reverse == true
+    castbar.__twichCastbarLastValue = nil
+    castbar.__twichCastbarLastMax = nil
+    castbar.__twichCastbarLastTenths = nil
     self._castbarState = {
         startTime = startSec,
         endTime = endSec,
         reverse = reverse == true,
         spellID = tonumber(spellID),
     }
-    self:ApplyStandaloneCastbarAppearance(castbar, self:GetDB().castbar or {}, self:GetPalette("player", "player"),
-        self:GetTextConfigFor("player"))
+    if castbar.__twichuiCastbarAppearanceApplied ~= true then
+        self:ApplyStandaloneCastbarAppearance(castbar, self:GetDB().castbar or {}, self:GetPalette("player", "player"),
+            self:GetTextConfigFor("player"))
+        castbar.__twichuiCastbarAppearanceApplied = true
+    end
     self:ResetFantasyCastbarVisuals(castbar)
     self:ApplyCastbarValue(castbar, reverse and duration or 0, duration)
     castbar:Show()
@@ -14300,7 +14381,6 @@ function UnitFrames:StopCastbar()
         self:StopStandaloneCastbarUpdates()
         castbar:Hide()
         self._castbarState = nil
-        self:RefreshCastbarStyle()
     end
     self._castbarState = nil
 end
@@ -14314,7 +14394,17 @@ function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
     if event == "UNIT_SPELLCAST_START" then
         local name, _, texture, startMS, endMS, _, _, _, activeSpellID = UnitCastingInfo("player")
         if name then
-            self:BeginCastbar(name, texture, startMS, endMS, false, spellID or activeSpellID)
+            local resolvedSpellID = spellID or activeSpellID
+            local existing = self._castbarState
+            local startSec = (tonumber(startMS) or 0) / 1000
+            local endSec = (tonumber(endMS) or 0) / 1000
+            if existing and existing.reverse ~= true and existing.spellID == tonumber(resolvedSpellID) and
+                math_abs((existing.startTime or 0) - startSec) < 0.01 and math_abs((existing.endTime or 0) - endSec) < 0.01
+            then
+                return
+            end
+
+            self:BeginCastbar(name, texture, startMS, endMS, false, resolvedSpellID)
         end
         return
     end
@@ -14322,7 +14412,17 @@ function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
     if event == "UNIT_SPELLCAST_CHANNEL_START" then
         local name, _, texture, startMS, endMS, _, _, activeSpellID = UnitChannelInfo("player")
         if name then
-            self:BeginCastbar(name, texture, startMS, endMS, true, spellID or activeSpellID)
+            local resolvedSpellID = spellID or activeSpellID
+            local existing = self._castbarState
+            local startSec = (tonumber(startMS) or 0) / 1000
+            local endSec = (tonumber(endMS) or 0) / 1000
+            if existing and existing.reverse == true and existing.spellID == tonumber(resolvedSpellID) and
+                math_abs((existing.startTime or 0) - startSec) < 0.01 and math_abs((existing.endTime or 0) - endSec) < 0.01
+            then
+                return
+            end
+
+            self:BeginCastbar(name, texture, startMS, endMS, true, resolvedSpellID)
         end
         return
     end

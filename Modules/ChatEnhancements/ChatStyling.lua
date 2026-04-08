@@ -1616,7 +1616,7 @@ function ChatStylingModule:ResolveChannelAbbreviation(channelRef, label)
 end
 
 function ChatStylingModule:ApplyChannelAbbreviations(message)
-    if type(message) ~= "string" or message == "" then
+    if type(message) ~= "string" then
         return message
     end
 
@@ -1624,14 +1624,22 @@ function ChatStylingModule:ApplyChannelAbbreviations(message)
         return message
     end
 
-    return message:gsub("(|Hchannel:([^|]+)|h)%[(.-)%](|h)", function(prefix, channelRef, label, suffix)
-        local abbreviation = self:ResolveChannelAbbreviation(channelRef, label)
-        if not abbreviation or abbreviation == "" then
-            return prefix .. "[" .. label .. "]" .. suffix
-        end
+    local ok, updated = pcall(function()
+        return message:gsub("(|Hchannel:([^|]+)|h)%[(.-)%](|h)", function(prefix, channelRef, label, suffix)
+            local abbreviation = self:ResolveChannelAbbreviation(channelRef, label)
+            if not abbreviation or abbreviation == "" then
+                return prefix .. "[" .. label .. "]" .. suffix
+            end
 
-        return prefix .. "[" .. abbreviation .. "]" .. suffix
+            return prefix .. "[" .. abbreviation .. "]" .. suffix
+        end)
     end)
+
+    if not ok or type(updated) ~= "string" then
+        return message
+    end
+
+    return updated
 end
 
 function ChatStylingModule:BuildPrefix()
@@ -1656,7 +1664,7 @@ function ChatStylingModule:BuildPrefix()
 end
 
 function ChatStylingModule:FormatMessage(message)
-    if type(message) ~= "string" or message == "" then
+    if type(message) ~= "string" then
         return message
     end
 
@@ -1667,7 +1675,10 @@ function ChatStylingModule:FormatMessage(message)
     end
 
     if settings.abbreviationsEnabled then
-        formatted = self:ApplyChannelAbbreviations(formatted)
+        local ok, updated = pcall(self.ApplyChannelAbbreviations, self, formatted)
+        if ok and type(updated) == "string" then
+            formatted = updated
+        end
     end
 
     local prefix = self:BuildPrefix()
@@ -1675,7 +1686,15 @@ function ChatStylingModule:FormatMessage(message)
         return formatted
     end
 
-    return prefix .. " " .. formatted
+    local ok, combined = pcall(function()
+        return prefix .. " " .. formatted
+    end)
+
+    if ok and type(combined) == "string" then
+        return combined
+    end
+
+    return formatted
 end
 
 function ChatStylingModule:EnsureFrameChrome(frame)
