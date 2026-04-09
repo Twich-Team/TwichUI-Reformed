@@ -15,6 +15,10 @@ function QOL:OnEnable()
     local Options = CM.Options --[[@as any]]
 
     -- Enable submodules
+    if Options.AutoLoot and Options.AutoLoot:GetEnabled() then
+        self:GetModule("AutoLoot"):Enable()
+    end
+
     if Options.QuestAutomation and Options.QuestAutomation:IsModuleEnabled() then
         self:GetModule("QuestAutomation"):Enable()
     end

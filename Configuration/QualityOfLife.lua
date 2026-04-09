@@ -48,6 +48,9 @@ local GatheringOptions = ConfigurationOptions.Gathering
 ---@type EasyFishConfigurationOptions
 local EasyFishOptions = ConfigurationOptions.EasyFish
 
+---@type AutoLootConfigurationOptions
+local ALOptions = ConfigurationOptions.AutoLoot
+
 local function BuildIconStyleLabel(style, text)
     local icon = Textures and Textures.GetPlayerClassTextureString and Textures:GetPlayerClassTextureString(14, style)
     if icon then
@@ -2553,6 +2556,65 @@ local function BuildChoresTab()
     }
 end
 
+local function BuildAutoLootTab()
+    local W = ConfigurationModule.Widgets
+    return {
+        type = "group",
+        name = "Auto Loot",
+        order = 1,
+        args = {
+            desc = {
+                type = "description",
+                order = 1,
+                name = "Automatically loots all eligible items as fast as the game allows. Falls back to showing the loot window when bag space is full, an item is need/greed locked, or a BoP confirmation is required.",
+            },
+            enable = {
+                type = "toggle",
+                name = "Enable",
+                desc = "Enable automatic looting.",
+                order = 2,
+                handler = ALOptions,
+                get = "GetEnabled",
+                set = "SetEnabled",
+            },
+            options = W.IGroup(10, "Options", {
+                fishingSound = {
+                    type = "toggle",
+                    name = "Fishing Reel-In Sound",
+                    desc = "Play the fishing reel-in sound when auto-looting a fishing catch.",
+                    order = 1,
+                    width = 1.75,
+                    disabled = function() return not ALOptions:GetEnabled() end,
+                    handler = ALOptions,
+                    get = "GetFishingSoundEnabled",
+                    set = "SetFishingSoundEnabled",
+                },
+                inventorySound = {
+                    type = "toggle",
+                    name = "Inventory Full Sound",
+                    desc = "Play a sound when your bags are full during auto-looting.",
+                    order = 3,
+                    width = 1.75,
+                    disabled = function() return not ALOptions:GetEnabled() end,
+                    handler = ALOptions,
+                    get = "GetInventorySoundEnabled",
+                    set = "SetInventorySoundEnabled",
+                },
+                inventorySoundID = {
+                    type = "input",
+                    name = "Inventory Full Sound ID",
+                    desc = "Numeric sound ID to play when bags are full (default: 44321). The ID is previewed immediately when you apply it.",
+                    order = 4,
+                    width = 1.75,
+                    disabled = function() return not ALOptions:GetEnabled() or not ALOptions:GetInventorySoundEnabled() end,
+                    get = function() return tostring(ALOptions:GetInventorySoundID()) end,
+                    set = function(_, v) ALOptions:SetInventorySoundID(nil, v) end,
+                },
+            }),
+        },
+    }
+end
+
 local function BuildConfiguration()
     local optionsTab = ConfigurationModule.Widgets.NewConfigurationSection(35, "Quality of Life")
 
@@ -2563,6 +2625,7 @@ local function BuildConfiguration()
             order = 1,
             name = "Features to improve your overall user experience.",
         },
+        autoLootTab = BuildAutoLootTab(),
         choresTab = BuildChoresTab(),
         gatheringTab = ConfigurationModuleRuntime.BuildGatheringTab and ConfigurationModuleRuntime.BuildGatheringTab() or
         nil,

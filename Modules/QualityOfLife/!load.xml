@@ -1,5 +1,6 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Include file='QualityOfLife.lua' />
+    <Include file='AutoLoot.lua' />
     <Include file='Gathering.lua' />
     <Include file='QuestAutomation.lua' />
     <Include file='QuestLogCleaner.lua' />

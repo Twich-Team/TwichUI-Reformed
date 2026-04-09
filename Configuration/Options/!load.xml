@@ -1,5 +1,6 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Include file='ActionBarsOptions.lua' />
+    <Include file='AutoLootOptions.lua' />
     <Include file='ThemeOptions.lua' />
     <Include file='ChatEnhancementOptions.lua' />
     <Include file='ChoresOptions.lua' />
