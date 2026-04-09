@@ -50,7 +50,7 @@ end
 
 function Options:GetFishingSoundEnabled()
     local db = GetDB()
-    return db.fishingSound ~= false   -- default on
+    return db.fishingSound ~= false -- default on
 end
 
 function Options:SetFishingSoundEnabled(info, value)

@@ -29,62 +29,62 @@ AL:SetEnabledState(false)
 -- ---------------------------------------------------------------------------
 -- Localized globals
 -- ---------------------------------------------------------------------------
-local C_Timer        = _G.C_Timer
-local C_Container    = _G.C_Container
-local C_CVar         = _G.C_CVar
-local C_Item         = _G.C_Item
-local C_PartyInfo    = _G.C_PartyInfo
-local GetCVar        = _G.GetCVar
-local GetCVarBool    = _G.GetCVarBool
-local GetLootThreshold   = _G.GetLootThreshold
-local GetLootSlotInfo    = _G.GetLootSlotInfo
-local GetLootSlotLink    = _G.GetLootSlotLink
-local GetLootSlotType    = _G.GetLootSlotType
-local GetNumLootItems    = _G.GetNumLootItems
-local IsFishingLoot      = _G.IsFishingLoot
-local IsInGroup          = _G.IsInGroup
-local IsModifiedClick    = _G.IsModifiedClick
-local LootSlot           = _G.LootSlot
-local PlaySound          = _G.PlaySound
-local SOUNDKIT           = _G.SOUNDKIT
-local SlashCmdList       = _G.SlashCmdList
-local BACKPACK_CONTAINER = _G.BACKPACK_CONTAINER
-local NUM_BAG_SLOTS      = _G.NUM_BAG_SLOTS
+local C_Timer                      = _G.C_Timer
+local C_Container                  = _G.C_Container
+local C_CVar                       = _G.C_CVar
+local C_Item                       = _G.C_Item
+local C_PartyInfo                  = _G.C_PartyInfo
+local GetCVar                      = _G.GetCVar
+local GetCVarBool                  = _G.GetCVarBool
+local GetLootThreshold             = _G.GetLootThreshold
+local GetLootSlotInfo              = _G.GetLootSlotInfo
+local GetLootSlotLink              = _G.GetLootSlotLink
+local GetLootSlotType              = _G.GetLootSlotType
+local GetNumLootItems              = _G.GetNumLootItems
+local IsFishingLoot                = _G.IsFishingLoot
+local IsInGroup                    = _G.IsInGroup
+local IsModifiedClick              = _G.IsModifiedClick
+local LootSlot                     = _G.LootSlot
+local PlaySound                    = _G.PlaySound
+local SOUNDKIT                     = _G.SOUNDKIT
+local SlashCmdList                 = _G.SlashCmdList
+local BACKPACK_CONTAINER           = _G.BACKPACK_CONTAINER
+local NUM_BAG_SLOTS                = _G.NUM_BAG_SLOTS
 local NUM_TOTAL_EQUIPPED_BAG_SLOTS = _G.NUM_TOTAL_EQUIPPED_BAG_SLOTS
-local ERR_INV_FULL       = _G.ERR_INV_FULL
-local ERR_ITEM_MAX_COUNT = _G.ERR_ITEM_MAX_COUNT
-local ERR_LOOT_ROLL_PENDING = _G.ERR_LOOT_ROLL_PENDING
-local Enum               = _G.Enum
-local LootFrame          = _G.LootFrame
-local UIParent           = _G.UIParent
-local math               = math
+local ERR_INV_FULL                 = _G.ERR_INV_FULL
+local ERR_ITEM_MAX_COUNT           = _G.ERR_ITEM_MAX_COUNT
+local ERR_LOOT_ROLL_PENDING        = _G.ERR_LOOT_ROLL_PENDING
+local Enum                         = _G.Enum
+local LootFrame                    = _G.LootFrame
+local UIParent                     = _G.UIParent
+local math                         = math
 
-local LOOT_THRESHOLD_NONE    = 10     -- always auto-loot solo normal loot
-local LOOT_TICKER_INTERVAL   = 0.033  -- ~30 Hz, one slot per tick
-local SOUND_INV_FULL_DEFAULT = 44321
+local LOOT_THRESHOLD_NONE          = 10 -- always auto-loot solo normal loot
+local LOOT_TICKER_INTERVAL         = 0.033 -- ~30 Hz, one slot per tick
+local SOUND_INV_FULL_DEFAULT       = 44321
 
 -- ---------------------------------------------------------------------------
 -- Per-session state (wiped at LOOT_CLOSED via ResetState)
 -- ---------------------------------------------------------------------------
-local state = {
+local state                        = {
     isLooting            = false,
-    isHidden             = true,    -- true = loot frame is suppressed
+    isHidden             = true, -- true = loot frame is suppressed
     isAnyItemLocked      = false,
     lootFailure          = false,
     lastNumLoot          = nil,
-    suppressedByModifier = false,   -- player held the toggle key
+    suppressedByModifier = false, -- player held the toggle key
     inventorySoundPlayed = false,
     lootTicker           = nil,
 }
 
 -- CVar value before we took ownership (restored on Disable).
-local savedAutoLootCVar = nil
+local savedAutoLootCVar            = nil
 
 -- Hidden anchor; LootFrame is reparented here while we loot silently.
-local sinkFrame = nil
+local sinkFrame                    = nil
 
 -- Whether the hooksecurefunc for EditMode has been installed.
-local editModeHooked = false
+local editModeHooked               = false
 
 -- ---------------------------------------------------------------------------
 -- Settings accessor
@@ -107,9 +107,9 @@ local function GetLootThresholdForSituation()
     if C_PartyInfo and C_PartyInfo.GetLootMethod then
         local method = C_PartyInfo.GetLootMethod()
         if IsInGroup() and (
-            method == Enum.LootMethod.Group or
-            method == Enum.LootMethod.NeedBeforeGreed or
-            method == Enum.LootMethod.MasterLooter) then
+                method == Enum.LootMethod.Group or
+                method == Enum.LootMethod.NeedBeforeGreed or
+                method == Enum.LootMethod.MasterLooter) then
             return GetLootThreshold()
         end
     end
@@ -139,7 +139,7 @@ local function ItemFitsInBags(link, qty)
                 if isCraftingReagent then return true else return false end
             end
             if not bagFamily or bagFamily == 0 or
-               (itemFamily and _G.bit and _G.bit.band(itemFamily, bagFamily) > 0) then
+                (itemFamily and _G.bit and _G.bit.band(itemFamily, bagFamily) > 0) then
                 return true
             end
         end
@@ -159,9 +159,9 @@ local function LootOneSlot(slot)
     local slotType  = GetLootSlotType(slot)
     if slotType == SLOT_NONE then return true end
 
-    local link                              = GetLootSlotLink(slot)
-    local qty, _, quality, locked, isQuest  = select(3, GetLootSlotInfo(slot))
-    local threshold                         = GetLootThresholdForSituation()
+    local link                             = GetLootSlotLink(slot)
+    local qty, _, quality, locked, isQuest = select(3, GetLootSlotInfo(slot))
+    local threshold                        = GetLootThresholdForSituation()
 
     if locked or (quality and quality >= threshold) then
         state.isAnyItemLocked = true
@@ -172,7 +172,7 @@ local function LootOneSlot(slot)
         LootSlot(slot)
         return true
     end
-    return false  -- no bag space
+    return false -- no bag space
 end
 
 local function CancelLootTicker()
@@ -350,9 +350,9 @@ function AL:OnEnable()
     -- Set the CVar so LOOT_OPENED/LOOT_READY always fire with auto-loot intent.
     TakeAutoLootOwnership()
 
-    self:RegisterEvent("LOOT_READY",       "LOOT_READY")
-    self:RegisterEvent("LOOT_OPENED",      "LOOT_READY")
-    self:RegisterEvent("LOOT_CLOSED",      "LOOT_CLOSED")
+    self:RegisterEvent("LOOT_READY", "LOOT_READY")
+    self:RegisterEvent("LOOT_OPENED", "LOOT_READY")
+    self:RegisterEvent("LOOT_CLOSED", "LOOT_CLOSED")
     self:RegisterEvent("UI_ERROR_MESSAGE", "UI_ERROR_MESSAGE")
 
     C_Timer.After(0.5, EnsureSinkHook)

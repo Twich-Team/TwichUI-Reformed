@@ -2566,7 +2566,8 @@ local function BuildAutoLootTab()
             desc = {
                 type = "description",
                 order = 1,
-                name = "Automatically loots all eligible items as fast as the game allows. Falls back to showing the loot window when bag space is full, an item is need/greed locked, or a BoP confirmation is required.",
+                name =
+                "Automatically loots all eligible items as fast as the game allows. Falls back to showing the loot window when bag space is full, an item is need/greed locked, or a BoP confirmation is required.",
             },
             enable = {
                 type = "toggle",
@@ -2603,7 +2604,8 @@ local function BuildAutoLootTab()
                 inventorySoundID = {
                     type = "input",
                     name = "Inventory Full Sound ID",
-                    desc = "Numeric sound ID to play when bags are full (default: 44321). The ID is previewed immediately when you apply it.",
+                    desc =
+                    "Numeric sound ID to play when bags are full (default: 44321). The ID is previewed immediately when you apply it.",
                     order = 4,
                     width = 1.75,
                     disabled = function() return not ALOptions:GetEnabled() or not ALOptions:GetInventorySoundEnabled() end,
@@ -2628,7 +2630,7 @@ local function BuildConfiguration()
         autoLootTab = BuildAutoLootTab(),
         choresTab = BuildChoresTab(),
         gatheringTab = ConfigurationModuleRuntime.BuildGatheringTab and ConfigurationModuleRuntime.BuildGatheringTab() or
-        nil,
+            nil,
         easyFishTab = BuildEasyFishTab(),
         gossipHotkeysTab = BuildGossipHotkeysTab(),
         preyTweaksTab = BuildPreyTweaksTab(),
@@ -2636,7 +2638,7 @@ local function BuildConfiguration()
         questLogCleanerTab = BuildQuestLogCleanerTab(),
         satchelWatchTab = BuildSatchelWatchTab(),
         smartMountTab = ConfigurationModuleRuntime.BuildSmartMountTab and
-        ConfigurationModuleRuntime.BuildSmartMountTab(9),
+            ConfigurationModuleRuntime.BuildSmartMountTab(9),
         teleportsTab = BuildTeleportsTab(),
         worldQuestsTab = BuildWorldQuestsTab(),
     }
