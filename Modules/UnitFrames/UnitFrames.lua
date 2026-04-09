@@ -4001,12 +4001,33 @@ function UnitFrames:ApplyClassBarColors(frame, colorObject)
     else
         er = r; eg = g; eb = b; ea = math_max(0.45, (a or 1) * 0.65)
     end
+    -- Per-pip color table (optional).
+    local pipColors = (cfg.usePerPipColors == true and type(cfg.pipColors) == "table") and cfg.pipColors or nil
     for i = 1, #frame.ClassPower do
         local bar = frame.ClassPower[i]
         if bar and bar.SetStatusBarColor then
-            bar:SetStatusBarColor(r, g, b, a)
-            if bar.SetBackdropColor then bar:SetBackdropColor(br, bg_, bb, ba) end
-            if bar.SetBackdropBorderColor then bar:SetBackdropBorderColor(er, eg, eb, ea) end
+            local pr, pg, pb, pa = r, g, b, a
+            if pipColors and type(pipColors[i]) == "table" then
+                local pc = pipColors[i]
+                pr = pc[1] or r; pg = pc[2] or g; pb = pc[3] or b; pa = pc[4] or a
+                -- Derive background/border from the per-pip fill color when no explicit override.
+                local pbr = cfg.useCustomBackground == true and br or (pr * 0.25)
+                local pbg = cfg.useCustomBackground == true and bg_ or (pg * 0.25)
+                local pbb = cfg.useCustomBackground == true and bb or (pb * 0.25)
+                if bar.SetBackdropColor then bar:SetBackdropColor(pbr, pbg, pbb, ba) end
+                if bar.SetBackdropBorderColor then
+                    local pea = math_max(0.45, (pa or 1) * 0.65)
+                    bar:SetBackdropBorderColor(
+                        cfg.useCustomBorder == true and er or pr,
+                        cfg.useCustomBorder == true and eg or pg,
+                        cfg.useCustomBorder == true and eb or pb,
+                        cfg.useCustomBorder == true and ea or pea)
+                end
+            else
+                if bar.SetBackdropColor then bar:SetBackdropColor(br, bg_, bb, ba) end
+                if bar.SetBackdropBorderColor then bar:SetBackdropBorderColor(er, eg, eb, ea) end
+            end
+            bar:SetStatusBarColor(pr, pg, pb, pa)
         end
     end
 end
@@ -11806,6 +11827,45 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 end,
             })
         end
+
+        -- Per-pip color overrides (shown for up to 6 pips).
+        AddExtra({
+            label = "Custom Per-Pip Colors",
+            type = "toggle",
+            tab = "classbar",
+            tabLabel = "Class Bar",
+            get = function()
+                return GetConfig().usePerPipColors == true
+            end,
+            set = function(value)
+                GetConfig().usePerPipColors = value == true
+                DesignerRefreshAllFrames()
+            end,
+            disabled = IsPowerDetached,
+        })
+        for pipIdx = 1, 6 do
+            AddExtra({
+                label = "Pip " .. pipIdx .. " Color",
+                type = "color",
+                hasAlpha = true,
+                tab = "classbar",
+                tabLabel = "Class Bar",
+                get = function()
+                    local cfg = GetConfig()
+                    cfg.pipColors = type(cfg.pipColors) == "table" and cfg.pipColors or {}
+                    return cfg.pipColors[pipIdx] or { 0.96, 0.76, 0.24, 1 }
+                end,
+                set = function(value)
+                    local cfg = GetConfig()
+                    cfg.pipColors = type(cfg.pipColors) == "table" and cfg.pipColors or {}
+                    cfg.pipColors[pipIdx] = DeepCopyValue(value)
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return IsPowerDetached() or GetConfig().usePerPipColors ~= true
+                end,
+            })
+        end
     end
 
     if layoutKey == "castbar" then
@@ -14245,10 +14305,66 @@ function UnitFrames:CreateCastbarFrame()
     self:ApplyFontObject(frame.spellText, 11)
     self:ApplyFontObject(frame.timeText, 10)
 
+    -- Empower stage markers: up to 4 thin vertical lines shown during Dracthyr empowered casts.
+    frame.empowerMarkers = {}
+    for i = 1, 4 do
+        local marker = frame:CreateTexture(nil, "OVERLAY")
+        marker:SetWidth(2)
+        marker:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+        marker:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0)
+        marker:SetColorTexture(0.98, 0.76, 0.22, 0.85)
+        marker:Hide()
+        frame.empowerMarkers[i] = marker
+    end
+
     frame._testModeOriginalParent = frame:GetParent() or UIParent
     self.frames.castbar = frame
     self:RegisterLayoutFrame("castbar", frame)
     return frame
+end
+
+function UnitFrames:UpdateCastbarEmpowerMarkers()
+    local castbar = self.frames.castbar
+    if not castbar or not castbar.empowerMarkers then return end
+
+    local state = self._castbarState
+
+    -- Always hide all markers first; re-show only for empowered casts.
+    for i = 1, #castbar.empowerMarkers do
+        castbar.empowerMarkers[i]:Hide()
+    end
+
+    if not state or not state.isEmpowered then return end
+
+    -- UnitEmpoweredStagePercentages returns {fraction1, fraction2, ...} where each
+    -- value is the fraction of the total bar that stage occupies (all values sum to 1.0).
+    local stages = state.empowerStagePercentages
+    if not stages or #stages < 2 then
+        UFDebug(string.format("[Empower] UpdateCastbarEmpowerMarkers: no stage data (stages=%s)",
+            tostring(stages and #stages or "nil")))
+        return
+    end
+
+    local barWidth = castbar:GetWidth() or 260
+    local acc      = 0
+    local placed   = 0
+
+    -- Place N-1 markers at each stage boundary (skip the final one at 100%).
+    for i = 1, #stages - 1 do
+        acc = acc + (tonumber(stages[i]) or 0)
+        local marker = castbar.empowerMarkers[i]
+        if marker then
+            local xPos = math_floor(acc * barWidth + 0.5)
+            marker:ClearAllPoints()
+            marker:SetPoint("TOPLEFT", castbar, "TOPLEFT", xPos - 1, 0)
+            marker:SetPoint("BOTTOMLEFT", castbar, "BOTTOMLEFT", xPos - 1, 0)
+            marker:Show()
+            placed = placed + 1
+        end
+    end
+
+    UFDebug(string.format("[Empower] UpdateCastbarEmpowerMarkers: placed=%d stages=%d barWidth=%.0f",
+        placed, #stages, barWidth))
 end
 
 function UnitFrames:StartStandaloneCastbarUpdates()
@@ -14417,6 +14533,13 @@ function UnitFrames:UpdateCastbarElapsed()
     local now = GetTimePreciseSec()
 
     if now >= state.endTime then
+        -- Empowered casts hold at 100% at max duration until EMPOWER_STOP fires.
+        -- Do NOT auto-hide; the event handler will call StopCastbar.
+        if state.isEmpowered then
+            self:ApplyCastbarValue(castbar, duration, duration)
+            if castbar.timeText then castbar.timeText:SetText("0.0") end
+            return
+        end
         self:ApplyCastbarValue(castbar, duration, duration)
         if castbar.timeText then castbar.timeText:SetText("0.0") end
         castbar.__twichCastbarLastTenths = 0
@@ -14475,6 +14598,12 @@ function UnitFrames:StopCastbar()
     local castbar = self.frames.castbar
     if castbar then
         castbar._twichReverse = nil
+        -- Clear empower stage markers.
+        if castbar.empowerMarkers then
+            for i = 1, #castbar.empowerMarkers do
+                castbar.empowerMarkers[i]:Hide()
+            end
+        end
         self:StopStandaloneCastbarUpdates()
         castbar:Hide()
         self._castbarState = nil
@@ -14528,6 +14657,72 @@ function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
         or event == "UNIT_SPELLCAST_FAILED"
         or event == "UNIT_SPELLCAST_INTERRUPTED"
         or event == "UNIT_SPELLCAST_CHANNEL_STOP"
+    then
+        self:StopCastbar()
+        return
+    end
+
+    -- Dracthyr empowered cast events.
+    if event == "UNIT_SPELLCAST_EMPOWER_START" then
+        -- UnitCastingInfo may not be populated yet on the same frame the event fires.
+        -- Defer by one tick so the engine commits the cast data.
+        local capturedSpellID = spellID
+        C_Timer.After(0, function()
+            local name, _, texture, startMS, endMS, _, _, _, activeSpellID = UnitCastingInfo("player")
+            if not name then
+                -- Second-chance via UnitChannelInfo (some builds may report empower as channel).
+                name, _, texture, startMS, endMS, _, _, activeSpellID = UnitChannelInfo("player")
+            end
+            if not name then
+                UFDebug("[Empower] EMPOWER_START deferred: no cast info from UnitCastingInfo or UnitChannelInfo")
+                return
+            end
+            -- Extend endMS by the hold-at-max phase (bar holds at 100% before auto-releasing).
+            local holdMS = 0
+            if type(_G.GetUnitEmpowerHoldAtMaxTime) == "function" then
+                holdMS = _G.GetUnitEmpowerHoldAtMaxTime("player") or 0
+            end
+            local extendedEndMS = (tonumber(endMS) or 0) + holdMS
+            -- UnitEmpoweredStagePercentages returns {fraction1, fraction2, ...} (each fraction sums to 1.0).
+            local stagePercentages = nil
+            if type(_G.UnitEmpoweredStagePercentages) == "function" then
+                stagePercentages = _G.UnitEmpoweredStagePercentages("player")
+            end
+            UFDebug(string.format("[Empower] START deferred: name=%s startMS=%.0f endMS=%.0f holdMS=%.0f stages=%s",
+                tostring(name), tonumber(startMS) or 0, tonumber(endMS) or 0, holdMS,
+                stagePercentages and tostring(#stagePercentages) or "nil"))
+            local resolvedSpellID = capturedSpellID or activeSpellID
+            self:BeginCastbar(name, texture, startMS, extendedEndMS, false, resolvedSpellID)
+            local state = self._castbarState
+            if state then
+                state.isEmpowered             = true
+                state.empowerStagePercentages = stagePercentages
+            end
+            self:UpdateCastbarEmpowerMarkers()
+        end)
+        return
+    end
+
+    if event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+        -- Fires repeatedly while the player holds a charge. Retry stage marker placement
+        -- only if stage data wasn't available yet when EMPOWER_START fired.
+        local state = self._castbarState
+        if state and state.isEmpowered and not state.empowerStagePercentages then
+            if type(_G.UnitEmpoweredStagePercentages) == "function" then
+                local stages = _G.UnitEmpoweredStagePercentages("player")
+                if stages and #stages >= 2 then
+                    UFDebug(string.format("[Empower] UPDATE: stage data now available (%d stages), placing markers",
+                        #stages))
+                    state.empowerStagePercentages = stages
+                    self:UpdateCastbarEmpowerMarkers()
+                end
+            end
+        end
+        return
+    end
+
+    if event == "UNIT_SPELLCAST_EMPOWER_STOP"
+        or event == "UNIT_SPELLCAST_EMPOWER_INTERRUPTED"
     then
         self:StopCastbar()
         return
@@ -16288,6 +16483,13 @@ function UnitFrames:OnEnable()
     self:RegisterEvent("UNIT_SPELLCAST_INTERRUPTED", "HandlePlayerCastEvent")
     self:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START", "HandlePlayerCastEvent")
     self:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP", "HandlePlayerCastEvent")
+    -- Empower events (Dracthyr); wrapped in pcall so older clients without these events don't error.
+    pcall(function()
+        self:RegisterEvent("UNIT_SPELLCAST_EMPOWER_START", "HandlePlayerCastEvent")
+        self:RegisterEvent("UNIT_SPELLCAST_EMPOWER_UPDATE", "HandlePlayerCastEvent")
+        self:RegisterEvent("UNIT_SPELLCAST_EMPOWER_STOP", "HandlePlayerCastEvent")
+        self:RegisterEvent("UNIT_SPELLCAST_EMPOWER_INTERRUPTED", "HandlePlayerCastEvent")
+    end)
     self:RegisterEvent("PLAYER_TARGET_CHANGED", "OnTargetChanged")
     self:RegisterEvent("UPDATE_MOUSEOVER_UNIT", "OnMouseoverChanged")
     self:RegisterEvent("UNIT_TARGET", "OnUnitTargetChanged")

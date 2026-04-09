@@ -222,7 +222,31 @@ local function ExperienceSettings()
         useShortNumbers = db.useShortNumbers ~= false,
         showRestedOnText = db.showRestedOnText == true,
         showRestedInTooltip = db.showRestedInTooltip ~= false,
+        showLevelTimer = db.showLevelTimer == true,
+        announceLevelUp = db.announceLevelUp == true,
     }
+end
+
+--- Returns (creating if needed) the per-character XP timer persistent storage.
+local function GetXPTimerData()
+    if not (T.db and T.db.char) then return nil end
+    if not T.db.char.xp then T.db.char.xp = {} end
+    return T.db.char.xp
+end
+
+--- Formats a duration in seconds into a human-readable string (e.g. "2h 14m" or "4m 30s").
+local function FormatLevelTime(seconds)
+    local total = math.max(0, math.floor(tonumber(seconds) or 0))
+    local h = math.floor(total / 3600)
+    local m = math.floor((total % 3600) / 60)
+    local s = total % 60
+    if h > 0 then
+        return format("%dh %dm", h, m)
+    elseif m > 0 then
+        return format("%dm %ds", m, s)
+    else
+        return format("%ds", s)
+    end
 end
 
 local function GetPlayerMaxLevel()
@@ -276,6 +300,12 @@ local function GetPlayerExperienceState()
         restedXP = 0
     end
 
+    local xpTimerData  = GetXPTimerData()
+    local levelTimeSec = nil
+    if xpTimerData and type(xpTimerData.levelStartTime) == "number" then
+        levelTimeSec = math.max(0, GetServerTime() - xpTimerData.levelStartTime)
+    end
+
     return {
         level = currentLevel,
         maxLevel = maxLevel,
@@ -288,6 +318,7 @@ local function GetPlayerExperienceState()
         restedXP = restedXP,
         restedPercent = (restedXP / maxXP) * 100,
         xpLocked = type(IsXPUserDisabled) == "function" and IsXPUserDisabled() == true or false,
+        levelTimeSec = levelTimeSec,
     }
 end
 
@@ -323,6 +354,8 @@ local function BuildExperienceDatatextText(settings, state)
         valueText = format("%s (%s)",
             FormatExperienceValue(state.remainingXP, settings.useShortNumbers),
             FormatPercent(state.remainingPercent))
+    elseif displayMode == "PERCENT" then
+        valueText = FormatPercent(state.progressPercent)
     else
         valueText = FormatExperienceValue(state.remainingXP, settings.useShortNumbers)
     end
@@ -336,6 +369,10 @@ local function BuildExperienceDatatextText(settings, state)
     if settings.showRestedOnText and state.restedXP > 0 then
         parts[#parts + 1] = T.Tools.Text.Color(T.Tools.Colors.GRAY,
             "+" .. FormatExperienceValue(state.restedXP, settings.useShortNumbers) .. " R")
+    end
+
+    if settings.showLevelTimer and type(state.levelTimeSec) == "number" and state.levelTimeSec > 0 then
+        parts[#parts + 1] = T.Tools.Text.Color(T.Tools.Colors.GRAY, FormatLevelTime(state.levelTimeSec))
     end
 
     return table.concat(parts, " ")
@@ -1991,7 +2028,40 @@ end
 ---@class ExperienceDataText : AceModule
 local ExperienceDT = DataTextModule:NewModule("ExperienceDataText")
 
-function ExperienceDT:OnEvent(panel)
+function ExperienceDT:OnEvent(panel, event, ...)
+    if event == "PLAYER_LEVEL_UP" then
+        local newLevel = ...
+        local settings = ExperienceSettings()
+        local xpData   = GetXPTimerData()
+        if xpData then
+            -- Announce time-to-level in chat if enabled (suppressed at max level).
+            if settings.announceLevelUp and type(xpData.levelStartTime) == "number" then
+                local maxLevel = GetPlayerMaxLevel()
+                local lvl      = tonumber(newLevel) or (type(UnitLevel) == "function" and UnitLevel("player") or 0)
+                local isMax    = type(maxLevel) == "number" and maxLevel > 0 and lvl >= maxLevel
+                if not isMax then
+                    local elapsed = math.max(0, GetServerTime() - xpData.levelStartTime)
+                    local msg = format("|cff66DB85TwichUI|r Level %d reached in %s!", lvl, FormatLevelTime(elapsed))
+                    if _G.DEFAULT_CHAT_FRAME then
+                        _G.DEFAULT_CHAT_FRAME:AddMessage(msg)
+                    end
+                end
+            end
+            -- Reset the timer for the new level.
+            xpData.levelStartTime = GetServerTime()
+            xpData.trackedLevel   = tonumber(newLevel) or (type(UnitLevel) == "function" and UnitLevel("player") or 0)
+        end
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- Initialise or re-sync the start time if we logged in at a different level.
+        local xpData = GetXPTimerData()
+        if xpData then
+            local currentLevel = type(UnitLevel) == "function" and (UnitLevel("player") or 0) or 0
+            if not xpData.levelStartTime or xpData.trackedLevel ~= currentLevel then
+                xpData.levelStartTime = GetServerTime()
+                xpData.trackedLevel   = currentLevel
+            end
+        end
+    end
     SetExperiencePanelText(panel)
 end
 
@@ -2027,6 +2097,10 @@ function ExperienceDT:OnEnter()
                     FormatExperienceValue(state.restedXP, false),
                     FormatPercent(state.restedPercent)),
                 0.75, 0.78, 0.84, 1, 1, 1)
+        end
+
+        if type(state.levelTimeSec) == "number" and state.levelTimeSec > 0 then
+            tooltip:AddDoubleLine("Time at Level", FormatLevelTime(state.levelTimeSec), 1, 1, 1, 1, 1, 1)
         end
     end
 

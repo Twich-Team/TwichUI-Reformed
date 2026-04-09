@@ -1151,6 +1151,7 @@ local function BuildExperienceConfiguration()
                         REMAINING_PERCENT = "Remaining + Percent",
                         CURRENT_MAX = "Current / Max",
                         CURRENT_PERCENT = "Current + Percent",
+                        PERCENT = "Percent Only",
                     },
                     get = function()
                         local db = Options:GetDatatextDB("experience")
@@ -1219,6 +1220,33 @@ local function BuildExperienceConfiguration()
                     set = function(_, value)
                         local db = Options:GetDatatextDB("experience")
                         db.showRestedInTooltip = value == true
+                    end,
+                },
+                showLevelTimer = {
+                    type = "toggle",
+                    name = "Show Time at Level",
+                    desc =
+                    "Append to the datatext how long you have been at your current level. Automatically hidden at max level.",
+                    order = 6,
+                    get = function()
+                        return Options:GetDatatextDB("experience").showLevelTimer == true
+                    end,
+                    set = function(_, value)
+                        Options:GetDatatextDB("experience").showLevelTimer = value == true
+                        RefreshNamedDatatext("TwichUI: Experience")
+                    end,
+                },
+                announceLevelUp = {
+                    type = "toggle",
+                    name = "Announce Level-Up Time",
+                    desc =
+                    "Sends a message to chat when you level up, showing how long it took to reach that level. Suppressed at max level.",
+                    order = 7,
+                    get = function()
+                        return Options:GetDatatextDB("experience").announceLevelUp == true
+                    end,
+                    set = function(_, value)
+                        Options:GetDatatextDB("experience").announceLevelUp = value == true
                     end,
                 },
             }),

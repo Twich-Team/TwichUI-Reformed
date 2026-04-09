@@ -74,3 +74,7 @@
 - Please add an experience datatext, showing the players experience required to achieve the next level. make the display configurable in the datatext options
 
 - I can see the default blizzard artwork for i think action bars, like the extra action button or vehicle artwork or something flash on and off occasionally.
+
+- Can we add the option to use Dracthyr's Soar to our smart mount for the flying mount?
+
+- I've added Speedy Auto Loot to addonreferences, lets implement our own version within our quality of life. Make it enableable. ensure tto research their implementation because they have TSM destroy workarounds and other things.
