@@ -51,6 +51,9 @@ local EasyFishOptions = ConfigurationOptions.EasyFish
 ---@type AutoLootConfigurationOptions
 local ALOptions = ConfigurationOptions.AutoLoot
 
+---@type LootFeedConfigurationOptions
+local LFOptions = ConfigurationOptions.LootFeed
+
 local function BuildIconStyleLabel(style, text)
     local icon = Textures and Textures.GetPlayerClassTextureString and Textures:GetPlayerClassTextureString(14, style)
     if icon then
@@ -2556,6 +2559,362 @@ local function BuildChoresTab()
     }
 end
 
+local function BuildLootFeedTab()
+    local W = ConfigurationModule.Widgets
+    local function IsDisabled() return not LFOptions:GetEnabled() end
+    local function IsItemsDisabled() return not LFOptions:GetEnabled() or not LFOptions:GetShowItems() end
+
+    return {
+        type = "group",
+        name = "Loot Feed",
+        order = 2,
+        args = {
+            desc = {
+                type = "description",
+                order = 1,
+                name =
+                "A scrolling feed that displays looted items, gold, and currencies with quality-coloured icons and slide-in animations.",
+            },
+            enable = {
+                type = "toggle",
+                name = "Enable",
+                desc = "Enable the Loot Feed.",
+                order = 2,
+                handler = LFOptions,
+                get = "GetEnabled",
+                set = "SetEnabled",
+            },
+            frameGroup = W.IGroup(10, "Frame", {
+                locked = {
+                    type = "toggle",
+                    name = "Lock Position",
+                    desc = "Lock the loot feed in place. Disable to drag it.",
+                    order = 1,
+                    width = 1.5,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetLocked",
+                    set = "SetLocked",
+                },
+                growUp = {
+                    type = "toggle",
+                    name = "Grow Upward",
+                    desc = "New entries push existing rows upward. Disable to grow downward.",
+                    order = 2,
+                    width = 1.5,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetGrowUp",
+                    set = "SetGrowUp",
+                },
+                maxRows = {
+                    type = "range",
+                    name = "Max Rows",
+                    desc = "Maximum number of entries visible at once.",
+                    order = 3,
+                    min = 1,
+                    max = 15,
+                    step = 1,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetMaxRows",
+                    set = "SetMaxRows",
+                },
+                feedWidth = {
+                    type = "range",
+                    name = "Feed Width",
+                    desc = "Width of the loot feed in pixels.",
+                    order = 4,
+                    min = 150,
+                    max = 500,
+                    step = 5,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetFeedWidth",
+                    set = "SetFeedWidth",
+                },
+                rowHeight = {
+                    type = "range",
+                    name = "Row Height",
+                    desc = "Height of each feed row in pixels.",
+                    order = 5,
+                    min = 18,
+                    max = 48,
+                    step = 1,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetRowHeight",
+                    set = "SetRowHeight",
+                },
+                iconSize = {
+                    type = "range",
+                    name = "Icon Size",
+                    desc = "Size of the item icon.",
+                    order = 6,
+                    min = 14,
+                    max = 40,
+                    step = 1,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetIconSize",
+                    set = "SetIconSize",
+                },
+                displayTime = {
+                    type = "range",
+                    name = "Display Time",
+                    desc = "Seconds each entry lingers before fading out.",
+                    order = 7,
+                    min = 1,
+                    max = 30,
+                    step = 0.5,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetDisplayTime",
+                    set = "SetDisplayTime",
+                },
+                bgAlpha = {
+                    type = "range",
+                    name = "Background Opacity",
+                    desc = "Opacity of the row background.",
+                    order = 8,
+                    min = 0,
+                    max = 1,
+                    step = 0.05,
+                    isPercent = true,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetBgAlpha",
+                    set = "SetBgAlpha",
+                },
+                bgColor = {
+                    type = "color",
+                    name = "Background Color",
+                    desc = "RGB color tint of the row background.",
+                    order = 9,
+                    hasAlpha = false,
+                    disabled = IsDisabled,
+                    get = function()
+                        return LFOptions:GetBgColor()
+                    end,
+                    set = function(_, r, g, b)
+                        LFOptions:SetBgColor(nil, r, g, b)
+                    end,
+                },
+                scale = {
+                    type = "range",
+                    name = "Scale",
+                    desc = "Overall scale of the loot feed frame.",
+                    order = 10,
+                    min = 0.5,
+                    max = 2.0,
+                    step = 0.05,
+                    isPercent = false,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetScale",
+                    set = "SetScale",
+                },
+                resetPos = {
+                    type = "execute",
+                    name = "Reset Position",
+                    desc = "Move the loot feed back to its default position.",
+                    order = 11,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    func = "ResetPosition",
+                },
+            }),
+            fontGroup = W.IGroup(20, "Font", {
+                font = {
+                    type = "select",
+                    dialogControl = "LSM30_Font",
+                    name = "Font",
+                    desc = "Font used for loot feed row text.",
+                    order = 0,
+                    width = 2,
+                    values = function()
+                        local fonts = LibStub("LibSharedMedia-3.0"):HashTable("font") or {}
+                        local values = { __default = "Default" }
+                        for key, value in pairs(fonts) do
+                            values[key] = value
+                        end
+                        return values
+                    end,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetFont",
+                    set = "SetFont",
+                },
+                fontSize = {
+                    type = "range",
+                    name = "Font Size",
+                    desc = "Font size for loot feed text.",
+                    order = 1,
+                    min = 8,
+                    max = 20,
+                    step = 1,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetFontSize",
+                    set = "SetFontSize",
+                },
+                fontOutline = {
+                    type = "select",
+                    name = "Font Outline",
+                    desc = "Outline style for loot feed text.",
+                    order = 2,
+                    values = {
+                        NONE = "None",
+                        OUTLINE = "Outline",
+                        THICKOUTLINE = "Thick Outline",
+                    },
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetFontOutline",
+                    set = "SetFontOutline",
+                },
+            }),
+            filterGroup = W.IGroup(30, "Content Filters", {
+                showItems = {
+                    type = "toggle",
+                    name = "Show Items",
+                    desc = "Show looted items in the feed.",
+                    order = 1,
+                    width = 1.5,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetShowItems",
+                    set = "SetShowItems",
+                },
+                showGold = {
+                    type = "toggle",
+                    name = "Show Gold",
+                    desc = "Show looted gold in the feed.",
+                    order = 2,
+                    width = 1.5,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetShowGold",
+                    set = "SetShowGold",
+                },
+                showCurrency = {
+                    type = "toggle",
+                    name = "Show Currency",
+                    desc = "Show looted currencies in the feed.",
+                    order = 3,
+                    width = 1.5,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetShowCurrency",
+                    set = "SetShowCurrency",
+                },
+                stackDuplicates = {
+                    type = "toggle",
+                    name = "Stack Duplicates",
+                    desc = "Merge repeated loots of the same item into a single row with an updated quantity.",
+                    order = 4,
+                    width = 1.5,
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetStackDuplicates",
+                    set = "SetStackDuplicates",
+                },
+            }),
+            qualityGroup = W.IGroup(40, "Item Quality", {
+                desc = W.Description(1, "Choose which item quality tiers appear in the feed."),
+                showPoor = {
+                    type = "toggle",
+                    name = "|cFF9D9D9DPoor|r",
+                    desc = "Show poor (gray) quality items.",
+                    order = 2,
+                    width = 1.25,
+                    disabled = IsItemsDisabled,
+                    handler = LFOptions,
+                    get = "GetShowPoor",
+                    set = "SetShowPoor",
+                },
+                showCommon = {
+                    type = "toggle",
+                    name = "Common",
+                    desc = "Show common (white) quality items.",
+                    order = 3,
+                    width = 1.25,
+                    disabled = IsItemsDisabled,
+                    handler = LFOptions,
+                    get = "GetShowCommon",
+                    set = "SetShowCommon",
+                },
+                showUncommon = {
+                    type = "toggle",
+                    name = "|cFF1EFF00Uncommon|r",
+                    desc = "Show uncommon (green) quality items.",
+                    order = 4,
+                    width = 1.25,
+                    disabled = IsItemsDisabled,
+                    handler = LFOptions,
+                    get = "GetShowUncommon",
+                    set = "SetShowUncommon",
+                },
+                showRare = {
+                    type = "toggle",
+                    name = "|cFF0070DDRare|r",
+                    desc = "Show rare (blue) quality items.",
+                    order = 5,
+                    width = 1.25,
+                    disabled = IsItemsDisabled,
+                    handler = LFOptions,
+                    get = "GetShowRare",
+                    set = "SetShowRare",
+                },
+                showEpic = {
+                    type = "toggle",
+                    name = "|cFFA335EEEpic|r",
+                    desc = "Show epic (purple) quality items.",
+                    order = 6,
+                    width = 1.25,
+                    disabled = IsItemsDisabled,
+                    handler = LFOptions,
+                    get = "GetShowEpic",
+                    set = "SetShowEpic",
+                },
+                showLegendary = {
+                    type = "toggle",
+                    name = "|cFFFF8000Legendary|r",
+                    desc = "Show legendary (orange) quality items.",
+                    order = 7,
+                    width = 1.25,
+                    disabled = IsItemsDisabled,
+                    handler = LFOptions,
+                    get = "GetShowLegendary",
+                    set = "SetShowLegendary",
+                },
+            }),
+            previewGroup = W.IGroup(50, "Preview", {
+                preview = {
+                    type = "execute",
+                    name = "Show Preview",
+                    desc = "Push sample rows into the loot feed to preview the current settings.",
+                    order = 1,
+                    disabled = IsDisabled,
+                    func = function()
+                        T:GetModule("QualityOfLife"):GetModule("LootFeed"):ShowPreview()
+                    end,
+                },
+                hidePreview = {
+                    type = "execute",
+                    name = "Hide Preview",
+                    desc = "Clear all loot feed rows.",
+                    order = 2,
+                    disabled = IsDisabled,
+                    func = function()
+                        T:GetModule("QualityOfLife"):GetModule("LootFeed"):HidePreview()
+                    end,
+                },
+            }),
+        },
+    }
+end
+
 local function BuildAutoLootTab()
     local W = ConfigurationModule.Widgets
     return {
@@ -2628,6 +2987,7 @@ local function BuildConfiguration()
             name = "Features to improve your overall user experience.",
         },
         autoLootTab = BuildAutoLootTab(),
+        lootFeedTab = BuildLootFeedTab(),
         choresTab = BuildChoresTab(),
         gatheringTab = ConfigurationModuleRuntime.BuildGatheringTab and ConfigurationModuleRuntime.BuildGatheringTab() or
             nil,

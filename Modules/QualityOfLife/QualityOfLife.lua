@@ -19,6 +19,10 @@ function QOL:OnEnable()
         self:GetModule("AutoLoot"):Enable()
     end
 
+    if Options.LootFeed and Options.LootFeed:GetEnabled() then
+        self:GetModule("LootFeed"):Enable()
+    end
+
     if Options.QuestAutomation and Options.QuestAutomation:IsModuleEnabled() then
         self:GetModule("QuestAutomation"):Enable()
     end

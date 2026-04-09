@@ -78,3 +78,5 @@
 - Can we add the option to use Dracthyr's Soar to our smart mount for the flying mount?
 
 - I've added Speedy Auto Loot to addonreferences, lets implement our own version within our quality of life. Make it enableable. ensure tto research their implementation because they have TSM destroy workarounds and other things.
+
+- Our experience time tracker seems to count time offline, it should only count time played for each level
