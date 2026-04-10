@@ -5168,6 +5168,8 @@ function UnitFrames:ApplyClassBarSettings(frame, unitKey)
     }, "|")
 
     if frame.ClassPower._twichLayoutSignature == layoutSignature then
+        container:SetShown(enabled)
+        self:ApplyClassBarColors(frame)
         return
     end
     frame.ClassPower._twichLayoutSignature = layoutSignature

@@ -35,6 +35,7 @@ local GameTooltip = _G.GameTooltip
 local GetMoneyString = _G.GetMoneyString
 local GetNumQuestLogRewards = _G.GetNumQuestLogRewards
 local GetNumQuestLogRewardFactions = _G.GetNumQuestLogRewardFactions
+local GetQuestLogItemLink = _G.GetQuestLogItemLink
 local GetQuestLogRewardFactionInfo = _G.GetQuestLogRewardFactionInfo
 local GetQuestLogRewardInfo = _G.GetQuestLogRewardInfo
 local GetQuestLogRewardMoney = _G.GetQuestLogRewardMoney
@@ -447,6 +448,15 @@ local function AddTooltipRewardLine(tooltipLines, text, icon)
     }
 end
 
+local function AddRewardDetail(details, kind, payload)
+    if type(details) ~= "table" or type(payload) ~= "table" then
+        return
+    end
+
+    payload.kind = kind
+    details[#details + 1] = payload
+end
+
 local function FormatTooltipRewardText(line)
     if type(line) == "table" then
         local text = tostring(line.text or "")
@@ -487,13 +497,22 @@ local function BuildQuestRewards(questID)
     local summaryParts = {}
     local flags = {}
     local tooltipLines = {}
+    local details = {}
     local displayIcon
+    local itemDetailCount = 0
+    local currencyDetailCount = 0
 
     local money = type(GetQuestLogRewardMoney) == "function" and GetQuestLogRewardMoney(questID) or 0
     if type(money) == "number" and money > 0 then
         flags.gold = true
-        AddSummaryPiece(summaryParts, BuildMoneySummary(money))
-        AddTooltipRewardLine(tooltipLines, BuildMoneySummary(money), "Interface\\MoneyFrame\\UI-GoldIcon")
+        local moneySummary = BuildMoneySummary(money)
+        AddSummaryPiece(summaryParts, moneySummary)
+        AddTooltipRewardLine(tooltipLines, moneySummary, "Interface\\MoneyFrame\\UI-GoldIcon")
+        AddRewardDetail(details, "money", {
+            amount = money,
+            text = moneySummary,
+            icon = "Interface\\MoneyFrame\\UI-GoldIcon",
+        })
         displayIcon = displayIcon or "Interface\\MoneyFrame\\UI-GoldIcon"
     end
 
@@ -509,8 +528,16 @@ local function BuildQuestRewards(questID)
             end
 
             currencyName = currencyName or format("Currency %d", tonumber(currencyInfo.currencyID) or index)
-            AddSummaryPiece(summaryParts, format("%s %s", tostring(quantity), currencyName))
-            AddTooltipRewardLine(tooltipLines, format("%s %s", tostring(quantity), currencyName), currencyInfo.texture)
+            local currencyText = format("%s %s", tostring(quantity), currencyName)
+            AddSummaryPiece(summaryParts, currencyText)
+            AddTooltipRewardLine(tooltipLines, currencyText, currencyInfo.texture)
+            AddRewardDetail(details, "currency", {
+                currencyID = tonumber(currencyInfo.currencyID),
+                quantity = quantity,
+                text = currencyText,
+                icon = currencyInfo.texture,
+            })
+            currencyDetailCount = currencyDetailCount + 1
             displayIcon = displayIcon or currencyInfo.texture
         end
     end
@@ -527,6 +554,11 @@ local function BuildQuestRewards(questID)
             or factionName
         AddSummaryPiece(summaryParts, text)
         AddTooltipRewardLine(tooltipLines, text)
+        AddRewardDetail(details, "reputation", {
+            factionName = factionName,
+            amount = reputationAmount,
+            text = text,
+        })
         factionIndex = factionIndex + 1
     end
 
@@ -535,6 +567,9 @@ local function BuildQuestRewards(questID)
         local itemName, itemTexture, itemCount, _, _, itemID, itemLevel = SafeCall(GetQuestLogRewardInfo, rewardIndex,
             questID)
         if type(itemName) == "string" and itemName ~= "" then
+            local itemLink = type(GetQuestLogItemLink) == "function"
+                and SafeCall(GetQuestLogItemLink, "reward", rewardIndex, questID)
+                or nil
             displayIcon = displayIcon or itemTexture
             local itemEquipLoc = nil
             if type(C_Item) == "table" and type(C_Item.GetItemInfoInstant) == "function" then
@@ -556,6 +591,38 @@ local function BuildQuestRewards(questID)
 
             AddSummaryPiece(summaryParts, label)
             AddTooltipRewardLine(tooltipLines, label, itemTexture)
+            AddRewardDetail(details, "item", {
+                itemID = tonumber(itemID),
+                itemLink = type(itemLink) == "string" and itemLink or nil,
+                itemName = itemName,
+                count = tonumber(itemCount) or 0,
+                itemLevel = tonumber(itemLevel),
+                text = label,
+                icon = itemTexture,
+            })
+            itemDetailCount = itemDetailCount + 1
+        end
+    end
+
+    local primaryDetail = nil
+    if itemDetailCount == 1 then
+        for _, detail in ipairs(details) do
+            if detail and detail.kind == "item" then
+                primaryDetail = detail
+                break
+            end
+        end
+    elseif currencyDetailCount == 1 then
+        for _, detail in ipairs(details) do
+            if detail and detail.kind == "currency" then
+                primaryDetail = detail
+                break
+            end
+        end
+    elseif #details == 1 then
+        local detail = details[1]
+        if detail and (detail.kind == "item" or detail.kind == "currency") then
+            primaryDetail = detail
         end
     end
 
@@ -563,6 +630,8 @@ local function BuildQuestRewards(questID)
         flags = flags,
         summary = JoinSummary(summaryParts),
         tooltipLines = tooltipLines,
+        details = details,
+        primaryDetail = primaryDetail,
         icon = displayIcon,
     }
 end
@@ -667,6 +736,8 @@ local function BuildQuestEntry(questID, sourceMapID)
         flags = flags,
         rewardSummary = rewards.summary,
         rewardTooltipLines = rewards.tooltipLines,
+        rewardDetails = rewards.details,
+        rewardPrimaryDetail = rewards.primaryDetail,
         rewardIcon = rewards.icon,
         timeLeftSeconds = timeLeftSeconds,
         timeLeftText = FormatRemainingTime(timeLeftSeconds),
@@ -1056,6 +1127,7 @@ local function EnsureRow(frame, index)
     row.Rewards:SetWordWrap(true)
     row.Rewards:SetMaxLines(2)
     row.Rewards:SetHeight(24)
+    row.RewardRow:EnableMouse(true)
 
     row.Time = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     row.Time:SetPoint("TOPRIGHT", row.ActionAnchor, "TOPRIGHT", 0, 0)
@@ -1102,6 +1174,50 @@ function WorldQuests:BuildRowTooltip(row)
     GameTooltip:AddLine("Left-click to place a waypoint.", 0.95, 0.82, 0.3)
     GameTooltip:AddLine("Right-click to toggle tracking.", 0.95, 0.82, 0.3)
     GameTooltip:Show()
+end
+
+function WorldQuests:BuildRewardTooltip(owner, entry)
+    if not owner or not entry then
+        return false
+    end
+
+    local detail = entry.rewardPrimaryDetail
+    if type(detail) == "table" then
+        if detail.kind == "item" and detail.itemID and GameTooltip.SetOwner then
+            GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+            GameTooltip:ClearLines()
+            if type(detail.itemLink) == "string" and detail.itemLink ~= "" and GameTooltip.SetHyperlink then
+                local ok = pcall(GameTooltip.SetHyperlink, GameTooltip, detail.itemLink)
+                if ok then
+                    GameTooltip:Show()
+                    return true
+                end
+            end
+            if GameTooltip.SetItemByID then
+                GameTooltip:SetItemByID(detail.itemID)
+                GameTooltip:Show()
+                return true
+            end
+            if GameTooltip.SetHyperlink then
+                local ok = pcall(GameTooltip.SetHyperlink, GameTooltip, ("item:%d"):format(detail.itemID))
+                if ok then
+                    GameTooltip:Show()
+                    return true
+                end
+            end
+        elseif detail.kind == "currency" and detail.currencyID and GameTooltip.SetOwner then
+            GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+            GameTooltip:ClearLines()
+            if GameTooltip.SetCurrencyByID then
+                GameTooltip:SetCurrencyByID(detail.currencyID)
+                GameTooltip:Show()
+                return true
+            end
+        end
+    end
+
+    self:BuildRowTooltip(owner:GetParent() or owner)
+    return true
 end
 
 function WorldQuests:SetHoveredQuestID(questID)
@@ -1285,6 +1401,21 @@ function WorldQuests:RenderBrowser(frame)
             row:SetScript("OnLeave", function()
                 self:SetHoveredQuestID(nil)
                 GameTooltip:Hide()
+            end)
+            row.RewardRow:SetScript("OnEnter", function(rewardRow)
+                local parentRow = rewardRow:GetParent()
+                self:SetHoveredQuestID(parentRow and parentRow.entry and parentRow.entry.questID or nil)
+                self:BuildRewardTooltip(rewardRow, parentRow and parentRow.entry or nil)
+            end)
+            row.RewardRow:SetScript("OnLeave", function()
+                self:SetHoveredQuestID(nil)
+                GameTooltip:Hide()
+            end)
+            row.RewardRow:SetScript("OnMouseUp", function(rewardRow, button)
+                local parentRow = rewardRow:GetParent()
+                if parentRow and parentRow:GetScript("OnMouseUp") then
+                    parentRow:GetScript("OnMouseUp")(parentRow, button)
+                end
             end)
 
             row:ClearAllPoints()

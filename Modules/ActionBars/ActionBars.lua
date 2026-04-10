@@ -46,6 +46,16 @@ local ActionButton_HideGrid = _G.ActionButton_HideGrid
 local ActionButton_ShowOverlayGlow = _G.ActionButton_ShowOverlayGlow
 local ActionButton_HideOverlayGlow = _G.ActionButton_HideOverlayGlow
 local hooksecurefunc = _G.hooksecurefunc
+local HasVehicleActionBar = _G.HasVehicleActionBar or (_G.C_ActionBar and _G.C_ActionBar.HasVehicleActionBar)
+local HasOverrideActionBar = _G.HasOverrideActionBar or (_G.C_ActionBar and _G.C_ActionBar.HasOverrideActionBar)
+local HasTempShapeshiftActionBar = _G.HasTempShapeshiftActionBar or
+(_G.C_ActionBar and _G.C_ActionBar.HasTempShapeshiftActionBar)
+local HasBonusActionBar = _G.HasBonusActionBar or (_G.C_ActionBar and _G.C_ActionBar.HasBonusActionBar)
+local GetVehicleBarIndex = _G.GetVehicleBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetVehicleBarIndex)
+local GetOverrideBarIndex = _G.GetOverrideBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetOverrideBarIndex)
+local GetTempShapeshiftBarIndex = _G.GetTempShapeshiftBarIndex or
+(_G.C_ActionBar and _G.C_ActionBar.GetTempShapeshiftBarIndex)
+local GetBonusBarIndex = _G.GetBonusBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetBonusBarIndex)
 
 local floor = math.floor
 local max = math.max
@@ -73,6 +83,24 @@ local DEBUG_SOURCE_KEY = "actionbars"
 local PIXEL_GLOW_ALPHA = 0.9
 local FAILED_ACTION_FEEDBACK_WINDOW = 0.6
 
+local PAGING_SUPPORTED_BARS = {
+    bar1 = true,
+    bar2 = true,
+    bar3 = true,
+    bar4 = true,
+    bar5 = true,
+    bar6 = true,
+    bar7 = true,
+    bar8 = true,
+    bar9 = true,
+    bar10 = true,
+    bar11 = true,
+    bar12 = true,
+    bar13 = true,
+    bar14 = true,
+    bar15 = true,
+}
+
 local SIMPLE_VISIBILITY_RULES = {
     { key = "combat",    label = "Combat",               condition = "combat" },
     { key = "petbattle", label = "Pet Battle",           condition = "petbattle" },
@@ -82,6 +110,13 @@ local SIMPLE_VISIBILITY_RULES = {
     { key = "pet",       label = "Pet",                  condition = "pet" },
     { key = "stance",    label = "Stance",               condition = "shapeshift" },
 }
+
+local function TrimString(value)
+    value = tostring(value or "")
+    value = value:gsub("^%s+", "")
+    value = value:gsub("%s+$", "")
+    return value
+end
 
 local function SplitBindingTarget(target)
     if type(target) ~= "string" then
@@ -2340,6 +2375,33 @@ function ActionBars:CreateInfrastructure()
         holder:SetFrameLevel(30)
         holder:EnableMouse(true)
         holder.barKey = barKey
+        holder:SetAttribute("_onstate-page", [[
+            local page = tonumber(newstate)
+            if newstate == 'possess' or newstate == '11' then
+                if HasVehicleActionBar() then
+                    page = GetVehicleBarIndex()
+                elseif HasOverrideActionBar() then
+                    page = GetOverrideBarIndex()
+                elseif HasTempShapeshiftActionBar() then
+                    page = GetTempShapeshiftBarIndex()
+                elseif HasBonusActionBar() then
+                    page = GetBonusBarIndex()
+                else
+                    page = 11
+                end
+            end
+
+            if not page or page < 1 then
+                page = 1
+            end
+
+            for index = 1, 12 do
+                local button = self:GetFrameRef('button' .. index)
+                if button then
+                    button:SetAttribute('actionpage', page)
+                end
+            end
+        ]])
 
         holder:HookScript("OnEnter", function(self)
             ActionBars:SetBarHoverState(self.barKey, true)
@@ -3826,9 +3888,8 @@ function ActionBars:CreateCustomActionButton(definition, index)
 
     button:SetParent(self.blizzardHiddenRoot)
     button:SetAttribute("type", "action")
-    button:SetAttribute("action", actionID)
-    button.action = actionID
-    button:SetID(actionID)
+    button:SetID(index)
+    button:SetAttribute("actionpage", definition.actionPage)
     button:Hide()
 
     self:CaptureButtonState(button)
@@ -3851,11 +3912,14 @@ function ActionBars:CaptureButtonState(button)
         points = CapturePoints(button),
         width = button:GetWidth(),
         height = button:GetHeight(),
+        id = button.GetID and button:GetID() or nil,
         scale = button:GetScale(),
         alpha = button:GetAlpha(),
         shown = button:IsShown(),
         frameStrata = button:GetFrameStrata(),
         frameLevel = button:GetFrameLevel(),
+        actionAttribute = button.GetAttribute and button:GetAttribute("action") or nil,
+        actionPageAttribute = button.GetAttribute and button:GetAttribute("actionpage") or nil,
         iconTexCoords = { left, right, top, bottom },
         hotKey = CaptureFont(self:GetButtonHotKey(button)),
         count = CaptureFont(self:GetButtonCount(button)),
@@ -3897,6 +3961,7 @@ function ActionBars:RestoreOriginalLayout()
     for _, holder in pairs(self.holders) do
         if holder then
             pcall(UnregisterStateDriver, holder, "visibility")
+            pcall(UnregisterStateDriver, holder, "page")
             holder:SetAlpha(1)
             holder:Hide()
         end
@@ -3913,6 +3978,9 @@ function ActionBars:RestoreOriginalLayout()
 
             if state.width and state.height then
                 button:SetSize(state.width, state.height)
+            end
+            if state.id ~= nil and button.SetID then
+                button:SetID(state.id)
             end
             if state.scale then
                 button:SetScale(state.scale)
@@ -3935,6 +4003,10 @@ function ActionBars:RestoreOriginalLayout()
             RestoreFont(self:GetButtonHotKey(button), state.hotKey)
             RestoreFont(self:GetButtonCount(button), state.count)
             RestoreFont(self:GetButtonMacroName(button), state.name)
+            if button.SetAttribute then
+                button:SetAttribute("action", state.actionAttribute)
+                button:SetAttribute("actionpage", state.actionPageAttribute)
+            end
             RestoreButtonArtTextures(button, state.artTextures)
             RestoreSpellCastAnimState(button, state.spellCastAnim)
             ActionBars:HideButtonHoverEffect(button)
@@ -4005,6 +4077,90 @@ function ActionBars:RestoreOriginalLayout()
     end
 
     RefreshBlizzardLayout()
+end
+
+function ActionBars:SupportsPaging(definition)
+    return definition and PAGING_SUPPORTED_BARS[definition.key] == true and definition.maxButtons == 12
+end
+
+function ActionBars:GetBaseActionPage(definition, buttons)
+    if not definition then
+        return nil
+    end
+
+    if definition.actionPage then
+        return tonumber(definition.actionPage)
+    end
+
+    if definition.key == "bar1" then
+        return 1
+    end
+
+    local firstButton = buttons and buttons[1] or nil
+    local actionID = tonumber(firstButton and
+    (firstButton.action or (firstButton.GetAttribute and firstButton:GetAttribute("action")) or nil))
+    if actionID and actionID > 0 then
+        return floor((actionID - 1) / 12) + 1
+    end
+
+    return 1
+end
+
+function ActionBars:GetPagingDriver(definition, barSettings, buttons)
+    if not self:SupportsPaging(definition) then
+        return nil, nil
+    end
+
+    local basePage = self:GetBaseActionPage(definition, buttons)
+    if not basePage then
+        return nil, nil
+    end
+
+    local driver = TrimString(barSettings and barSettings.paging or "")
+    if driver == "" then
+        driver = tostring(basePage)
+    elseif driver:sub(-1) == ";" then
+        driver = driver .. " " .. tostring(basePage)
+    else
+        driver = driver .. "; " .. tostring(basePage)
+    end
+
+    return driver, basePage
+end
+
+function ActionBars:ApplyPaging(holder, definition, barSettings, buttons)
+    pcall(UnregisterStateDriver, holder, "page")
+
+    if not self:SupportsPaging(definition) then
+        return
+    end
+
+    local driver, basePage = self:GetPagingDriver(definition, barSettings, buttons)
+    if not driver or not basePage then
+        return
+    end
+
+    for index = 1, 12 do
+        local button = buttons[index]
+        if button then
+            if button.SetID and button:GetID() ~= index then
+                button:SetID(index)
+            end
+            if button.SetAttribute then
+                button:SetAttribute("actionpage", basePage)
+            end
+            if holder.SetFrameRef then
+                holder:SetFrameRef("button" .. index, button)
+            end
+        end
+    end
+
+    holder:SetAttribute("state-page", basePage)
+
+    local ok = pcall(RegisterStateDriver, holder, "page", driver)
+    if not ok then
+        pcall(RegisterStateDriver, holder, "page", tostring(basePage))
+    end
 end
 
 function ActionBars:GetButtonsForDefinition(definition)
@@ -4998,6 +5154,7 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
         tostring(barSettings.showBorder ~= false),
         tostring(barSettings.showAccent ~= false),
         tostring(barSettings.visibility or DEFAULT_VISIBILITY),
+        tostring(barSettings.paging or ""),
         tostring(self._themeStyleToken or 0),
     }, "|")
 
@@ -5017,6 +5174,7 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
 
     if not enabled then
         pcall(UnregisterStateDriver, holder, "visibility")
+        pcall(UnregisterStateDriver, holder, "page")
         holder:SetAlpha(0)
         holder:SetShown(false)
 
@@ -5074,6 +5232,8 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
             button:Hide()
         end
     end
+
+    self:ApplyPaging(holder, definition, barSettings, buttons)
 
     if definition.key == "vehicleExit" then
         pcall(UnregisterStateDriver, holder, "visibility")

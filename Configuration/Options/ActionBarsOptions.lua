@@ -11,6 +11,9 @@ local Options = ConfigurationModule.Options.ActionBars or {}
 ConfigurationModule.Options.ActionBars = Options
 
 local LSM = (T.Libs and T.Libs.LSM) or (_G.LibStub and _G.LibStub("LibSharedMedia-3.0", true))
+local UnitClass = _G.UnitClass
+
+local PLAYER_CLASS = select(2, UnitClass("player"))
 
 local ROOT_DEFAULTS = {
     enabled = true,
@@ -483,6 +486,24 @@ local BAR_MAX_BUTTONS = {
     stance = 10,
 }
 
+local PAGING_SUPPORTED_BARS = {
+    bar1 = true,
+    bar2 = true,
+    bar3 = true,
+    bar4 = true,
+    bar5 = true,
+    bar6 = true,
+    bar7 = true,
+    bar8 = true,
+    bar9 = true,
+    bar10 = true,
+    bar11 = true,
+    bar12 = true,
+    bar13 = true,
+    bar14 = true,
+    bar15 = true,
+}
+
 local function ClampNumber(value, minValue, maxValue, fallback)
     value = tonumber(value)
     if not value then
@@ -497,6 +518,62 @@ local function ClampNumber(value, minValue, maxValue, fallback)
     end
 
     return value
+end
+
+local function TrimString(value)
+    value = tostring(value or "")
+    value = value:gsub("^%s+", "")
+    value = value:gsub("%s+$", "")
+    return value
+end
+
+local function SupportsPaging(barKey)
+    return PAGING_SUPPORTED_BARS[barKey] == true
+end
+
+local function GetDefaultPagingDriver(barKey)
+    if barKey ~= "bar1" then
+        return ""
+    end
+
+    local segments = {
+        "[vehicleui] possess;",
+        "[overridebar] possess;",
+        "[possessbar] possess;",
+        "[shapeshift] possess;",
+        "[bonusbar:5] 11;",
+    }
+
+    if PLAYER_CLASS == "ROGUE" then
+        segments[#segments + 1] = "[bonusbar:1] 7;"
+    elseif PLAYER_CLASS == "WARLOCK" then
+        segments[#segments + 1] = "[form:1] 7;"
+    elseif PLAYER_CLASS == "DRUID" then
+        segments[#segments + 1] = "[bonusbar:1,nostealth] 7;"
+        segments[#segments + 1] = "[bonusbar:1,stealth] 8;"
+        segments[#segments + 1] = "[bonusbar:2] 10;"
+        segments[#segments + 1] = "[bonusbar:3] 9;"
+        segments[#segments + 1] = "[bonusbar:4] 10;"
+    elseif PLAYER_CLASS == "PRIEST" then
+        segments[#segments + 1] = "[form:1,spec:3] 7;"
+    elseif PLAYER_CLASS == "WARRIOR" then
+        segments[#segments + 1] = "[bonusbar:1] 7;"
+        segments[#segments + 1] = "[bonusbar:2] 8;"
+        segments[#segments + 1] = "[bonusbar:3] 9;"
+    elseif PLAYER_CLASS == "EVOKER" then
+        segments[#segments + 1] = "[bonusbar:1] 7;"
+    elseif PLAYER_CLASS == "MONK" then
+        segments[#segments + 1] = "[bonusbar:1] 7;"
+        segments[#segments + 1] = "[bonusbar:2] 8;"
+    end
+
+    segments[#segments + 1] = "[bar:6] 6;"
+    segments[#segments + 1] = "[bar:5] 5;"
+    segments[#segments + 1] = "[bar:4] 4;"
+    segments[#segments + 1] = "[bar:3] 3;"
+    segments[#segments + 1] = "[bar:2] 2;"
+
+    return TrimString(table.concat(segments, " "))
 end
 
 local function DeepCopyValue(value)
@@ -557,6 +634,16 @@ local function NormalizeBarSettings(barKey, barDB)
         UpdateBarVisibilityFromSimple(barDB)
     else
         barDB.visibility = tostring(barDB.visibility or defaults.visibility or "show")
+    end
+
+    if SupportsPaging(barKey) then
+        if barDB.paging == nil then
+            barDB.paging = GetDefaultPagingDriver(barKey)
+        else
+            barDB.paging = TrimString(barDB.paging)
+        end
+    else
+        barDB.paging = nil
     end
 
     barDB._cooldownSwipeDefaultsMigrated = true
@@ -1683,6 +1770,49 @@ function Options:BuildConfiguration()
                             local barDB = Options:GetBarSettings(barKey)
                             barDB.simpleVisibilityMode = "raw"
                             barDB.visibility = tostring(value or "")
+                            RequestRefresh(false)
+                        end,
+                    },
+                    paging = {
+                        type = "input",
+                        name = "Action Paging Driver",
+                        desc =
+                        "Secure page driver for this bar. Return page numbers like 2 or 7, or use possess for vehicle, override, and temporary bonus bars. A fallback base page is appended automatically.",
+                        order = 10.5,
+                        width = 2.2,
+                        hidden = function()
+                            return not SupportsPaging(barKey)
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tostring(barDB and barDB.paging or "")
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then
+                                return
+                            end
+
+                            barDB.paging = TrimString(value)
+                            RequestRefresh(false)
+                        end,
+                    },
+                    restorePaging = {
+                        type = "execute",
+                        name = "Restore Paging",
+                        desc = "Restore this bar's default paging driver.",
+                        order = 10.6,
+                        width = 1.2,
+                        hidden = function()
+                            return not SupportsPaging(barKey)
+                        end,
+                        func = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then
+                                return
+                            end
+
+                            barDB.paging = GetDefaultPagingDriver(barKey)
                             RequestRefresh(false)
                         end,
                     },
