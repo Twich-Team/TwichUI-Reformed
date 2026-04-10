@@ -13636,36 +13636,39 @@ do
 end
 
 function UnitFrames:ApplyBlizzardPlayerCastbarVisibility()
-    local blizzardCastbar = _G.PlayerCastingBarFrame or _G.CastingBarFrame
-    if not blizzardCastbar then
-        return
-    end
-
     local db = self.GetDB and self:GetDB() or nil
     local isEnabled = not db or db.enabled ~= false
 
-    if isEnabled then
-        if blizzardCastbar.IgnoreFramePositionManager ~= true then
-            blizzardCastbar.IgnoreFramePositionManager = true
-        end
-        if not blizzardCastbar._twichUIOriginalParent then
-            blizzardCastbar._twichUIOriginalParent = blizzardCastbar:GetParent() or UIParent
-        end
-        if not blizzardCastbar._twichUIOnShowHooked then
-            blizzardCastbar:HookScript("OnShow", function(frame)
-                if frame._twichUISuppressCastbar == true then
-                    frame:Hide()
+    for _, blizzardCastbar in ipairs({
+        _G.OverlayPlayerCastingBarFrame,
+        _G.PlayerCastingBarFrame,
+        _G.CastingBarFrame,
+    }) do
+        if blizzardCastbar then
+            if isEnabled then
+                if blizzardCastbar.IgnoreFramePositionManager ~= true then
+                    blizzardCastbar.IgnoreFramePositionManager = true
                 end
-            end)
-            blizzardCastbar._twichUIOnShowHooked = true
+                if not blizzardCastbar._twichUIOriginalParent then
+                    blizzardCastbar._twichUIOriginalParent = blizzardCastbar:GetParent() or UIParent
+                end
+                if not blizzardCastbar._twichUIOnShowHooked then
+                    blizzardCastbar:HookScript("OnShow", function(frame)
+                        if frame._twichUISuppressCastbar == true then
+                            frame:Hide()
+                        end
+                    end)
+                    blizzardCastbar._twichUIOnShowHooked = true
+                end
+                blizzardCastbar._twichUISuppressCastbar = true
+                if blizzardCastbar.UnregisterAllEvents then
+                    blizzardCastbar:UnregisterAllEvents()
+                end
+                blizzardCastbar:Hide()
+            else
+                blizzardCastbar._twichUISuppressCastbar = nil
+            end
         end
-        blizzardCastbar._twichUISuppressCastbar = true
-        if blizzardCastbar.UnregisterAllEvents then
-            blizzardCastbar:UnregisterAllEvents()
-        end
-        blizzardCastbar:Hide()
-    else
-        blizzardCastbar._twichUISuppressCastbar = nil
     end
 end
 

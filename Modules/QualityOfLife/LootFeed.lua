@@ -34,6 +34,8 @@ local C_Timer         = _G.C_Timer
 local C_Item          = _G.C_Item
 local CreateFrame     = _G.CreateFrame
 local UIParent        = _G.UIParent
+local GetItemInfo     = _G.GetItemInfo
+local GetItemInfoInstant = _G.GetItemInfoInstant or (C_Item and C_Item.GetItemInfoInstant)
 local GetPlayerGuid   = _G.C_PlayerInfo and _G.C_PlayerInfo.GetGUIDForUnit or
     function(u) return _G.UnitGUID(u) end
 local math            = math
@@ -51,9 +53,11 @@ local unpack          = table.unpack or _G.unpack
 local ADDON_NAME      = "TwichUI_Reformed"
 local MAX_POOL        = 20   -- hard cap on live rows
 local PADDING         = 3    -- vertical gap between rows (px)
-local ENTER_DURATION  = 0.2  -- slide+fade in
-local SHIFT_DURATION  = 0.12 -- row shift translate
+local ENTER_DURATION  = 0.24  -- slide+fade in
+local SHIFT_DURATION  = 0.18 -- row shift translate
 local EXIT_DURATION   = 0.35 -- fade out
+local ENTER_OFFSET_X  = -14    -- softer lateral travel for new rows
+local SHIFT_FADE_FROM = 0.82   -- subtle fade while rows reposition
 
 -- Item quality names / display ordering (mirrors Enum.ItemQuality)
 local QUALITY_NAMES   = {
@@ -77,6 +81,8 @@ local QUALITY_DB_KEYS = {
     [4] = "showEpic",
     [5] = "showLegendary",
 }
+
+local FALLBACK_ITEM_ICON = 134400
 
 -- Coin icon sizes (pixels at font size 12)
 local COIN_ATLAS      = {
@@ -171,6 +177,36 @@ local function CreateRowFrame(settings)
     local fs   = settings.fontSize or 12
     local fout = settings.fontOutline or "OUTLINE"
 
+    local function ShowTooltip(owner)
+        if not owner.link then return end
+        _G.GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+        _G.GameTooltip:SetHyperlink(owner.link)
+        _G.GameTooltip:Show()
+    end
+
+    local function HideTooltip()
+        _G.GameTooltip:Hide()
+    end
+
+    local function HandleModifiedClick(owner)
+        if owner.link and _G.IsModifiedClick("CHATLINK") then
+            _G.ChatEdit_InsertLink(owner.link)
+        end
+    end
+
+    local function ForwardDragStart()
+        local s = GetSettings()
+        if not s.locked and container and container:GetScript("OnDragStart") then
+            container:GetScript("OnDragStart")(container)
+        end
+    end
+
+    local function ForwardDragStop()
+        if container and container:GetScript("OnDragStop") then
+            container:GetScript("OnDragStop")(container)
+        end
+    end
+
     -- Parent to the container so SetPoint offsets are always in the same
     -- coordinate space as the container.  This eliminates the cross-parent
     -- anchor ambiguity that caused rows 2+ to snap to UIParent BOTTOM.
@@ -179,6 +215,15 @@ local function CreateRowFrame(settings)
     row:SetFrameStrata("HIGH")
     row:SetAlpha(0)
     row:Hide()
+    row:EnableMouse(true)
+    row:RegisterForDrag("LeftButton")
+    row:SetScript("OnEnter", ShowTooltip)
+    row:SetScript("OnLeave", HideTooltip)
+    row:SetScript("OnMouseUp", function(self)
+        HandleModifiedClick(self)
+    end)
+    row:SetScript("OnDragStart", ForwardDragStart)
+    row:SetScript("OnDragStop", ForwardDragStop)
 
     -- Subtle dark background
     local bg = row:CreateTexture(nil, "BACKGROUND")
@@ -203,21 +248,14 @@ local function CreateRowFrame(settings)
     icon:SetSize(isz, isz)
     icon:SetPoint("LEFT", row, "LEFT", 4, 0)
     icon:EnableMouse(true)
-    icon:SetScript("OnEnter", function(self)
-        if self.link then
-            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            _G.GameTooltip:SetHyperlink(self.link)
-            _G.GameTooltip:Show()
-        end
+    icon:RegisterForDrag("LeftButton")
+    icon:SetScript("OnEnter", ShowTooltip)
+    icon:SetScript("OnLeave", HideTooltip)
+    icon:SetScript("OnMouseUp", function(self)
+        HandleModifiedClick(self)
     end)
-    icon:SetScript("OnLeave", function()
-        _G.GameTooltip:Hide()
-    end)
-    icon:SetScript("OnMouseUp", function(self, btn)
-        if self.link and _G.IsModifiedClick("CHATLINK") then
-            _G.ChatEdit_InsertLink(self.link)
-        end
-    end)
+    icon:SetScript("OnDragStart", ForwardDragStart)
+    icon:SetScript("OnDragStop", ForwardDragStop)
 
     local iconTex = icon:CreateTexture(nil, "ARTWORK")
     iconTex:SetAllPoints()
@@ -263,12 +301,12 @@ local function CreateRowFrame(settings)
     enterFade:SetFromAlpha(0)
     enterFade:SetToAlpha(1)
     enterFade:SetDuration(ENTER_DURATION)
-    enterFade:SetSmoothing("IN_OUT")
+        enterFade:SetSmoothing("OUT")
 
     local enterSlide = enterAG:CreateAnimation("Translation")
-    enterSlide:SetOffset(-20, 0)
+        enterSlide:SetOffset(ENTER_OFFSET_X, 0)
     enterSlide:SetDuration(ENTER_DURATION)
-    enterSlide:SetSmoothing("IN_OUT")
+        enterSlide:SetSmoothing("OUT")
     row.enterAG = enterAG
 
     -- Fade-out exit animation
@@ -288,8 +326,14 @@ local function CreateRowFrame(settings)
     -- Shift animation
     local shiftAG    = row:CreateAnimationGroup()
     local shiftTrans = shiftAG:CreateAnimation("Translation")
+        local shiftFade  = shiftAG:CreateAnimation("Alpha")
+        shiftFade:SetFromAlpha(SHIFT_FADE_FROM)
+        shiftFade:SetToAlpha(1)
+        shiftFade:SetDuration(SHIFT_DURATION)
+        shiftFade:SetSmoothing("IN_OUT")
     row.shiftAG      = shiftAG
     row.shiftTrans   = shiftTrans
+        row.shiftFade    = shiftFade
 
     return row
 end
@@ -310,6 +354,7 @@ local function ReleaseRow(row)
     row:SetAlpha(0)
     row:Hide()
     row:ClearAllPoints()
+    row.link = nil
     row.icon.tex:SetTexture(nil)
     row.icon.border:SetAlpha(0)
     row.icon.link = nil
@@ -363,9 +408,13 @@ local function ShiftRows(settings)
         --    new SetPoint.  Translation goes from (offsetX, offsetY) → (0, 0).
         --    We want to start at old_visual = new_setpoint − dir*amount, so the
         --    offset that puts us at the old position is: -dir * amount.
+            row:SetAlpha(1)
         row.shiftTrans:SetOffset(0, -dir * amount)
         row.shiftTrans:SetDuration(SHIFT_DURATION)
-        row.shiftTrans:SetSmoothing("OUT")
+            row.shiftTrans:SetSmoothing("IN_OUT")
+            row.shiftFade:SetFromAlpha(SHIFT_FADE_FROM)
+            row.shiftFade:SetToAlpha(1)
+            row.shiftFade:SetDuration(SHIFT_DURATION)
         row.shiftAG:Play()
     end
 end
@@ -481,6 +530,7 @@ local function PopulateRow(entry, icon, text, link, quality, settings)
     end
 
     row.txt:SetText(text)
+    row.link = link
     row.icon.link = link
 
     -- Font (re-apply in case settings changed)
@@ -642,6 +692,35 @@ local function IsQualityShown(quality, settings)
     return settings[key] ~= false
 end
 
+local function ResolveItemIcon(itemLink, itemID, texture)
+    if texture then
+        return texture
+    end
+
+    if itemLink and GetItemInfoInstant then
+        local _, _, _, _, instantTexture = GetItemInfoInstant(itemLink)
+        if instantTexture then
+            return instantTexture
+        end
+    end
+
+    if itemID and GetItemInfoInstant then
+        local _, _, _, _, instantTexture = GetItemInfoInstant(itemID)
+        if instantTexture then
+            return instantTexture
+        end
+    end
+
+    if itemID and C_Item and type(C_Item.GetItemIconByID) == "function" then
+        local icon = C_Item.GetItemIconByID(itemID)
+        if icon then
+            return icon
+        end
+    end
+
+    return FALLBACK_ITEM_ICON
+end
+
 -- ---------------------------------------------------------------------------
 -- Event handlers
 -- ---------------------------------------------------------------------------
@@ -690,7 +769,7 @@ function LF:CHAT_MSG_LOOT(_, msg, _, _, _, senderName2, _, _, _, _, _, _, guid)
 
     local name, _, quality, _, _, _, _, _, _, texture = _G.C_Item and
         _G.C_Item.GetItemInfo and _G.C_Item.GetItemInfo(itemLink) or
-        _G.GetItemInfo(itemLink)
+        GetItemInfo(itemLink)
 
     if not name then
         -- Defer until item data arrives
@@ -700,6 +779,7 @@ function LF:CHAT_MSG_LOOT(_, msg, _, _, _, senderName2, _, _, _, _, _, _, guid)
 
     if not IsQualityShown(quality, settings) then return end
 
+    texture = ResolveItemIcon(itemLink, itemID, texture)
     local displayText = qty > 1 and ("|cFFFFFFFF" .. name .. "|r x" .. qty) or itemLink
 
     PushEntry(texture, displayText, itemLink, quality, itemLink)
@@ -720,11 +800,12 @@ function LF:GET_ITEM_INFO_RECEIVED(_, itemID, success)
 
     local name, _, quality, _, _, _, _, _, _, texture = _G.C_Item and
         _G.C_Item.GetItemInfo and _G.C_Item.GetItemInfo(itemLink) or
-        _G.GetItemInfo(itemLink)
+        GetItemInfo(itemLink)
 
     if not name then return end
     if not IsQualityShown(quality, settings) then return end
 
+    texture = ResolveItemIcon(itemLink, itemID, texture)
     local displayText = qty > 1 and ("|cFFFFFFFF" .. name .. "|r x" .. qty) or itemLink
     PushEntry(texture, displayText, itemLink, quality, itemLink)
 end

@@ -234,6 +234,42 @@ local function GetXPTimerData()
     return T.db.char.xp
 end
 
+local function GetCurrentLevelTimerSeconds(xpTimerData)
+    if not xpTimerData then
+        return nil
+    end
+
+    local total = tonumber(xpTimerData.levelActiveSeconds) or 0
+    local lastUpdateTime = tonumber(xpTimerData.lastUpdateTime)
+    if lastUpdateTime then
+        total = total + math.max(0, GetTime() - lastUpdateTime)
+    end
+
+    return math.max(0, total)
+end
+
+local function SyncXPTimerActiveTime(xpTimerData)
+    if not xpTimerData then
+        return 0
+    end
+
+    local total = GetCurrentLevelTimerSeconds(xpTimerData) or 0
+    xpTimerData.levelActiveSeconds = total
+    xpTimerData.lastUpdateTime = GetTime()
+    return total
+end
+
+local function ResetXPTimerForLevel(xpTimerData, level)
+    if not xpTimerData then
+        return
+    end
+
+    xpTimerData.trackedLevel = tonumber(level) or 0
+    xpTimerData.levelActiveSeconds = 0
+    xpTimerData.lastUpdateTime = GetTime()
+    xpTimerData.levelStartTime = nil
+end
+
 --- Formats a duration in seconds into a human-readable string (e.g. "2h 14m" or "4m 30s").
 local function FormatLevelTime(seconds)
     local total = math.max(0, math.floor(tonumber(seconds) or 0))
@@ -301,10 +337,7 @@ local function GetPlayerExperienceState()
     end
 
     local xpTimerData  = GetXPTimerData()
-    local levelTimeSec = nil
-    if xpTimerData and type(xpTimerData.levelStartTime) == "number" then
-        levelTimeSec = math.max(0, GetServerTime() - xpTimerData.levelStartTime)
-    end
+    local levelTimeSec = GetCurrentLevelTimerSeconds(xpTimerData)
 
     return {
         level = currentLevel,
@@ -2035,12 +2068,12 @@ function ExperienceDT:OnEvent(panel, event, ...)
         local xpData   = GetXPTimerData()
         if xpData then
             -- Announce time-to-level in chat if enabled (suppressed at max level).
-            if settings.announceLevelUp and type(xpData.levelStartTime) == "number" then
+            if settings.announceLevelUp then
                 local maxLevel = GetPlayerMaxLevel()
                 local lvl      = tonumber(newLevel) or (type(UnitLevel) == "function" and UnitLevel("player") or 0)
                 local isMax    = type(maxLevel) == "number" and maxLevel > 0 and lvl >= maxLevel
                 if not isMax then
-                    local elapsed = math.max(0, GetServerTime() - xpData.levelStartTime)
+                    local elapsed = SyncXPTimerActiveTime(xpData)
                     local msg = format("|cff66DB85TwichUI|r Level %d reached in %s!", lvl, FormatLevelTime(elapsed))
                     if _G.DEFAULT_CHAT_FRAME then
                         _G.DEFAULT_CHAT_FRAME:AddMessage(msg)
@@ -2048,20 +2081,37 @@ function ExperienceDT:OnEvent(panel, event, ...)
                 end
             end
             -- Reset the timer for the new level.
-            xpData.levelStartTime = GetServerTime()
-            xpData.trackedLevel   = tonumber(newLevel) or (type(UnitLevel) == "function" and UnitLevel("player") or 0)
+            ResetXPTimerForLevel(xpData, tonumber(newLevel) or (type(UnitLevel) == "function" and UnitLevel("player") or 0))
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
-        -- Initialise or re-sync the start time if we logged in at a different level.
+        -- Initialise or re-sync the timer state without counting offline time.
         local xpData = GetXPTimerData()
         if xpData then
             local currentLevel = type(UnitLevel) == "function" and (UnitLevel("player") or 0) or 0
-            if not xpData.levelStartTime or xpData.trackedLevel ~= currentLevel then
-                xpData.levelStartTime = GetServerTime()
-                xpData.trackedLevel   = currentLevel
+            if xpData.trackedLevel ~= currentLevel then
+                ResetXPTimerForLevel(xpData, currentLevel)
+            else
+                xpData.levelActiveSeconds = tonumber(xpData.levelActiveSeconds) or 0
+                xpData.lastUpdateTime = GetTime()
+                xpData.levelStartTime = nil
             end
         end
     end
+    SetExperiencePanelText(panel)
+end
+
+function ExperienceDT:OnUpdate(panel, elapsed)
+    local settings = ExperienceSettings()
+    if not settings.showLevelTimer then
+        return
+    end
+
+    panel.experienceElapsed = (panel.experienceElapsed or 0) + (tonumber(elapsed) or 0)
+    if panel.experienceElapsed < 1 then
+        return
+    end
+
+    panel.experienceElapsed = 0
     SetExperiencePanelText(panel)
 end
 
@@ -2130,7 +2180,7 @@ function ExperienceDT:OnInitialize()
             "PLAYER_ENTERING_WORLD",
         },
         onEventFunc = DataTextModule:CreateBoundCallback(self, "OnEvent"),
-        onUpdateFunc = nil,
+        onUpdateFunc = DataTextModule:CreateBoundCallback(self, "OnUpdate"),
         onClickFunc = nil,
         onEnterFunc = DataTextModule:CreateBoundCallback(self, "OnEnter"),
         onLeaveFunc = DataTextModule:CreateBoundCallback(self, "OnLeave"),

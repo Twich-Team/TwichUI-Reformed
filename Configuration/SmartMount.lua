@@ -1,6 +1,7 @@
 local TwichRx = _G.TwichRx
 ---@type TwichUI
 local T = unpack(TwichRx)
+local PLAYER_RACE = select(2, UnitRace("player"))
 
 ---@type ConfigurationModule
 local ConfigurationModule = T:GetModule("Configuration")
@@ -15,9 +16,12 @@ local Options = ConfigurationModule.Options.SmartMount
 -- resulting string is in WoW's canonical SetBinding format (e.g. "SHIFT-SPACE").
 
 local MODIFIER_ONLY = {
-    LSHIFT = true, RSHIFT = true,
-    LCTRL  = true, RCTRL  = true,
-    LALT   = true, RALT   = true,
+    LSHIFT = true,
+    RSHIFT = true,
+    LCTRL = true,
+    RCTRL = true,
+    LALT = true,
+    RALT = true,
 }
 
 local keybindCaptureFrame = nil
@@ -25,13 +29,13 @@ local keybindCaptureFrame = nil
 local function GetKeybindCaptureFrame()
     if keybindCaptureFrame then return keybindCaptureFrame end
 
-    local CreateFrame = _G.CreateFrame
-    local UIParent    = _G.UIParent
+    local CreateFrame      = _G.CreateFrame
+    local UIParent         = _G.UIParent
     local IsShiftKeyDown   = _G.IsShiftKeyDown
     local IsControlKeyDown = _G.IsControlKeyDown
     local IsAltKeyDown     = _G.IsAltKeyDown
 
-    local f = CreateFrame("Frame", "TwichUIKeybindCapture", UIParent, "BackdropTemplate")
+    local f                = CreateFrame("Frame", "TwichUIKeybindCapture", UIParent, "BackdropTemplate")
     f:SetSize(300, 90)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
@@ -73,9 +77,9 @@ local function GetKeybindCaptureFrame()
 
         -- Build the canonical binding string.
         local binding = ""
-        if IsShiftKeyDown()   then binding = binding .. "SHIFT-" end
-        if IsControlKeyDown() then binding = binding .. "CTRL-"  end
-        if IsAltKeyDown()     then binding = binding .. "ALT-"   end
+        if IsShiftKeyDown() then binding = binding .. "SHIFT-" end
+        if IsControlKeyDown() then binding = binding .. "CTRL-" end
+        if IsAltKeyDown() then binding = binding .. "ALT-" end
 
         if key == "BACKSPACE" then
             -- Empty string = clear the binding.
@@ -260,6 +264,19 @@ local function BuildSmartMountTab(order)
                 set = "SetUseAquaticMounts",
                 order = 7,
             },
+            enableDracthyrSoar = {
+                type = "toggle",
+                name = "Use Dracthyr Soar for Flying",
+                desc =
+                "When flying is allowed, Smart Mount will cast Soar first and fall back to your selected flying mount if Soar cannot be used.",
+                disabled = function()
+                    return PLAYER_RACE ~= "Dracthyr"
+                end,
+                handler = Options,
+                get = "GetUseDracthyrSoar",
+                set = "SetUseDracthyrSoar",
+                order = 8,
+            },
             keybinding = {
                 type = "execute",
                 name = function()
@@ -270,7 +287,7 @@ local function BuildSmartMountTab(order)
                     return "Set Keybinding  |cff808080(unbound)|r"
                 end,
                 desc = "Click to capture a new keybind. Press Backspace inside the capture window to clear it.",
-                order = 8,
+                order = 9,
                 func = function()
                     OpenKeybindCapture(function(binding)
                         Options:SetSmartMountKeybinding(nil, binding)
