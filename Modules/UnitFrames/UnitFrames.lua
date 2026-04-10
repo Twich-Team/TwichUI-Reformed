@@ -5198,6 +5198,169 @@ function UnitFrames:ApplyClassBarSettings(frame, unitKey)
     -- No second ForceUpdate needed — already done above.
 end
 
+-- ---------------------------------------------------------------------------
+-- Ebon Might bar helpers
+-- ---------------------------------------------------------------------------
+
+--- Apply visual and layout settings to the Ebon Might bar on the player frame.
+--- Safe to call at any time; no-ops when the frame or bar does not exist.
+function UnitFrames:ApplyEbonMightBarSettings(frame, unitKey)
+    if unitKey ~= "player" or not frame or not frame.TwichEbonMightBar then return end
+    local db             = self:GetDB()
+    local cfg            = db.ebonMightBar or {}
+    local bar            = frame.TwichEbonMightBar
+
+    -- Resolve appearance ---------------------------------------------------
+    local enabled        = cfg.enabled ~= false
+    local height         = Clamp(cfg.height or 8, 4, 40)
+    local detached       = cfg.detached == true
+
+    -- Colors
+    local fr, fg, fb, fa = 0.76, 0.56, 0.12, 1 -- default: deep ember bronze
+    if cfg.useCustomColor == true and type(cfg.color) == "table" then
+        fr = cfg.color[1] or fr; fg = cfg.color[2] or fg
+        fb = cfg.color[3] or fb; fa = cfg.color[4] or fa
+    end
+    local br, bg_, bb, ba
+    if cfg.useCustomBackground == true and type(cfg.backgroundColor) == "table" then
+        local c = cfg.backgroundColor
+        br = c[1] or 0.05; bg_ = c[2] or 0.06; bb = c[3] or 0.08; ba = c[4] or 0.85
+    else
+        br = fr * 0.2; bg_ = fg * 0.2; bb = fb * 0.2; ba = 0.85
+    end
+    local bdr, bdg, bdb, bda
+    if cfg.useCustomBorder == true and type(cfg.borderColor) == "table" then
+        local c = cfg.borderColor
+        bdr = c[1] or 0.24; bdg = c[2] or 0.26; bdb = c[3] or 0.32; bda = c[4] or 0.9
+    else
+        bdr = 0.24; bdg = 0.26; bdb = 0.32; bda = 0.9
+    end
+
+    -- Apply texture
+    local texName = (db.texture and db.texture ~= "") and db.texture or nil
+    local texture = texName and GetLSMTexture(texName) or GetThemeTexture()
+    bar:SetStatusBarTexture(texture)
+    bar:SetStatusBarColor(fr, fg, fb, fa)
+    if bar.bg then
+        bar.bg:SetTexture(texture)
+        bar.bg:SetVertexColor(br, bg_, bb, ba)
+    end
+    if bar.border then
+        bar.border:SetBackdropBorderColor(bdr, bdg, bdb, bda)
+    end
+
+    -- Timer text
+    if bar.timerText then
+        local textCfg  = type(cfg.text) == "table" and cfg.text or {}
+        local fontSize = tonumber(textCfg.fontSize) or 9
+        local tPoint   = textCfg.timerPoint or "RIGHT"
+        local tOffX    = tonumber(textCfg.timerOffsetX) or -2
+        local tOffY    = tonumber(textCfg.timerOffsetY) or 0
+        local fontName = (textCfg.fontName ~= nil and textCfg.fontName ~= "") and textCfg.fontName or nil
+        local tcR, tcG, tcB, tcA
+        if type(textCfg.textColor) == "table" then
+            tcR = textCfg.textColor[1]; tcG = textCfg.textColor[2]
+            tcB = textCfg.textColor[3]; tcA = textCfg.textColor[4] or 1
+        else
+            tcR, tcG, tcB, tcA = fr, fg, fb, 1 -- default: match bar color
+        end
+        bar.timerText:SetShown(cfg.showTimer == true)
+        local baseStyle = self:GetTextConfigFor("player")
+        self:ApplyFontObject(bar.timerText, fontSize, fontName or (baseStyle and baseStyle.fontName) or nil, baseStyle)
+        bar.timerText:ClearAllPoints()
+        bar.timerText:SetPoint(tPoint, bar, tPoint, tOffX, tOffY)
+        bar.timerText:SetTextColor(tcR, tcG, tcB, tcA)
+    end
+
+    -- Label text
+    if bar.labelText then
+        local textCfg  = type(cfg.text) == "table" and cfg.text or {}
+        local fontSize = tonumber(textCfg.fontSize) or 9
+        local lPoint   = textCfg.labelPoint or "LEFT"
+        local lOffX    = tonumber(textCfg.labelOffsetX) or 2
+        local lOffY    = tonumber(textCfg.labelOffsetY) or 0
+        local fontName = (textCfg.fontName ~= nil and textCfg.fontName ~= "") and textCfg.fontName or nil
+        local tcR, tcG, tcB, tcA
+        if type(textCfg.textColor) == "table" then
+            tcR = textCfg.textColor[1]; tcG = textCfg.textColor[2]
+            tcB = textCfg.textColor[3]; tcA = textCfg.textColor[4] or 1
+        else
+            tcR, tcG, tcB, tcA = fr, fg, fb, 1 -- default: match bar color
+        end
+        bar.labelText:SetShown(cfg.showLabel == true)
+        local baseStyle = self:GetTextConfigFor("player")
+        self:ApplyFontObject(bar.labelText, fontSize, fontName or (baseStyle and baseStyle.fontName) or nil, baseStyle)
+        bar.labelText:ClearAllPoints()
+        bar.labelText:SetPoint(lPoint, bar, lPoint, lOffX, lOffY)
+        bar.labelText:SetTextColor(tcR, tcG, tcB, tcA)
+    end
+
+    -- Particle FX ------------------------------------------------------------
+    if type(self.EnsurePowerBarFx) == "function" and type(self.SyncPowerBarFx) == "function" then
+        local fx = type(cfg.fx) == "table" and cfg.fx or {}
+        self:EnsurePowerBarFx(bar)
+        bar._powerFxEnabled = fx.enabled == true
+        bar._powerFxTheme   = fx.theme or "holy"
+        bar._powerFxScale   = Clamp(tonumber(fx.effectScale) or 1, 0.5, 3)
+        self:SyncPowerBarFx(bar, true)
+    end
+
+    -- Size + position -------------------------------------------------------
+    bar._detached = detached
+    bar._designedHeight = height
+
+    if not enabled then
+        bar:Hide()
+        if bar.border then bar.border:Hide() end
+        bar._forceHide = true
+        return
+    end
+    bar._forceHide = nil
+
+    bar:ClearAllPoints()
+    if bar.border then bar.border:ClearAllPoints() end
+
+    local width
+    if cfg.matchFrameWidth == true then
+        width = Clamp(frame:GetWidth(), 40, 600)
+    else
+        width = Clamp(cfg.width or math_max(frame:GetWidth(), 260), 40, 600)
+    end
+
+    bar:SetHeight(height)
+    bar:SetWidth(width)
+
+    if detached then
+        -- Free-floating: anchor to UIParent if a layout position has been saved.
+        local layout = self:GetLayoutSettings("player_ebonMight")
+        if layout and layout.point == "BOTTOMLEFT" and layout.x ~= nil then
+            bar:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT",
+                tonumber(layout.x) or 0,
+                tonumber(layout.y) or 0)
+        else
+            bar:SetPoint(
+                cfg.point or "TOPLEFT", frame,
+                cfg.relativePoint or "BOTTOMLEFT",
+                tonumber(cfg.xOffset) or 0,
+                tonumber(cfg.yOffset) or -2)
+        end
+    else
+        bar:SetPoint(
+            cfg.point or "TOPLEFT", frame,
+            cfg.relativePoint or "BOTTOMLEFT",
+            tonumber(cfg.xOffset) or 0,
+            tonumber(cfg.yOffset) or -2)
+    end
+
+    if bar.border then
+        bar.border:SetPoint("TOPLEFT", bar, "TOPLEFT", -1, 1)
+        bar.border:SetPoint("BOTTOMRIGHT", bar, "BOTTOMRIGHT", 1, -1)
+    end
+
+    -- Trigger a fresh aura scan so any enable/position change is reflected immediately.
+    if bar._scan then bar._scan(bar) end
+end
+
 function UnitFrames:GetCastbarSmoothingMethod()
     if not StatusBarInterpolation then return nil end
     if self:GetDB().smoothBars == false then return StatusBarInterpolation.Immediate end
@@ -8536,6 +8699,7 @@ function UnitFrames:ApplySingleFrameSettings(frame, unitKey)
     self:ApplyAuraSettings(frame, unitKey)
     self:ApplyTagVisibility(frame)
     self:ApplyClassBarSettings(frame, unitKey)
+    self:ApplyEbonMightBarSettings(frame, unitKey)
     self:ApplyPlayerClassArtworkSettings(frame, unitKey)
     self:ApplyHighlightSettings(frame)
     self:ApplyUnitCastbarSettings(frame, unitKey)
@@ -9499,6 +9663,63 @@ function UnitFrames:UpdateMovers()
         end
     end
 
+    -- Detached Ebon Might bar mover (player only).
+    do
+        -- Register/unregister with the shared TwichMoverModule so the designer
+        -- overlay shows a drag handle for this bar when detach is enabled.
+        self:RegisterDetachedEbonMightLayoutFrame()
+
+        local playerFrame = self.frames.player
+        local s           = self:GetUnitSettings("player")
+        local cfg         = db.ebonMightBar or {}
+        local emKey       = "player_ebonMight"
+        if playerFrame and playerFrame.TwichEbonMightBar and cfg.enabled ~= false and cfg.detached == true then
+            local bar = playerFrame.TwichEbonMightBar
+            if not self.movers[emKey] then
+                self:AttachMover(bar, emKey)
+            end
+            local mover = self.movers[emKey]
+            if mover then
+                local layout = self:GetLayoutSettings(emKey)
+                local ew = Clamp(cfg.width or s.width or 260, 40, 600)
+                local eh = math_max(16, Clamp(cfg.height or 8, 4, 40))
+                if layout and layout.point == "BOTTOMLEFT" and layout.x ~= nil then
+                    PlaceMover(mover, "BOTTOMLEFT", "BOTTOMLEFT",
+                        tonumber(layout.x) or 0,
+                        tonumber(layout.y) or 0,
+                        ew, eh, s.enabled ~= false)
+                else
+                    -- The Ebon Might bar is only visible while the aura is active,
+                    -- so we can't rely on IsVisible(). Fall back to the player power
+                    -- bar position (if detached) or the player frame bottom instead.
+                    local bl, bb
+                    if playerFrame.Power and playerFrame.Power:IsVisible() then
+                        bl = playerFrame.Power:GetLeft()
+                        bb = (playerFrame.Power:GetBottom() or 0) - eh - 4
+                    end
+                    if not bl then
+                        -- Ultimate fallback: below the player frame
+                        bl = playerFrame:IsVisible() and playerFrame:GetLeft()
+                        bb = playerFrame:IsVisible() and ((playerFrame:GetBottom() or 0) - eh - 4)
+                    end
+                    if bl and bb then
+                        PlaceMover(mover, "BOTTOMLEFT", "BOTTOMLEFT", bl, bb, ew, eh, s.enabled ~= false)
+                    else
+                        -- Frame hasn't rendered yet; provide a sensible screen default.
+                        local screenW = UIParent:GetWidth() or 1920
+                        PlaceMover(mover, "BOTTOMLEFT", "BOTTOMLEFT",
+                            screenW * 0.38,
+                            160,
+                            ew, eh, s.enabled ~= false)
+                    end
+                end
+            end
+        else
+            local mover = self.movers[emKey]
+            if mover then mover:Hide() end
+        end
+    end
+
     -- Castbar
     do
         local frame = self.frames.castbar
@@ -9588,6 +9809,7 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     end
 
     local powerBase = type(layoutKey) == "string" and layoutKey:match("^(.-)_power$") or nil
+    local ebonBase  = type(layoutKey) == "string" and layoutKey:match("^(.-)_ebonMight$") or nil
 
     setupWizard:RegisterLayoutFrame("UF_" .. layoutKey, frame, function(absX, absY, absW, absH)
         local layout = UnitFrames:GetLayoutSettings(layoutKey)
@@ -9609,6 +9831,14 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             if absH and absH > 12 then
                 db.castbar.height = math.floor(absH + 0.5)
             end
+            return
+        end
+
+        if ebonBase then
+            local cfg = UnitFrames:GetDB().ebonMightBar or {}
+            if absW and absW > 20 then cfg.width = math.floor(absW + 0.5) end
+            if absH and absH > 4 then cfg.height = math.floor(absH + 0.5) end
+            UnitFrames:GetDB().ebonMightBar = cfg
             return
         end
 
@@ -9643,16 +9873,18 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     local isHeader = (layoutKey == "party" or layoutKey == "raid" or layoutKey == "tank" or layoutKey == "boss")
 
     local LABELS = {
-        player       = "Player Frame",
-        target       = "Target Frame",
-        targettarget = "Target of Target",
-        focus        = "Focus Frame",
-        pet          = "Pet Frame",
-        castbar      = "Castbar",
-        boss         = "Boss Anchor",
-        party        = "Party Frames",
-        raid         = "Raid Frames",
-        tank         = "Tank Frames",
+        player           = "Player Frame",
+        target           = "Target Frame",
+        targettarget     = "Target of Target",
+        focus            = "Focus Frame",
+        pet              = "Pet Frame",
+        castbar          = "Castbar",
+        boss             = "Boss Anchor",
+        party            = "Party Frames",
+        raid             = "Raid Frames",
+        tank             = "Tank Frames",
+        player_power     = "Player Power Bar",
+        player_ebonMight = "Extra Class Power Bar",
     }
 
     local function getSetSize()
@@ -9663,6 +9895,17 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 db.castbar = db.castbar or {}
                 if w and w > 20 then db.castbar.width = math.floor(w + 0.5) end
                 if h and h > 12 then db.castbar.height = math.floor(h + 0.5) end
+                if frame and frame.SetSize and frame:IsObjectType("Frame") then
+                    frame:SetSize(w or frame:GetWidth(), h or frame:GetHeight())
+                end
+            end
+        end
+        if ebonBase then
+            return function(w, h)
+                local cfg = UnitFrames:GetDB().ebonMightBar or {}
+                if w and w > 20 then cfg.width = math.floor(w + 0.5) end
+                if h and h > 4 then cfg.height = math.floor(h + 0.5) end
+                UnitFrames:GetDB().ebonMightBar = cfg
                 if frame and frame.SetSize and frame:IsObjectType("Frame") then
                     frame:SetSize(w or frame:GetWidth(), h or frame:GetHeight())
                 end
@@ -9705,6 +9948,12 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
             return math.floor((tonumber(castbar and castbar.width) or 240) + 0.5)
         end
 
+        if ebonBase then
+            local cfg = UnitFrames:GetDB().ebonMightBar or {}
+            local s   = UnitFrames:GetUnitSettings(ebonBase)
+            return math.floor((tonumber(cfg.width) or tonumber(s and s.width) or 260) + 0.5)
+        end
+
         if powerBase then
             local unitSettings = UnitFrames:GetUnitSettings(powerBase)
             return math.floor((tonumber(unitSettings and unitSettings.powerWidth) or tonumber(unitSettings and unitSettings.width) or 220) +
@@ -9736,6 +9985,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         if powerBase then
             local unitSettings = UnitFrames:GetUnitSettings(powerBase)
             return math.floor((tonumber(unitSettings and unitSettings.powerHeight) or 8) + 0.5)
+        end
+
+        if ebonBase then
+            local cfg = UnitFrames:GetDB().ebonMightBar or {}
+            return math.floor(math.max(16, tonumber(cfg.height) or 8) + 0.5)
         end
 
         if isHeader then
@@ -11870,6 +12124,399 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         end
     end
 
+    local function AddEbonMightBarExtras()
+        if layoutKey ~= "player" and not ebonBase then return end
+
+        local function GetEMConfig()
+            local db2 = UnitFrames:GetDB()
+            db2.ebonMightBar = db2.ebonMightBar or {}
+            return db2.ebonMightBar
+        end
+
+        local EM_TAB       = "ebonmight"
+        local EM_TAB_LABEL = "Extra Class Power"
+
+        AddExtra({
+            label    = "Enable Extra Class Power Bar",
+            type     = "toggle",
+            tab      = EM_TAB,
+            tabLabel = EM_TAB_LABEL,
+            get      = function() return GetEMConfig().enabled ~= false end,
+            set      = function(value)
+                GetEMConfig().enabled = value == true
+                DesignerRefreshAllFrames()
+            end,
+        })
+        AddExtra({
+            label    = "Test Mode",
+            type     = "toggle",
+            tab      = EM_TAB,
+            tabLabel = EM_TAB_LABEL,
+            get      = function() return UnitFrames:IsDesignerPreviewEnabled("ebonMight") end,
+            set      = function(value)
+                UnitFrames:SetTestPreviewGroupEnabled("ebonMight", value == true)
+            end,
+            disabled = function() return GetEMConfig().enabled == false end,
+        })
+
+        local function EMDisabled()
+            return GetEMConfig().enabled == false
+        end
+
+        AddExtra({
+            label    = "Hide When Inactive",
+            type     = "toggle",
+            tab      = EM_TAB,
+            tabLabel = EM_TAB_LABEL,
+            get      = function() return GetEMConfig().hideWhenInactive ~= false end,
+            set      = function(value)
+                GetEMConfig().hideWhenInactive = value == true
+                DesignerRefreshAllFrames()
+            end,
+            disabled = EMDisabled,
+        })
+        AddExtra({
+            label    = "Detach Bar",
+            type     = "toggle",
+            tab      = EM_TAB,
+            tabLabel = EM_TAB_LABEL,
+            get      = function() return GetEMConfig().detached == true end,
+            set      = function(value)
+                GetEMConfig().detached = value == true
+                DesignerRefreshAllFrames()
+            end,
+            disabled = EMDisabled,
+        })
+        AddExtra({
+            label    = "Match Frame Width",
+            type     = "toggle",
+            tab      = EM_TAB,
+            tabLabel = EM_TAB_LABEL,
+            get      = function() return GetEMConfig().matchFrameWidth == true end,
+            set      = function(value)
+                GetEMConfig().matchFrameWidth = value == true
+                DesignerRefreshAllFrames()
+            end,
+            disabled = EMDisabled,
+        })
+
+        local emRanges = {
+            { field = "width",   label = "Width",    min = 40,   max = 600, disabledFn = function() return EMDisabled() or
+                GetEMConfig().matchFrameWidth == true end },
+            { field = "height",  label = "Height",   min = 4,    max = 40,  disabledFn = EMDisabled },
+            { field = "xOffset", label = "X Offset", min = -240, max = 240, disabledFn = function() return EMDisabled() or
+                GetEMConfig().detached == true end },
+            { field = "yOffset", label = "Y Offset", min = -240, max = 240, disabledFn = function() return EMDisabled() or
+                GetEMConfig().detached == true end },
+        }
+        for _, entry in ipairs(emRanges) do
+            local capturedEntry = entry
+            AddExtra({
+                label    = capturedEntry.label,
+                type     = "range",
+                tab      = EM_TAB,
+                tabLabel = EM_TAB_LABEL,
+                min      = capturedEntry.min,
+                max      = capturedEntry.max,
+                step     = 1,
+                get      = function()
+                    local defaults = { width = 260, height = 8, xOffset = 0, yOffset = -2 }
+                    return tonumber(GetEMConfig()[capturedEntry.field]) or defaults[capturedEntry.field] or 0
+                end,
+                set      = function(value)
+                    GetEMConfig()[capturedEntry.field] = tonumber(value) or 0
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = capturedEntry.disabledFn,
+            })
+        end
+
+        local emColors = {
+            { toggle = "useCustomColor",      color = "color",           label = "Custom Bar Color",  colorLabel = "Bar Color",        default = { 0.76, 0.56, 0.12, 1 } },
+            { toggle = "useCustomBackground", color = "backgroundColor", label = "Custom Background", colorLabel = "Background Color", default = { 0.05, 0.06, 0.08, 0.85 } },
+            { toggle = "useCustomBorder",     color = "borderColor",     label = "Custom Border",     colorLabel = "Border Color",     default = { 0.24, 0.26, 0.32, 0.9 } },
+        }
+        for _, entry in ipairs(emColors) do
+            local capturedEntry = entry
+            AddExtra({
+                label    = capturedEntry.label,
+                type     = "toggle",
+                tab      = EM_TAB,
+                tabLabel = EM_TAB_LABEL,
+                get      = function() return GetEMConfig()[capturedEntry.toggle] == true end,
+                set      = function(value)
+                    GetEMConfig()[capturedEntry.toggle] = value == true
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = EMDisabled,
+            })
+            AddExtra({
+                label    = capturedEntry.colorLabel,
+                type     = "color",
+                hasAlpha = true,
+                tab      = EM_TAB,
+                tabLabel = EM_TAB_LABEL,
+                get      = function()
+                    return GetEMConfig()[capturedEntry.color] or capturedEntry.default
+                end,
+                set      = function(value)
+                    GetEMConfig()[capturedEntry.color] = DeepCopyValue(value)
+                    DesignerRefreshAllFrames()
+                end,
+                disabled = function()
+                    return EMDisabled() or GetEMConfig()[capturedEntry.toggle] ~= true
+                end,
+            })
+        end
+
+        -- Particle FX ---------------------------------------------------------
+        local EM_FX_TAB = "ebonmight_fx"
+        local EM_FX_LABEL = "Effects"
+
+        local function GetEMFx()
+            local c = GetEMConfig()
+            c.fx = type(c.fx) == "table" and c.fx or {}
+            return c.fx
+        end
+
+        AddExtra({
+            type     = "label",
+            tab      = EM_FX_TAB,
+            tabLabel = EM_FX_LABEL,
+            text     = "Ambient particle effects for the Extra Class Power bar.",
+        })
+        AddExtra({
+            label    = "Particle Effects",
+            type     = "toggle",
+            tab      = EM_FX_TAB,
+            tabLabel = EM_FX_LABEL,
+            get      = function() return GetEMFx().enabled == true end,
+            set      = function(value)
+                GetEMFx().enabled = value == true
+                DesignerRefreshAllFrames()
+            end,
+            disabled = EMDisabled,
+        })
+        AddExtra({
+            label    = "Particle Theme",
+            type     = "select",
+            tab      = EM_FX_TAB,
+            tabLabel = EM_FX_LABEL,
+            values   = POWER_FX_THEME_VALUES,
+            get      = function() return GetEMFx().theme or "holy" end,
+            set      = function(value)
+                GetEMFx().theme = POWER_FX_THEME_VALUES[value] and value or "holy"
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function() return EMDisabled() or GetEMFx().enabled ~= true end,
+        })
+        AddExtra({
+            label    = "Particle Expansion",
+            type     = "range",
+            tab      = EM_FX_TAB,
+            tabLabel = EM_FX_LABEL,
+            min      = 0.5,
+            max      = 3,
+            step     = 0.05,
+            get      = function() return tonumber(GetEMFx().effectScale) or 1 end,
+            set      = function(value)
+                GetEMFx().effectScale = Clamp(tonumber(value) or 1, 0.5, 3)
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function() return EMDisabled() or GetEMFx().enabled ~= true end,
+        })
+
+        -- Text ----------------------------------------------------------------
+        local EM_TEXT_TAB = "ebonmight_text"
+        local EM_TEXT_LABEL = "Text"
+
+        local function GetEMText()
+            local c = GetEMConfig()
+            c.text = type(c.text) == "table" and c.text or {}
+            return c.text
+        end
+
+        AddExtra({
+            label    = "Show Timer",
+            type     = "toggle",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            get      = function() return GetEMConfig().showTimer == true end,
+            set      = function(value)
+                GetEMConfig().showTimer = value == true
+                DesignerRefreshAllFrames()
+            end,
+            disabled = EMDisabled,
+        })
+        AddExtra({
+            label    = "Show Label",
+            type     = "toggle",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            get      = function() return GetEMConfig().showLabel == true end,
+            set      = function(value)
+                GetEMConfig().showLabel = value == true
+                DesignerRefreshAllFrames()
+            end,
+            disabled = EMDisabled,
+        })
+        AddExtra({
+            label    = "Font Size",
+            type     = "range",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            min      = 6,
+            max      = 20,
+            step     = 1,
+            get      = function() return tonumber(GetEMText().fontSize) or 9 end,
+            set      = function(value)
+                GetEMText().fontSize = math.floor((tonumber(value) or 9) + 0.5)
+                DesignerRefreshAllFrames()
+            end,
+            disabled = EMDisabled,
+        })
+        AddExtra({
+            label    = "Font",
+            type     = "select",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            desc     = "Font override for the timer and label text. Leave as default to use the global font.",
+            values   = function()
+                local lsm = T.Libs and T.Libs.LSM
+                local list = { [""] = "Default" }
+                if lsm and type(lsm.HashTable) == "function" then
+                    for name in pairs(lsm:HashTable("font") or {}) do
+                        list[name] = name
+                    end
+                end
+                return list
+            end,
+            get      = function() return GetEMText().fontName or "" end,
+            set      = function(value)
+                GetEMText().fontName = (value ~= nil and value ~= "") and value or nil
+                DesignerRefreshAllFrames()
+            end,
+            disabled = EMDisabled,
+        })
+        AddExtra({
+            label    = "Text Color",
+            type     = "color",
+            hasAlpha = true,
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            desc     = "Text color for timer and label. Leave unset to inherit the bar color.",
+            get      = function()
+                local c = GetEMText().textColor
+                return type(c) == "table" and c or nil
+            end,
+            set      = function(value)
+                GetEMText().textColor = value and DeepCopyValue(value) or nil
+                DesignerRefreshAllFrames()
+            end,
+            disabled = EMDisabled,
+        })
+        AddExtra({
+            label    = "Reset Text Color",
+            type     = "execute",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            desc     = "Revert text color to inherit from the bar color.",
+            func     = function()
+                GetEMText().textColor = nil
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function() return EMDisabled() or GetEMText().textColor == nil end,
+        })
+        AddExtra({
+            label    = "Timer Anchor",
+            type     = "select",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            values   = POINT_SELECT_VALUES,
+            get      = function() return GetEMText().timerPoint or "RIGHT" end,
+            set      = function(value)
+                GetEMText().timerPoint = POINT_SELECT_VALUES[value] and value or "RIGHT"
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function() return EMDisabled() or GetEMConfig().showTimer ~= true end,
+        })
+        AddExtra({
+            label    = "Timer X Offset",
+            type     = "range",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            min      = -60,
+            max      = 60,
+            step     = 1,
+            get      = function() return tonumber(GetEMText().timerOffsetX) or -2 end,
+            set      = function(value)
+                GetEMText().timerOffsetX = tonumber(value) or -2
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function() return EMDisabled() or GetEMConfig().showTimer ~= true end,
+        })
+        AddExtra({
+            label    = "Timer Y Offset",
+            type     = "range",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            min      = -20,
+            max      = 20,
+            step     = 1,
+            get      = function() return tonumber(GetEMText().timerOffsetY) or 0 end,
+            set      = function(value)
+                GetEMText().timerOffsetY = tonumber(value) or 0
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function() return EMDisabled() or GetEMConfig().showTimer ~= true end,
+        })
+        AddExtra({
+            label    = "Label Anchor",
+            type     = "select",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            values   = POINT_SELECT_VALUES,
+            get      = function() return GetEMText().labelPoint or "LEFT" end,
+            set      = function(value)
+                GetEMText().labelPoint = POINT_SELECT_VALUES[value] and value or "LEFT"
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function() return EMDisabled() or GetEMConfig().showLabel ~= true end,
+        })
+        AddExtra({
+            label    = "Label X Offset",
+            type     = "range",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            min      = -60,
+            max      = 60,
+            step     = 1,
+            get      = function() return tonumber(GetEMText().labelOffsetX) or 2 end,
+            set      = function(value)
+                GetEMText().labelOffsetX = tonumber(value) or 2
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function() return EMDisabled() or GetEMConfig().showLabel ~= true end,
+        })
+        AddExtra({
+            label    = "Label Y Offset",
+            type     = "range",
+            tab      = EM_TEXT_TAB,
+            tabLabel = EM_TEXT_LABEL,
+            min      = -20,
+            max      = 20,
+            step     = 1,
+            get      = function() return tonumber(GetEMText().labelOffsetY) or 0 end,
+            set      = function(value)
+                GetEMText().labelOffsetY = tonumber(value) or 0
+                DesignerRefreshAllFrames()
+            end,
+            disabled = function() return EMDisabled() or GetEMConfig().showLabel ~= true end,
+        })
+    end
+
+    AddEbonMightBarExtras()
+
     if layoutKey == "castbar" then
         AddStandaloneCastbarExtras()
     elseif isHeader then
@@ -12493,6 +13140,11 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
                 end,
             })
         end
+    elseif ebonBase then
+        -- Ebon Might / Extra Class Power bar mover.
+        -- Extras are already added by AddEbonMightBarExtras() above.
+        -- No additional extras needed here — do not fall through to the
+        -- generic unit-frame block which would show the full player config.
     else
         if layoutKey ~= "player" then
             AddExtra({
@@ -12735,14 +13387,15 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
     end
 
     local headerToggle = nil
-    if layoutKey == "castbar" or layoutKey == "party" or layoutKey == "raid" or layoutKey == "tank" then
+    if layoutKey == "castbar" or layoutKey == "party" or layoutKey == "raid" or layoutKey == "tank" or ebonBase then
+        local previewKey = ebonBase and "ebonMight" or layoutKey
         headerToggle = {
             label = "Test Mode",
             get = function()
-                return GetDesignerPreviewToggleValue(layoutKey)
+                return GetDesignerPreviewToggleValue(previewKey)
             end,
             set = function(value)
-                SetDesignerPreviewToggle(layoutKey, value == true)
+                SetDesignerPreviewToggle(previewKey, value == true)
             end,
         }
     end
@@ -12836,6 +13489,22 @@ function UnitFrames:RegisterDetachedPowerLayoutFrame(unitKey)
         local moversModule = _G.TwichMoverModule
         if moversModule and type(moversModule.UnregisterMover) == "function" then
             moversModule:UnregisterMover("UF_" .. unitKey .. "_power")
+        end
+    end
+end
+
+function UnitFrames:RegisterDetachedEbonMightLayoutFrame()
+    local frame = self.frames and self.frames.player
+    local bar   = frame and frame.TwichEbonMightBar or nil
+    if not bar then return end
+
+    local cfg = self:GetDB().ebonMightBar or {}
+    if cfg.enabled ~= false and cfg.detached == true then
+        self:RegisterLayoutFrame("player_ebonMight", bar)
+    else
+        local moversModule = _G.TwichMoverModule
+        if moversModule and type(moversModule.UnregisterMover) == "function" then
+            moversModule:UnregisterMover("UF_player_ebonMight")
         end
     end
 end
@@ -14061,6 +14730,159 @@ function UnitFrames:StyleFrame(frame)
             classPower[i] = bar
         end
         frame.ClassPower = classPower
+    end
+
+    -- Ebon Might timer bar (Augmentation Evoker).
+    -- Spell 395296 is the SELF-CAST Ebon Might aura on the caster (395152 is the ally buff).
+    -- ElvUI confirms: tracked via C_UnitAuras.GetPlayerAuraBySpellID(395296) +
+    -- an OnUpdate watcher that polls every 0.1 s (mirroring ElvUI_Libraries classpower.lua).
+    if capturedUnitKey == "player" and not frame.TwichEbonMightBar then
+        local EBON_MIGHT_SELF_SPELL_ID = 395296
+
+        local ebonBar = CreateFrame("StatusBar", nil, frame)
+        ebonBar:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -2)
+        ebonBar:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, -2)
+        ebonBar:SetHeight(8)
+        ebonBar:SetMinMaxValues(0, 1); ebonBar:SetValue(0)
+        ebonBar:Hide()
+
+        local ebonBg = ebonBar:CreateTexture(nil, "BACKGROUND")
+        ebonBg:SetAllPoints(ebonBar)
+        ebonBg:SetTexture("Interface\\Buttons\\WHITE8x8")
+        ebonBar.bg = ebonBg
+
+        local ebonBorder = CreateFrame("Frame", nil, ebonBar, "BackdropTemplate")
+        ebonBorder:SetPoint("TOPLEFT", ebonBar, "TOPLEFT", -1, 1)
+        ebonBorder:SetPoint("BOTTOMRIGHT", ebonBar, "BOTTOMRIGHT", 1, -1)
+        ebonBorder:SetFrameLevel(math_max(0, ebonBar:GetFrameLevel() - 1))
+        ebonBorder:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+        ebonBorder:SetBackdropBorderColor(0.24, 0.26, 0.32, 0.9)
+        ebonBar.border = ebonBorder
+
+        -- Optional remaining-time text
+        local ebonText = ebonBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ebonText:SetPoint("RIGHT", ebonBar, "RIGHT", -2, 0)
+        ebonText:SetJustifyH("RIGHT")
+        ebonText:Hide()
+        ebonBar.timerText = ebonText
+
+        -- Optional spell label
+        local ebonLabel = ebonBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        ebonLabel:SetPoint("LEFT", ebonBar, "LEFT", 2, 0)
+        ebonLabel:SetJustifyH("LEFT")
+        ebonLabel:SetText("Extra Class Power")
+        ebonLabel:Hide()
+        ebonBar.labelText = ebonLabel
+
+        -- Watcher: polls every 0.1 s while Ebon Might is active to drain the bar.
+        -- Parented to UIParent so it doesn't depend on ebonBar visibility.
+        local ebonWatcher = CreateFrame("Frame", nil, UIParent)
+        ebonWatcher:Hide()
+        ebonWatcher._waiting = 0
+
+        -- Helper: get the self-buff aura info (HELPFUL, isHelpful guard matches ElvUI).
+        local function GetEbonMightAura()
+            local info = C_UnitAuras.GetPlayerAuraBySpellID(EBON_MIGHT_SELF_SPELL_ID)
+            return (info and info.isHelpful and info.expirationTime and info.duration and info.duration > 0) and info or
+            nil
+        end
+
+        ebonWatcher:SetScript("OnUpdate", function(w, elapsed)
+            w._waiting = w._waiting + elapsed
+            if w._waiting < 0.1 then return end
+            w._waiting = 0
+
+            local aura = GetEbonMightAura()
+            if aura then
+                local remaining = aura.expirationTime - GetTime()
+                if remaining < 0 then remaining = 0 end
+                -- Sticky max: grow the reference maximum only when remaining exceeds it.
+                -- This prevents the bar snapping to full when Ebon Might is refreshed at
+                -- a point where the new remaining is less than the original cast duration.
+                local trackMax = math.max(ebonBar._trackMax or 0, remaining)
+                ebonBar._trackMax = trackMax
+                UnitFrames:ApplySmoothBarValue(ebonBar, remaining, trackMax)
+                if ebonBar.timerText and ebonBar.timerText:IsShown() then
+                    ebonBar.timerText:SetFormattedText("%.1fs", remaining)
+                end
+            else
+                -- Aura expired — stop watcher, reset sticky max.
+                w:Hide()
+                ebonBar._trackMax = 0
+                UnitFrames:StopSmoothBar(ebonBar)
+                local cfg = UnitFrames:GetDB().ebonMightBar or {}
+                if cfg.hideWhenInactive ~= false then
+                    ebonBar:Hide()
+                    if ebonBar.border then ebonBar.border:Hide() end
+                else
+                    UnitFrames:ApplySmoothBarValue(ebonBar, 0, 1)
+                end
+                if ebonBar.timerText then ebonBar.timerText:SetText("") end
+            end
+        end)
+
+        -- Scan: check if Ebon Might aura is present; show/hide bar and start/stop watcher.
+        local function ScanEbonMight(barFrame)
+            if barFrame._forceHide then return end
+            local cfg = UnitFrames:GetDB().ebonMightBar or {}
+            if cfg.enabled == false then return end
+
+            -- Test/preview mode: show a full bar with fake 30 s duration.
+            if UnitFrames:IsDesignerPreviewEnabled("ebonMight") then
+                ebonWatcher:Hide()
+                barFrame:Show()
+                if barFrame.border then barFrame.border:Show() end
+                UnitFrames:ApplySmoothBarValue(barFrame, 30, 30)
+                if barFrame.timerText and barFrame.timerText:IsShown() then
+                    barFrame.timerText:SetFormattedText("%.1fs", 30)
+                end
+                return
+            end
+
+            local aura = GetEbonMightAura()
+            if aura then
+                local remaining = aura.expirationTime - GetTime()
+                if remaining < 0 then remaining = 0 end
+                barFrame:Show()
+                if barFrame.border then barFrame.border:Show() end
+                -- Use sticky max so the bar only ever grows upward on refresh.
+                local trackMax = math.max(barFrame._trackMax or 0, remaining)
+                barFrame._trackMax = trackMax
+                UnitFrames:ApplySmoothBarValue(barFrame, remaining, trackMax)
+                if barFrame.timerText and barFrame.timerText:IsShown() then
+                    barFrame.timerText:SetFormattedText("%.1fs", remaining)
+                end
+                ebonWatcher:Show() -- start the drain watcher
+            else
+                ebonWatcher:Hide()
+                barFrame._trackMax = 0
+                UnitFrames:StopSmoothBar(barFrame)
+                -- "Hide When Inactive" is opt-out (default true).
+                -- When explicitly set to false, show the bar as an empty preview.
+                if cfg.hideWhenInactive ~= false then
+                    barFrame:Hide()
+                    if barFrame.border then barFrame.border:Hide() end
+                else
+                    barFrame:Show()
+                    if barFrame.border then barFrame.border:Show() end
+                    UnitFrames:ApplySmoothBarValue(barFrame, 0, 1)
+                end
+                if barFrame.timerText then barFrame.timerText:SetText("") end
+            end
+        end
+
+        -- Event listener on the bar frame: UNIT_AURA to detect Ebon Might being applied/removed.
+        ebonBar:RegisterEvent("UNIT_AURA")
+        ebonBar:RegisterEvent("PLAYER_ENTERING_WORLD")
+        ebonBar:SetScript("OnEvent", function(self, event, unit)
+            if event == "UNIT_AURA" and unit ~= "player" then return end
+            ScanEbonMight(self)
+        end)
+
+        -- Expose scanner so ApplyEbonMightBarSettings can trigger a fresh check
+        ebonBar._scan           = ScanEbonMight
+        ebonBar._watcher        = ebonWatcher
+        frame.TwichEbonMightBar = ebonBar
     end
 
     if capturedUnitKey == "player" and not frame.TwichPlayerClassArtwork then
@@ -16650,6 +17472,8 @@ function UnitFrames:IsDesignerPreviewEnabled(previewKey)
         return db.testPreviewCastbar == true
     elseif previewKey == "boss" then
         return db.testPreviewBoss == true
+    elseif previewKey == "ebonMight" then
+        return db.testPreviewEbonMight == true
     end
 
     return false
@@ -16661,6 +17485,7 @@ function UnitFrames:HasAnyDesignerPreviewEnabled()
         or self:IsDesignerPreviewEnabled("tank")
         or self:IsDesignerPreviewEnabled("castbar")
         or self:IsDesignerPreviewEnabled("boss")
+        or self:IsDesignerPreviewEnabled("ebonMight")
 end
 
 function UnitFrames:ClearDesignerPreviewModes()
@@ -16671,6 +17496,7 @@ function UnitFrames:ClearDesignerPreviewModes()
     db.testPreviewTank = false
     db.testPreviewCastbar = false
     db.testPreviewBoss = false
+    db.testPreviewEbonMight = false
     self:RefreshPreviewVisibility()
     self:RefreshAllFrames()
 end
@@ -16687,6 +17513,8 @@ function UnitFrames:SetTestPreviewGroupEnabled(groupKey, enabled)
         db.testPreviewCastbar = enabled == true
     elseif groupKey == "boss" then
         db.testPreviewBoss = enabled == true
+    elseif groupKey == "ebonMight" then
+        db.testPreviewEbonMight = enabled == true
     else
         return
     end
