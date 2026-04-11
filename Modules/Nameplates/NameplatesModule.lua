@@ -103,6 +103,13 @@ local PLAIN_BD               = {
     edgeFile = "Interface\\Buttons\\WHITE8x8",
     edgeSize = 1,
 }
+-- Soft-edge backdrop for the target glow frame.
+-- GlowTex creates a blurred halo; edgeSize=6 gives a visible but not overwhelming ring.
+local GLOW_EDGE              = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\GlowTex"
+local GLOW_BD                = {
+    edgeFile = GLOW_EDGE,
+    edgeSize = 6,
+}
 
 -- CVars we take control of while the module is active
 local NAMEPLATE_CVARS        = {
@@ -405,30 +412,48 @@ function Nameplates:BuildPlateFrame(parentPlate)
     frame:SetFrameLevel(math_max(2, baseLevel + 3))
     ApplyBackdrop(frame, bgC[1], bgC[2], bgC[3], bgC[4], bdC[1], bdC[2], bdC[3], bdC[4])
 
-    -- ── Target / focus glow (behind the bar) ─────────────────────────────────
-    local glowOutset = Clamp(db.targetGlowOutset or 3, 1, 10)
-    local targetGlow = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    targetGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", -glowOutset, glowOutset)
-    targetGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", glowOutset, -glowOutset)
+    -- ── Target / focus glow ring ──────────────────────────────────────────────
+    -- Parented to parentPlate (not frame) to avoid child/frameLevel clipping.
+    -- GlowTex + edgeSize=6 creates a soft halo that bleeds outward from the ring.
+    -- Rendered at frameLevel-1 so the main frame content shows cleanly above it.
+    local glowOutset = Clamp(db.targetGlowOutset or 4, 1, 12)
+    local targetGlow = CreateFrame("Frame", nil, parentPlate, "BackdropTemplate")
+    targetGlow:SetPoint("TOPLEFT",     frame, "TOPLEFT",     -glowOutset,  glowOutset)
+    targetGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",  glowOutset, -glowOutset)
     targetGlow:SetFrameLevel(math_max(1, frame:GetFrameLevel() - 1))
-    ApplyBackdrop(targetGlow, 0, 0, 0, 0, 0.96, 0.76, 0.24, 0)
+    if targetGlow.SetBackdrop then
+        targetGlow:SetBackdrop(GLOW_BD)
+    end
+    targetGlow:SetBackdropBorderColor(0.96, 0.76, 0.24, 0)
     targetGlow:Hide()
     frame.targetGlow = targetGlow
 
+    -- Store the normal border colour so UpdateTargetGlow can restore it.
+    frame._normalBdColor = { bdC[1], bdC[2], bdC[3], bdC[4] or 0.9 }
+
     -- ── Target arrows ─────────────────────────────────────────────────────────
-    local arrowSize  = Clamp(db.targetArrowSize or 16, 8, 32)
-    local arrowL     = frame:CreateTexture(nil, "OVERLAY", nil, 2)
+    -- Use ArrowUp.tga (a real arrow shape) with TexCoord rotation so:
+    --   arrowL (left side of plate) points RIGHT →
+    --   arrowR (right side of plate) points LEFT ←
+    -- TexCoords from ElvUI: CW-90° for right, CW-90° + H-flip for left.
+    local arrowSize = Clamp(db.targetArrowSize or 18, 8, 32)
+    local ARROW_TEX = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\ArrowUp"
+
+    local arrowL = frame:CreateTexture(nil, "OVERLAY", nil, 7)
     arrowL:SetSize(arrowSize, arrowSize)
     arrowL:SetPoint("RIGHT", frame, "LEFT", -4, 0)
-    arrowL:SetAtlas("nameplates-arrow-highlighted")
-    arrowL:SetTexCoord(1, 0, 0, 1) -- mirror H
+    arrowL:SetTexture(ARROW_TEX)
+    -- ArrowUp rotated 90° CW → points right (→), placed on LEFT side
+    arrowL:SetTexCoord(1, 0, 0, 0, 1, 1, 0, 1)
     arrowL:Hide()
     frame.arrowL = arrowL
 
-    local arrowR = frame:CreateTexture(nil, "OVERLAY", nil, 2)
+    local arrowR = frame:CreateTexture(nil, "OVERLAY", nil, 7)
     arrowR:SetSize(arrowSize, arrowSize)
     arrowR:SetPoint("LEFT", frame, "RIGHT", 4, 0)
-    arrowR:SetAtlas("nameplates-arrow-highlighted")
+    arrowR:SetTexture(ARROW_TEX)
+    -- ArrowUp rotated 90° CW then H-flipped → points left (←), placed on RIGHT side
+    arrowR:SetTexCoord(0, 1, 1, 1, 0, 0, 1, 0)
     arrowR:Hide()
     frame.arrowR = arrowR
 
@@ -737,7 +762,17 @@ end
 function Nameplates:UpdateTargetGlow(frame, unit)
     if not frame or not frame.targetGlow then return end
     local db = self:GetDB()
+
+    -- Helper: restore the frame's normal border colour from stored state or DB.
+    local function RestoreBorder()
+        local bc = frame._normalBdColor
+                   or (type(db.healthBorderColor) == "table" and db.healthBorderColor)
+                   or { 0.14, 0.15, 0.20, 0.90 }
+        frame:SetBackdropBorderColor(bc[1], bc[2], bc[3], bc[4] or 0.9)
+    end
+
     if db.showTargetGlow == false then
+        RestoreBorder()
         frame.targetGlow:Hide()
         if frame.arrowL then frame.arrowL:Hide() end
         if frame.arrowR then frame.arrowR:Hide() end
@@ -750,6 +785,7 @@ function Nameplates:UpdateTargetGlow(frame, unit)
     local baseH    = Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60)
 
     if isTarget then
+        -- Resolve target glow colour (custom DB override or theme accent).
         local gc = type(db.targetGlowColor) == "table" and db.targetGlowColor or nil
         local gr, gg, gb, ga
         if gc then
@@ -758,32 +794,55 @@ function Nameplates:UpdateTargetGlow(frame, unit)
             local ac = GetThemeColor("accentColor", { 0.96, 0.76, 0.24 })
             gr, gg, gb, ga = ac[1], ac[2], ac[3], 0.9
         end
-        frame.targetGlow:SetBackdropBorderColor(gr, gg, gb, ga)
+
+        -- Change the main frame's 1px border to the accent colour — the most
+        -- reliable visual indicator regardless of frameLevel stacking.
+        frame:SetBackdropBorderColor(gr, gg, gb, ga)
+
+        -- Show the outer glow ring (2px border, outset from the frame).
+        frame.targetGlow:SetBackdropBorderColor(gr, gg, gb, ga * 0.6)
         frame.targetGlow:Show()
 
-        local growW = (db.targetGrowWidth and db.targetGrowWidth ~= 1) and Clamp(db.targetGrowWidth, 0.5, 2) or 1
-        local growH = (db.targetGrowHeight and db.targetGrowHeight ~= 1) and Clamp(db.targetGrowHeight, 0.5, 2) or 1
+        -- Optional frame grow on target.
+        local growW = (db.targetGrowWidth and db.targetGrowWidth ~= 1)
+                      and Clamp(db.targetGrowWidth, 0.5, 2) or 1
+        local growH = (db.targetGrowHeight and db.targetGrowHeight ~= 1)
+                      and Clamp(db.targetGrowHeight, 0.5, 2) or 1
         frame:SetSize(baseW * growW, baseH * growH)
 
         if db.showTargetArrows ~= false then
-            if frame.arrowL then frame.arrowL:Show() end
-            if frame.arrowR then frame.arrowR:Show() end
+            if frame.arrowL then
+                frame.arrowL:SetVertexColor(gr, gg, gb, 1)
+                frame.arrowL:Show()
+            end
+            if frame.arrowR then
+                frame.arrowR:SetVertexColor(gr, gg, gb, 1)
+                frame.arrowR:Show()
+            end
         else
             if frame.arrowL then frame.arrowL:Hide() end
             if frame.arrowR then frame.arrowR:Hide() end
         end
+
     elseif isFocus then
         local fc = type(db.focusGlowColor) == "table" and db.focusGlowColor or nil
+        local fr, fg, fb, fa
         if fc then
-            frame.targetGlow:SetBackdropBorderColor(fc[1], fc[2], fc[3], fc[4] or 0.7)
+            fr, fg, fb, fa = fc[1], fc[2], fc[3], fc[4] or 0.7
         else
-            frame.targetGlow:SetBackdropBorderColor(0.22, 0.78, 0.96, 0.7)
+            fr, fg, fb, fa = 0.22, 0.78, 0.96, 0.7
         end
+
+        frame:SetBackdropBorderColor(fr, fg, fb, fa)
+        frame.targetGlow:SetBackdropBorderColor(fr, fg, fb, fa * 0.5)
         frame.targetGlow:Show()
+
         if frame.arrowL then frame.arrowL:Hide() end
         if frame.arrowR then frame.arrowR:Hide() end
         frame:SetSize(baseW, baseH)
+
     else
+        RestoreBorder()
         frame.targetGlow:Hide()
         if frame.arrowL then frame.arrowL:Hide() end
         if frame.arrowR then frame.arrowR:Hide() end
@@ -1025,6 +1084,8 @@ function Nameplates:ApplyThemeToFrame(frame)
     local bgC = type(db.healthBgColor) == "table" and db.healthBgColor or { 0.05, 0.06, 0.08, 0.92 }
     local bdC = type(db.healthBorderColor) == "table" and db.healthBorderColor or { 0.14, 0.15, 0.20, 0.90 }
     ApplyBackdrop(frame, bgC[1], bgC[2], bgC[3], bgC[4], bdC[1], bdC[2], bdC[3], bdC[4])
+    -- Keep the cached normal-border colour in sync so UpdateTargetGlow can restore it.
+    frame._normalBdColor = { bdC[1], bdC[2], bdC[3], bdC[4] or 0.9 }
 
     if frame.castContainer then
         local cbgC = type(db.castBgColor) == "table" and db.castBgColor or { 0.05, 0.06, 0.08, 0.92 }
@@ -1107,6 +1168,20 @@ function Nameplates:OnNamePlateAdded(_, unitID)
         blizzUF:SetAlpha(0)
         -- Do not call Hide() — it can cause issues with Blizzard secure code
     end
+
+    -- Suppress any other Blizzard visual art children on the plate frame (e.g. selection
+    -- highlight / target outline that lives outside the UnitFrame).  We do this BEFORE
+    -- creating our custom frame so we can safely zero-alpha everything currently parented
+    -- to `plate` without accidentally hiding our own content.
+    -- Wrapped in pcall to be safe against secure-frame restrictions.
+    pcall(function()
+        local children = { plate:GetChildren() }
+        for _, child in ipairs(children) do
+            if child ~= blizzUF then
+                child:SetAlpha(0)
+            end
+        end
+    end)
 
     local frame          = self:BuildPlateFrame(plate)
     frame._unit          = unitID
@@ -1270,11 +1345,15 @@ function Nameplates:EnterTestMode()
             end
         end
 
-        -- Target glow on first plate
+        -- Target glow on first plate (preview)
         if i == 1 and frame.targetGlow then
             local ac = GetThemeColor("accentColor", { 0.96, 0.76, 0.24 })
-            frame.targetGlow:SetBackdropBorderColor(ac[1], ac[2], ac[3], 0.9)
+            -- Mirror the live behaviour: colour the main frame border + show outer ring.
+            frame:SetBackdropBorderColor(ac[1], ac[2], ac[3], 0.9)
+            frame.targetGlow:SetBackdropBorderColor(ac[1], ac[2], ac[3], 0.55)
             frame.targetGlow:Show()
+            if frame.arrowL then frame.arrowL:SetVertexColor(ac[1], ac[2], ac[3], 1); frame.arrowL:Show() end
+            if frame.arrowR then frame.arrowR:SetVertexColor(ac[1], ac[2], ac[3], 1); frame.arrowR:Show() end
         end
 
         -- Cast bar
