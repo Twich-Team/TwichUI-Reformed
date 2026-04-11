@@ -68,6 +68,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "smart",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -88,6 +90,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -108,6 +112,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -128,6 +134,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "RIGHT",
         relativePoint = "RIGHT",
         x = -46,
@@ -148,6 +156,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "RIGHT",
         relativePoint = "RIGHT",
         x = -88,
@@ -168,6 +178,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -188,6 +200,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -208,6 +222,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -228,6 +244,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -248,6 +266,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -268,6 +288,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -288,6 +310,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -308,6 +332,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -328,6 +354,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -348,6 +376,8 @@ local BAR_DEFAULTS = {
         simpleVisibilityMode = "raw",
         simpleVisibility = {},
         visibility = "[petbattle] hide; show",
+        pagingMode = "raw",
+        simplePaging = {},
         point = "BOTTOM",
         relativePoint = "BOTTOM",
         x = 0,
@@ -531,51 +561,6 @@ local function SupportsPaging(barKey)
     return PAGING_SUPPORTED_BARS[barKey] == true
 end
 
-local function GetDefaultPagingDriver(barKey)
-    if barKey ~= "bar1" then
-        return ""
-    end
-
-    local segments = {
-        "[vehicleui] possess;",
-        "[overridebar] possess;",
-        "[possessbar] possess;",
-        "[shapeshift] possess;",
-        "[bonusbar:5] 11;",
-    }
-
-    if PLAYER_CLASS == "ROGUE" then
-        segments[#segments + 1] = "[bonusbar:1] 7;"
-    elseif PLAYER_CLASS == "WARLOCK" then
-        segments[#segments + 1] = "[form:1] 7;"
-    elseif PLAYER_CLASS == "DRUID" then
-        segments[#segments + 1] = "[bonusbar:1,nostealth] 7;"
-        segments[#segments + 1] = "[bonusbar:1,stealth] 8;"
-        segments[#segments + 1] = "[bonusbar:2] 10;"
-        segments[#segments + 1] = "[bonusbar:3] 9;"
-        segments[#segments + 1] = "[bonusbar:4] 10;"
-    elseif PLAYER_CLASS == "PRIEST" then
-        segments[#segments + 1] = "[form:1,spec:3] 7;"
-    elseif PLAYER_CLASS == "WARRIOR" then
-        segments[#segments + 1] = "[bonusbar:1] 7;"
-        segments[#segments + 1] = "[bonusbar:2] 8;"
-        segments[#segments + 1] = "[bonusbar:3] 9;"
-    elseif PLAYER_CLASS == "EVOKER" then
-        segments[#segments + 1] = "[bonusbar:1] 7;"
-    elseif PLAYER_CLASS == "MONK" then
-        segments[#segments + 1] = "[bonusbar:1] 7;"
-        segments[#segments + 1] = "[bonusbar:2] 8;"
-    end
-
-    segments[#segments + 1] = "[bar:6] 6;"
-    segments[#segments + 1] = "[bar:5] 5;"
-    segments[#segments + 1] = "[bar:4] 4;"
-    segments[#segments + 1] = "[bar:3] 3;"
-    segments[#segments + 1] = "[bar:2] 2;"
-
-    return TrimString(table.concat(segments, " "))
-end
-
 local function DeepCopyValue(value)
     if type(value) ~= "table" then
         return value
@@ -637,13 +622,29 @@ local function NormalizeBarSettings(barKey, barDB)
     end
 
     if SupportsPaging(barKey) then
-        if barDB.paging == nil then
-            barDB.paging = GetDefaultPagingDriver(barKey)
-        else
-            barDB.paging = TrimString(barDB.paging)
+        -- Migrate pagingMode: if paging has a non-empty raw string from an old save, keep it as "raw".
+        -- New bar1 installs default to "smart".
+        if barDB.pagingMode == nil then
+            local defaults = BAR_DEFAULTS[barKey] or {}
+            barDB.pagingMode = defaults.pagingMode or "raw"
+        end
+        if barDB.pagingMode ~= "smart" and barDB.pagingMode ~= "simple" and barDB.pagingMode ~= "raw" then
+            barDB.pagingMode = "raw"
+        end
+        if type(barDB.simplePaging) ~= "table" then
+            barDB.simplePaging = DeepCopyValue((BAR_DEFAULTS[barKey] or {}).simplePaging or {})
+        end
+        if barDB.pagingMode == "raw" then
+            if barDB.paging == nil then
+                barDB.paging = ""
+            else
+                barDB.paging = TrimString(barDB.paging)
+            end
         end
     else
         barDB.paging = nil
+        barDB.pagingMode = nil
+        barDB.simplePaging = nil
     end
 
     barDB._cooldownSwipeDefaultsMigrated = true
@@ -1773,15 +1774,352 @@ function Options:BuildConfiguration()
                             RequestRefresh(false)
                         end,
                     },
+                    pagingMode = {
+                        type = "select",
+                        name = "Paging Mode",
+                        desc =
+                        "How paging is configured for this bar.\n\n|cffffcc00Smart|r — Class-aware automatic paging. Handles vehicle, override, shapeshift, stance, and bar-swap hotkeys automatically.\n\n|cffffcc00Simple|r — Per-condition page dropdowns. Choose which page is shown for each condition.\n\n|cffffcc00Raw|r — Enter a custom secure state driver string manually.",
+                        order = 10,
+                        width = 1.5,
+                        values = { smart = "Smart (Auto)", simple = "Simple", raw = "Raw Driver" },
+                        sorting = { "smart", "simple", "raw" },
+                        hidden = function()
+                            return not SupportsPaging(barKey)
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return barDB and barDB.pagingMode or "raw"
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.pagingMode = value
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSmartInfo = {
+                        type = "description",
+                        name = function()
+                            return
+                            "|cff88ddffSmart paging|r automatically detects your class, current stance, vehicle state, and Blizzard bar-swap hotkeys to page bar 1 to the correct action page. No configuration needed."
+                        end,
+                        order = 10.1,
+                        width = "full",
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "smart"
+                        end,
+                    },
+                    pagingSimpleHeader = {
+                        type = "description",
+                        name =
+                        "|cff88ddffAssign a page override for each condition.|r Leave blank (0 or empty) to stay on the base page.",
+                        order = 10.2,
+                        width = "full",
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                    },
+                    pagingSimpleVehicle = {
+                        type = "range",
+                        name = "Vehicle / Override",
+                        desc = "Page to show when in a vehicle, override bar, or possess bar. 0 = use base page.",
+                        order = 10.3,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.vehicle) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.vehicle = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSimpleShapeshift = {
+                        type = "range",
+                        name = "Shapeshift / Form",
+                        desc = "Page to show while shapeshifted or using a temporary shapeshift bar. 0 = use base page.",
+                        order = 10.31,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.shapeshift) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.shapeshift = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSimpleBonusBar1 = {
+                        type = "range",
+                        name = "Bonus/Stance Bar 1",
+                        desc = "Page when bonus bar 1 is active (rogue/warrior stance 1, druid cat, etc). 0 = base page.",
+                        order = 10.32,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.bonusbar1) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.bonusbar1 = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSimpleBonusBar2 = {
+                        type = "range",
+                        name = "Bonus/Stance Bar 2",
+                        desc = "Page when bonus bar 2 is active. 0 = base page.",
+                        order = 10.33,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.bonusbar2) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.bonusbar2 = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSimpleBonusBar3 = {
+                        type = "range",
+                        name = "Bonus/Stance Bar 3",
+                        desc = "Page when bonus bar 3 is active. 0 = base page.",
+                        order = 10.34,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.bonusbar3) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.bonusbar3 = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSimpleBonusBar4 = {
+                        type = "range",
+                        name = "Bonus/Stance Bar 4",
+                        desc = "Page when bonus bar 4 is active. 0 = base page.",
+                        order = 10.35,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.bonusbar4) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.bonusbar4 = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSimpleBar2 = {
+                        type = "range",
+                        name = "Bar Hotkey [bar:2]",
+                        desc = "Page when the player presses the Bar 2 swap hotkey. 0 = base page.",
+                        order = 10.4,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.bar2) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.bar2 = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSimpleBar3 = {
+                        type = "range",
+                        name = "Bar Hotkey [bar:3]",
+                        desc = "Page when the player presses the Bar 3 swap hotkey. 0 = base page.",
+                        order = 10.41,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.bar3) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.bar3 = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSimpleBar4 = {
+                        type = "range",
+                        name = "Bar Hotkey [bar:4]",
+                        desc = "Page when the player presses the Bar 4 swap hotkey. 0 = base page.",
+                        order = 10.42,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.bar4) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.bar4 = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSimpleBar5 = {
+                        type = "range",
+                        name = "Bar Hotkey [bar:5]",
+                        desc = "Page when the player presses the Bar 5 swap hotkey. 0 = base page.",
+                        order = 10.43,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.bar5) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.bar5 = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
+                    pagingSimpleBar6 = {
+                        type = "range",
+                        name = "Bar Hotkey [bar:6]",
+                        desc = "Page when the player presses the Bar 6 swap hotkey. 0 = base page.",
+                        order = 10.44,
+                        min = 0,
+                        max = 18,
+                        step = 1,
+                        width = 1.4,
+                        hidden = function()
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "simple"
+                        end,
+                        get = function()
+                            local barDB = Options:GetBarSettings(barKey)
+                            return tonumber(barDB and barDB.simplePaging and barDB.simplePaging.bar6) or 0
+                        end,
+                        set = function(_, value)
+                            local barDB = Options:GetBarSettings(barKey)
+                            if not barDB then return end
+                            barDB.simplePaging = barDB.simplePaging or {}
+                            barDB.simplePaging.bar6 = (value > 0) and value or nil
+                            RequestRefresh(false)
+                        end,
+                    },
                     paging = {
                         type = "input",
-                        name = "Action Paging Driver",
+                        name = "Raw Paging Driver",
                         desc =
-                        "Secure page driver for this bar. Return page numbers like 2 or 7, or use possess for vehicle, override, and temporary bonus bars. A fallback base page is appended automatically.",
+                        "Secure page state driver string. Return page numbers (1-18) for each condition. A fallback base page is appended automatically. Example: [bonusbar:1] 7; [bar:2] 2;",
                         order = 10.5,
                         width = 2.2,
                         hidden = function()
-                            return not SupportsPaging(barKey)
+                            if not SupportsPaging(barKey) then return true end
+                            local barDB = Options:GetBarSettings(barKey)
+                            return not barDB or barDB.pagingMode ~= "raw"
                         end,
                         get = function()
                             local barDB = Options:GetBarSettings(barKey)
@@ -1789,30 +2127,8 @@ function Options:BuildConfiguration()
                         end,
                         set = function(_, value)
                             local barDB = Options:GetBarSettings(barKey)
-                            if not barDB then
-                                return
-                            end
-
+                            if not barDB then return end
                             barDB.paging = TrimString(value)
-                            RequestRefresh(false)
-                        end,
-                    },
-                    restorePaging = {
-                        type = "execute",
-                        name = "Restore Paging",
-                        desc = "Restore this bar's default paging driver.",
-                        order = 10.6,
-                        width = 1.2,
-                        hidden = function()
-                            return not SupportsPaging(barKey)
-                        end,
-                        func = function()
-                            local barDB = Options:GetBarSettings(barKey)
-                            if not barDB then
-                                return
-                            end
-
-                            barDB.paging = GetDefaultPagingDriver(barKey)
                             RequestRefresh(false)
                         end,
                     },

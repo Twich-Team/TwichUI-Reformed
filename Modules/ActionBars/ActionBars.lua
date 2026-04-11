@@ -49,12 +49,12 @@ local hooksecurefunc = _G.hooksecurefunc
 local HasVehicleActionBar = _G.HasVehicleActionBar or (_G.C_ActionBar and _G.C_ActionBar.HasVehicleActionBar)
 local HasOverrideActionBar = _G.HasOverrideActionBar or (_G.C_ActionBar and _G.C_ActionBar.HasOverrideActionBar)
 local HasTempShapeshiftActionBar = _G.HasTempShapeshiftActionBar or
-(_G.C_ActionBar and _G.C_ActionBar.HasTempShapeshiftActionBar)
+    (_G.C_ActionBar and _G.C_ActionBar.HasTempShapeshiftActionBar)
 local HasBonusActionBar = _G.HasBonusActionBar or (_G.C_ActionBar and _G.C_ActionBar.HasBonusActionBar)
 local GetVehicleBarIndex = _G.GetVehicleBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetVehicleBarIndex)
 local GetOverrideBarIndex = _G.GetOverrideBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetOverrideBarIndex)
 local GetTempShapeshiftBarIndex = _G.GetTempShapeshiftBarIndex or
-(_G.C_ActionBar and _G.C_ActionBar.GetTempShapeshiftBarIndex)
+    (_G.C_ActionBar and _G.C_ActionBar.GetTempShapeshiftBarIndex)
 local GetBonusBarIndex = _G.GetBonusBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetBonusBarIndex)
 
 local floor = math.floor
@@ -73,6 +73,9 @@ local unpackValues = table.unpack or _G.unpack
 local LSM = (T.Libs and T.Libs.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
 local LBG = LibStub and LibStub("LibButtonGlow-1.0", true)
 local Masque = LibStub and LibStub("Masque", true)
+local LAB = LibStub and LibStub("LibActionButton-1.0-ElvUI", true)
+local ClearOverrideBindings = _G.ClearOverrideBindings
+local SetOverrideBindingClick = _G.SetOverrideBindingClick
 local DebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
 local ErrorLog = T.Tools and T.Tools.ErrorLog
 
@@ -200,21 +203,14 @@ local BLIZZARD_OBJECTS_TO_HIDE = {
     "MainMenuBarMaxLevelBar3",
 }
 
-local CUSTOM_BAR_PAGES = {
-    bar9 = 2,
-    bar10 = 7,
-    bar11 = 8,
-    bar12 = 9,
-    bar13 = 10,
-    bar14 = 11,
-    bar15 = 12,
-}
-
+-- LAB-owned primary bars: basePage = which WoW action page (1-15) this bar owns
+-- bindPrefix = Blizzard binding prefix for standard key bindings; nil = CLICK bindings
 local BAR_DEFINITIONS = {
     {
         key = "bar1",
         label = "Bar 1",
-        prefix = "ActionButton",
+        basePage = 1,
+        bindPrefix = "ACTIONBUTTON",
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 36,
@@ -222,7 +218,8 @@ local BAR_DEFINITIONS = {
     {
         key = "bar2",
         label = "Bar 2",
-        prefix = "MultiBarBottomLeftButton",
+        basePage = 2,
+        bindPrefix = "MULTIACTIONBAR3BUTTON",
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 34,
@@ -230,7 +227,8 @@ local BAR_DEFINITIONS = {
     {
         key = "bar3",
         label = "Bar 3",
-        prefix = "MultiBarBottomRightButton",
+        basePage = 3,
+        bindPrefix = "MULTIACTIONBAR4BUTTON",
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 34,
@@ -238,7 +236,8 @@ local BAR_DEFINITIONS = {
     {
         key = "bar4",
         label = "Bar 4",
-        prefix = "MultiBarRightButton",
+        basePage = 4,
+        bindPrefix = "MULTIACTIONBAR2BUTTON",
         maxButtons = 12,
         fallbackButtonsPerRow = 1,
         fallbackButtonSize = 32,
@@ -246,7 +245,8 @@ local BAR_DEFINITIONS = {
     {
         key = "bar5",
         label = "Bar 5",
-        prefix = "MultiBarLeftButton",
+        basePage = 5,
+        bindPrefix = "MULTIACTIONBAR1BUTTON",
         maxButtons = 12,
         fallbackButtonsPerRow = 1,
         fallbackButtonSize = 32,
@@ -254,7 +254,8 @@ local BAR_DEFINITIONS = {
     {
         key = "bar6",
         label = "Bar 6",
-        prefix = "MultiBar5Button",
+        basePage = 6,
+        bindPrefix = "MULTIACTIONBAR5BUTTON",
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 32,
@@ -262,7 +263,8 @@ local BAR_DEFINITIONS = {
     {
         key = "bar7",
         label = "Bar 7",
-        prefix = "MultiBar6Button",
+        basePage = 7,
+        bindPrefix = "MULTIACTIONBAR6BUTTON",
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 32,
@@ -270,7 +272,8 @@ local BAR_DEFINITIONS = {
     {
         key = "bar8",
         label = "Bar 8",
-        prefix = "MultiBar7Button",
+        basePage = 8,
+        bindPrefix = "MULTIACTIONBAR7BUTTON",
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 32,
@@ -278,7 +281,7 @@ local BAR_DEFINITIONS = {
     {
         key = "bar9",
         label = "Bar 9",
-        actionPage = CUSTOM_BAR_PAGES.bar9,
+        basePage = 9,
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 32,
@@ -286,7 +289,7 @@ local BAR_DEFINITIONS = {
     {
         key = "bar10",
         label = "Bar 10",
-        actionPage = CUSTOM_BAR_PAGES.bar10,
+        basePage = 10,
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 32,
@@ -294,7 +297,7 @@ local BAR_DEFINITIONS = {
     {
         key = "bar11",
         label = "Bar 11",
-        actionPage = CUSTOM_BAR_PAGES.bar11,
+        basePage = 11,
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 32,
@@ -302,7 +305,7 @@ local BAR_DEFINITIONS = {
     {
         key = "bar12",
         label = "Bar 12",
-        actionPage = CUSTOM_BAR_PAGES.bar12,
+        basePage = 12,
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 32,
@@ -310,7 +313,7 @@ local BAR_DEFINITIONS = {
     {
         key = "bar13",
         label = "Bar 13",
-        actionPage = CUSTOM_BAR_PAGES.bar13,
+        basePage = 13,
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 32,
@@ -318,7 +321,7 @@ local BAR_DEFINITIONS = {
     {
         key = "bar14",
         label = "Bar 14",
-        actionPage = CUSTOM_BAR_PAGES.bar14,
+        basePage = 14,
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 32,
@@ -326,7 +329,7 @@ local BAR_DEFINITIONS = {
     {
         key = "bar15",
         label = "Bar 15",
-        actionPage = CUSTOM_BAR_PAGES.bar15,
+        basePage = 15,
         maxButtons = 12,
         fallbackButtonsPerRow = 12,
         fallbackButtonSize = 32,
@@ -1059,6 +1062,13 @@ local function ApplyButtonGridState(button, showGrid)
         return
     end
 
+    -- LAB buttons manage their own grid via UpdateConfig, not Blizzard's ActionButton_ShowGrid.
+    if button.UpdateConfig and button.state_types then
+        button:UpdateConfig({ showGrid = showGrid == true })
+        CleanupButtonGridArt(button)
+        return
+    end
+
     local showGridFunc, hideGridFunc = ResolveGridFunctions()
 
     if showGrid == true then
@@ -1155,11 +1165,11 @@ end
 function ActionBars:OnInitialize()
     self.holders = {}
     self.barButtons = {}
-    self.customButtons = {}
+    self.labButtons = {} -- LAB-created buttons for primary bars 1-15
     self.activeAlertSpells = {}
     self.lastActionAttempt = nil
     self.lastSpellAttempt = nil
-    self.originalButtons = {}
+    self.originalButtons = {} -- Legacy: capture state for special bars (pet/stance/extra/vehicle)
     self.originalFrames = {}
     self.originalRegions = {}
     self.hoverTokens = {}
@@ -1215,7 +1225,7 @@ function ActionBars:OnEnable()
     self:RegisterEvent("UNIT_EXITED_VEHICLE", "RequestRefresh")
     self:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
     self:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
-    self:RegisterEvent("UPDATE_BINDINGS", "RefreshButtonStates")
+    self:RegisterEvent("UPDATE_BINDINGS", "OnBindingsChanged")
     self:RegisterEvent("ACTIONBAR_PAGE_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("ACTIONBAR_SLOT_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("ACTIONBAR_UPDATE_STATE", "RefreshButtonStates")
@@ -1273,6 +1283,7 @@ function ActionBars:OnDisable()
     self.lastSpellAttempt = nil
     self:InvalidateDBCache()
     self:ClearMasqueGroups()
+    self:ClearAllOverrideBindings()
     self:RestoreOriginalLayout()
     RefreshBlizzardLayout()
     LogDebug("action bars disabled and original layout restored", false)
@@ -1296,6 +1307,12 @@ function ActionBars:PLAYER_REGEN_ENABLED()
         self.pendingRefresh = false
         self:RefreshModuleState()
     end
+end
+
+function ActionBars:OnBindingsChanged()
+    self:RefreshButtonStates("UPDATE_BINDINGS")
+    -- Re-apply override bindings so new/changed key assignments route to LAB buttons.
+    self:ApplyOverrideBindings()
 end
 
 function ActionBars:OnThemeChanged()
@@ -2375,6 +2392,8 @@ function ActionBars:CreateInfrastructure()
         holder:SetFrameLevel(30)
         holder:EnableMouse(true)
         holder.barKey = barKey
+        -- For LAB-based bars: propagate page state to child buttons via ChildUpdate.
+        -- For legacy bars (pet/stance): the state driver is never registered, so this fires only if paging is active.
         holder:SetAttribute("_onstate-page", [[
             local page = tonumber(newstate)
             if newstate == 'possess' or newstate == '11' then
@@ -2395,12 +2414,8 @@ function ActionBars:CreateInfrastructure()
                 page = 1
             end
 
-            for index = 1, 12 do
-                local button = self:GetFrameRef('button' .. index)
-                if button then
-                    button:SetAttribute('actionpage', page)
-                end
-            end
+            self:SetAttribute('state', page)
+            control:ChildUpdate('state', page)
         ]])
 
         holder:HookScript("OnEnter", function(self)
@@ -3872,29 +3887,8 @@ function ActionBars:SPELL_ACTIVATION_OVERLAY_GLOW_HIDE(_, spellID)
     self:UpdateAllButtonGlows()
 end
 
-function ActionBars:CreateCustomActionButton(definition, index)
-    if not definition or not definition.key or not definition.actionPage or not self.blizzardHiddenRoot then
-        return nil
-    end
-
-    local buttonName = string.format("TwichUIActionBar_%s_Button%d", definition.key, index)
-    local button = _G[buttonName]
-    local actionID = ((definition.actionPage - 1) * 12) + index
-
-    if not button then
-        button = CreateFrame("CheckButton", buttonName, self.blizzardHiddenRoot,
-            "ActionButtonTemplate,SecureActionButtonTemplate")
-    end
-
-    button:SetParent(self.blizzardHiddenRoot)
-    button:SetAttribute("type", "action")
-    button:SetID(index)
-    button:SetAttribute("actionpage", definition.actionPage)
-    button:Hide()
-
-    self:CaptureButtonState(button)
-    return button
-end
+-- CreateCustomActionButton has been superseded by GetOrCreateLABButtons (LAB v2 system).
+-- Primary bars 1-15 are now fully TwichUI-owned LAB buttons.
 
 function ActionBars:CaptureButtonState(button)
     if not button or self.originalButtons[button] then
@@ -3967,39 +3961,39 @@ function ActionBars:RestoreOriginalLayout()
         end
     end
 
+    self:ClearAllOverrideBindings()
     self._defaultArtHiddenApplied = false
 
+    -- Hide LAB buttons cleanly (they stay parented to their holders which are hidden).
+    for barKey, buttonList in pairs(self.labButtons or {}) do
+        for _, button in ipairs(buttonList) do
+            if button then
+                button:Hide()
+                self:HideButtonHoverEffect(button)
+                self:HideFailedActionFeedback(button)
+                self:HidePixelGlow(button)
+                self:HideProcGlow(button)
+                self:HideNativeOverlayGlow(button)
+                if button.__twichuiABChrome then
+                    button.__twichuiABChrome:Hide()
+                end
+            end
+        end
+    end
+
+    -- Restore legacy captured Blizzard buttons (pet/stance/extra/vehicle).
     for button, state in pairs(self.originalButtons) do
         if button and state then
-            if state.parent then
-                button:SetParent(state.parent)
-            end
+            if state.parent then button:SetParent(state.parent) end
             RestorePoints(button, state.points)
-
-            if state.width and state.height then
-                button:SetSize(state.width, state.height)
-            end
-            if state.id ~= nil and button.SetID then
-                button:SetID(state.id)
-            end
-            if state.scale then
-                button:SetScale(state.scale)
-            end
-            if state.alpha then
-                button:SetAlpha(state.alpha)
-            end
-            if state.frameStrata then
-                button:SetFrameStrata(state.frameStrata)
-            end
-            if state.frameLevel then
-                button:SetFrameLevel(state.frameLevel)
-            end
-
+            if state.width and state.height then button:SetSize(state.width, state.height) end
+            if state.id ~= nil and button.SetID then button:SetID(state.id) end
+            if state.scale then button:SetScale(state.scale) end
+            if state.alpha then button:SetAlpha(state.alpha) end
+            if state.frameStrata then button:SetFrameStrata(state.frameStrata) end
+            if state.frameLevel then button:SetFrameLevel(state.frameLevel) end
             local icon = self:GetButtonIcon(button)
-            if icon and state.iconTexCoords then
-                icon:SetTexCoord(unpackValues(state.iconTexCoords))
-            end
-
+            if icon and state.iconTexCoords then icon:SetTexCoord(unpackValues(state.iconTexCoords)) end
             RestoreFont(self:GetButtonHotKey(button), state.hotKey)
             RestoreFont(self:GetButtonCount(button), state.count)
             RestoreFont(self:GetButtonMacroName(button), state.name)
@@ -4009,125 +4003,186 @@ function ActionBars:RestoreOriginalLayout()
             end
             RestoreButtonArtTextures(button, state.artTextures)
             RestoreSpellCastAnimState(button, state.spellCastAnim)
-            ActionBars:HideButtonHoverEffect(button)
-            ActionBars:HideFailedActionFeedback(button)
-            ActionBars:HidePixelGlow(button)
-            ActionBars:HideProcGlow(button)
-            ActionBars:HideNativeOverlayGlow(button)
-
-            if state.shown == true then
-                button:Show()
-            else
-                button:Hide()
-            end
-
-            if button.__twichuiABChrome then
-                button.__twichuiABChrome:Hide()
-            end
-
+            self:HideButtonHoverEffect(button)
+            self:HideFailedActionFeedback(button)
+            self:HidePixelGlow(button)
+            self:HideProcGlow(button)
+            self:HideNativeOverlayGlow(button)
+            if state.shown == true then button:Show() else button:Hide() end
+            if button.__twichuiABChrome then button.__twichuiABChrome:Hide() end
             local cooldown = self:GetButtonCooldown(button)
             if cooldown then
                 RestorePoints(cooldown, state.cooldownPoints)
-                if cooldown.SetHideCountdownNumbers then
-                    cooldown:SetHideCountdownNumbers(false)
-                end
-                if cooldown.SetDrawSwipe then
-                    cooldown:SetDrawSwipe(true)
-                end
-                if cooldown.SetDrawEdge then
-                    cooldown:SetDrawEdge(true)
-                end
-                if cooldown.SetDrawBling then
-                    cooldown:SetDrawBling(false)
-                end
+                if cooldown.SetHideCountdownNumbers then cooldown:SetHideCountdownNumbers(false) end
+                if cooldown.SetDrawSwipe then cooldown:SetDrawSwipe(true) end
+                if cooldown.SetDrawEdge then cooldown:SetDrawEdge(true) end
+                if cooldown.SetDrawBling then cooldown:SetDrawBling(false) end
             end
         end
     end
 
     for frame, state in pairs(self.originalFrames) do
         if frame and state then
-            if state.parent then
-                frame:SetParent(state.parent)
-            end
-            if frame.ignoreInLayout ~= nil then
-                frame.ignoreInLayout = state.ignoreInLayout
-            end
+            if state.parent then frame:SetParent(state.parent) end
+            if frame.ignoreInLayout ~= nil then frame.ignoreInLayout = state.ignoreInLayout end
             if _G.UIPARENT_MANAGED_FRAME_POSITIONS and state.name then
                 _G.UIPARENT_MANAGED_FRAME_POSITIONS[state.name] = state.managedPosition
             end
             RestorePoints(frame, state.points)
             frame:SetAlpha(state.alpha or 1)
-            if state.shown == true then
-                frame:Show()
-            else
-                frame:Hide()
-            end
-
-            LogDebugf(false, "restore frame=%s shown=%s parent=%s",
-                SafeDebugString(frame.GetName and frame:GetName() or frame),
-                tostring(state.shown == true),
-                state.parent and state.parent.GetName and state.parent:GetName() or "nil")
+            if state.shown == true then frame:Show() else frame:Hide() end
         end
     end
 
     for region, state in pairs(self.originalRegions) do
-        if region and state then
-            RestoreRegionState(region, state)
-        end
+        if region and state then RestoreRegionState(region, state) end
     end
 
     RefreshBlizzardLayout()
 end
 
+-- ── Paging mode constants ─────────────────────────────────────────────────────
+-- Conditions used by the simple paging configuration UI.
+local SIMPLE_PAGING_CONDITIONS = {
+    { key = "vehicle",    fmt = "[vehicleui][overridebar][possessbar]", label = "Vehicle / Override" },
+    { key = "shapeshift", fmt = "[shapeshift]",                         label = "Shapeshift/Form" },
+    { key = "bonusbar5",  fmt = "[bonusbar:5]",                         label = "Bonus Bar 5 (misc)" },
+    { key = "bonusbar1",  fmt = "[bonusbar:1]",                         label = "Bonus/Form Bar 1" },
+    { key = "bonusbar2",  fmt = "[bonusbar:2]",                         label = "Bonus/Form Bar 2" },
+    { key = "bonusbar3",  fmt = "[bonusbar:3]",                         label = "Bonus/Form Bar 3" },
+    { key = "bonusbar4",  fmt = "[bonusbar:4]",                         label = "Bonus/Form Bar 4" },
+    { key = "bar2",       fmt = "[bar:2]",                              label = "Bar Hotkey [bar:2]" },
+    { key = "bar3",       fmt = "[bar:3]",                              label = "Bar Hotkey [bar:3]" },
+    { key = "bar4",       fmt = "[bar:4]",                              label = "Bar Hotkey [bar:4]" },
+    { key = "bar5",       fmt = "[bar:5]",                              label = "Bar Hotkey [bar:5]" },
+    { key = "bar6",       fmt = "[bar:6]",                              label = "Bar Hotkey [bar:6]" },
+}
+ActionBars.SIMPLE_PAGING_CONDITIONS = SIMPLE_PAGING_CONDITIONS
+
 function ActionBars:SupportsPaging(definition)
     return definition and PAGING_SUPPORTED_BARS[definition.key] == true and definition.maxButtons == 12
 end
 
-function ActionBars:GetBaseActionPage(definition, buttons)
-    if not definition then
-        return nil
-    end
-
-    if definition.actionPage then
-        return tonumber(definition.actionPage)
-    end
-
-    if definition.key == "bar1" then
-        return 1
-    end
-
-    local firstButton = buttons and buttons[1] or nil
-    local actionID = tonumber(firstButton and
-    (firstButton.action or (firstButton.GetAttribute and firstButton:GetAttribute("action")) or nil))
-    if actionID and actionID > 0 then
-        return floor((actionID - 1) / 12) + 1
-    end
-
-    return 1
+function ActionBars:GetBasePageForBar(definition)
+    return definition and definition.basePage or 1
 end
 
-function ActionBars:GetPagingDriver(definition, barSettings, buttons)
+-- Parse all concrete page numbers from a state driver string.
+function ActionBars:GetActivePagesFromDriver(driver)
+    local pages = {}
+    if type(driver) ~= "string" then return pages end
+    local clean = driver:gsub("%[.-%]", "")
+    for segment in clean:gmatch("[^;]+") do
+        local num = tonumber(TrimString(segment))
+        if num and num >= 1 and num <= 18 then
+            pages[math.floor(num)] = true
+        end
+    end
+    return pages
+end
+
+-- Build smart (class-aware) paging driver for bar1.
+function ActionBars:BuildSmartPagingDriver(barKey)
+    if barKey ~= "bar1" then return nil end
+
+    local GetOverrideBarIndexFn = GetOverrideBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetOverrideBarIndex)
+    local GetVehicleBarIndexFn  = GetVehicleBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetVehicleBarIndex)
+    local GetTempBarIndexFn     = GetTempShapeshiftBarIndex or
+    (_G.C_ActionBar and _G.C_ActionBar.GetTempShapeshiftBarIndex)
+    local GetBonusBarIndexFn    = GetBonusBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetBonusBarIndex)
+
+    local overrideIdx           = (GetOverrideBarIndexFn and GetOverrideBarIndexFn()) or 13
+    local vehicleIdx            = (GetVehicleBarIndexFn and GetVehicleBarIndexFn()) or 11
+    local shapeshiftIdx         = (GetTempBarIndexFn and GetTempBarIndexFn()) or 12
+    local bonusIdx              = (GetBonusBarIndexFn and GetBonusBarIndexFn()) or 11
+
+    local UnitClass             = _G.UnitClass
+    local playerClass           = select(2, UnitClass("player"))
+
+    local segments              = {
+        format("[overridebar] %d;", overrideIdx),
+        format("[vehicleui][possessbar] %d;", vehicleIdx),
+        format("[shapeshift] %d;", shapeshiftIdx),
+        format("[bonusbar:5] %d;", bonusIdx),
+    }
+
+    if playerClass == "ROGUE" then
+        segments[#segments + 1] = "[bonusbar:1] 7;"
+    elseif playerClass == "WARLOCK" then
+        segments[#segments + 1] = "[form:1] 7;"
+    elseif playerClass == "DRUID" then
+        segments[#segments + 1] = "[bonusbar:1,nostealth] 7;"
+        segments[#segments + 1] = "[bonusbar:1,stealth] 8;"
+        segments[#segments + 1] = "[bonusbar:2] 10;"
+        segments[#segments + 1] = "[bonusbar:3] 9;"
+        segments[#segments + 1] = "[bonusbar:4] 10;"
+    elseif playerClass == "PRIEST" then
+        segments[#segments + 1] = "[form:1,spec:3] 7;"
+    elseif playerClass == "WARRIOR" then
+        segments[#segments + 1] = "[bonusbar:1] 7;"
+        segments[#segments + 1] = "[bonusbar:2] 8;"
+        segments[#segments + 1] = "[bonusbar:3] 9;"
+    elseif playerClass == "EVOKER" then
+        segments[#segments + 1] = "[bonusbar:1] 7;"
+    elseif playerClass == "MONK" then
+        segments[#segments + 1] = "[bonusbar:1] 7;"
+        segments[#segments + 1] = "[bonusbar:2] 8;"
+    end
+
+    segments[#segments + 1] = "[bar:6] 6;"
+    segments[#segments + 1] = "[bar:5] 5;"
+    segments[#segments + 1] = "[bar:4] 4;"
+    segments[#segments + 1] = "[bar:3] 3;"
+    segments[#segments + 1] = "[bar:2] 2;"
+
+    return TrimString(table.concat(segments, " "))
+end
+
+-- Build driver from simple per-condition page assignments.
+function ActionBars:BuildSimplePagingDriver(barSettings, basePage)
+    local simplePaging = barSettings and type(barSettings.simplePaging) == "table" and barSettings.simplePaging or {}
+    local segments = {}
+    for _, rule in ipairs(SIMPLE_PAGING_CONDITIONS) do
+        local page = tonumber(simplePaging[rule.key])
+        if page and page >= 1 and page <= 18 and math.floor(page) ~= basePage then
+            segments[#segments + 1] = rule.fmt .. " " .. math.floor(page) .. ";"
+        end
+    end
+    if #segments == 0 then return nil end
+    return TrimString(table.concat(segments, " "))
+end
+
+-- Build the final state driver string from pagingMode setting.
+function ActionBars:BuildPagingDriver(definition, barSettings)
+    local basePage = self:GetBasePageForBar(definition)
     if not self:SupportsPaging(definition) then
-        return nil, nil
+        return tostring(basePage)
     end
 
-    local basePage = self:GetBaseActionPage(definition, buttons)
-    if not basePage then
-        return nil, nil
+    local pagingMode = barSettings and barSettings.pagingMode or "raw"
+    local prefix = ""
+
+    if pagingMode == "smart" then
+        local smartDriver = self:BuildSmartPagingDriver(definition.key)
+        if smartDriver and smartDriver ~= "" then
+            prefix = smartDriver .. "; "
+        end
+    elseif pagingMode == "simple" then
+        local simpleDriver = self:BuildSimplePagingDriver(barSettings, basePage)
+        if simpleDriver and simpleDriver ~= "" then
+            prefix = simpleDriver .. "; "
+        end
+    else -- raw
+        local raw = TrimString(barSettings and barSettings.paging or "")
+        if raw ~= "" then
+            prefix = raw:sub(-1) == ";" and (raw .. " ") or (raw .. "; ")
+        end
     end
 
-    local driver = TrimString(barSettings and barSettings.paging or "")
-    if driver == "" then
-        driver = tostring(basePage)
-    elseif driver:sub(-1) == ";" then
-        driver = driver .. " " .. tostring(basePage)
-    else
-        driver = driver .. "; " .. tostring(basePage)
-    end
-
-    return driver, basePage
+    return prefix .. tostring(basePage)
 end
 
+-- Apply state-based paging to a holder using LAB SetState machinery.
 function ActionBars:ApplyPaging(holder, definition, barSettings, buttons)
     pcall(UnregisterStateDriver, holder, "page")
 
@@ -4135,53 +4190,133 @@ function ActionBars:ApplyPaging(holder, definition, barSettings, buttons)
         return
     end
 
-    local driver, basePage = self:GetPagingDriver(definition, barSettings, buttons)
-    if not driver or not basePage then
-        return
-    end
+    local basePage = self:GetBasePageForBar(definition)
+    local driver = self:BuildPagingDriver(definition, barSettings)
+    local isLABBar = definition.basePage ~= nil and LAB ~= nil
 
-    for index = 1, 12 do
-        local button = buttons[index]
-        if button then
-            if button.SetID and button:GetID() ~= index then
-                button:SetID(index)
+    if isLABBar then
+        -- LAB path: map each active page to action slots via SetState.
+        local activePages = self:GetActivePagesFromDriver(driver)
+        for index, button in ipairs(buttons) do
+            if button.SetState and button.ClearStates then
+                button:ClearStates()
+                for page = 1, 18 do
+                    if activePages[page] then
+                        button:SetState(page, "action", (page - 1) * 12 + index)
+                    else
+                        button:SetState(page, "empty", nil)
+                    end
+                end
             end
-            if button.SetAttribute then
-                button:SetAttribute("actionpage", basePage)
-            end
-            if holder.SetFrameRef then
-                holder:SetFrameRef("button" .. index, button)
+        end
+    else
+        -- Legacy path for non-LAB special bars.
+        for index = 1, 12 do
+            local button = buttons[index]
+            if button then
+                if button.SetID and button:GetID() ~= index then button:SetID(index) end
+                if button.SetAttribute then button:SetAttribute("actionpage", basePage) end
+                if holder.SetFrameRef then holder:SetFrameRef("button" .. index, button) end
             end
         end
     end
 
     holder:SetAttribute("state-page", basePage)
-
     local ok = pcall(RegisterStateDriver, holder, "page", driver)
     if not ok then
         pcall(RegisterStateDriver, holder, "page", tostring(basePage))
     end
 end
 
-function ActionBars:GetButtonsForDefinition(definition)
-    local buttons = {}
-    if definition.actionPage then
-        self.customButtons[definition.key] = self.customButtons[definition.key] or {}
+-- ── Override binding management ───────────────────────────────────────────────
 
-        for index = 1, definition.maxButtons do
-            local button = self.customButtons[definition.key][index] or self:CreateCustomActionButton(definition, index)
-            if button then
-                self.customButtons[definition.key][index] = button
-                buttons[#buttons + 1] = button
+function ActionBars:ApplyOverrideBindings()
+    if InCombatLockdown() then return end
+
+    for _, definition in ipairs(BAR_DEFINITIONS) do
+        if definition.basePage and definition.bindPrefix then
+            local holder = self.holders[definition.key]
+            local buttons = self.barButtons[definition.key] or {}
+            if holder then
+                pcall(ClearOverrideBindings, holder)
+                for _, button in ipairs(buttons) do
+                    local target = button.keyBoundTarget
+                    if target then
+                        local keys = { GetBindingKey(target) }
+                        for _, key in ipairs(keys) do
+                            if key and key ~= "" then
+                                pcall(SetOverrideBindingClick, holder, false, key, button:GetName())
+                            end
+                        end
+                    end
+                end
             end
         end
-    elseif definition.buttonName then
+    end
+end
+
+function ActionBars:ClearAllOverrideBindings()
+    if InCombatLockdown() then return end
+    for _, holder in pairs(self.holders) do
+        if holder then
+            pcall(ClearOverrideBindings, holder)
+        end
+    end
+end
+
+-- ── Button lifecycle ──────────────────────────────────────────────────────────
+
+function ActionBars:GetOrCreateLABButtons(definition)
+    if not LAB then return {} end
+    local holder = self.holders[definition.key]
+    if not holder then return {} end
+
+    self.labButtons[definition.key] = self.labButtons[definition.key] or {}
+    local buttons = {}
+    local bindPrefix = definition.bindPrefix
+
+    for index = 1, definition.maxButtons do
+        local button = self.labButtons[definition.key][index]
+        if not button then
+            local buttonName = format("TwichUIActionBar_%s_%d", definition.key, index)
+            button = LAB:CreateButton(index, buttonName, holder, {
+                showGrid = false,
+                useColoring = true,
+                outOfRangeColoring = "button",
+                tooltip = "enabled",
+                enabled = true,
+                keyBoundTarget = bindPrefix and (bindPrefix .. index) or false,
+                clickOnDown = false,
+            })
+            button.parentBarKey = definition.key
+            button.parentBarIndex = index
+            self.labButtons[definition.key][index] = button
+        end
+        buttons[#buttons + 1] = button
+    end
+
+    return buttons
+end
+
+function ActionBars:GetButtonsForDefinition(definition)
+    local buttons = {}
+
+    -- LAB path for all primary bars 1-15.
+    if definition.basePage ~= nil then
+        buttons = self:GetOrCreateLABButtons(definition)
+        self.barButtons[definition.key] = buttons
+        self:MarkSpellButtonIndexDirty()
+        return buttons
+    end
+
+    -- Legacy path for special bars (vehicleExit, pet, stance, extraAction).
+    if definition.buttonName then
         local button = _G[definition.buttonName]
         if button then
             self:CaptureButtonState(button)
             buttons[#buttons + 1] = button
         end
-    else
+    elseif definition.prefix then
         for index = 1, definition.maxButtons do
             local button = _G[definition.prefix .. index]
             if button then
@@ -5154,7 +5289,16 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
         tostring(barSettings.showBorder ~= false),
         tostring(barSettings.showAccent ~= false),
         tostring(barSettings.visibility or DEFAULT_VISIBILITY),
+        tostring(barSettings.pagingMode or "raw"),
         tostring(barSettings.paging or ""),
+        (function()
+            local sp = barSettings.simplePaging
+            if type(sp) ~= "table" then return "" end
+            local parts = {}
+            for k, v in pairs(sp) do parts[#parts + 1] = k .. "=" .. tostring(v) end
+            table.sort(parts)
+            return table.concat(parts, ",")
+        end)(),
         tostring(self._themeStyleToken or 0),
     }, "|")
 
@@ -5354,6 +5498,7 @@ function ActionBars:RefreshAll()
 
     self:ApplyMasqueSettings(actionBarDB)
     self:RefreshButtonStates(true)
+    self:ApplyOverrideBindings()
     local glowStyle = self:GetGlowStyle()
     if glowStyle == "button" or glowStyle == "blizzard" then
         self:ScheduleGlowSync(0.15)
