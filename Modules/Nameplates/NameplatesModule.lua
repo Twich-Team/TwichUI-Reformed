@@ -61,6 +61,7 @@ local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
 local GetSpecalization       = _G.GetSpecialization
 local GetSpecalizationRole   = _G.GetSpecializationRole
 local GetTime                = _G.GetTime
+local CooldownFrame_Set      = _G.CooldownFrame_Set
 local RAID_CLASS_COLORS      = _G.RAID_CLASS_COLORS
 local C_ClassColor           = _G.C_ClassColor
 local math_max               = math.max
@@ -378,19 +379,10 @@ function Nameplates:ResolveHealthColor(unit, db)
             return DBColor(db, "colorTapped", COLOR_TAPPED)
         end
 
-        -- Classification sub-type colours (hostile only)
+        -- Classification sub-type colours (hostile only).
+        -- Classification always wins — a boss that is also a caster class stays boss color.
         local reaction = UnitReaction and UnitReaction(unit, "player")
         if reaction and reaction <= 3 then
-            -- Caster-type NPC detection via UnitClassBase (e.g. PALADIN healer NPCs).
-            -- Checked first so it can override classification colors (rare, rareelite, etc.)
-            -- when the player has explicitly enabled caster differentiation.
-            if db.colorByCaster then
-                local baseClass = UnitClassBase and UnitClassBase(unit)
-                if baseClass == "PALADIN" then
-                    return DBColor(db, "colorNpcCaster", COLOR_NPC_CASTER)
-                end
-            end
-
             local cl = UnitClassification and UnitClassification(unit) or ""
             if cl == "worldboss" or cl == "boss" then
                 return DBColor(db, "colorBoss", COLOR_BOSS)
@@ -406,6 +398,14 @@ function Nameplates:ResolveHealthColor(unit, db)
                     return DBColor(db, "colorBoss", COLOR_BOSS)
                 elseif lvl >= (maxLvl + 1) then
                     return DBColor(db, "colorMiniboss", COLOR_MINIBOSS)
+                end
+            end
+
+            -- Caster-type NPC detection (only for non-classified hostiles).
+            if db.colorByCaster then
+                local baseClass = UnitClassBase and UnitClassBase(unit)
+                if baseClass == "PALADIN" then
+                    return DBColor(db, "colorNpcCaster", COLOR_NPC_CASTER)
                 end
             end
 
@@ -715,7 +715,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     auraFrame:SetSize(w, auraSize + 4)
     auraFrame.icons = {}
 
-    local timerFSize = Clamp(db.auraTimerFontSize or 8, 6, 14)
+    local timerFSize = Clamp(db.auraTimerFontSize or 8, 6, 28)
     for i = 1, NP_MAX_AURA_POOL do
         local iconF = CreateFrame("Frame", nil, auraFrame, "BackdropTemplate")
         iconF:SetSize(auraSize, auraSize)
@@ -732,11 +732,25 @@ function Nameplates:BuildPlateFrame(parentPlate)
         iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         iconF.tex = iconTex
 
-        local timeFs = iconF:CreateFontString(nil, "OVERLAY")
-        timeFs:SetFont(_G.STANDARD_TEXT_FONT, timerFSize, "OUTLINE")
-        timeFs:SetPoint("BOTTOM", iconF, "BOTTOM", 0, 2)
-        timeFs:SetJustifyH("CENTER")
-        iconF.timeText = timeFs
+        -- Cooldown frame: Blizzard handles tainted DurationObjects internally.
+        -- We never read back any values from it, so no taint errors.
+        local cd = CreateFrame("Cooldown", nil, iconF, "CooldownFrameTemplate")
+        cd:SetAllPoints(iconF)
+        cd:SetDrawEdge(false)
+        cd:SetDrawSwipe(true)
+        cd:SetMinimumCountdownDuration(0)
+        cd:SetHideCountdownNumbers(false)
+        cd:SetAlpha(1)
+        -- In Midnight, GetRegions() returns the built-in timer region directly
+        -- (same as Plater_Auras.lua line ~1454).  Assign it to cd.Timer so we
+        -- can SetFont on it — the template's own .Timer may be nil in Midnight.
+        local timerRegion = cd:GetRegions()
+        cd.Timer = timerRegion or cd.Timer
+        if cd.Timer then
+            cd.Timer:SetFont(_G.STANDARD_TEXT_FONT, timerFSize, "OUTLINE")
+        end
+        cd:Hide()
+        iconF.cooldown = cd
 
         iconF:Hide()
         auraFrame.icons[i] = iconF
@@ -1027,61 +1041,93 @@ function Nameplates:UpdateAuras(frame, unit)
     end
 
     local maxAuras   = Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 0, NP_MAX_AURA_POOL)
-    local auraFilter = db.auraFilter or "HARMFUL"
+    -- Append |PLAYER to the filter when onlyMine is set. This is resolved at the API level
+    -- so we never need to touch tainted secret boolean/string fields (isFromPlayerOrPlayerPet,
+    -- sourceUnit) which throw errors on == comparison in Midnight.
+    local baseFilter = db.auraFilter or "HARMFUL"
+    local auraFilter = (db.auraOnlyMine == true) and (baseFilter .. "|PLAYER") or baseFilter
     local auraSize   = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
-    local onlyMine   = db.auraOnlyMine == true
     local showTimer  = db.auraShowTimer ~= false
-    local timerFSize = Clamp(db.auraTimerFontSize or 8, 6, 14)
-
-    local slotCount  = CollectAuraSlots(unit, auraFilter, maxAuras + (onlyMine and maxAuras or 0))
     local shown      = 0
 
-    for s = 1, slotCount do
-        if shown >= maxAuras then break end
-        local slotIndex = _slotBuffer[s]
-        if not slotIndex then break end
-
-        local data = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot(unit, slotIndex)
-        if data and data.auraInstanceID and data.icon then
-            -- MIDNIGHT: sourceUnit is a secret string on nameplate units.
-            -- Wrap the comparison in pcall; if it errors, treat as "not mine".
-            local isPlayerAura = true
-            if onlyMine then
-                local ok, result = pcall(function() return data.sourceUnit == "player" end)
-                isPlayerAura = ok and result
+    -- ── Populate aura icon ────────────────────────────────────────────────────
+    -- Timer: DurationObject methods (IsZero, GetRemainingDuration) return tainted
+    -- secret booleans/numbers in Midnight — any Lua comparison throws, even in pcall.
+    -- SetCooldownFromDurationObject is a Blizzard widget method that accepts tainted
+    -- objects safely (no Lua-side return values). This is how Plater does it.
+    local function ShowAuraIcon(iconF, aura)
+        iconF:SetSize(auraSize, auraSize)
+        -- icon fileID can be a secret number; wrap in pcall
+        if not pcall(function() iconF.tex:SetTexture(aura.icon) end) then
+            pcall(function() iconF.tex:SetTexture(134400) end)
+        end
+        -- Timer via Cooldown frame
+        local cd = iconF.cooldown
+        if showTimer and cd and C_UnitAuras and C_UnitAuras.GetAuraDuration then
+            local instanceID = aura.auraInstanceID
+            if instanceID then
+                local durationObj = C_UnitAuras.GetAuraDuration(unit, instanceID)
+                if durationObj then
+                    -- Pass the tainted object directly into the widget — no Lua comparisons.
+                    pcall(function() cd:SetCooldownFromDurationObject(durationObj) end)
+                    cd:Show()
+                else
+                    cd:Hide()
+                end
+            else
+                cd:Hide()
             end
-            if not onlyMine or isPlayerAura then
+        elseif cd then
+            cd:Hide()
+        end
+        iconF:Show()
+    end
+
+    -- ── Fetch aura list ───────────────────────────────────────────────────────
+    -- Midnight: C_UnitAuras.GetUnitAuras(unit, filter, nil, sortRule) returns
+    -- an array of aura tables directly (Plater_Auras.lua line ~806).
+    -- Do NOT wrap in pcall — it silently eats the entire result on error.
+    -- GetAuraSlots is a pre-Midnight API that returns no slots for nameplate tokens.
+    local auraList = nil
+    if C_UnitAuras and C_UnitAuras.GetUnitAuras then
+        -- Pass Unsorted sort rule for Midnight (required for proper return value).
+        local sortRule = Enum and Enum.UnitAuraSortRule and Enum.UnitAuraSortRule.Unsorted or nil
+        local getOk, getResult = pcall(C_UnitAuras.GetUnitAuras, unit, auraFilter, nil, sortRule)
+        if getOk then
+            auraList = getResult
+        else
+            NpLog(string.format("UpdateAuras(%s): GetUnitAuras FAILED: %s", tostring(unit), tostring(getResult)))
+        end
+    end
+
+    -- GetUnitAuras returns a table; iterate with pairs (Midnight may use non-sequential keys).
+    -- Player filtering was already handled by the |PLAYER filter token above — no field checks.
+    if auraList then
+        local iterOk, iterErr = pcall(function()
+            for _, aura in pairs(auraList) do
+                if shown >= maxAuras then break end
+                if not aura then break end
                 shown = shown + 1
                 local iconF = frame.auraFrame.icons[shown]
-                if iconF then
-                    iconF:SetSize(auraSize, auraSize)
-                    iconF.tex:SetTexture(data.icon)
-
-                    if showTimer then
-                        local dur = tonumber(data.duration) or 0
-                        local exp = tonumber(data.expirationTime) or 0
-                        if dur > 0 and exp > 0 then
-                            local rem = math_max(0, exp - GetTime())
-                            local timeStr
-                            if rem > 60 then
-                                timeStr = math_floor(rem / 60) .. "m"
-                            elseif rem > 10 then
-                                timeStr = tostring(math_floor(rem))
-                            else
-                                timeStr = string.format("%.1f", rem)
-                            end
-                            iconF.timeText:SetFont(_G.STANDARD_TEXT_FONT, timerFSize, "OUTLINE")
-                            iconF.timeText:SetText(timeStr)
-                            iconF.timeText:Show()
-                        else
-                            iconF.timeText:Hide()
-                        end
-                    else
-                        iconF.timeText:Hide()
-                    end
-
-                    iconF:Show()
-                end
+                if iconF then ShowAuraIcon(iconF, aura) end
+            end
+        end)
+        if not iterOk then
+            NpLog(string.format("UpdateAuras(%s): ITERATION ERROR: %s", tostring(unit), tostring(iterErr)))
+        end
+    else
+        -- ── Fallback: GetAuraSlots / GetAuraDataBySlot (pre-Midnight API) ───────
+        -- auraFilter already contains |PLAYER if onlyMine is set.
+        local slotCount = CollectAuraSlots(unit, auraFilter, maxAuras)
+        for s = 1, slotCount do
+            if shown >= maxAuras then break end
+            local slotIndex = _slotBuffer[s]
+            if not slotIndex then break end
+            local data = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot(unit, slotIndex)
+            if data and data.icon then
+                shown = shown + 1
+                local iconF = frame.auraFrame.icons[shown]
+                if iconF then ShowAuraIcon(iconF, data) end
             end
         end
     end
@@ -1091,7 +1137,11 @@ function Nameplates:UpdateAuras(frame, unit)
         if iconF then iconF:Hide() end
     end
 
-    if shown > 0 then frame.auraFrame:Show() else frame.auraFrame:Hide() end
+    if shown > 0 then
+        frame.auraFrame:Show()
+    else
+        frame.auraFrame:Hide()
+    end
 end
 
 function Nameplates:UpdateCastBar(frame, unit)
@@ -1697,6 +1747,7 @@ function Nameplates:EnterTestMode()
         if db.showAuras ~= false and db.auraTestMode ~= false and frame.auraFrame then
             local FAKE_ICONS = { 135817, 136243, 135768, 135723 }
             local auraSize   = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
+            local fSize      = Clamp(db.auraTimerFontSize or 8, 6, 14)
             local count      = math_min(#FAKE_ICONS, Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 0, NP_MAX_AURA_POOL))
             for ai = 1, count do
                 local iconF = frame.auraFrame.icons[ai]
@@ -1704,12 +1755,19 @@ function Nameplates:EnterTestMode()
                     iconF:SetSize(auraSize, auraSize)
                     iconF.tex:SetTexture(FAKE_ICONS[ai])
                     iconF.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-                    if db.auraShowTimer ~= false then
-                        local fakeRem = 10 + (ai * 8)
-                        iconF.timeText:SetText(tostring(fakeRem) .. "s")
-                        iconF.timeText:Show()
-                    else
-                        iconF.timeText:Hide()
+                    local cd = iconF.cooldown
+                    if cd then
+                        if db.auraShowTimer ~= false then
+                            -- Use plain SetCooldown for fake data (no tainted DurationObject).
+                            local fakeRem = 10 + (ai * 8)
+                            if cd.Timer then
+                                cd.Timer:SetFont(_G.STANDARD_TEXT_FONT, fSize, "OUTLINE")
+                            end
+                            CooldownFrame_Set(cd, GetTime() - (30 - fakeRem), 30, 1, true, 1)
+                            cd:Show()
+                        else
+                            cd:Hide()
+                        end
                     end
                     iconF:Show()
                 end
@@ -2061,6 +2119,19 @@ end
 -- Called from Options when any setting changes
 function Nameplates:Refresh()
     self:InvalidateCache()
+    -- Update cooldown timer font on all existing icon pools when settings change.
+    local fSize = Clamp(self:GetDB().auraTimerFontSize or 8, 6, 28)
+    local function updatePoolFont(frame)
+        if frame and frame.auraFrame and frame.auraFrame.icons then
+            for _, iconF in ipairs(frame.auraFrame.icons) do
+                if iconF.cooldown and iconF.cooldown.Timer then
+                    iconF.cooldown.Timer:SetFont(_G.STANDARD_TEXT_FONT, fSize, "OUTLINE")
+                end
+            end
+        end
+    end
+    for _, frame in pairs(self._plates) do updatePoolFont(frame) end
+    for _, entry in ipairs(self._testPlates or {}) do updatePoolFont(entry.frame) end
     self:RefreshAllPlates()
     if self._testMode then
         self:ExitTestMode()
@@ -2193,11 +2264,18 @@ function Nameplates:BuildDebugReport()
             "castFont", "castFontSize", "castHeight",
             "nameFont", "nameFontSize", "nameFontFlags",
             "showLevel", "showEliteIcon", "showTargetGlow", "showTargetArrow",
-            "showThreat", "showAuras", "auraSize", "auraMax",
+            "showThreat", "showAuras", "auraSize", "auraMax", "auraOnlyMine",
         }
         for _, k in ipairs(keys) do
-            local v = db[k]
-            add(string.format("  %-28s = %s", k, tostring(v)))
+            local ok, v = pcall(function() return db[k] end)
+            local vs
+            if not ok then
+                vs = "<tainted>"
+            else
+                local tok, ts = pcall(tostring, v)
+                vs = (tok and type(ts) == "string") and ts or "<secret>"
+            end
+            add(string.format("  %-28s = %s", k, vs))
         end
     else
         add("  DB unavailable")

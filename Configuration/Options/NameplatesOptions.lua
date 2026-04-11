@@ -607,7 +607,7 @@ end
 function Options:GetAuraTimerFontSize() return self:GetDB().auraTimerFontSize or 8 end
 
 function Options:SetAuraTimerFontSize(_, v)
-    self:GetDB().auraTimerFontSize = math.max(6, math.min(14, math.floor(tonumber(v) or 8))); Refresh()
+    self:GetDB().auraTimerFontSize = math.max(6, math.min(28, math.floor(tonumber(v) or 8))); Refresh()
 end
 
 function Options:GetAuraTestMode() return self:GetDB().auraTestMode ~= false end
@@ -1328,7 +1328,7 @@ function Options:BuildConfiguration()
                         name = "Timer Font Size",
                         order = 7,
                         min = 6,
-                        max = 14,
+                        max = 28,
                         step = 1,
                         hidden = function()
                             return not Options:GetShowAuras() or not Options:GetAuraShowTimer()
