@@ -67,13 +67,18 @@ local NP_DEFAULT_HEIGHT      = 22
 local NP_DEFAULT_CAST_HEIGHT = 12
 local NP_DEFAULT_AURA_SIZE   = 20
 local NP_DEFAULT_AURA_MAX    = 5
-local NP_MAX_AURA_POOL       = 10  -- pre-allocated icons per plate
+local NP_MAX_AURA_POOL       = 10 -- pre-allocated icons per plate
 
 -- Default reaction colours used when healthColorMode = "reaction"
+-- These are the built-in fallbacks; users can override each via DB.
 local COLOR_HOSTILE          = { 0.87, 0.25, 0.25, 1 }
 local COLOR_FRIENDLY         = { 0.28, 0.88, 0.42, 1 }
 local COLOR_NEUTRAL          = { 0.92, 0.77, 0.22, 1 }
 local COLOR_TAPPED           = { 0.48, 0.48, 0.48, 1 }
+local COLOR_BOSS             = { 0.90, 0.10, 0.10, 1 }
+local COLOR_MINIBOSS         = { 0.75, 0.30, 0.90, 1 }
+local COLOR_RARE             = { 0.50, 0.80, 1.00, 1 }
+local COLOR_NPC_CASTER       = { 0.90, 0.45, 0.22, 1 }
 local COLOR_CAST             = { 0.96, 0.76, 0.24, 1 }
 local COLOR_CAST_UNINT       = { 0.75, 0.12, 0.12, 1 }
 local COLOR_CHANNEL          = { 0.22, 0.78, 0.96, 1 }
@@ -105,6 +110,7 @@ local NAMEPLATE_CVARS        = {
 Nameplates._plates           = {} -- unitID → custom plate frame
 Nameplates._testPlates       = {} -- list of { frame, anchor } for test mode
 Nameplates._testMode         = false
+Nameplates._castTestMode     = false
 
 -- ── Utility helpers ───────────────────────────────────────────────────────────
 local function CopyColor(c, fallback)
@@ -169,6 +175,37 @@ local function GetThemeFont(size)
     return _G.STANDARD_TEXT_FONT, size or 10, "OUTLINE"
 end
 
+-- Per-element font resolver: DB key overrides theme fallback.
+-- key is e.g. "name", "health", "cast" — reads db[key.."Font"] etc.
+local function GetPlateFont(key, size, db)
+    local LSM = T.Libs and T.Libs.LSM
+    if LSM and db then
+        local fontName = db[key .. "Font"]
+        if fontName and fontName ~= "" and fontName ~= "__default" then
+            local ok, path = pcall(LSM.Fetch, LSM, "font", fontName)
+            if ok and type(path) == "string" and path ~= "" then
+                local outline = db[key .. "FontOutline"] or "OUTLINE"
+                return path, size or 10, outline
+            end
+        end
+    end
+    return GetThemeFont(size)
+end
+
+-- Per-element statusbar texture resolver: DB key overrides theme.
+-- key is e.g. "healthBarTexture", "castBarTexture".
+local function GetPlateTexture(key, db)
+    local LSM = T.Libs and T.Libs.LSM
+    if LSM and db then
+        local texName = db[key]
+        if texName and texName ~= "" and texName ~= "__default" then
+            local ok, path = pcall(LSM.Fetch, LSM, "statusbar", texName)
+            if ok and type(path) == "string" and path ~= "" then return path end
+        end
+    end
+    return GetThemeTexture()
+end
+
 -- ── DB access ─────────────────────────────────────────────────────────────────
 function Nameplates:GetOptions()
     if self._optionsCache then return self._optionsCache end
@@ -195,6 +232,21 @@ function Nameplates:InvalidateCache()
 end
 
 -- ── Health colour resolution ──────────────────────────────────────────────────
+-- Helper: read a color from DB or fall back to a built-in constant.
+local function DBColor(db, key, fallback)
+    local c = db and db[key]
+    return (type(c) == "table") and CopyColor(c) or CopyColor(fallback)
+end
+
+-- Max player level cache (used for elite-level miniboss/boss derivation).
+local _maxLevel = nil
+local function GetMaxLevel()
+    if not _maxLevel then
+        _maxLevel = (GetMaxPlayerLevel and GetMaxPlayerLevel()) or 80
+    end
+    return _maxLevel
+end
+
 function Nameplates:ResolveHealthColor(unit, db)
     local mode = db.healthColorMode or "reaction"
 
@@ -213,21 +265,54 @@ function Nameplates:ResolveHealthColor(unit, db)
         return CopyColor(db.healthCustomColor)
     end
 
-    -- Theme colour mode
     if mode == "theme" then
         return GetThemeColor("accentColor", COLOR_HOSTILE)
     end
 
-    -- Reaction-based (default)
+    -- Reaction-based (default).  Within reaction mode we also honour
+    -- per-classification overrides (boss, miniboss, rare, npc caster).
     if unit then
         if UnitIsTapDenied and UnitIsTapDenied(unit) then
-            return CopyColor(COLOR_TAPPED)
+            return DBColor(db, "colorTapped", COLOR_TAPPED)
         end
+
+        -- Classification sub-type colours (hostile only)
         local reaction = UnitReaction and UnitReaction(unit, "player")
+        if reaction and reaction <= 3 then
+            -- Caster-type NPC detection via UnitClassBase (e.g. PALADIN healer NPCs).
+            -- Checked first so it can override classification colors (rare, rareelite, etc.)
+            -- when the player has explicitly enabled caster differentiation.
+            if db.colorByCaster then
+                local baseClass = UnitClassBase and UnitClassBase(unit)
+                if baseClass == "PALADIN" then
+                    return DBColor(db, "colorNpcCaster", COLOR_NPC_CASTER)
+                end
+            end
+
+            local cl = UnitClassification and UnitClassification(unit) or ""
+            if cl == "worldboss" or cl == "boss" then
+                return DBColor(db, "colorBoss", COLOR_BOSS)
+            elseif cl == "rareelite" then
+                return DBColor(db, "colorMiniboss", COLOR_MINIBOSS)
+            elseif cl == "rare" then
+                return DBColor(db, "colorRare", COLOR_RARE)
+            elseif cl == "elite" then
+                -- Derive boss/miniboss from level vs expansion cap (ElvUI approach)
+                local lvl    = UnitLevel and UnitLevel(unit) or 0
+                local maxLvl = GetMaxLevel()
+                if lvl >= (maxLvl + 2) then
+                    return DBColor(db, "colorBoss", COLOR_BOSS)
+                elseif lvl >= (maxLvl + 1) then
+                    return DBColor(db, "colorMiniboss", COLOR_MINIBOSS)
+                end
+            end
+
+            return DBColor(db, "colorHostile", COLOR_HOSTILE)
+        end
+
         if reaction then
-            if reaction >= 5 then return CopyColor(COLOR_FRIENDLY) end
-            if reaction == 4 then return CopyColor(COLOR_NEUTRAL) end
-            return CopyColor(COLOR_HOSTILE)
+            if reaction >= 5 then return DBColor(db, "colorFriendly", COLOR_FRIENDLY) end
+            if reaction == 4 then return DBColor(db, "colorNeutral", COLOR_NEUTRAL) end
         end
     end
 
@@ -293,7 +378,14 @@ function Nameplates:BuildPlateFrame(parentPlate)
     local castH     = Clamp(db.castHeight or NP_DEFAULT_CAST_HEIGHT, 6, 30)
     local auraMax   = Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 0, NP_MAX_AURA_POOL)
     local auraSize  = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
-    local tex       = GetThemeTexture()
+    local hpTex     = GetPlateTexture("healthBarTexture", db)
+    local castTex   = GetPlateTexture("castBarTexture", db)
+    local bgTex     = GetPlateTexture("healthBgTexture", db)
+
+    local bgC       = type(db.healthBgColor) == "table" and db.healthBgColor or { 0.05, 0.06, 0.08, 0.92 }
+    local bdC       = type(db.healthBorderColor) == "table" and db.healthBorderColor or { 0.14, 0.15, 0.20, 0.90 }
+    local cbgC      = type(db.castBgColor) == "table" and db.castBgColor or { 0.05, 0.06, 0.08, 0.92 }
+    local cbdC      = type(db.castBorderColor) == "table" and db.castBorderColor or { 0.14, 0.15, 0.20, 0.90 }
 
     -- ── Root frame ────────────────────────────────────────────────────────────
     local baseLevel = (parentPlate and parentPlate.GetFrameLevel and parentPlate:GetFrameLevel()) or 100
@@ -301,38 +393,56 @@ function Nameplates:BuildPlateFrame(parentPlate)
     frame:SetSize(w, h)
     frame:SetPoint("CENTER", parentPlate or UIParent, "CENTER", 0, 0)
     frame:SetFrameLevel(math_max(2, baseLevel + 3))
-    ApplyBackdrop(frame)
+    ApplyBackdrop(frame, bgC[1], bgC[2], bgC[3], bgC[4], bdC[1], bdC[2], bdC[3], bdC[4])
 
     -- ── Target / focus glow (behind the bar) ─────────────────────────────────
+    local glowOutset = Clamp(db.targetGlowOutset or 3, 1, 10)
     local targetGlow = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    targetGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", -3, 3)
-    targetGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 3, -3)
+    targetGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", -glowOutset, glowOutset)
+    targetGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", glowOutset, -glowOutset)
     targetGlow:SetFrameLevel(math_max(1, frame:GetFrameLevel() - 1))
     ApplyBackdrop(targetGlow, 0, 0, 0, 0, 0.96, 0.76, 0.24, 0)
     targetGlow:Hide()
     frame.targetGlow = targetGlow
+
+    -- ── Target arrows ─────────────────────────────────────────────────────────
+    local arrowSize  = Clamp(db.targetArrowSize or 16, 8, 32)
+    local arrowL     = frame:CreateTexture(nil, "OVERLAY", nil, 2)
+    arrowL:SetSize(arrowSize, arrowSize)
+    arrowL:SetPoint("RIGHT", frame, "LEFT", -4, 0)
+    arrowL:SetAtlas("nameplates-arrow-highlighted")
+    arrowL:SetTexCoord(1, 0, 0, 1) -- mirror H
+    arrowL:Hide()
+    frame.arrowL = arrowL
+
+    local arrowR = frame:CreateTexture(nil, "OVERLAY", nil, 2)
+    arrowR:SetSize(arrowSize, arrowSize)
+    arrowR:SetPoint("LEFT", frame, "RIGHT", 4, 0)
+    arrowR:SetAtlas("nameplates-arrow-highlighted")
+    arrowR:Hide()
+    frame.arrowR = arrowR
 
     -- ── Health bar ────────────────────────────────────────────────────────────
     local healthBar = CreateFrame("StatusBar", nil, frame)
     healthBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
     healthBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
     healthBar:SetHeight(h - 2)
-    healthBar:SetStatusBarTexture(tex)
+    healthBar:SetStatusBarTexture(hpTex)
     healthBar:SetStatusBarColor(COLOR_HOSTILE[1], COLOR_HOSTILE[2], COLOR_HOSTILE[3], 1)
     healthBar:SetMinMaxValues(0, 1)
     healthBar:SetValue(1)
 
     local healthBg = healthBar:CreateTexture(nil, "BACKGROUND")
     healthBg:SetAllPoints()
-    healthBg:SetTexture(tex)
-    healthBg:SetVertexColor(0.05, 0.06, 0.08, 0.92)
+    healthBg:SetTexture(bgTex)
+    healthBg:SetVertexColor(bgC[1], bgC[2], bgC[3], bgC[4] or 0.92)
     frame.healthBar = healthBar
     frame.healthBg  = healthBg
 
     -- ── Absorb overlay ────────────────────────────────────────────────────────
     local absorbBar = CreateFrame("StatusBar", nil, healthBar)
     absorbBar:SetAllPoints()
-    absorbBar:SetStatusBarTexture(tex)
+    absorbBar:SetStatusBarTexture(hpTex)
     absorbBar:SetStatusBarColor(0.67, 0.85, 0.97, 0.5)
     absorbBar:SetMinMaxValues(0, 1)
     absorbBar:SetValue(0)
@@ -346,29 +456,36 @@ function Nameplates:BuildPlateFrame(parentPlate)
     threatBar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 3, 0)
     threatBar:SetTexture("Interface\\Buttons\\WHITE8x8")
     threatBar:SetVertexColor(0, 0, 0, 0)
-    frame.threatBar = threatBar
+    frame.threatBar      = threatBar
 
     -- ── Name text ─────────────────────────────────────────────────────────────
-    local nf, ns, nfl = GetThemeFont(Clamp(db.nameFontSize or 10, 6, 20))
-    local nameText = frame:CreateFontString(nil, "OVERLAY")
+    local nf, ns, nfl    = GetPlateFont("name", Clamp(db.nameFontSize or 10, 6, 20), db)
+    local nameAnchorPt   = db.nameAnchorPoint or "BOTTOMLEFT"
+    local nameOX, nameOY = db.nameOffsetX or 2, db.nameOffsetY or 3
+    local nameText       = frame:CreateFontString(nil, "OVERLAY")
     nameText:SetFont(nf, ns, nfl)
-    nameText:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 2, 3)
-    nameText:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -2, 3)
-    nameText:SetJustifyH("LEFT")
+    if db.nameFontShadow then nameText:SetShadowOffset(1, -1) else nameText:SetShadowOffset(0, 0) end
+    nameText:SetPoint(nameAnchorPt, frame, "TOPLEFT", nameOX, nameOY)
+    nameText:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -nameOX, nameOY)
+    nameText:SetJustifyH(db.nameJustify or "LEFT")
     nameText:SetTextColor(1, 1, 1, 1)
     nameText:SetWordWrap(false)
-    frame.nameText = nameText
+    frame.nameText         = nameText
 
-    -- ── Health text (right of bar) ────────────────────────────────────────────
-    local hf, hs, hfl = GetThemeFont(Clamp(db.healthFontSize or 9, 6, 18))
-    local healthText = healthBar:CreateFontString(nil, "OVERLAY")
+    -- ── Health text ───────────────────────────────────────────────────────────
+    local hf, hs, hfl      = GetPlateFont("health", Clamp(db.healthFontSize or 9, 6, 18), db)
+    local hTextAnchor      = db.healthTextAnchor or "RIGHT"
+    local hTextOX, hTextOY = db.healthTextOffsetX or (hTextAnchor == "RIGHT" and -3 or 3),
+        db.healthTextOffsetY or 0
+    local healthText       = healthBar:CreateFontString(nil, "OVERLAY")
     healthText:SetFont(hf, hs, hfl)
-    healthText:SetPoint("RIGHT", healthBar, "RIGHT", -3, 0)
-    healthText:SetJustifyH("RIGHT")
+    if db.healthFontShadow then healthText:SetShadowOffset(1, -1) else healthText:SetShadowOffset(0, 0) end
+    healthText:SetPoint(hTextAnchor, healthBar, hTextAnchor, hTextOX, hTextOY)
+    healthText:SetJustifyH(hTextAnchor == "LEFT" and "LEFT" or "RIGHT")
     healthText:SetTextColor(1, 1, 1, 1)
     frame.healthText = healthText
 
-    -- ── Level text (left of bar) ──────────────────────────────────────────────
+    -- ── Level text ────────────────────────────────────────────────────────────
     local levelText = healthBar:CreateFontString(nil, "OVERLAY")
     levelText:SetFont(hf, hs, hfl)
     levelText:SetPoint("LEFT", healthBar, "LEFT", 3, 0)
@@ -389,7 +506,8 @@ function Nameplates:BuildPlateFrame(parentPlate)
     castContainer:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -2)
     castContainer:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, -2)
     castContainer:SetHeight(castH_outer)
-    ApplyBackdrop(castContainer)
+    ApplyBackdrop(castContainer, cbgC[1], cbgC[2], cbgC[3], cbgC[4] or 0.92,
+        cbdC[1], cbdC[2], cbdC[3], cbdC[4] or 0.9)
     castContainer:Hide()
     frame.castContainer = castContainer
 
@@ -397,15 +515,15 @@ function Nameplates:BuildPlateFrame(parentPlate)
     castBar:SetPoint("TOPLEFT", castContainer, "TOPLEFT", 1, -1)
     castBar:SetPoint("TOPRIGHT", castContainer, "TOPRIGHT", -1, -1)
     castBar:SetHeight(castH)
-    castBar:SetStatusBarTexture(tex)
+    castBar:SetStatusBarTexture(castTex)
     castBar:SetStatusBarColor(COLOR_CAST[1], COLOR_CAST[2], COLOR_CAST[3], 1)
     castBar:SetMinMaxValues(0, 1)
     castBar:SetValue(0)
 
     local castBg = castBar:CreateTexture(nil, "BACKGROUND")
     castBg:SetAllPoints()
-    castBg:SetTexture(tex)
-    castBg:SetVertexColor(0.05, 0.06, 0.08, 0.92)
+    castBg:SetTexture(castTex)
+    castBg:SetVertexColor(cbgC[1], cbgC[2], cbgC[3], cbgC[4] or 0.92)
     frame.castBar  = castBar
     frame.castBg   = castBg
 
@@ -425,9 +543,10 @@ function Nameplates:BuildPlateFrame(parentPlate)
     frame.castShield = castShield
 
     -- Cast spell name text
-    local cf, cs, cfl = GetThemeFont(Clamp(db.castFontSize or 9, 6, 16))
+    local cf, cs, cfl = GetPlateFont("cast", Clamp(db.castFontSize or 9, 6, 16), db)
     local castText = castContainer:CreateFontString(nil, "OVERLAY")
     castText:SetFont(cf, cs, cfl)
+    if db.castFontShadow then castText:SetShadowOffset(1, -1) else castText:SetShadowOffset(0, 0) end
     castText:SetPoint("LEFT", castContainer, "LEFT", 4, 0)
     castText:SetPoint("RIGHT", castContainer, "RIGHT", -4, 0)
     castText:SetJustifyH("CENTER")
@@ -442,6 +561,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     auraFrame:SetSize(w, auraSize + 4)
     auraFrame.icons = {}
 
+    local timerFSize = Clamp(db.auraTimerFontSize or 8, 6, 14)
     for i = 1, NP_MAX_AURA_POOL do
         local iconF = CreateFrame("Frame", nil, auraFrame, "BackdropTemplate")
         iconF:SetSize(auraSize, auraSize)
@@ -459,7 +579,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
         iconF.tex = iconTex
 
         local timeFs = iconF:CreateFontString(nil, "OVERLAY")
-        timeFs:SetFont(_G.STANDARD_TEXT_FONT, 8, "OUTLINE")
+        timeFs:SetFont(_G.STANDARD_TEXT_FONT, timerFSize, "OUTLINE")
         timeFs:SetPoint("BOTTOM", iconF, "BOTTOM", 0, 2)
         timeFs:SetJustifyH("CENTER")
         iconF.timeText = timeFs
@@ -617,21 +737,56 @@ function Nameplates:UpdateTargetGlow(frame, unit)
     if not frame or not frame.targetGlow then return end
     local db = self:GetDB()
     if db.showTargetGlow == false then
-        frame.targetGlow:Hide(); return
+        frame.targetGlow:Hide()
+        if frame.arrowL then frame.arrowL:Hide() end
+        if frame.arrowR then frame.arrowR:Hide() end
+        return
     end
 
     local isTarget = UnitIsUnit and UnitIsUnit(unit, "target")
     local isFocus  = UnitIsUnit and UnitIsUnit(unit, "focus")
+    local baseW    = Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600)
+    local baseH    = Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60)
 
     if isTarget then
-        local ac = GetThemeColor("accentColor", { 0.96, 0.76, 0.24 })
-        frame.targetGlow:SetBackdropBorderColor(ac[1], ac[2], ac[3], 0.9)
+        local gc = type(db.targetGlowColor) == "table" and db.targetGlowColor or nil
+        local gr, gg, gb, ga
+        if gc then
+            gr, gg, gb, ga = gc[1], gc[2], gc[3], gc[4] or 0.9
+        else
+            local ac = GetThemeColor("accentColor", { 0.96, 0.76, 0.24 })
+            gr, gg, gb, ga = ac[1], ac[2], ac[3], 0.9
+        end
+        frame.targetGlow:SetBackdropBorderColor(gr, gg, gb, ga)
         frame.targetGlow:Show()
+
+        local growW = (db.targetGrowWidth and db.targetGrowWidth ~= 1) and Clamp(db.targetGrowWidth, 0.5, 2) or 1
+        local growH = (db.targetGrowHeight and db.targetGrowHeight ~= 1) and Clamp(db.targetGrowHeight, 0.5, 2) or 1
+        frame:SetSize(baseW * growW, baseH * growH)
+
+        if db.showTargetArrows ~= false then
+            if frame.arrowL then frame.arrowL:Show() end
+            if frame.arrowR then frame.arrowR:Show() end
+        else
+            if frame.arrowL then frame.arrowL:Hide() end
+            if frame.arrowR then frame.arrowR:Hide() end
+        end
     elseif isFocus then
-        frame.targetGlow:SetBackdropBorderColor(0.22, 0.78, 0.96, 0.7)
+        local fc = type(db.focusGlowColor) == "table" and db.focusGlowColor or nil
+        if fc then
+            frame.targetGlow:SetBackdropBorderColor(fc[1], fc[2], fc[3], fc[4] or 0.7)
+        else
+            frame.targetGlow:SetBackdropBorderColor(0.22, 0.78, 0.96, 0.7)
+        end
         frame.targetGlow:Show()
+        if frame.arrowL then frame.arrowL:Hide() end
+        if frame.arrowR then frame.arrowR:Hide() end
+        frame:SetSize(baseW, baseH)
     else
         frame.targetGlow:Hide()
+        if frame.arrowL then frame.arrowL:Hide() end
+        if frame.arrowR then frame.arrowR:Hide() end
+        frame:SetSize(baseW, baseH)
     end
 end
 
@@ -666,8 +821,11 @@ function Nameplates:UpdateAuras(frame, unit)
     local maxAuras   = Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 0, NP_MAX_AURA_POOL)
     local auraFilter = db.auraFilter or "HARMFUL"
     local auraSize   = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
+    local onlyMine   = db.auraOnlyMine == true
+    local showTimer  = db.auraShowTimer ~= false
+    local timerFSize = Clamp(db.auraTimerFontSize or 8, 6, 14)
 
-    local slotCount  = CollectAuraSlots(unit, auraFilter, maxAuras)
+    local slotCount  = CollectAuraSlots(unit, auraFilter, maxAuras + (onlyMine and maxAuras or 0))
     local shown      = 0
 
     for s = 1, slotCount do
@@ -677,47 +835,50 @@ function Nameplates:UpdateAuras(frame, unit)
 
         local data = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot(unit, slotIndex)
         if data and data.auraInstanceID and data.icon then
-            shown = shown + 1
-            local iconF = frame.auraFrame.icons[shown]
-            if iconF then
-                iconF:SetSize(auraSize, auraSize)
-                iconF.tex:SetTexture(data.icon)
+            if onlyMine and data.sourceUnit ~= "player" then
+                -- skip non-player auras
+            else
+                shown = shown + 1
+                local iconF = frame.auraFrame.icons[shown]
+                if iconF then
+                    iconF:SetSize(auraSize, auraSize)
+                    iconF.tex:SetTexture(data.icon)
 
-                -- Timer text
-                local dur = tonumber(data.duration) or 0
-                local exp = tonumber(data.expirationTime) or 0
-                if dur > 0 and exp > 0 then
-                    local rem = math_max(0, exp - GetTime())
-                    local timeStr
-                    if rem > 60 then
-                        timeStr = math_floor(rem / 60) .. "m"
-                    elseif rem > 10 then
-                        timeStr = tostring(math_floor(rem))
+                    if showTimer then
+                        local dur = tonumber(data.duration) or 0
+                        local exp = tonumber(data.expirationTime) or 0
+                        if dur > 0 and exp > 0 then
+                            local rem = math_max(0, exp - GetTime())
+                            local timeStr
+                            if rem > 60 then
+                                timeStr = math_floor(rem / 60) .. "m"
+                            elseif rem > 10 then
+                                timeStr = tostring(math_floor(rem))
+                            else
+                                timeStr = string.format("%.1f", rem)
+                            end
+                            iconF.timeText:SetFont(_G.STANDARD_TEXT_FONT, timerFSize, "OUTLINE")
+                            iconF.timeText:SetText(timeStr)
+                            iconF.timeText:Show()
+                        else
+                            iconF.timeText:Hide()
+                        end
                     else
-                        timeStr = string.format("%.1f", rem)
+                        iconF.timeText:Hide()
                     end
-                    iconF.timeText:SetText(timeStr)
-                    iconF.timeText:Show()
-                else
-                    iconF.timeText:Hide()
-                end
 
-                iconF:Show()
+                    iconF:Show()
+                end
             end
         end
     end
 
-    -- Hide unused icons
     for i = shown + 1, NP_MAX_AURA_POOL do
         local iconF = frame.auraFrame.icons[i]
         if iconF then iconF:Hide() end
     end
 
-    if shown > 0 then
-        frame.auraFrame:Show()
-    else
-        frame.auraFrame:Hide()
-    end
+    if shown > 0 then frame.auraFrame:Show() else frame.auraFrame:Hide() end
 end
 
 function Nameplates:UpdateCastBar(frame, unit)
@@ -836,22 +997,60 @@ end
 -- ── Refresh / resize helpers ──────────────────────────────────────────────────
 function Nameplates:ApplyThemeToFrame(frame)
     if not frame then return end
-    local db  = self:GetDB()
-    local tex = GetThemeTexture()
+    local db    = self:GetDB()
+    local hpTex = GetPlateTexture("healthBarTexture", db)
+    local cTex  = GetPlateTexture("castBarTexture", db)
+    local bgTex = GetPlateTexture("healthBgTexture", db)
 
-    if frame.healthBar then frame.healthBar:SetStatusBarTexture(tex) end
-    if frame.healthBg then frame.healthBg:SetTexture(tex) end
-    if frame.castBar then frame.castBar:SetStatusBarTexture(tex) end
-    if frame.castBg then frame.castBg:SetTexture(tex) end
-    if frame.absorbBar then frame.absorbBar:SetStatusBarTexture(tex) end
+    -- Bar textures
+    if frame.healthBar then frame.healthBar:SetStatusBarTexture(hpTex) end
+    if frame.healthBg then
+        frame.healthBg:SetTexture(bgTex)
+        local bgC = type(db.healthBgColor) == "table" and db.healthBgColor or { 0.05, 0.06, 0.08, 0.92 }
+        frame.healthBg:SetVertexColor(bgC[1], bgC[2], bgC[3], bgC[4] or 0.92)
+    end
+    if frame.castBar then frame.castBar:SetStatusBarTexture(cTex) end
+    if frame.castBg then
+        frame.castBg:SetTexture(cTex)
+        local cbgC = type(db.castBgColor) == "table" and db.castBgColor or { 0.05, 0.06, 0.08, 0.92 }
+        frame.castBg:SetVertexColor(cbgC[1], cbgC[2], cbgC[3], cbgC[4] or 0.92)
+    end
+    if frame.absorbBar then frame.absorbBar:SetStatusBarTexture(hpTex) end
 
-    local nf, ns, nfl = GetThemeFont(Clamp(db.nameFontSize or 10, 6, 20))
-    if frame.nameText then frame.nameText:SetFont(nf, ns, nfl) end
-    local hf, hs, hfl = GetThemeFont(Clamp(db.healthFontSize or 9, 6, 18))
-    if frame.healthText then frame.healthText:SetFont(hf, hs, hfl) end
+    -- Frame backdrop colors
+    local bgC = type(db.healthBgColor) == "table" and db.healthBgColor or { 0.05, 0.06, 0.08, 0.92 }
+    local bdC = type(db.healthBorderColor) == "table" and db.healthBorderColor or { 0.14, 0.15, 0.20, 0.90 }
+    ApplyBackdrop(frame, bgC[1], bgC[2], bgC[3], bgC[4], bdC[1], bdC[2], bdC[3], bdC[4])
+
+    if frame.castContainer then
+        local cbgC = type(db.castBgColor) == "table" and db.castBgColor or { 0.05, 0.06, 0.08, 0.92 }
+        local cbdC = type(db.castBorderColor) == "table" and db.castBorderColor or { 0.14, 0.15, 0.20, 0.90 }
+        ApplyBackdrop(frame.castContainer, cbgC[1], cbgC[2], cbgC[3], cbgC[4],
+            cbdC[1], cbdC[2], cbdC[3], cbdC[4])
+    end
+
+    -- Per-element fonts
+    local nf, ns, nfl = GetPlateFont("name", Clamp(db.nameFontSize or 10, 6, 20), db)
+    local hf, hs, hfl = GetPlateFont("health", Clamp(db.healthFontSize or 9, 6, 18), db)
+    local cf, cs, cfl = GetPlateFont("cast", Clamp(db.castFontSize or 9, 6, 16), db)
+
+    if frame.nameText then
+        frame.nameText:SetFont(nf, ns, nfl)
+        if db.nameFontShadow then frame.nameText:SetShadowOffset(1, -1) else frame.nameText:SetShadowOffset(0, 0) end
+        local nc = type(db.nameFontColor) == "table" and db.nameFontColor or nil
+        if nc then frame.nameText:SetTextColor(nc[1], nc[2], nc[3], nc[4] or 1) end
+    end
+    if frame.healthText then
+        frame.healthText:SetFont(hf, hs, hfl)
+        if db.healthFontShadow then frame.healthText:SetShadowOffset(1, -1) else frame.healthText:SetShadowOffset(0, 0) end
+        local hc = type(db.healthFontColor) == "table" and db.healthFontColor or nil
+        if hc then frame.healthText:SetTextColor(hc[1], hc[2], hc[3], hc[4] or 1) end
+    end
     if frame.levelText then frame.levelText:SetFont(hf, hs, hfl) end
-    local cf, cs, cfl = GetThemeFont(Clamp(db.castFontSize or 9, 6, 16))
-    if frame.castText then frame.castText:SetFont(cf, cs, cfl) end
+    if frame.castText then
+        frame.castText:SetFont(cf, cs, cfl)
+        if db.castFontShadow then frame.castText:SetShadowOffset(1, -1) else frame.castText:SetShadowOffset(0, 0) end
+    end
 end
 
 function Nameplates:ResizePlateFrame(frame)
@@ -917,6 +1116,15 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     frame:Show()
 
     self:UpdateAllElements(frame, unitID)
+
+    -- If cast test mode is running, start a fake cast on this new plate
+    if self._castTestMode then
+        C_Timer.After(math.random() * 0.5, function()
+            if self._castTestMode and frame and frame:IsShown() then
+                self:StartFakeCast(frame)
+            end
+        end)
+    end
 end
 
 function Nameplates:OnNamePlateRemoved(_, unitID)
@@ -1086,6 +1294,34 @@ function Nameplates:EnterTestMode()
             frame.threatBar:SetVertexColor(0.87, 0.25, 0.25, 0.9)
         end
 
+        -- Fake aura icons (test aura mode)
+        if db.showAuras ~= false and db.auraTestMode ~= false and frame.auraFrame then
+            local FAKE_ICONS = { 135817, 136243, 135768, 135723 }
+            local auraSize   = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
+            local count      = math_min(#FAKE_ICONS, Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 0, NP_MAX_AURA_POOL))
+            for ai = 1, count do
+                local iconF = frame.auraFrame.icons[ai]
+                if iconF then
+                    iconF:SetSize(auraSize, auraSize)
+                    iconF.tex:SetTexture(FAKE_ICONS[ai])
+                    iconF.tex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+                    if db.auraShowTimer ~= false then
+                        local fakeRem = 10 + (ai * 8)
+                        iconF.timeText:SetText(tostring(fakeRem) .. "s")
+                        iconF.timeText:Show()
+                    else
+                        iconF.timeText:Hide()
+                    end
+                    iconF:Show()
+                end
+            end
+            for ai = count + 1, NP_MAX_AURA_POOL do
+                local iconF = frame.auraFrame.icons[ai]
+                if iconF then iconF:Hide() end
+            end
+            frame.auraFrame:Show()
+        end
+
         anchor:Show()
         frame:Show()
         self._testPlates[#self._testPlates + 1] = { frame = frame, anchor = anchor }
@@ -1112,6 +1348,120 @@ function Nameplates:ToggleTestMode()
         self:ExitTestMode()
     else
         self:EnterTestMode()
+    end
+end
+
+-- ── Cast bar test mode ─────────────────────────────────────────────────────────────
+local CAST_TEST_SPELLS = {
+    { name = "Shadow Bolt",     duration = 2.0, notInterruptible = false, channeling = false },
+    { name = "Mend Pet",        duration = 3.0, notInterruptible = false, channeling = true },
+    { name = "Devour Essence",  duration = 2.5, notInterruptible = true,  channeling = false },
+    { name = "Pyroblast",       duration = 3.5, notInterruptible = false, channeling = false },
+    { name = "Arcane Missiles", duration = 2.0, notInterruptible = false, channeling = true },
+    { name = "Fel Concentrate", duration = 2.8, notInterruptible = true,  channeling = false },
+}
+
+function Nameplates:StartFakeCast(frame)
+    if not frame or not frame.castContainer then return end
+    local db = self:GetDB()
+    if db.showCastBar == false then return end
+
+    local idx         = math.random(#CAST_TEST_SPELLS)
+    local spell       = CAST_TEST_SPELLS[idx]
+    local now         = GetTime()
+
+    frame._casting    = true
+    frame._channeling = spell.channeling
+    frame._castStart  = now
+    frame._castEnd    = now + spell.duration
+    frame._castMax    = spell.duration
+
+    frame.castText:SetText(spell.name)
+
+    if spell.notInterruptible then
+        frame.castBar:SetStatusBarColor(COLOR_CAST_UNINT[1], COLOR_CAST_UNINT[2], COLOR_CAST_UNINT[3], 1)
+        frame.castShield:Show()
+    elseif spell.channeling then
+        local cc = CopyColor(db.castColor, COLOR_CHANNEL)
+        frame.castBar:SetStatusBarColor(cc[1], cc[2], cc[3], 1)
+        frame.castShield:Hide()
+    else
+        local cc = CopyColor(db.castColor, COLOR_CAST)
+        frame.castBar:SetStatusBarColor(cc[1], cc[2], cc[3], 1)
+        frame.castShield:Hide()
+    end
+
+    frame.castBar:SetMinMaxValues(0, spell.duration)
+    frame.castBar:SetValue(0)
+    frame.castContainer:Show()
+
+    if not frame._castScriptActive then
+        frame._castScriptActive = true
+        frame:SetScript("OnUpdate", function(self2)
+            if not self2._casting then
+                self2:SetScript("OnUpdate", nil)
+                self2._castScriptActive = false
+                self2.castContainer:Hide()
+                -- Reschedule next fake cast if test mode still active
+                if Nameplates._castTestMode and self2 and self2:IsShown() then
+                    C_Timer.After(0.5 + math.random() * 1.5, function()
+                        if Nameplates._castTestMode and self2 and self2:IsShown() then
+                            Nameplates:StartFakeCast(self2)
+                        end
+                    end)
+                end
+                return
+            end
+            local now2 = GetTime()
+            local max2 = self2._castMax
+            if self2._channeling then
+                local remaining = math_max(0, self2._castEnd - now2)
+                self2.castBar:SetMinMaxValues(0, max2)
+                self2.castBar:SetValue(remaining)
+            else
+                local elapsed = math_min(now2 - self2._castStart, max2)
+                self2.castBar:SetMinMaxValues(0, max2)
+                self2.castBar:SetValue(elapsed)
+            end
+            if now2 >= self2._castEnd then
+                self2._casting = false
+            end
+        end)
+    end
+end
+
+function Nameplates:EnterCastBarTestMode()
+    if self._castTestMode then return end
+    self._castTestMode = true
+    -- Stagger fake casts on all visible plates
+    local delay = 0
+    for _, frame in pairs(self._plates) do
+        local f = frame -- upvalue
+        C_Timer.After(delay, function()
+            if Nameplates._castTestMode then Nameplates:StartFakeCast(f) end
+        end)
+        delay = delay + 0.15
+    end
+end
+
+function Nameplates:ExitCastBarTestMode()
+    if not self._castTestMode then return end
+    self._castTestMode = false
+    for _, frame in pairs(self._plates) do
+        frame._casting = false
+        if frame._castScriptActive then
+            frame:SetScript("OnUpdate", nil)
+            frame._castScriptActive = false
+        end
+        if frame.castContainer then frame.castContainer:Hide() end
+    end
+end
+
+function Nameplates:ToggleCastBarTestMode()
+    if self._castTestMode then
+        self:ExitCastBarTestMode()
+    else
+        self:EnterCastBarTestMode()
     end
 end
 
@@ -1171,6 +1521,7 @@ function Nameplates:OnDisable()
     self:UnregisterAllMessages()
 
     if self._testMode then self:ExitTestMode() end
+    if self._castTestMode then self:ExitCastBarTestMode() end
 
     -- Restore Blizzard UnitFrame visibility on all active plates
     if C_NamePlate and C_NamePlate.GetNamePlates then
@@ -1247,6 +1598,10 @@ function Nameplates:Refresh()
     if self._testMode then
         self:ExitTestMode()
         self:EnterTestMode()
+    end
+    if self._castTestMode then
+        self:ExitCastBarTestMode()
+        self:EnterCastBarTestMode()
     end
 end
 
