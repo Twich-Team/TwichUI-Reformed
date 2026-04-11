@@ -12201,13 +12201,37 @@ function UnitFrames:RegisterLayoutFrame(layoutKey, frame)
         })
 
         local emRanges = {
-            { field = "width",   label = "Width",    min = 40,   max = 600, disabledFn = function() return EMDisabled() or
-                GetEMConfig().matchFrameWidth == true end },
-            { field = "height",  label = "Height",   min = 4,    max = 40,  disabledFn = EMDisabled },
-            { field = "xOffset", label = "X Offset", min = -240, max = 240, disabledFn = function() return EMDisabled() or
-                GetEMConfig().detached == true end },
-            { field = "yOffset", label = "Y Offset", min = -240, max = 240, disabledFn = function() return EMDisabled() or
-                GetEMConfig().detached == true end },
+            {
+                field = "width",
+                label = "Width",
+                min = 40,
+                max = 600,
+                disabledFn = function()
+                    return EMDisabled() or
+                        GetEMConfig().matchFrameWidth == true
+                end
+            },
+            { field = "height", label = "Height", min = 4, max = 40, disabledFn = EMDisabled },
+            {
+                field = "xOffset",
+                label = "X Offset",
+                min = -240,
+                max = 240,
+                disabledFn = function()
+                    return EMDisabled() or
+                        GetEMConfig().detached == true
+                end
+            },
+            {
+                field = "yOffset",
+                label = "Y Offset",
+                min = -240,
+                max = 240,
+                disabledFn = function()
+                    return EMDisabled() or
+                        GetEMConfig().detached == true
+                end
+            },
         }
         for _, entry in ipairs(emRanges) do
             local capturedEntry = entry
@@ -14784,7 +14808,7 @@ function UnitFrames:StyleFrame(frame)
         local function GetEbonMightAura()
             local info = C_UnitAuras.GetPlayerAuraBySpellID(EBON_MIGHT_SELF_SPELL_ID)
             return (info and info.isHelpful and info.expirationTime and info.duration and info.duration > 0) and info or
-            nil
+                nil
         end
 
         ebonWatcher:SetScript("OnUpdate", function(w, elapsed)
@@ -15492,16 +15516,25 @@ function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
     -- Dracthyr empowered cast events.
     if event == "UNIT_SPELLCAST_EMPOWER_START" then
         -- UnitCastingInfo may not be populated yet on the same frame the event fires.
-        -- Defer by one tick so the engine commits the cast data.
+        -- Targeted empowered spells (e.g. Augmentation Eruption) can take several frames
+        -- before the engine commits cast data, so retry up to 4 times with short delays.
         local capturedSpellID = spellID
-        C_Timer.After(0, function()
+        local self_ = self
+        local function TryBeginEmpowerCast(attempt)
             local name, _, texture, startMS, endMS, _, _, _, activeSpellID = UnitCastingInfo("player")
             if not name then
-                -- Second-chance via UnitChannelInfo (some builds may report empower as channel).
+                -- Some builds may report empower as a channel briefly.
                 name, _, texture, startMS, endMS, _, _, activeSpellID = UnitChannelInfo("player")
             end
             if not name then
-                UFDebug("[Empower] EMPOWER_START deferred: no cast info from UnitCastingInfo or UnitChannelInfo")
+                if attempt < 4 then
+                    -- Escalate delay: 0, 0.05, 0.1, 0.15 seconds.
+                    C_Timer.After(attempt * 0.05, function()
+                        TryBeginEmpowerCast(attempt + 1)
+                    end)
+                else
+                    UFDebug("[Empower] EMPOWER_START: no cast info after 4 attempts, giving up")
+                end
                 return
             end
             -- Extend endMS by the hold-at-max phase (bar holds at 100% before auto-releasing).
@@ -15510,23 +15543,24 @@ function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
                 holdMS = _G.GetUnitEmpowerHoldAtMaxTime("player") or 0
             end
             local extendedEndMS = (tonumber(endMS) or 0) + holdMS
-            -- UnitEmpoweredStagePercentages returns {fraction1, fraction2, ...} (each fraction sums to 1.0).
+            -- UnitEmpoweredStagePercentages returns {fraction1, fraction2, ...}.
             local stagePercentages = nil
             if type(_G.UnitEmpoweredStagePercentages) == "function" then
                 stagePercentages = _G.UnitEmpoweredStagePercentages("player")
             end
-            UFDebug(string.format("[Empower] START deferred: name=%s startMS=%.0f endMS=%.0f holdMS=%.0f stages=%s",
-                tostring(name), tonumber(startMS) or 0, tonumber(endMS) or 0, holdMS,
+            UFDebug(string.format("[Empower] START (attempt %d): name=%s startMS=%.0f endMS=%.0f holdMS=%.0f stages=%s",
+                attempt, tostring(name), tonumber(startMS) or 0, tonumber(endMS) or 0, holdMS,
                 stagePercentages and tostring(#stagePercentages) or "nil"))
             local resolvedSpellID = capturedSpellID or activeSpellID
-            self:BeginCastbar(name, texture, startMS, extendedEndMS, false, resolvedSpellID)
-            local state = self._castbarState
+            self_:BeginCastbar(name, texture, startMS, extendedEndMS, false, resolvedSpellID)
+            local state = self_._castbarState
             if state then
                 state.isEmpowered             = true
                 state.empowerStagePercentages = stagePercentages
             end
-            self:UpdateCastbarEmpowerMarkers()
-        end)
+            self_:UpdateCastbarEmpowerMarkers()
+        end
+        TryBeginEmpowerCast(1)
         return
     end
 
