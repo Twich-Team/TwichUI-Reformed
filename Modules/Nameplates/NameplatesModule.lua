@@ -112,20 +112,20 @@ local GLOW_BD                = {
 }
 
 -- Arrow texture base folder (contains Arrow0-72, ArrowBracket, ArrowRed, ArrowUp)
-local ARROW_BASE = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Arrows\\"
+local ARROW_BASE             = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Arrows\\"
 -- TexCoords for arrow textures (all assumed to be upward-pointing designs):
 --   Left  arrow (RIGHT of plate facing ←): 90°CW rotation
 --   Right arrow (LEFT of plate facing →): 90°CW + H-flip
 -- These produce inward-pointing arrows from each side.
-local ARROW_TC_LEFT  = { 1, 0, 0, 0, 1, 1, 0, 1 }  -- points ← (right side of plate)
-local ARROW_TC_RIGHT = { 0, 1, 1, 1, 0, 0, 1, 0 }  -- points → (left side of plate)
+local ARROW_TC_LEFT          = { 1, 0, 0, 0, 1, 1, 0, 1 } -- points ← (right side of plate)
+local ARROW_TC_RIGHT         = { 0, 1, 1, 1, 0, 0, 1, 0 } -- points → (left side of plate)
 
 local function GetArrowTexPath(styleName)
     return ARROW_BASE .. (styleName or "ArrowUp") .. ".tga"
 end
 
 -- CVars we take control of while the module is active
-local NAMEPLATE_CVARS        = {
+local NAMEPLATE_CVARS    = {
     nameplateMinAlpha              = "1",
     nameplateMinAlphaDistance      = "-1000000",
     nameplateSelectedAlpha         = "1",
@@ -137,10 +137,21 @@ local NAMEPLATE_CVARS        = {
 }
 
 -- ── Module state ─────────────────────────────────────────────────────────────
-Nameplates._plates           = {} -- unitID → custom plate frame
-Nameplates._testPlates       = {} -- list of { frame, anchor } for test mode
-Nameplates._testMode         = false
-Nameplates._castTestMode     = false
+Nameplates._plates       = {}     -- unitID → custom plate frame
+Nameplates._testPlates   = {}     -- list of { frame, anchor } for test mode
+Nameplates._testMode     = false
+Nameplates._castTestMode = false
+
+-- Hidden off-screen parent used to reparent Blizzard nameplate sub-frames so
+-- they receive no events, take no screen space, and never become visible.
+-- Matches Plater's hiddenParentFrame design.
+local _hiddenPlateParent = CreateFrame("Frame", "TwichUI_HiddenNpParent", WorldFrame)
+_hiddenPlateParent:SetSize(1, 1)
+_hiddenPlateParent:SetPoint("CENTER", WorldFrame, "CENTER", -10000, -10000)
+_hiddenPlateParent:Hide()
+
+-- Per-blizzUF suppress lock used by the SetAlpha hook to avoid re-entry.
+local _alphaLocks = {} -- blizzUF pointer (tostring) → true
 
 -- ── Utility helpers ───────────────────────────────────────────────────────────
 local function CopyColor(c, fallback)
@@ -402,44 +413,48 @@ end
 
 -- ── Frame construction ────────────────────────────────────────────────────────
 function Nameplates:BuildPlateFrame(parentPlate)
-    local db        = self:GetDB()
-    local w         = Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600)
-    local h         = Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60)
-    local castH     = Clamp(db.castHeight or NP_DEFAULT_CAST_HEIGHT, 6, 30)
-    local auraMax   = Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 0, NP_MAX_AURA_POOL)
-    local auraSize  = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
-    local hpTex     = GetPlateTexture("healthBarTexture", db)
-    local castTex   = GetPlateTexture("castBarTexture", db)
-    local bgTex     = GetPlateTexture("healthBgTexture", db)
+    local db                  = self:GetDB()
+    local w                   = Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600)
+    local h                   = Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60)
+    local castH               = Clamp(db.castHeight or NP_DEFAULT_CAST_HEIGHT, 6, 30)
+    local auraMax             = Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 0, NP_MAX_AURA_POOL)
+    local auraSize            = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
+    local hpTex               = GetPlateTexture("healthBarTexture", db)
+    local castTex             = GetPlateTexture("castBarTexture", db)
+    local bgTex               = GetPlateTexture("healthBgTexture", db)
 
-    local bgC       = type(db.healthBgColor) == "table" and db.healthBgColor or { 0.05, 0.06, 0.08, 0.92 }
-    local bdC       = type(db.healthBorderColor) == "table" and db.healthBorderColor or { 0.14, 0.15, 0.20, 0.90 }
-    local cbgC      = type(db.castBgColor) == "table" and db.castBgColor or { 0.05, 0.06, 0.08, 0.92 }
-    local cbdC      = type(db.castBorderColor) == "table" and db.castBorderColor or { 0.14, 0.15, 0.20, 0.90 }
+    local bgC                 = type(db.healthBgColor) == "table" and db.healthBgColor or { 0.05, 0.06, 0.08, 0.92 }
+    local bdC                 = type(db.healthBorderColor) == "table" and db.healthBorderColor or
+    { 0.14, 0.15, 0.20, 0.90 }
+    local cbgC                = type(db.castBgColor) == "table" and db.castBgColor or { 0.05, 0.06, 0.08, 0.92 }
+    local cbdC                = type(db.castBorderColor) == "table" and db.castBorderColor or { 0.14, 0.15, 0.20, 0.90 }
 
     -- ── Root frame ────────────────────────────────────────────────────────────
-    local baseLevel = (parentPlate and parentPlate.GetFrameLevel and parentPlate:GetFrameLevel()) or 100
-    local frame     = CreateFrame("Frame", nil, parentPlate or UIParent, "BackdropTemplate")
+    -- MIDNIGHT SECRET: parentPlate:GetFrameLevel() returns a secret/tainted number.
+    -- ANY arithmetic on it (+ 3, - 1) causes a secret-arithmetic crash that silently
+    -- kills BuildPlateFrame before self._plates[unitID] is set → 0 plates tracked.
+    -- Fix: use fixed frame levels.  Our frame at 140 sits above Blizzard's UnitFrame.
+    local NP_FRAME_LEVEL      = 140
+    local NP_GLOW_FRAME_LEVEL = 138
+    local frame               = CreateFrame("Frame", nil, parentPlate or UIParent, "BackdropTemplate")
+    frame._isTwichFrame       = true -- used by suppression loops to skip our own frame
     frame:SetSize(w, h)
     frame:SetPoint("CENTER", parentPlate or UIParent, "CENTER", 0, 0)
-    frame:SetFrameLevel(math_max(2, baseLevel + 3))
+    frame:SetFrameLevel(NP_FRAME_LEVEL)
     ApplyBackdrop(frame, bgC[1], bgC[2], bgC[3], bgC[4], bdC[1], bdC[2], bdC[3], bdC[4])
 
     -- ── Target / focus glow ring ──────────────────────────────────────────────
-    -- Parented to parentPlate (not frame) to avoid child/frameLevel clipping.
-    -- GlowTex + edgeSize=6 creates a soft halo that bleeds outward from the ring.
-    -- Rendered at frameLevel-1 so the main frame content shows cleanly above it.
     local glowOutset = Clamp(db.targetGlowOutset or 4, 1, 12)
     local targetGlow = CreateFrame("Frame", nil, parentPlate, "BackdropTemplate")
-    targetGlow:SetPoint("TOPLEFT",     frame, "TOPLEFT",     -glowOutset,  glowOutset)
-    targetGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",  glowOutset, -glowOutset)
-    targetGlow:SetFrameLevel(math_max(1, frame:GetFrameLevel() - 1))
+    targetGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", -glowOutset, glowOutset)
+    targetGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", glowOutset, -glowOutset)
+    targetGlow:SetFrameLevel(NP_GLOW_FRAME_LEVEL)
     if targetGlow.SetBackdrop then
         targetGlow:SetBackdrop(GLOW_BD)
     end
     targetGlow:SetBackdropBorderColor(0.96, 0.76, 0.24, 0)
     targetGlow:Hide()
-    frame.targetGlow = targetGlow
+    frame.targetGlow     = targetGlow
 
     -- Store the normal border colour so UpdateTargetGlow can restore it.
     frame._normalBdColor = { bdC[1], bdC[2], bdC[3], bdC[4] or 0.9 }
@@ -448,10 +463,10 @@ function Nameplates:BuildPlateFrame(parentPlate)
     -- Arrow textures live in Media/Textures/Arrows/  (ArrowUp default, Arrow0-72, etc.)
     -- ARROW_TC_RIGHT makes the arrow point → (used on the LEFT side of the plate).
     -- ARROW_TC_LEFT  makes the arrow point ← (used on the RIGHT side of the plate).
-    local arrowSize = Clamp(db.targetArrowSize or 18, 8, 32)
-    local arrowTex  = GetArrowTexPath(db.targetArrowStyle)
+    local arrowSize      = Clamp(db.targetArrowSize or 18, 8, 32)
+    local arrowTex       = GetArrowTexPath(db.targetArrowStyle)
 
-    local arrowL = frame:CreateTexture(nil, "OVERLAY", nil, 7)
+    local arrowL         = frame:CreateTexture(nil, "OVERLAY", nil, 7)
     arrowL:SetSize(arrowSize, arrowSize)
     arrowL:SetPoint("RIGHT", frame, "LEFT", -4, 0)
     arrowL:SetTexture(arrowTex)
@@ -519,7 +534,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
 
     -- ── Health text ───────────────────────────────────────────────────────────
     local hf, hs, hfl  = GetPlateFont("health", Clamp(db.healthFontSize or 9, 6, 18), db)
-    local hTextJustify = db.healthTextAnchor or "RIGHT"     -- "LEFT", "CENTER", or "RIGHT"
+    local hTextJustify = db.healthTextAnchor or "RIGHT" -- "LEFT", "CENTER", or "RIGHT"
     local hTextOX      = db.healthTextOffsetX or 0
     local hTextOY      = db.healthTextOffsetY or 0
     local healthText   = healthBar:CreateFontString(nil, "OVERLAY")
@@ -776,8 +791,8 @@ function Nameplates:UpdateTargetGlow(frame, unit)
     -- Helper: restore the frame's normal border colour from stored state or DB.
     local function RestoreBorder()
         local bc = frame._normalBdColor
-                   or (type(db.healthBorderColor) == "table" and db.healthBorderColor)
-                   or { 0.14, 0.15, 0.20, 0.90 }
+            or (type(db.healthBorderColor) == "table" and db.healthBorderColor)
+            or { 0.14, 0.15, 0.20, 0.90 }
         frame:SetBackdropBorderColor(bc[1], bc[2], bc[3], bc[4] or 0.9)
     end
 
@@ -815,9 +830,9 @@ function Nameplates:UpdateTargetGlow(frame, unit)
 
         -- Optional frame grow on target.
         local growW = (db.targetGrowWidth and db.targetGrowWidth ~= 1)
-                      and Clamp(db.targetGrowWidth, 0.5, 2) or 1
+            and Clamp(db.targetGrowWidth, 0.5, 2) or 1
         local growH = (db.targetGrowHeight and db.targetGrowHeight ~= 1)
-                      and Clamp(db.targetGrowHeight, 0.5, 2) or 1
+            and Clamp(db.targetGrowHeight, 0.5, 2) or 1
         frame:SetSize(baseW * growW, baseH * growH)
 
         if db.showTargetArrows ~= false then
@@ -833,7 +848,6 @@ function Nameplates:UpdateTargetGlow(frame, unit)
             if frame.arrowL then frame.arrowL:Hide() end
             if frame.arrowR then frame.arrowR:Hide() end
         end
-
     elseif isFocus then
         local fc = type(db.focusGlowColor) == "table" and db.focusGlowColor or nil
         local fr, fg, fb, fa
@@ -850,7 +864,6 @@ function Nameplates:UpdateTargetGlow(frame, unit)
         if frame.arrowL then frame.arrowL:Hide() end
         if frame.arrowR then frame.arrowR:Hide() end
         frame:SetSize(baseW, baseH)
-
     else
         RestoreBorder()
         frame.targetGlow:Hide()
@@ -905,9 +918,14 @@ function Nameplates:UpdateAuras(frame, unit)
 
         local data = C_UnitAuras and C_UnitAuras.GetAuraDataBySlot(unit, slotIndex)
         if data and data.auraInstanceID and data.icon then
-            if onlyMine and data.sourceUnit ~= "player" then
-                -- skip non-player auras
-            else
+            -- MIDNIGHT: sourceUnit is a secret string on nameplate units.
+            -- Wrap the comparison in pcall; if it errors, treat as "not mine".
+            local isPlayerAura = true
+            if onlyMine then
+                local ok, result = pcall(function() return data.sourceUnit == "player" end)
+                isPlayerAura = ok and result
+            end
+            if not onlyMine or isPlayerAura then
                 shown = shown + 1
                 local iconF = frame.auraFrame.icons[shown]
                 if iconF then
@@ -989,26 +1007,44 @@ function Nameplates:UpdateCastBar(frame, unit)
     end
 
     -- Update cast state
-    frame._casting    = true
-    frame._channeling = channeling
-    frame._castStart  = startTime and (startTime / 1000) or GetTime()
-    frame._castEnd    = endTime and (endTime / 1000) or (GetTime() + 1)
-    frame._castMax    = math_max(0.001, frame._castEnd - frame._castStart)
+    -- MIDNIGHT SECRET NOTE: startTime/endTime from UnitCastingInfo/UnitChannelInfo
+    -- are secret numbers on nameplate units — cannot do / 1000 arithmetic on them.
+    -- We derive duration entirely via C_Spell.GetSpellInfo(spellId).castTime (non-secret),
+    -- then drive the bar solely with GetTime() arithmetic. No secret arithmetic needed.
+    frame._casting         = true
+    frame._channeling      = channeling
+    frame._castObservedAt  = GetTime()
+
+    -- MIDNIGHT SECRET: C_Spell.GetSpellInfo returns castTime as a tainted/secret number
+    -- in combat.  Any comparison (> 0) on it will crash.  We therefore always use the
+    -- 2-second fallback duration.  The bar terminates early via UNIT_SPELLCAST_STOP, so
+    -- this only matters for the worst-case tail display.
+    local dur              = 2.0
+    frame._castDurationSec = dur
+    frame.castBar:SetMinMaxValues(0, dur)
+    frame.castBar:SetValue(channeling and dur or 0)
 
     frame.castText:SetText(name)
 
-    -- Color: uninterruptible vs normal vs channel
-    if notInterruptible then
-        frame.castBar:SetStatusBarColor(COLOR_CAST_UNINT[1], COLOR_CAST_UNINT[2], COLOR_CAST_UNINT[3], 1)
-        frame.castShield:Show()
-    elseif channeling then
+    -- Color: uninterruptible vs normal vs channel.
+    -- MIDNIGHT SECRET: notInterruptible from UnitCastingInfo/UnitChannelInfo is a secret
+    -- boolean — `if notInterruptible then` throws.  Wrap in pcall; on error treat as
+    -- interruptible (unint stays false).
+    if channeling then
         local cc = CopyColor(db.castColor, COLOR_CHANNEL)
         frame.castBar:SetStatusBarColor(cc[1], cc[2], cc[3], 1)
         frame.castShield:Hide()
     else
-        local cc = CopyColor(db.castColor, COLOR_CAST)
-        frame.castBar:SetStatusBarColor(cc[1], cc[2], cc[3], 1)
-        frame.castShield:Hide()
+        local unint = false
+        pcall(function() if notInterruptible then unint = true end end)
+        if unint then
+            frame.castBar:SetStatusBarColor(COLOR_CAST_UNINT[1], COLOR_CAST_UNINT[2], COLOR_CAST_UNINT[3], 1)
+            frame.castShield:Show()
+        else
+            local cc = CopyColor(db.castColor, COLOR_CAST)
+            frame.castBar:SetStatusBarColor(cc[1], cc[2], cc[3], 1)
+            frame.castShield:Hide()
+        end
     end
 
     -- Spell icon
@@ -1031,18 +1067,16 @@ function Nameplates:UpdateCastBar(frame, unit)
                 self2._castScriptActive = false
                 return
             end
-            local now = GetTime()
-            local max = self2._castMax
+            -- All values here are non-secret GetTime() arithmetic — safe in Midnight.
+            local elapsed = GetTime() - self2._castObservedAt
+            local dur     = self2._castDurationSec or 1
+            local clamped = math_min(elapsed, dur)
             if self2._channeling then
-                local remaining = math_max(0, self2._castEnd - now)
-                self2.castBar:SetMinMaxValues(0, max)
-                self2.castBar:SetValue(remaining)
+                self2.castBar:SetValue(math_max(0, dur - clamped))
             else
-                local elapsed = math_min(now - self2._castStart, max)
-                self2.castBar:SetMinMaxValues(0, max)
-                self2.castBar:SetValue(elapsed)
+                self2.castBar:SetValue(clamped)
             end
-            if now >= self2._castEnd then
+            if elapsed >= dur then
                 self2._casting = false
                 self2.castContainer:Hide()
             end
@@ -1186,29 +1220,74 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     local plate = C_NamePlate.GetNamePlateForUnit(unitID)
     if not plate then return end
 
-    -- Suppress Blizzard's built-in unit frame
+    -- ── Suppress Blizzard's built-in unit frame ───────────────────────────────
+    -- Plater's Midnight approach (Plater.lua ~4515-4550):
+    --   1. hooksecurefunc(blizzUF, "Show")  — works on protected frames in combat
+    --   2. hooksecurefunc(blizzUF, "SetAlpha") — catches Blizzard resetting alpha
+    --   3. blizzUF:UnregisterAllEvents()    — prevents event-driven re-draws
+    --   4. Reparent AurasFrame children to a hidden parent
+    -- We MUST use hooksecurefunc, not HookScript — HookScript on protected frames
+    -- is forbidden during combat lockdown.
     local blizzUF = plate.UnitFrame
-    if blizzUF then
+    if blizzUF and not blizzUF._twichSuppressed then
+        blizzUF._twichSuppressed = true
         blizzUF:SetAlpha(0)
-        -- Do not call Hide() — it can cause issues with Blizzard secure code
+
+        -- Hook Show: whenever Blizzard tries to show it, zero alpha immediately.
+        hooksecurefunc(blizzUF, "Show", function(f)
+            if not f._isTwichFrame then f:SetAlpha(0) end
+        end)
+
+        -- Hook SetAlpha: prevent Blizzard from restoring the alpha (threat flashes etc.).
+        local key = tostring(blizzUF)
+        hooksecurefunc(blizzUF, "SetAlpha", function(f, v)
+            if _alphaLocks[key] then return end
+            if v ~= 0 then
+                _alphaLocks[key] = true
+                f:SetAlpha(0)
+                _alphaLocks[key] = nil
+            end
+        end)
+
+        -- Stop Blizzard receiving events that re-trigger element updates/shows.
+        pcall(function() blizzUF:UnregisterAllEvents() end)
+        pcall(function()
+            if blizzUF.HealthBarsContainer and blizzUF.HealthBarsContainer.healthBar then
+                blizzUF.HealthBarsContainer.healthBar:UnregisterAllEvents()
+            end
+            if blizzUF.castBar then blizzUF.castBar:UnregisterAllEvents() end
+        end)
+
+        -- Reparent Blizzard's aura/CC sub-frames to the hidden parent so they
+        -- take no screen space and receive no further event-driven updates.
+        pcall(function()
+            if blizzUF.AurasFrame then
+                local af = blizzUF.AurasFrame
+                if af.DebuffListFrame then af.DebuffListFrame:SetParent(_hiddenPlateParent) end
+                if af.BuffListFrame then af.BuffListFrame:SetParent(_hiddenPlateParent) end
+                if af.CrowdControlListFrame then af.CrowdControlListFrame:SetParent(_hiddenPlateParent) end
+                if af.LossOfControlFrame then af.LossOfControlFrame:SetParent(_hiddenPlateParent) end
+            end
+        end)
+    elseif blizzUF then
+        blizzUF:SetAlpha(0) -- already hooked; just re-zero
     end
 
-    -- Suppress any other Blizzard visual art children on the plate frame (e.g. selection
-    -- highlight / target outline that lives outside the UnitFrame).  We do this BEFORE
-    -- creating our custom frame so we can safely zero-alpha everything currently parented
-    -- to `plate` without accidentally hiding our own content.
-    -- Wrapped in pcall to be safe against secure-frame restrictions.
+    -- Suppress other non-TwichUI art children on the plate.
     pcall(function()
         local children = { plate:GetChildren() }
         for _, child in ipairs(children) do
-            if child ~= blizzUF then
+            if child ~= blizzUF and not child._isTwichFrame and not child._twichSuppressed then
+                child._twichSuppressed = true
                 child:SetAlpha(0)
+                hooksecurefunc(child, "Show", function(f) f:SetAlpha(0) end)
             end
         end
     end)
 
     local frame          = self:BuildPlateFrame(plate)
     frame._unit          = unitID
+    frame._plate         = plate -- store direct ref to avoid GetNamePlateForUnit on any unit token
     self._plates[unitID] = frame
 
     local db             = self:GetDB()
@@ -1376,8 +1455,12 @@ function Nameplates:EnterTestMode()
             frame:SetBackdropBorderColor(ac[1], ac[2], ac[3], 0.9)
             frame.targetGlow:SetBackdropBorderColor(ac[1], ac[2], ac[3], 0.55)
             frame.targetGlow:Show()
-            if frame.arrowL then frame.arrowL:SetVertexColor(ac[1], ac[2], ac[3], 1); frame.arrowL:Show() end
-            if frame.arrowR then frame.arrowR:SetVertexColor(ac[1], ac[2], ac[3], 1); frame.arrowR:Show() end
+            if frame.arrowL then
+                frame.arrowL:SetVertexColor(ac[1], ac[2], ac[3], 1); frame.arrowL:Show()
+            end
+            if frame.arrowR then
+                frame.arrowR:SetVertexColor(ac[1], ac[2], ac[3], 1); frame.arrowR:Show()
+            end
         end
 
         -- Cast bar
@@ -1596,10 +1679,10 @@ function Nameplates:OnEnable()
     self:RegisterEvent("PLAYER_TARGET_CHANGED", "OnTargetFocusChanged")
     self:RegisterEvent("PLAYER_FOCUS_CHANGED", "OnTargetFocusChanged")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
-
-    -- Theme message
-    self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
-
+    -- Re-suppress Blizzard plate art when entering combat (Blizzard re-shows
+    -- threat rings / selection art on PLAYER_REGEN_DISABLED and UNIT_THREAT_*).
+    self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnCombatStateChange")
+    self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnCombatStateChange")
     -- Apply CVars
     self:ApplyCVars()
 
@@ -1674,10 +1757,15 @@ function Nameplates:OnCastEvent(_, unit)
 end
 
 function Nameplates:OnThreatUpdate(_, unit)
+    -- IMPORTANT: UNIT_THREAT_SITUATION_UPDATE fires for ANY unit token (player, party1,
+    -- raid5, targettarget, etc.).  C_NamePlate.GetNamePlateForUnit only accepts nameplate
+    -- unit tokens and throws for anything else.  We NEVER call it here.
+    -- Use the stored _plate reference instead (set in OnNamePlateAdded).
     local frame = unit and self._plates[unit]
-    if frame then
-        self:UpdateThreat(frame, unit)
-    end
+    if not frame then return end
+    self:UpdateThreat(frame, unit)
+    -- BlizzUF suppression is handled by the OnShow hooks set at plate creation time;
+    -- no manual re-suppression sweep needed here.
 end
 
 function Nameplates:OnTargetFocusChanged()
@@ -1691,6 +1779,44 @@ function Nameplates:OnPlayerEnteringWorld()
     C_Timer.After(0.5, function()
         if self:IsEnabled() then self:RefreshAllPlates() end
     end)
+end
+
+-- Blizzard re-shows its threat rings, selection art, and aggro overlays when entering
+-- combat or when threat changes.  Individual plates already have OnShow hooks from
+-- OnNamePlateAdded, but new plates spawned mid-combat need the same treatment.
+-- We iterate via GetNamePlates() which does NOT require unit tokens — safe to call anywhere.
+function Nameplates:OnCombatStateChange()
+    if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
+    local plates = C_NamePlate.GetNamePlates()
+    if not plates then return end
+    for _, plate in ipairs(plates) do
+        local blizzUF = plate.UnitFrame
+        if blizzUF then
+            blizzUF:SetAlpha(0) -- re-zero; hooks already installed from OnNamePlateAdded
+        end
+        pcall(function()
+            local children = { plate:GetChildren() }
+            for _, child in ipairs(children) do
+                if child ~= blizzUF and not child._isTwichFrame then
+                    child:SetAlpha(0)
+                end
+            end
+        end)
+    end
+    -- Re-assert our own frame alphas in case anything disturbed them.
+    local db    = self:GetDB()
+    local alpha = Clamp(db.alpha or 1, 0.1, 1)
+    local scale = Clamp(db.scale or 1, 0.5, 2)
+    for _, frame in pairs(self._plates) do
+        if frame then
+            frame:SetAlpha(alpha)
+            frame:SetScale(scale)
+        end
+    end
+end
+
+function Nameplates:SuppressAllBlizzardPlateChildren()
+    self:OnCombatStateChange()
 end
 
 function Nameplates:OnThemeChanged()
@@ -1861,64 +1987,57 @@ function Nameplates:BuildDebugReport()
     local total, visible = 0, 0
     for _, frame in pairs(self._plates) do
         total = total + 1
-        if frame and frame:IsShown() then visible = visible + 1 end
+        pcall(function() if frame and frame:IsShown() then visible = visible + 1 end end)
     end
     add(string.format("--- Plates: %d tracked / %d visible ---", total, visible))
 
-    -- First visible plate detail
+    -- First visible plate detail.
+    -- MIDNIGHT SECRET: calling frame methods (IsShown, GetWidth, GetFont, GetText, etc.)
+    -- on nameplate-parented frames returns tainted/secret values in combat.  string.format
+    -- propagates taint, inserting secret strings into `lines` which then crash
+    -- table.concat.  Wrap the entire detail block in pcall so a single tainted value
+    -- does not break the whole report.
     local found = false
     for unit, frame in pairs(self._plates) do
-        if frame and frame:IsShown() then
+        -- IsShown may itself be tainted; guard with pcall
+        local shown = false
+        pcall(function() if frame and frame:IsShown() then shown = true end end)
+        if shown then
             found = true
             add(string.format("  sample unit : %s", tostring(unit)))
-            add(string.format("  frame size  : %.0f x %.0f", frame:GetWidth(), frame:GetHeight()))
-
-            local hb = frame.healthBar
-            if hb then
-                add(string.format("  healthBar   : IsShown=%s  w=%.0f h=%.0f",
-                    tostring(hb:IsShown()), hb:GetWidth(), hb:GetHeight()))
+            -- Stored metadata (_unit, _casting, etc.) is set by us — always safe.
+            add(string.format("  casting     : %s  channeling=%s",
+                tostring(frame._casting), tostring(frame._channeling)))
+            -- Frame method calls that may return tainted values — each in its own pcall.
+            local function safeGet(fmt, fn)
+                local ok, result = pcall(fn)
+                add(ok and result or (fmt .. " <tainted>"))
             end
-
-            local ht = frame.healthText
-            if ht then
-                local font, size, flags = ht:GetFont()
-                add(string.format("  healthText  : IsShown=%s  text=%q  pts=%d",
-                    tostring(ht:IsShown()), tostring(ht:GetText() or ""), ht:GetNumPoints()))
-                add(string.format("  healthFont  : %s  sz=%s  flags=%s",
-                    tostring(font), tostring(size), tostring(flags)))
+            safeGet("  frame size", function()
+                return string.format("  frame size  : %.0f x %.0f", frame:GetWidth(), frame:GetHeight())
+            end)
+            if frame.healthBar then
+                safeGet("  healthBar", function()
+                    local hb = frame.healthBar
+                    return string.format("  healthBar   : IsShown=%s  w=%.0f h=%.0f",
+                        tostring(hb:IsShown()), hb:GetWidth(), hb:GetHeight())
+                end)
+            end
+            if frame.healthText then
+                safeGet("  healthText", function()
+                    local ht = frame.healthText
+                    return string.format("  healthText  : IsShown=%s  pts=%d",
+                        tostring(ht:IsShown()), ht:GetNumPoints())
+                end)
             else
                 add("  healthText  : NOT CREATED")
             end
-
-            local ab = frame.absorbBar
-            if ab then
-                add(string.format("  absorbBar   : IsShown=%s", tostring(ab:IsShown())))
+            if frame.castBar then
+                safeGet("  castBar", function()
+                    local cb = frame.castBar
+                    return string.format("  castBar     : IsShown=%s", tostring(cb:IsShown()))
+                end)
             end
-
-            local cb = frame.castBar
-            if cb then
-                add(string.format("  castBar     : IsShown=%s  w=%.0f h=%.0f",
-                    tostring(cb:IsShown()), cb:GetWidth(), cb:GetHeight()))
-            end
-
-            local ct = frame.castText
-            if ct then
-                add(string.format("  castText    : IsShown=%s  text=%q  pts=%d",
-                    tostring(ct:IsShown()), tostring(ct:GetText() or ""), ct:GetNumPoints()))
-            else
-                add("  castText    : NOT CREATED")
-            end
-
-            local ti = frame.targetIndicator
-            if ti then
-                add(string.format("  targetArrow : IsShown=%s", tostring(ti:IsShown())))
-            end
-
-            local ei = frame.eliteIcon
-            if ei then
-                add(string.format("  eliteIcon   : IsShown=%s", tostring(ei:IsShown())))
-            end
-
             break
         end
     end

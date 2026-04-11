@@ -416,23 +416,68 @@ function Options:SetTargetArrowSize(_, v)
 end
 
 -- All .tga files in Media/Textures/Arrows/ (Arrow0-72, ArrowBracket, ArrowRed, ArrowUp)
-local ARROW_STYLES_VALUES = nil
-local ARROW_STYLES_SORT   = nil
-local function BuildArrowStyles()
-    if ARROW_STYLES_VALUES then return end
-    ARROW_STYLES_VALUES = {}
-    ARROW_STYLES_SORT   = {}
-    -- ArrowUp first (default)
-    ARROW_STYLES_VALUES["ArrowUp"]      = "Arrow Up (Default)"
-    ARROW_STYLES_VALUES["ArrowBracket"] = "Arrow Bracket"
-    ARROW_STYLES_VALUES["ArrowRed"]     = "Arrow Red"
-    table.insert(ARROW_STYLES_SORT, "ArrowUp")
-    table.insert(ARROW_STYLES_SORT, "ArrowBracket")
-    table.insert(ARROW_STYLES_SORT, "ArrowRed")
-    for i = 0, 72 do
-        local key = "Arrow" .. i
-        ARROW_STYLES_VALUES[key] = "Arrow " .. i
-        table.insert(ARROW_STYLES_SORT, key)
+local ARROW_BASE = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Arrows\\"
+local ALL_ARROW_STYLES = nil
+local function GetAllArrowStyles()
+    if ALL_ARROW_STYLES then return ALL_ARROW_STYLES end
+    ALL_ARROW_STYLES = { "ArrowUp", "ArrowBracket", "ArrowRed" }
+    for i = 0, 72 do ALL_ARROW_STYLES[#ALL_ARROW_STYLES + 1] = "Arrow" .. i end
+    return ALL_ARROW_STYLES
+end
+
+-- ── Arrow picker popup ────────────────────────────────────────────────────────
+-- A floating AceGUI window showing all arrow styles as clickable icon buttons.
+local _arrowPickerFrame = nil
+
+local function OpenArrowPicker()
+    local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
+    if not AceGUI then return end
+
+    -- If already open, close (toggle behaviour)
+    if _arrowPickerFrame then
+        _arrowPickerFrame:Hide()
+        _arrowPickerFrame = nil
+        return
+    end
+
+    local frame = AceGUI:Create("Frame")
+    frame:SetTitle("Select Arrow Style")
+    frame:SetStatusText("Click an arrow to select  |  " .. Options:GetTargetArrowStyle() .. " is current")
+    frame:SetLayout("Flow")
+    frame:SetWidth(560)
+    frame:SetHeight(420)
+    frame:SetCallback("OnClose", function(widget)
+        AceGUI:Release(widget)
+        _arrowPickerFrame = nil
+    end)
+    _arrowPickerFrame = frame
+
+    local current = Options:GetTargetArrowStyle()
+
+    for _, style in ipairs(GetAllArrowStyles()) do
+        local s       = style
+        -- Short display label: "ArrowUp" → "Up", "Arrow0" → "0"
+        local label   = s:match("^Arrow(.+)$") or s
+        local texPath = ARROW_BASE .. s .. ".tga"
+
+        local icon    = AceGUI:Create("Icon")
+        icon:SetImage(texPath)
+        icon:SetImageSize(40, 40)
+        icon:SetLabel(label)
+        icon:SetWidth(68)
+        if s == current then
+            icon.label:SetTextColor(0.2, 1, 0.3)
+            icon.image:SetVertexColor(0.2, 1, 0.3, 1)
+        end
+        icon:SetCallback("OnClick", function()
+            Options:SetTargetArrowStyle(nil, s)
+            -- Close the picker; the config panel refreshes automatically via Refresh()
+            if _arrowPickerFrame then
+                _arrowPickerFrame:Hide()
+                _arrowPickerFrame = nil
+            end
+        end)
+        frame:AddChild(icon)
     end
 end
 
@@ -443,8 +488,7 @@ function Options:SetTargetArrowStyle(_, v)
 end
 
 function Options:GetTargetArrowPreviewTex()
-    local style = self:GetTargetArrowStyle()
-    return "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Arrows\\" .. style .. ".tga"
+    return ARROW_BASE .. self:GetTargetArrowStyle() .. ".tga"
 end
 
 function Options:GetTargetGlowOutset() return self:GetDB().targetGlowOutset or 3 end
@@ -812,7 +856,9 @@ function Options:BuildConfiguration()
                                 order  = 6,
                                 values = NAME_ANCHOR_POINTS,
                                 get    = function() return Options:GetDB().nameAnchorPoint or "BOTTOMLEFT" end,
-                                set    = function(_, v) Options:GetDB().nameAnchorPoint = v; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetDB().nameAnchorPoint = v; Refresh()
+                                end,
                             },
                             nameOffsetX     = {
                                 type  = "range",
@@ -822,7 +868,9 @@ function Options:BuildConfiguration()
                                 max   = 20,
                                 step  = 1,
                                 get   = function() return Options:GetDB().nameOffsetX or 2 end,
-                                set   = function(_, v) Options:GetDB().nameOffsetX = v; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetDB().nameOffsetX = v; Refresh()
+                                end,
                             },
                             nameOffsetY     = {
                                 type  = "range",
@@ -832,7 +880,9 @@ function Options:BuildConfiguration()
                                 max   = 20,
                                 step  = 1,
                                 get   = function() return Options:GetDB().nameOffsetY or 3 end,
-                                set   = function(_, v) Options:GetDB().nameOffsetY = v; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetDB().nameOffsetY = v; Refresh()
+                                end,
                             },
                         },
                     },
@@ -890,7 +940,9 @@ function Options:BuildConfiguration()
                                 order  = 6,
                                 values = ANCHOR_TEXTS,
                                 get    = function() return Options:GetDB().healthTextAnchor or "RIGHT" end,
-                                set    = function(_, v) Options:GetDB().healthTextAnchor = v; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetDB().healthTextAnchor = v; Refresh()
+                                end,
                             },
                         },
                     },
@@ -1266,46 +1318,28 @@ function Options:BuildConfiguration()
                         get = function() return Options:GetShowTargetArrows() end,
                         set = function(_, v) Options:SetShowTargetArrows(_, v) end,
                     },
-                    targetArrowStyle = {
-                        type    = "select",
-                        name    = "Arrow Style",
-                        order   = 22,
-                        hidden  = function() return not Options:GetShowTargetArrows() end,
-                        values  = function() BuildArrowStyles(); return ARROW_STYLES_VALUES end,
-                        sorting = function() BuildArrowStyles(); return ARROW_STYLES_SORT end,
-                        get     = function() return Options:GetTargetArrowStyle() end,
-                        set     = function(_, v) Options:SetTargetArrowStyle(_, v) end,
-                    },
-                    targetArrowPreviewHdr = {
-                        type   = "description",
-                        name   = "Arrow Preview  (→ left side    right side ←)",
-                        order  = 23,
+                    -- "Browse" button opens the arrow picker popup gallery
+                    targetArrowPicker = {
+                        type   = "execute",
+                        name   = "Browse Arrow Styles...",
+                        desc   = "Open a visual gallery of all arrow styles.",
+                        order  = 22,
                         hidden = function() return not Options:GetShowTargetArrows() end,
-                        width  = "full",
+                        func   = function() OpenArrowPicker() end,
+                        width  = "normal",
                     },
-                    -- Left arrow: points → (placed on the left side of the plate)
-                    targetArrowPreviewL = {
+                    -- Current selection preview (shows the arrow upright — no coord gymnastics)
+                    targetArrowPreview = {
                         type        = "description",
-                        name        = "",
-                        order       = 23.1,
+                        name        = function()
+                            return "Current: " .. Options:GetTargetArrowStyle()
+                        end,
+                        order       = 22.5,
                         hidden      = function() return not Options:GetShowTargetArrows() end,
                         image       = function() return Options:GetTargetArrowPreviewTex() end,
-                        imageCoords = { 0, 1, 1, 1, 0, 0, 1, 0 },  -- points →
-                        imageWidth  = 48,
-                        imageHeight = 48,
-                        width       = "half",
-                    },
-                    -- Right arrow: points ← (placed on the right side of the plate)
-                    targetArrowPreviewR = {
-                        type        = "description",
-                        name        = "",
-                        order       = 23.2,
-                        hidden      = function() return not Options:GetShowTargetArrows() end,
-                        image       = function() return Options:GetTargetArrowPreviewTex() end,
-                        imageCoords = { 1, 0, 0, 0, 1, 1, 0, 1 },  -- points ←
-                        imageWidth  = 48,
-                        imageHeight = 48,
-                        width       = "half",
+                        imageWidth  = 64,
+                        imageHeight = 64,
+                        width       = "full",
                     },
                     targetArrowSize = {
                         type = "range",
