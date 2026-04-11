@@ -57,10 +57,12 @@ local function GetLogsDB()
             suppressChatOutput = false,
             playAlertSound = false,
             alertSound = DEFAULT_SOUND,
+            popupOnError = false,
         }
     end
     if db.errorLog.suppressChatOutput == nil then db.errorLog.suppressChatOutput = false end
     if db.errorLog.playAlertSound == nil then db.errorLog.playAlertSound = false end
+    if db.errorLog.popupOnError == nil then db.errorLog.popupOnError = false end
     if type(db.errorLog.alertSound) ~= "string" or db.errorLog.alertSound == "" then
         db.errorLog.alertSound = DEFAULT_SOUND
     end
@@ -97,12 +99,18 @@ local function PlayAlertSound()
 end
 
 --- Returns true if `msg` originates from our addon.
-local function IsOurError(msg)
-    if type(msg) ~= "string" then return false end
+local function ContainsOurSource(text)
+    if type(text) ~= "string" then
+        return false
+    end
 
-    local lowered = msg:lower()
+    local lowered = text:lower()
     return lowered:find(ADDON_NAME:lower(), 1, true) ~= nil
         or lowered:find("twichrx", 1, true) ~= nil
+end
+
+local function IsOurError(msg, stack)
+    return ContainsOurSource(msg) or ContainsOurSource(stack)
 end
 
 --- Extracts a short one-line summary from the full error string.
@@ -131,12 +139,12 @@ end
 local function AppendEntry(detail)
     local db = GetLogsDB()
     if not db then
-        return false
+        return nil
     end
 
     local now = time()
     if db._lastDetail == detail and db._lastCapturedAt == now then
-        return false
+        return nil
     end
 
     db._lastDetail = detail
@@ -160,7 +168,24 @@ local function AppendEntry(detail)
         viewer:Refresh()
     end
 
-    return true
+    return entry
+end
+
+local function NotifyPopup(entry)
+    local db = GetLogsDB()
+    if not db or db.popupOnError ~= true or not entry then
+        return
+    end
+
+    local popup = Tools.UI and Tools.UI.ErrorLogPopup
+    if popup and type(popup.NotifyNewError) == "function" then
+        local ok = pcall(function()
+            popup:NotifyNewError(entry)
+        end)
+        if not ok then
+            return
+        end
+    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -169,11 +194,12 @@ end
 
 function ErrorLog:Capture(detail, context, stack)
     local fullDetail = BuildDetail(detail, context, stack)
-    local inserted = AppendEntry(fullDetail)
-    if inserted then
+    local entry = AppendEntry(fullDetail)
+    if entry then
         PlayAlertSound()
+        NotifyPopup(entry)
     end
-    if inserted and T.Print and self:GetSuppressChatOutput() ~= true then
+    if entry and T.Print and self:GetSuppressChatOutput() ~= true then
         T:Print("[TwichUI] Encountered an error. View details using /tui errors.")
     end
 end
@@ -203,8 +229,9 @@ function ErrorLog:Install()
     self._previousHandler = previous
     self._handler = function(msg)
         pcall(function()
-            if IsOurError(msg) then
-                self:Capture(msg)
+            local stack = type(debugstack) == "function" and debugstack(2, 20, 20) or nil
+            if IsOurError(msg, stack) then
+                self:Capture(msg, nil, stack)
             end
         end)
 
@@ -320,6 +347,17 @@ function ErrorLog:SetAlertSound(value)
         return
     end
     db.alertSound = value
+end
+
+function ErrorLog:GetPopupOnError()
+    local db = GetLogsDB()
+    return db and db.popupOnError == true or false
+end
+
+function ErrorLog:SetPopupOnError(value)
+    local db = GetLogsDB()
+    if not db then return end
+    db.popupOnError = value == true
 end
 
 --- FOR TESTING ONLY: directly inject a fake error entry.

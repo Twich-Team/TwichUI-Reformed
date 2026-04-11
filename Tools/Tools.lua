@@ -19,6 +19,7 @@ local T = unpack(TwichRx)
 ---@field Profiler TwichUIProfiler
 ---@field ProfilerUI TwichUIProfilerUI
 ---@field DebugConsole any
+---@field ErrorLogPopup any
 ---@field ErrorLogViewer any
 local Tools = T.Tools or {}
 T.Tools = Tools

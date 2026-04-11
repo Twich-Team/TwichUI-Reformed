@@ -3,6 +3,7 @@
     <Include file='Profiler.lua' />
     <Include file='ProfilerUI.lua' />
     <Include file='DebugConsole.lua' />
+    <Include file='ErrorLogPopup.lua' />
     <Include file='ErrorLogViewer.lua' />
     <Include file='SmartSelectorFrame.lua' />
     <Include file='SecureMenu.lua' />

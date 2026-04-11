@@ -23,7 +23,8 @@ local function GetErrorLog()
 end
 
 local function GetViewer()
-    return T.Tools and T.Tools.UI and (T.Tools.UI --[[@as any]]).ErrorLogViewer
+    local tools = T.Tools --[[@as any]]
+    return tools and tools.UI and tools.UI.ErrorLogViewer
 end
 
 local function BuildErrorLogConfiguration()
@@ -34,7 +35,7 @@ local function BuildErrorLogConfiguration()
     section.args = {
         title         = W.TitleWidget(0, "Error Log"),
         desc          = W.Description(5,
-            "TwichUI captures unhandled Lua errors from its own code and keeps a rolling log. " ..
+            "TwichUI captures unhandled Lua errors from its own code, keeps a rolling log, and can raise a popup when a new error is caught. " ..
             "Use the viewer to inspect them and copy details for bug reports."),
         status        = W.IGroup(10, "Status", {
             count = {
@@ -64,6 +65,20 @@ local function BuildErrorLogConfiguration()
                 set = function(_, value)
                     local el = GetErrorLog()
                     if el then el:SetSuppressChatOutput(value) end
+                end,
+            },
+            popupOnError = {
+                type = "toggle",
+                order = 15,
+                name = "Popup On Error",
+                desc = "Show a TwichUI error popup with an Open Log action when a new error is captured.",
+                get = function()
+                    local el = GetErrorLog()
+                    return el and el:GetPopupOnError() or false
+                end,
+                set = function(_, value)
+                    local el = GetErrorLog()
+                    if el then el:SetPopupOnError(value) end
                 end,
             },
             playAlertSound = {
