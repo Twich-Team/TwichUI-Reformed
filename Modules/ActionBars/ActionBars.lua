@@ -4085,21 +4085,18 @@ end
 function ActionBars:BuildSmartPagingDriver(barKey)
     if barKey ~= "bar1" then return nil end
 
-    local GetOverrideBarIndexFn = GetOverrideBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetOverrideBarIndex)
-    local GetVehicleBarIndexFn  = GetVehicleBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetVehicleBarIndex)
-    local GetTempBarIndexFn     = GetTempShapeshiftBarIndex or
-    (_G.C_ActionBar and _G.C_ActionBar.GetTempShapeshiftBarIndex)
-    local GetBonusBarIndexFn    = GetBonusBarIndex or (_G.C_ActionBar and _G.C_ActionBar.GetBonusBarIndex)
+    -- These are fixed WoW action-bar page constants — do NOT resolve dynamically at
+    -- load time because GetBonusBarIndex()/GetVehicleBarIndex() return 0 when the
+    -- player is not currently in that state, which would bake "0" into the driver.
+    local overrideIdx   = 13
+    local vehicleIdx    = 11
+    local shapeshiftIdx = 12
+    local bonusIdx      = 11
 
-    local overrideIdx           = (GetOverrideBarIndexFn and GetOverrideBarIndexFn()) or 13
-    local vehicleIdx            = (GetVehicleBarIndexFn and GetVehicleBarIndexFn()) or 11
-    local shapeshiftIdx         = (GetTempBarIndexFn and GetTempBarIndexFn()) or 12
-    local bonusIdx              = (GetBonusBarIndexFn and GetBonusBarIndexFn()) or 11
+    local UnitClass     = _G.UnitClass
+    local playerClass   = select(2, UnitClass("player"))
 
-    local UnitClass             = _G.UnitClass
-    local playerClass           = select(2, UnitClass("player"))
-
-    local segments              = {
+    local segments      = {
         format("[overridebar] %d;", overrideIdx),
         format("[vehicleui][possessbar] %d;", vehicleIdx),
         format("[shapeshift] %d;", shapeshiftIdx),
