@@ -3138,23 +3138,19 @@ function UnitFrames:UpdateStateIndicator(frame, unitKey, indicatorKey)
         elseif indicatorKey == "summonIndicator" and unit ~= "player" then
             shouldShow = false
         elseif indicatorKey == "combatIndicator" then
-            local okCombat, inCombat = pcall(_G.UnitAffectingCombat, unit)
-            shouldShow = okCombat and inCombat == true
+            shouldShow = _G.UnitAffectingCombat(unit) == true
         elseif indicatorKey == "restingIndicator" then
             shouldShow = _G.IsResting and _G.IsResting() == true
         elseif indicatorKey == "spiritIndicator" then
-            local okDead, isDead = pcall(_G.UnitIsDeadOrGhost, unit)
-            shouldShow = okDead and isDead == true
+            shouldShow = _G.UnitIsDeadOrGhost(unit) == true
         elseif indicatorKey == "offlineIndicator" then
-            local okConn, isConn = pcall(_G.UnitIsConnected, unit)
-            shouldShow = okConn and isConn == false
+            shouldShow = _G.UnitIsConnected(unit) == false
         elseif indicatorKey == "resurrectIndicator" then
-            local okRes, hasRes = pcall(_G.UnitHasIncomingResurrectSpell, unit)
-            shouldShow = okRes and hasRes == true
+            local resurrectFunc = _G.UnitHasIncomingResurrection or _G.UnitHasIncomingResurrectSpell
+            shouldShow = type(resurrectFunc) == "function" and resurrectFunc(unit) == true
         elseif indicatorKey == "summonIndicator" then
             if _G.C_InboundSummon then
-                local okSummon, hasSummon = pcall(_G.C_InboundSummon.HasInboundSummon)
-                shouldShow = okSummon and hasSummon == true
+                shouldShow = _G.C_InboundSummon.HasInboundSummon() == true
             end
         end
     end
@@ -6475,6 +6471,9 @@ function UnitFrames:EnsureFantasyCastbarVisuals(castbar)
         UnitFrames:ResetFantasyCastbarVisuals(self)
     end)
     castbar:HookScript("OnUpdate", function(self, elapsed)
+        if self._twichCastbarUpdating == true then
+            return
+        end
         UnitFrames:OnFantasyCastbarUpdate(self, elapsed)
     end)
 

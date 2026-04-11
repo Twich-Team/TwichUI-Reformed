@@ -4845,7 +4845,29 @@ function ActionBars:ApplyCooldownSettings()
     end
 
     self._cooldownBarState = self._cooldownBarState or {}
+    self._cooldownButtonCount = self._cooldownButtonCount or {}
     local hideCountdown = db.showCooldownText ~= true
+    local fullSignatureParts = {
+        hideCountdown and "1" or "0",
+        db.showCooldownSwipe == true and "1" or "0",
+    }
+
+    for barKey, buttons in pairs(self.barButtons) do
+        local settings = self:GetBarSettings(barKey)
+        local firstButton = buttons[1]
+        local lastButton = buttons[#buttons]
+        fullSignatureParts[#fullSignatureParts + 1] = tostring(barKey)
+        fullSignatureParts[#fullSignatureParts + 1] = tostring(#buttons)
+        fullSignatureParts[#fullSignatureParts + 1] = tostring(firstButton)
+        fullSignatureParts[#fullSignatureParts + 1] = tostring(lastButton)
+        fullSignatureParts[#fullSignatureParts + 1] = (not settings or settings.showCooldownSwipe ~= false) and "1" or
+        "0"
+    end
+
+    local fullSignature = table.concat(fullSignatureParts, ":")
+    if self._cooldownFullSignature == fullSignature then
+        return
+    end
 
     for barKey, buttons in pairs(self.barButtons) do
         local settings = self:GetBarSettings(barKey)
@@ -4853,13 +4875,16 @@ function ActionBars:ApplyCooldownSettings()
             (not settings or settings.showCooldownSwipe ~= false)
         local signature = (showSwipe and "1" or "0") .. ":" .. (hideCountdown and "1" or "0")
 
-        if self._cooldownBarState[barKey] ~= signature then
+        if self._cooldownBarState[barKey] ~= signature or self._cooldownButtonCount[barKey] ~= #buttons then
             for _, button in ipairs(buttons) do
                 self:ApplyCooldownSettingsToButton(button, db, settings)
             end
             self._cooldownBarState[barKey] = signature
+            self._cooldownButtonCount[barKey] = #buttons
         end
     end
+
+    self._cooldownFullSignature = fullSignature
 end
 
 function ActionBars:QueueCooldownRefresh()

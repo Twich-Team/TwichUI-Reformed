@@ -579,6 +579,35 @@ local function BuildTransformSet()
     return set
 end
 
+local cachedTransformSet
+local cachedTransformSignature
+
+local function BuildTransformSignature()
+    if not Feature({ "system", "noTransforms" }) then
+        return "disabled"
+    end
+
+    return table.concat({
+        tostring(Value({ "system", "transformSpellIDs" }, "") or ""),
+        tostring(Value({ "system", "presetTransforms", "fishing" }, false) and 1 or 0),
+        tostring(Value({ "system", "presetTransforms", "druidTravel" }, false) and 1 or 0),
+        tostring(Value({ "system", "presetTransforms", "druidFlight" }, false) and 1 or 0),
+        tostring(Value({ "system", "presetTransforms", "mountEquipment" }, false) and 1 or 0),
+        tostring(Value({ "system", "presetTransforms", "chefHat" }, false) and 1 or 0),
+        tostring(Value({ "system", "presetTransforms", "noblegarden" }, false) and 1 or 0)
+    }, "|")
+end
+
+local function GetCachedTransformSet()
+    local signature = BuildTransformSignature()
+    if cachedTransformSignature ~= signature or not cachedTransformSet then
+        cachedTransformSignature = signature
+        cachedTransformSet = BuildTransformSet()
+    end
+
+    return cachedTransformSet
+end
+
 local function HasSecretValues(...)
     if type(hasanysecretvalues) == "function" then
         local ok, hasSecret = pcall(hasanysecretvalues, ...)
@@ -591,7 +620,7 @@ local function HasSecretValues(...)
 end
 
 local function CancelBlockedTransforms()
-    local blocked = BuildTransformSet()
+    local blocked = GetCachedTransformSet()
     if not next(blocked) then
         return
     end
@@ -606,6 +635,7 @@ local function CancelBlockedTransforms()
         local spellID = aura.spellId
         if spellID and not HasSecretValues(spellID) and blocked[spellID] then
             _G.CancelSpellByID(spellID)
+            return
         end
         index = index + 1
     end
