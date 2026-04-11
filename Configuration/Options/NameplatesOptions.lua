@@ -199,6 +199,31 @@ function Options:SetShowThreat(_, v)
     self:GetDB().showThreat = v == true; Refresh()
 end
 
+-- Aggro color override
+function Options:GetShowAggroColor() return self:GetDB().showAggroColor ~= false end
+
+function Options:SetShowAggroColor(_, v)
+    self:GetDB().showAggroColor = v == true; Refresh()
+end
+
+function Options:GetAggroColorTank()
+    local c = self:GetDB().aggroColorTank or { 0.25, 0.90, 0.40, 1 }
+    return c[1], c[2], c[3], c[4] or 1
+end
+
+function Options:SetAggroColorTank(_, r, g, b, a)
+    self:GetDB().aggroColorTank = { r, g, b, a or 1 }; Refresh()
+end
+
+function Options:GetAggroColorDps()
+    local c = self:GetDB().aggroColorDps or { 1.00, 0.40, 0.10, 1 }
+    return c[1], c[2], c[3], c[4] or 1
+end
+
+function Options:SetAggroColorDps(_, r, g, b, a)
+    self:GetDB().aggroColorDps = { r, g, b, a or 1 }; Refresh()
+end
+
 function Options:GetShowAbsorb() return self:GetDB().showAbsorb ~= false end
 
 function Options:SetShowAbsorb(_, v)
@@ -517,6 +542,55 @@ function Options:SetFocusGlowColor(_, r, g, b, a)
     self:GetDB().focusGlowColor = { r, g, b, a or 0.7 }; Refresh()
 end
 
+-- Target arrow color (separate from glow color; nil = use glow color)
+function Options:GetTargetArrowColor()
+    local c = self:GetDB().targetArrowColor
+    if type(c) == "table" then return c[1], c[2], c[3], c[4] or 1 end
+    -- Default: match the glow color
+    return Options:GetTargetGlowColor()
+end
+
+function Options:SetTargetArrowColor(_, r, g, b, a)
+    self:GetDB().targetArrowColor = { r, g, b, a or 1 }; Refresh()
+end
+
+-- Power bar
+function Options:GetShowPowerBar() return self:GetDB().showPowerBar ~= false end
+
+function Options:SetShowPowerBar(_, v)
+    self:GetDB().showPowerBar = v == true; Refresh()
+end
+
+function Options:GetPowerBarHeight() return self:GetDB().powerBarHeight or 4 end
+
+function Options:SetPowerBarHeight(_, v)
+    self:GetDB().powerBarHeight = math.max(2, math.min(14, math.floor(tonumber(v) or 4))); Refresh()
+end
+
+function Options:GetPowerBarGap() return self:GetDB().powerBarGap or 2 end
+
+function Options:SetPowerBarGap(_, v)
+    self:GetDB().powerBarGap = math.max(0, math.min(12, math.floor(tonumber(v) or 2))); Refresh()
+end
+
+function Options:GetPowerBgColor()
+    local c = self:GetDB().powerBgColor or { 0.05, 0.06, 0.08, 0.92 }
+    return c[1], c[2], c[3], c[4] or 0.92
+end
+
+function Options:SetPowerBgColor(_, r, g, b, a)
+    self:GetDB().powerBgColor = { r, g, b, a or 0.92 }; Refresh()
+end
+
+function Options:GetPowerBorderColor()
+    local c = self:GetDB().powerBorderColor or { 0.14, 0.15, 0.20, 0.90 }
+    return c[1], c[2], c[3], c[4] or 0.9
+end
+
+function Options:SetPowerBorderColor(_, r, g, b, a)
+    self:GetDB().powerBorderColor = { r, g, b, a or 0.9 }; Refresh()
+end
+
 -- Aura extra options
 function Options:GetAuraOnlyMine() return self:GetDB().auraOnlyMine == true end
 
@@ -796,276 +870,14 @@ function Options:BuildConfiguration()
                 },
             },
 
-            -- ── Fonts tab ────────────────────────────────────────────────────
-            fonts = {
-                type  = "group",
-                name  = "Fonts",
-                order = 3,
-                args  = {
-
-                    nameGroup = {
-                        type   = "group",
-                        name   = "Name Text",
-                        inline = true,
-                        order  = 1,
-                        args   = {
-                            nameFontFace    = {
-                                type   = "select",
-                                name   = "Font Face",
-                                order  = 1,
-                                values = FontList,
-                                get    = function() return GetFontFace("name") end,
-                                set    = function(_, v) SetFontFace("name", v) end,
-                            },
-                            nameFontSize    = {
-                                type  = "range",
-                                name  = "Font Size",
-                                order = 2,
-                                min   = 6,
-                                max   = 20,
-                                step  = 1,
-                                get   = function() return Options:GetNameFontSize() end,
-                                set   = function(_, v) Options:SetNameFontSize(_, v) end,
-                            },
-                            nameFontOutline = {
-                                type   = "select",
-                                name   = "Outline",
-                                order  = 3,
-                                values = OUTLINE_VALUES,
-                                get    = function() return GetFontOutline("name") end,
-                                set    = function(_, v) SetFontOutline("name", v) end,
-                            },
-                            nameFontShadow  = {
-                                type  = "toggle",
-                                name  = "Drop Shadow",
-                                order = 4,
-                                get   = function() return GetFontShadow("name") end,
-                                set   = function(_, v) SetFontShadow("name", v) end,
-                            },
-                            nameFontColor   = {
-                                type     = "color",
-                                name     = "Color Override",
-                                order    = 5,
-                                hasAlpha = true,
-                                get      = function() return GetFontColor("name") end,
-                                set      = function(_, r, g, b, a) SetFontColor("name", r, g, b, a) end,
-                            },
-                            nameAnchorPoint = {
-                                type   = "select",
-                                name   = "Text Anchor",
-                                order  = 6,
-                                values = NAME_ANCHOR_POINTS,
-                                get    = function() return Options:GetDB().nameAnchorPoint or "BOTTOMLEFT" end,
-                                set    = function(_, v)
-                                    Options:GetDB().nameAnchorPoint = v; Refresh()
-                                end,
-                            },
-                            nameOffsetX     = {
-                                type  = "range",
-                                name  = "Offset X",
-                                order = 7,
-                                min   = -20,
-                                max   = 20,
-                                step  = 1,
-                                get   = function() return Options:GetDB().nameOffsetX or 2 end,
-                                set   = function(_, v)
-                                    Options:GetDB().nameOffsetX = v; Refresh()
-                                end,
-                            },
-                            nameOffsetY     = {
-                                type  = "range",
-                                name  = "Offset Y",
-                                order = 8,
-                                min   = -20,
-                                max   = 20,
-                                step  = 1,
-                                get   = function() return Options:GetDB().nameOffsetY or 3 end,
-                                set   = function(_, v)
-                                    Options:GetDB().nameOffsetY = v; Refresh()
-                                end,
-                            },
-                        },
-                    },
-
-                    healthGroup = {
-                        type   = "group",
-                        name   = "Health / Level Text",
-                        inline = true,
-                        order  = 2,
-                        args   = {
-                            healthFontFace    = {
-                                type   = "select",
-                                name   = "Font Face",
-                                order  = 1,
-                                values = FontList,
-                                get    = function() return GetFontFace("health") end,
-                                set    = function(_, v) SetFontFace("health", v) end,
-                            },
-                            healthFontSize    = {
-                                type  = "range",
-                                name  = "Font Size",
-                                order = 2,
-                                min   = 6,
-                                max   = 18,
-                                step  = 1,
-                                get   = function() return Options:GetHealthFontSize() end,
-                                set   = function(_, v) Options:SetHealthFontSize(_, v) end,
-                            },
-                            healthFontOutline = {
-                                type   = "select",
-                                name   = "Outline",
-                                order  = 3,
-                                values = OUTLINE_VALUES,
-                                get    = function() return GetFontOutline("health") end,
-                                set    = function(_, v) SetFontOutline("health", v) end,
-                            },
-                            healthFontShadow  = {
-                                type  = "toggle",
-                                name  = "Drop Shadow",
-                                order = 4,
-                                get   = function() return GetFontShadow("health") end,
-                                set   = function(_, v) SetFontShadow("health", v) end,
-                            },
-                            healthFontColor   = {
-                                type     = "color",
-                                name     = "Color Override",
-                                order    = 5,
-                                hasAlpha = true,
-                                get      = function() return GetFontColor("health") end,
-                                set      = function(_, r, g, b, a) SetFontColor("health", r, g, b, a) end,
-                            },
-                            healthTextAnchor  = {
-                                type   = "select",
-                                name   = "Health Text Anchor",
-                                order  = 6,
-                                values = ANCHOR_TEXTS,
-                                get    = function() return Options:GetDB().healthTextAnchor or "RIGHT" end,
-                                set    = function(_, v)
-                                    Options:GetDB().healthTextAnchor = v; Refresh()
-                                end,
-                            },
-                        },
-                    },
-
-                    castGroup = {
-                        type   = "group",
-                        name   = "Cast Bar Text",
-                        inline = true,
-                        order  = 3,
-                        args   = {
-                            castFontFace    = {
-                                type   = "select",
-                                name   = "Font Face",
-                                order  = 1,
-                                values = FontList,
-                                get    = function() return GetFontFace("cast") end,
-                                set    = function(_, v) SetFontFace("cast", v) end,
-                            },
-                            castFontSize    = {
-                                type  = "range",
-                                name  = "Font Size",
-                                order = 2,
-                                min   = 6,
-                                max   = 16,
-                                step  = 1,
-                                get   = function() return Options:GetCastFontSize() end,
-                                set   = function(_, v) Options:SetCastFontSize(_, v) end,
-                            },
-                            castFontOutline = {
-                                type   = "select",
-                                name   = "Outline",
-                                order  = 3,
-                                values = OUTLINE_VALUES,
-                                get    = function() return GetFontOutline("cast") end,
-                                set    = function(_, v) SetFontOutline("cast", v) end,
-                            },
-                            castFontShadow  = {
-                                type  = "toggle",
-                                name  = "Drop Shadow",
-                                order = 4,
-                                get   = function() return GetFontShadow("cast") end,
-                                set   = function(_, v) SetFontShadow("cast", v) end,
-                            },
-                        },
-                    },
-
-                },
-            },
-
-            -- ── Textures tab ─────────────────────────────────────────────────
-            textures = {
-                type  = "group",
-                name  = "Textures",
-                order = 4,
-                args  = {
-                    sepHP = { type = "header", name = "Health Bar", order = 1 },
-                    healthBarTexture = {
-                        type = "select",
-                        name = "Health Bar Texture",
-                        order = 2,
-                        values = TextureList,
-                        get = function() return GetBarTexture("healthBarTexture") end,
-                        set = function(_, v) SetBarTexture("healthBarTexture", v) end,
-                    },
-                    healthBgTexture = {
-                        type = "select",
-                        name = "Health BG Texture",
-                        order = 3,
-                        values = TextureList,
-                        get = function() return GetBarTexture("healthBgTexture") end,
-                        set = function(_, v) SetBarTexture("healthBgTexture", v) end,
-                    },
-                    healthBgColor = {
-                        type = "color",
-                        name = "Health BG Color",
-                        order = 4,
-                        hasAlpha = true,
-                        get = function() return GetBarBgColor("healthBgColor") end,
-                        set = function(_, r, g, b, a) SetBarBgColor("healthBgColor", r, g, b, a) end,
-                    },
-                    healthBorderColor = {
-                        type = "color",
-                        name = "Health Border Color",
-                        order = 5,
-                        hasAlpha = true,
-                        get = function() return GetBarBorderColor("healthBorderColor") end,
-                        set = function(_, r, g, b, a) SetBarBorderColor("healthBorderColor", r, g, b, a) end,
-                    },
-                    sepCast = { type = "header", name = "Cast Bar", order = 10 },
-                    castBarTexture = {
-                        type = "select",
-                        name = "Cast Bar Texture",
-                        order = 11,
-                        values = TextureList,
-                        get = function() return GetBarTexture("castBarTexture") end,
-                        set = function(_, v) SetBarTexture("castBarTexture", v) end,
-                    },
-                    castBgColor = {
-                        type = "color",
-                        name = "Cast BG Color",
-                        order = 12,
-                        hasAlpha = true,
-                        get = function() return GetBarBgColor("castBgColor") end,
-                        set = function(_, r, g, b, a) SetBarBgColor("castBgColor", r, g, b, a) end,
-                    },
-                    castBorderColor = {
-                        type = "color",
-                        name = "Cast Border Color",
-                        order = 13,
-                        hasAlpha = true,
-                        get = function() return GetBarBorderColor("castBorderColor") end,
-                        set = function(_, r, g, b, a) SetBarBorderColor("castBorderColor", r, g, b, a) end,
-                    },
-                },
-            },
-
             -- ── Health tab ───────────────────────────────────────────────────
+            -- Contains: bar texture/colors, health text, absorb, and health font.
             health = {
                 type  = "group",
                 name  = "Health",
-                order = 5,
+                order = 3,
                 args  = {
-                    sep1 = { type = "header", name = "Display", order = 1 },
+                    sep_display = { type = "header", name = "Display", order = 1 },
                     healthFormat = {
                         type = "select",
                         name = "Health Text Format",
@@ -1075,27 +887,113 @@ function Options:BuildConfiguration()
                         set = function(_, v) Options:SetHealthFormat(_, v) end,
                     },
                     showAbsorb = {
-                        type = "toggle",
-                        name = "Show Absorb Overlay",
+                        type  = "toggle",
+                        name  = "Show Absorb Overlay",
                         order = 3,
-                        get = function() return Options:GetShowAbsorb() end,
-                        set = function(_, v) Options:SetShowAbsorb(_, v) end,
+                        get   = function() return Options:GetShowAbsorb() end,
+                        set   = function(_, v) Options:SetShowAbsorb(_, v) end,
+                    },
+                    sep_tex = { type = "header", name = "Health Bar", order = 10 },
+                    healthBarTexture = {
+                        type   = "select",
+                        name   = "Bar Texture",
+                        order  = 11,
+                        values = TextureList,
+                        get    = function() return GetBarTexture("healthBarTexture") end,
+                        set    = function(_, v) SetBarTexture("healthBarTexture", v) end,
+                    },
+                    healthBgTexture = {
+                        type   = "select",
+                        name   = "Background Texture",
+                        order  = 12,
+                        values = TextureList,
+                        get    = function() return GetBarTexture("healthBgTexture") end,
+                        set    = function(_, v) SetBarTexture("healthBgTexture", v) end,
+                    },
+                    healthBgColor = {
+                        type     = "color",
+                        name     = "Background Color",
+                        order    = 13,
+                        hasAlpha = true,
+                        get      = function() return GetBarBgColor("healthBgColor") end,
+                        set      = function(_, r, g, b, a) SetBarBgColor("healthBgColor", r, g, b, a) end,
+                    },
+                    healthBorderColor = {
+                        type     = "color",
+                        name     = "Border Color",
+                        order    = 14,
+                        hasAlpha = true,
+                        get      = function() return GetBarBorderColor("healthBorderColor") end,
+                        set      = function(_, r, g, b, a) SetBarBorderColor("healthBorderColor", r, g, b, a) end,
+                    },
+                    sep_font = { type = "header", name = "Health Text Font", order = 20 },
+                    healthFontFace = {
+                        type   = "select",
+                        name   = "Font Face",
+                        order  = 21,
+                        values = FontList,
+                        get    = function() return GetFontFace("health") end,
+                        set    = function(_, v) SetFontFace("health", v) end,
+                    },
+                    healthFontSize = {
+                        type  = "range",
+                        name  = "Font Size",
+                        order = 22,
+                        min   = 6,
+                        max   = 18,
+                        step  = 1,
+                        get   = function() return Options:GetHealthFontSize() end,
+                        set   = function(_, v) Options:SetHealthFontSize(_, v) end,
+                    },
+                    healthFontOutline = {
+                        type   = "select",
+                        name   = "Outline",
+                        order  = 23,
+                        values = OUTLINE_VALUES,
+                        get    = function() return GetFontOutline("health") end,
+                        set    = function(_, v) SetFontOutline("health", v) end,
+                    },
+                    healthFontShadow = {
+                        type  = "toggle",
+                        name  = "Drop Shadow",
+                        order = 24,
+                        get   = function() return GetFontShadow("health") end,
+                        set   = function(_, v) SetFontShadow("health", v) end,
+                    },
+                    healthFontColor = {
+                        type     = "color",
+                        name     = "Text Color Override",
+                        order    = 25,
+                        hasAlpha = true,
+                        get      = function() return GetFontColor("health") end,
+                        set      = function(_, r, g, b, a) SetFontColor("health", r, g, b, a) end,
+                    },
+                    healthTextAnchor = {
+                        type   = "select",
+                        name   = "Text Align",
+                        order  = 26,
+                        values = ANCHOR_TEXTS,
+                        get    = function() return Options:GetDB().healthTextAnchor or "RIGHT" end,
+                        set    = function(_, v)
+                            Options:GetDB().healthTextAnchor = v; Refresh()
+                        end,
                     },
                 },
             },
 
             -- ── Name & Level tab ─────────────────────────────────────────────
+            -- Contains: show toggles, name format, elite icon, and name font.
             nameLevel = {
                 type  = "group",
                 name  = "Name & Level",
-                order = 6,
+                order = 4,
                 args  = {
                     showName = {
-                        type = "toggle",
-                        name = "Show Name",
+                        type  = "toggle",
+                        name  = "Show Name",
                         order = 1,
-                        get = function() return Options:GetShowName() end,
-                        set = function(_, v) Options:SetShowName(_, v) end,
+                        get   = function() return Options:GetShowName() end,
+                        set   = function(_, v) Options:SetShowName(_, v) end,
                     },
                     nameFormat = {
                         type   = "select",
@@ -1107,52 +1005,258 @@ function Options:BuildConfiguration()
                         set    = function(_, v) Options:SetNameFormat(_, v) end,
                     },
                     showLevel = {
-                        type = "toggle",
-                        name = "Show Level",
+                        type  = "toggle",
+                        name  = "Show Level",
                         order = 3,
-                        get = function() return Options:GetShowLevel() end,
-                        set = function(_, v) Options:SetShowLevel(_, v) end,
+                        get   = function() return Options:GetShowLevel() end,
+                        set   = function(_, v) Options:SetShowLevel(_, v) end,
                     },
                     showEliteIcon = {
-                        type = "toggle",
-                        name = "Show Elite/Boss Icon",
+                        type  = "toggle",
+                        name  = "Show Elite/Boss Icon",
                         order = 4,
-                        get = function() return Options:GetShowEliteIcon() end,
-                        set = function(_, v) Options:SetShowEliteIcon(_, v) end,
+                        get   = function() return Options:GetShowEliteIcon() end,
+                        set   = function(_, v) Options:SetShowEliteIcon(_, v) end,
+                    },
+                    sep_font = { type = "header", name = "Name Text Font", order = 10 },
+                    nameFontFace = {
+                        type   = "select",
+                        name   = "Font Face",
+                        order  = 11,
+                        values = FontList,
+                        get    = function() return GetFontFace("name") end,
+                        set    = function(_, v) SetFontFace("name", v) end,
+                    },
+                    nameFontSize = {
+                        type  = "range",
+                        name  = "Font Size",
+                        order = 12,
+                        min   = 6,
+                        max   = 20,
+                        step  = 1,
+                        get   = function() return Options:GetNameFontSize() end,
+                        set   = function(_, v) Options:SetNameFontSize(_, v) end,
+                    },
+                    nameFontOutline = {
+                        type   = "select",
+                        name   = "Outline",
+                        order  = 13,
+                        values = OUTLINE_VALUES,
+                        get    = function() return GetFontOutline("name") end,
+                        set    = function(_, v) SetFontOutline("name", v) end,
+                    },
+                    nameFontShadow = {
+                        type  = "toggle",
+                        name  = "Drop Shadow",
+                        order = 14,
+                        get   = function() return GetFontShadow("name") end,
+                        set   = function(_, v) SetFontShadow("name", v) end,
+                    },
+                    nameFontColor = {
+                        type     = "color",
+                        name     = "Text Color Override",
+                        order    = 15,
+                        hasAlpha = true,
+                        get      = function() return GetFontColor("name") end,
+                        set      = function(_, r, g, b, a) SetFontColor("name", r, g, b, a) end,
+                    },
+                    sep_pos = { type = "header", name = "Name Position", order = 20 },
+                    nameAnchorPoint = {
+                        type   = "select",
+                        name   = "Text Anchor",
+                        order  = 21,
+                        values = NAME_ANCHOR_POINTS,
+                        get    = function() return Options:GetDB().nameAnchorPoint or "BOTTOMLEFT" end,
+                        set    = function(_, v)
+                            Options:GetDB().nameAnchorPoint = v; Refresh()
+                        end,
+                    },
+                    nameJustify = {
+                        type   = "select",
+                        name   = "Justify",
+                        order  = 22,
+                        values = ANCHOR_HALIGN,
+                        get    = function() return Options:GetDB().nameJustify or "LEFT" end,
+                        set    = function(_, v)
+                            Options:GetDB().nameJustify = v; Refresh()
+                        end,
+                    },
+                    nameOffsetX = {
+                        type  = "range",
+                        name  = "Offset X",
+                        order = 23,
+                        min   = -20,
+                        max   = 20,
+                        step  = 1,
+                        get   = function() return Options:GetDB().nameOffsetX or 2 end,
+                        set   = function(_, v)
+                            Options:GetDB().nameOffsetX = v; Refresh()
+                        end,
+                    },
+                    nameOffsetY = {
+                        type  = "range",
+                        name  = "Offset Y",
+                        order = 24,
+                        min   = -20,
+                        max   = 20,
+                        step  = 1,
+                        get   = function() return Options:GetDB().nameOffsetY or 3 end,
+                        set   = function(_, v)
+                            Options:GetDB().nameOffsetY = v; Refresh()
+                        end,
                     },
                 },
             },
 
             -- ── Cast Bar tab ─────────────────────────────────────────────────
+            -- Contains: show toggle, colors, texture/bg/border, cast font.
             castbar = {
                 type  = "group",
                 name  = "Cast Bar",
-                order = 7,
+                order = 5,
                 args  = {
                     showCastBar = {
-                        type = "toggle",
-                        name = "Show Cast Bar",
+                        type  = "toggle",
+                        name  = "Show Cast Bar",
                         order = 1,
                         width = "full",
-                        get = function() return Options:GetShowCastBar() end,
-                        set = function(_, v) Options:SetShowCastBar(_, v) end,
+                        get   = function() return Options:GetShowCastBar() end,
+                        set   = function(_, v) Options:SetShowCastBar(_, v) end,
                     },
                     castColor = {
-                        type = "color",
-                        name = "Cast Color",
-                        order = 2,
+                        type     = "color",
+                        name     = "Cast Bar Color",
+                        order    = 2,
                         hasAlpha = false,
-                        get = function() return Options:GetCastColor() end,
-                        set = function(_, r, g, b, a) Options:SetCastColor(_, r, g, b, a) end,
+                        get      = function() return Options:GetCastColor() end,
+                        set      = function(_, r, g, b, a) Options:SetCastColor(_, r, g, b, a) end,
                     },
+                    sep_tex = { type = "header", name = "Cast Bar Appearance", order = 10 },
+                    castBarTexture = {
+                        type   = "select",
+                        name   = "Bar Texture",
+                        order  = 11,
+                        values = TextureList,
+                        get    = function() return GetBarTexture("castBarTexture") end,
+                        set    = function(_, v) SetBarTexture("castBarTexture", v) end,
+                    },
+                    castBgColor = {
+                        type     = "color",
+                        name     = "Background Color",
+                        order    = 12,
+                        hasAlpha = true,
+                        get      = function() return GetBarBgColor("castBgColor") end,
+                        set      = function(_, r, g, b, a) SetBarBgColor("castBgColor", r, g, b, a) end,
+                    },
+                    castBorderColor = {
+                        type     = "color",
+                        name     = "Border Color",
+                        order    = 13,
+                        hasAlpha = true,
+                        get      = function() return GetBarBorderColor("castBorderColor") end,
+                        set      = function(_, r, g, b, a) SetBarBorderColor("castBorderColor", r, g, b, a) end,
+                    },
+                    sep_font = { type = "header", name = "Cast Bar Font", order = 20 },
+                    castFontFace = {
+                        type   = "select",
+                        name   = "Font Face",
+                        order  = 21,
+                        values = FontList,
+                        get    = function() return GetFontFace("cast") end,
+                        set    = function(_, v) SetFontFace("cast", v) end,
+                    },
+                    castFontSize = {
+                        type  = "range",
+                        name  = "Font Size",
+                        order = 22,
+                        min   = 6,
+                        max   = 16,
+                        step  = 1,
+                        get   = function() return Options:GetCastFontSize() end,
+                        set   = function(_, v) Options:SetCastFontSize(_, v) end,
+                    },
+                    castFontOutline = {
+                        type   = "select",
+                        name   = "Outline",
+                        order  = 23,
+                        values = OUTLINE_VALUES,
+                        get    = function() return GetFontOutline("cast") end,
+                        set    = function(_, v) SetFontOutline("cast", v) end,
+                    },
+                    castFontShadow = {
+                        type  = "toggle",
+                        name  = "Drop Shadow",
+                        order = 24,
+                        get   = function() return GetFontShadow("cast") end,
+                        set   = function(_, v) SetFontShadow("cast", v) end,
+                    },
+                    sep_test = { type = "header", name = "Testing", order = 30 },
                     castTestMode = {
-                        type = "execute",
-                        order = 3,
-                        name = function()
+                        type  = "execute",
+                        order = 31,
+                        name  = function()
                             return Options:IsInCastTestMode() and "Stop Cast Preview" or "Cast Bar Preview"
                         end,
-                        desc = "Play fake cast bars on all visible nameplates.",
-                        func = function() Options:ToggleCastTestMode() end,
+                        desc  = "Play fake cast bars on all visible nameplates.",
+                        func  = function() Options:ToggleCastTestMode() end,
+                    },
+                },
+            },
+
+            -- ── Power Bar tab ────────────────────────────────────────────────
+            powerBar = {
+                type  = "group",
+                name  = "Power Bar",
+                order = 6,
+                args  = {
+                    showPowerBar = {
+                        type  = "toggle",
+                        name  = "Show Power Bar",
+                        order = 1,
+                        width = "full",
+                        desc  = "Display a thin resource bar (mana, energy, rage, etc.) below the health bar.",
+                        get   = function() return Options:GetShowPowerBar() end,
+                        set   = function(_, v) Options:SetShowPowerBar(_, v) end,
+                    },
+                    powerBarHeight = {
+                        type   = "range",
+                        name   = "Bar Height",
+                        order  = 2,
+                        min    = 2,
+                        max    = 14,
+                        step   = 1,
+                        hidden = function() return not Options:GetShowPowerBar() end,
+                        get    = function() return Options:GetPowerBarHeight() end,
+                        set    = function(_, v) Options:SetPowerBarHeight(_, v) end,
+                    },
+                    powerBarGap = {
+                        type   = "range",
+                        name   = "Gap from Health Bar",
+                        order  = 3,
+                        min    = 0,
+                        max    = 12,
+                        step   = 1,
+                        hidden = function() return not Options:GetShowPowerBar() end,
+                        get    = function() return Options:GetPowerBarGap() end,
+                        set    = function(_, v) Options:SetPowerBarGap(_, v) end,
+                    },
+                    powerBgColor = {
+                        type     = "color",
+                        name     = "Background Color",
+                        order    = 4,
+                        hasAlpha = true,
+                        hidden   = function() return not Options:GetShowPowerBar() end,
+                        get      = function() return Options:GetPowerBgColor() end,
+                        set      = function(_, r, g, b, a) Options:SetPowerBgColor(_, r, g, b, a) end,
+                    },
+                    powerBorderColor = {
+                        type     = "color",
+                        name     = "Border Color",
+                        order    = 5,
+                        hasAlpha = true,
+                        hidden   = function() return not Options:GetShowPowerBar() end,
+                        get      = function() return Options:GetPowerBorderColor() end,
+                        set      = function(_, r, g, b, a) Options:SetPowerBorderColor(_, r, g, b, a) end,
                     },
                 },
             },
@@ -1161,7 +1265,7 @@ function Options:BuildConfiguration()
             auras = {
                 type  = "group",
                 name  = "Auras",
-                order = 8,
+                order = 7,
                 args  = {
                     showAuras = {
                         type = "toggle",
@@ -1248,7 +1352,7 @@ function Options:BuildConfiguration()
             target = {
                 type  = "group",
                 name  = "Target",
-                order = 9,
+                order = 8,
                 args  = {
                     showTargetGlow = {
                         type  = "toggle",
@@ -1342,15 +1446,25 @@ function Options:BuildConfiguration()
                         width       = "full",
                     },
                     targetArrowSize = {
-                        type = "range",
-                        name = "Arrow Size",
-                        order = 24,
-                        min = 8,
-                        max = 32,
-                        step = 1,
+                        type   = "range",
+                        name   = "Arrow Size",
+                        order  = 24,
+                        min    = 8,
+                        max    = 32,
+                        step   = 1,
                         hidden = function() return not Options:GetShowTargetArrows() end,
-                        get = function() return Options:GetTargetArrowSize() end,
-                        set = function(_, v) Options:SetTargetArrowSize(_, v) end,
+                        get    = function() return Options:GetTargetArrowSize() end,
+                        set    = function(_, v) Options:SetTargetArrowSize(_, v) end,
+                    },
+                    targetArrowColor = {
+                        type     = "color",
+                        name     = "Arrow Color",
+                        order    = 25,
+                        hasAlpha = false,
+                        desc     = "Color of the target arrows. Defaults to the target glow color if not set.",
+                        hidden   = function() return not Options:GetShowTargetArrows() end,
+                        get      = function() return Options:GetTargetArrowColor() end,
+                        set      = function(_, r, g, b, a) Options:SetTargetArrowColor(_, r, g, b, a) end,
                     },
                 },
             },
@@ -1359,7 +1473,7 @@ function Options:BuildConfiguration()
             indicators = {
                 type  = "group",
                 name  = "Indicators",
-                order = 10,
+                order = 9,
                 args  = {
                     showThreat = {
                         type  = "toggle",
@@ -1369,19 +1483,38 @@ function Options:BuildConfiguration()
                         get   = function() return Options:GetShowThreat() end,
                         set   = function(_, v) Options:SetShowThreat(_, v) end,
                     },
-                    showAbsorb = {
-                        type = "toggle",
-                        name = "Show Absorb Overlay",
-                        order = 2,
-                        get = function() return Options:GetShowAbsorb() end,
-                        set = function(_, v) Options:SetShowAbsorb(_, v) end,
+                    sepAggro = { type = "header", name = "Aggro Bar Color", order = 10 },
+                    showAggroColor = {
+                        type  = "toggle",
+                        name  = "Enable Aggro Color",
+                        order = 11,
+                        width = "full",
+                        desc  =
+                        "Override the health bar color when you have aggro on an enemy. Uses a different color depending on whether you are tanking or not.",
+                        get   = function() return Options:GetShowAggroColor() end,
+                        set   = function(_, v) Options:SetShowAggroColor(_, v) end,
                     },
-                    showEliteIcon = {
-                        type = "toggle",
-                        name = "Show Elite/Boss Icon",
-                        order = 3,
-                        get = function() return Options:GetShowEliteIcon() end,
-                        set = function(_, v) Options:SetShowEliteIcon(_, v) end,
+                    aggroColorTank = {
+                        type     = "color",
+                        name     = "Tank Aggro Color",
+                        order    = 12,
+                        hasAlpha = false,
+                        desc     =
+                        "Health bar color when you have aggro and your role is Tank. Aggro is good — default green.",
+                        hidden   = function() return not Options:GetShowAggroColor() end,
+                        get      = function() return Options:GetAggroColorTank() end,
+                        set      = function(_, r, g, b, a) Options:SetAggroColorTank(_, r, g, b, a) end,
+                    },
+                    aggroColorDps = {
+                        type     = "color",
+                        name     = "DPS / Healer Aggro Color",
+                        order    = 13,
+                        hasAlpha = false,
+                        desc     =
+                        "Health bar color when you have aggro and your role is DPS or Healer. Aggro is bad — default orange.",
+                        hidden   = function() return not Options:GetShowAggroColor() end,
+                        get      = function() return Options:GetAggroColorDps() end,
+                        set      = function(_, r, g, b, a) Options:SetAggroColorDps(_, r, g, b, a) end,
                     },
                 },
             },

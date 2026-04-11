@@ -23,46 +23,52 @@
       • CVars applied through pcall + C_CVar fallback
 ]]
 
-local TwichRx             = _G.TwichRx
+local TwichRx                = _G.TwichRx
 ---@type TwichUI
-local T                   = unpack(TwichRx)
+local T                      = unpack(TwichRx)
 
 ---@class NameplatesModule : AceModule, AceEvent-3.0, AceTimer-3.0
-local Nameplates          = T:NewModule("Nameplates", "AceEvent-3.0", "AceTimer-3.0")
+local Nameplates             = T:NewModule("Nameplates", "AceEvent-3.0", "AceTimer-3.0")
 
 -- ── WoW API locals ──────────────────────────────────────────────────────────
-local CreateFrame         = _G.CreateFrame
-local UIParent            = _G.UIParent
-local C_NamePlate         = _G.C_NamePlate
-local C_UnitAuras         = _G.C_UnitAuras
-local C_Timer             = _G.C_Timer
-local C_Spell             = _G.C_Spell
-local UnitReaction        = _G.UnitReaction
-local UnitExists          = _G.UnitExists
-local UnitHealth          = _G.UnitHealth
-local UnitHealthMax       = _G.UnitHealthMax
-local UnitName            = _G.UnitName
-local UnitIsPlayer        = _G.UnitIsPlayer
-local UnitLevel           = _G.UnitLevel
-local UnitIsUnit          = _G.UnitIsUnit
-local UnitClass           = _G.UnitClass
-local UnitAffectingCombat = _G.UnitAffectingCombat
-local UnitThreatSituation = _G.UnitThreatSituation
-local UnitIsTapDenied     = _G.UnitIsTapDenied
-local UnitGetTotalAbsorbs = _G.UnitGetTotalAbsorbs
-local UnitIsDeadOrGhost   = _G.UnitIsDeadOrGhost
-local UnitCastingInfo     = _G.UnitCastingInfo
-local UnitChannelInfo     = _G.UnitChannelInfo
-local UnitClassification  = _G.UnitClassification
-local GetTime             = _G.GetTime
-local RAID_CLASS_COLORS   = _G.RAID_CLASS_COLORS
-local C_ClassColor        = _G.C_ClassColor
-local math_max            = math.max
-local math_min            = math.min
-local math_floor          = math.floor
+local CreateFrame            = _G.CreateFrame
+local UIParent               = _G.UIParent
+local C_NamePlate            = _G.C_NamePlate
+local C_UnitAuras            = _G.C_UnitAuras
+local C_Timer                = _G.C_Timer
+local C_Spell                = _G.C_Spell
+local UnitReaction           = _G.UnitReaction
+local UnitExists             = _G.UnitExists
+local UnitHealth             = _G.UnitHealth
+local UnitHealthMax          = _G.UnitHealthMax
+local UnitName               = _G.UnitName
+local UnitIsPlayer           = _G.UnitIsPlayer
+local UnitLevel              = _G.UnitLevel
+local UnitIsUnit             = _G.UnitIsUnit
+local UnitClass              = _G.UnitClass
+local UnitAffectingCombat    = _G.UnitAffectingCombat
+local UnitThreatSituation    = _G.UnitThreatSituation
+local UnitIsTapDenied        = _G.UnitIsTapDenied
+local UnitGetTotalAbsorbs    = _G.UnitGetTotalAbsorbs
+local UnitIsDeadOrGhost      = _G.UnitIsDeadOrGhost
+local UnitCastingInfo        = _G.UnitCastingInfo
+local UnitChannelInfo        = _G.UnitChannelInfo
+local UnitClassification     = _G.UnitClassification
+local UnitPower              = _G.UnitPower
+local UnitPowerMax           = _G.UnitPowerMax
+local UnitPowerType          = _G.UnitPowerType
+local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
+local GetSpecalization       = _G.GetSpecialization
+local GetSpecalizationRole   = _G.GetSpecializationRole
+local GetTime                = _G.GetTime
+local RAID_CLASS_COLORS      = _G.RAID_CLASS_COLORS
+local C_ClassColor           = _G.C_ClassColor
+local math_max               = math.max
+local math_min               = math.min
+local math_floor             = math.floor
 
 -- ── Debug logging helper ──────────────────────────────────────────────────────
-local _debugConsoleRef    = nil
+local _debugConsoleRef       = nil
 local function NpLog(msg)
     if not _debugConsoleRef then
         _debugConsoleRef = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
@@ -92,6 +98,8 @@ local COLOR_NPC_CASTER       = { 0.90, 0.45, 0.22, 1 }
 local COLOR_CAST             = { 0.96, 0.76, 0.24, 1 }
 local COLOR_CAST_UNINT       = { 0.75, 0.12, 0.12, 1 }
 local COLOR_CHANNEL          = { 0.22, 0.78, 0.96, 1 }
+local COLOR_AGGRO_TANK       = { 0.25, 0.90, 0.40, 1 } -- green: aggro = good for tank
+local COLOR_AGGRO_DPS        = { 1.00, 0.40, 0.10, 1 } -- orange: aggro = bad for dps/healer
 
 -- Elite / boss / rare atlas keys
 local ATLAS_BOSS             = "nameplates-icon-boss-skull"
@@ -137,8 +145,8 @@ local NAMEPLATE_CVARS    = {
 }
 
 -- ── Module state ─────────────────────────────────────────────────────────────
-Nameplates._plates       = {}     -- unitID → custom plate frame
-Nameplates._testPlates   = {}     -- list of { frame, anchor } for test mode
+Nameplates._plates       = {} -- unitID → custom plate frame
+Nameplates._testPlates   = {} -- list of { frame, anchor } for test mode
 Nameplates._testMode     = false
 Nameplates._castTestMode = false
 
@@ -218,19 +226,22 @@ end
 
 -- Per-element font resolver: DB key overrides theme fallback.
 -- key is e.g. "name", "health", "cast" — reads db[key.."Font"] etc.
+-- NOTE: outline is ALWAYS read from DB so changing it takes effect without
+-- a frame rebuild, even when the theme default font path is used.
 local function GetPlateFont(key, size, db)
+    local outline = (db and db[key .. "FontOutline"]) or "OUTLINE"
     local LSM = T.Libs and T.Libs.LSM
     if LSM and db then
         local fontName = db[key .. "Font"]
         if fontName and fontName ~= "" and fontName ~= "__default" then
             local ok, path = pcall(LSM.Fetch, LSM, "font", fontName)
             if ok and type(path) == "string" and path ~= "" then
-                local outline = db[key .. "FontOutline"] or "OUTLINE"
                 return path, size or 10, outline
             end
         end
     end
-    return GetThemeFont(size)
+    local f, s = GetThemeFont(size)
+    return f, s, outline
 end
 
 -- Per-element statusbar texture resolver: DB key overrides theme.
@@ -288,8 +299,58 @@ local function GetMaxLevel()
     return _maxLevel
 end
 
+-- ── Role detection ────────────────────────────────────────────────────────────
+-- Cached; invalidated on spec change (PLAYER_SPECIALIZATION_CHANGED event).
+local _cachedIsTank = nil
+local function GetPlayerIsTank()
+    if _cachedIsTank ~= nil then return _cachedIsTank end
+    -- 1. In a group, use the assigned role.
+    if UnitGroupRolesAssigned then
+        local role = UnitGroupRolesAssigned("player")
+        if role == "TANK" then
+            _cachedIsTank = true; return true
+        end
+        if role == "DAMAGER" or role == "HEALER" then
+            _cachedIsTank = false; return false
+        end
+    end
+    -- 2. Fall back to specialization role.
+    if GetSpecalization and GetSpecalizationRole then
+        local spec = GetSpecalization()
+        if spec and spec > 0 then
+            local ok, role = pcall(GetSpecalizationRole, spec)
+            if ok and role == "TANK" then
+                _cachedIsTank = true; return true
+            end
+            if ok then
+                _cachedIsTank = false; return false
+            end
+        end
+    end
+    _cachedIsTank = false
+    return false
+end
+
 function Nameplates:ResolveHealthColor(unit, db)
     local mode = db.healthColorMode or "reaction"
+
+    -- ── Aggro color override (hostile units only, highest priority) ────────────
+    -- threat 3 = highest threat / tanking, 2 = nearing aggro loss, 1 = risky.
+    -- We only tint the bar when the player is at threat level 3 (actually has aggro).
+    if unit and db.showAggroColor ~= false then
+        local reaction = UnitReaction and UnitReaction(unit, "player")
+        local isEnemy  = reaction and reaction <= 3
+        if isEnemy then
+            local threat = UnitThreatSituation and UnitThreatSituation("player", unit) or 0
+            if threat == 3 then
+                if GetPlayerIsTank() then
+                    return DBColor(db, "aggroColorTank", COLOR_AGGRO_TANK)
+                else
+                    return DBColor(db, "aggroColorDps", COLOR_AGGRO_DPS)
+                end
+            end
+        end
+    end
 
     if mode == "class" and unit and UnitIsPlayer(unit) then
         local _, classToken = UnitClass(unit)
@@ -425,7 +486,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
 
     local bgC                 = type(db.healthBgColor) == "table" and db.healthBgColor or { 0.05, 0.06, 0.08, 0.92 }
     local bdC                 = type(db.healthBorderColor) == "table" and db.healthBorderColor or
-    { 0.14, 0.15, 0.20, 0.90 }
+        { 0.14, 0.15, 0.20, 0.90 }
     local cbgC                = type(db.castBgColor) == "table" and db.castBgColor or { 0.05, 0.06, 0.08, 0.92 }
     local cbdC                = type(db.castBorderColor) == "table" and db.castBorderColor or { 0.14, 0.15, 0.20, 0.90 }
 
@@ -560,13 +621,43 @@ function Nameplates:BuildPlateFrame(parentPlate)
     eliteIcon:SetSize(14, 14)
     eliteIcon:SetPoint("LEFT", frame, "RIGHT", 4, 0)
     eliteIcon:Hide()
-    frame.eliteIcon = eliteIcon
+    frame.eliteIcon      = eliteIcon
+
+    -- ── Power bar ─────────────────────────────────────────────────────────────
+    -- Always created so toggling Show/Hide live works without a frame rebuild.
+    -- Sits between the health bar and cast bar.  Height is driven by db.powerBarHeight.
+    local powerH         = Clamp(db.powerBarHeight or 4, 2, 14)
+    local powerGap       = Clamp(db.powerBarGap or 2, 0, 12)
+    local pbgC           = type(db.powerBgColor) == "table" and db.powerBgColor or { 0.05, 0.06, 0.08, 0.92 }
+    local pbdC           = type(db.powerBorderColor) == "table" and db.powerBorderColor or { 0.14, 0.15, 0.20, 0.90 }
+    local powerContainer = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    powerContainer:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -powerGap)
+    powerContainer:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, -powerGap)
+    powerContainer:SetHeight(powerH + 2)
+    ApplyBackdrop(powerContainer, pbgC[1], pbgC[2], pbgC[3], pbgC[4] or 0.92,
+        pbdC[1], pbdC[2], pbdC[3], pbdC[4] or 0.9)
+    local powerBar = CreateFrame("StatusBar", nil, powerContainer)
+    powerBar:SetPoint("TOPLEFT", powerContainer, "TOPLEFT", 1, -1)
+    powerBar:SetPoint("TOPRIGHT", powerContainer, "TOPRIGHT", -1, -1)
+    powerBar:SetHeight(powerH)
+    powerBar:SetStatusBarTexture(hpTex)
+    powerBar:SetStatusBarColor(0.22, 0.52, 1.0, 1) -- default mana blue; UpdatePower overwrites
+    powerBar:SetMinMaxValues(0, 1)
+    powerBar:SetValue(1)
+    frame.powerBar       = powerBar
+    frame.powerContainer = powerContainer
+    -- Show/hide based on initial setting; live toggle handled in ResizePlateFrame.
+    if db.showPowerBar == false then powerContainer:Hide() end
+
+    -- Cast container is anchored below the power bar (always, whether visible or not,
+    -- so toggling the power bar live just needs a Show/Hide + reposition).
+    local castOffsetY = (db.showPowerBar ~= false) and (-powerGap - powerH - 2 - powerGap) or -powerGap
 
     -- ── Cast bar container ────────────────────────────────────────────────────
     local castH_outer = castH + 2
     local castContainer = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    castContainer:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -2)
-    castContainer:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, -2)
+    castContainer:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, castOffsetY)
+    castContainer:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, castOffsetY)
     castContainer:SetHeight(castH_outer)
     ApplyBackdrop(castContainer, cbgC[1], cbgC[2], cbgC[3], cbgC[4] or 0.92,
         cbdC[1], cbdC[2], cbdC[3], cbdC[4] or 0.9)
@@ -698,14 +789,35 @@ function Nameplates:UpdateHealth(frame, unit)
     --   "attempt to perform arithmetic on local/upvalue 'hp' (a secret number value tainted by ...)"
     -- Plater explicitly skips health arithmetic for Midnight (IS_WOW_PROJECT_MIDNIGHT guards in
     -- QuickHealthUpdate / OnUpdateHealth) with a --TODO: MIDNIGHT!! comment in UpdateLifePercentText.
-    -- The only safe display path is AbbreviateNumbers(hp): a WoW C API that accepts secret numbers
-    -- and returns a real formatted string ("125k", "1.2M", etc.).
-    -- All health text formats (percent, current, deficit) display abbreviated absolute health.
+    -- Safe paths:
+    --   AbbreviateNumbers(hp)       → C API, accepts secrets, returns "125k" / "1.2M" strings.
+    --   UnitHealthPercent(unit,true) → Midnight-exclusive C API that returns a real (non-secret)
+    --                                  percent value; wrapped in pcall since availability varies.
     if frame.healthText then
         local fmt = db.healthFormat or "percent"
         if fmt == "none" then
             frame.healthText:SetText("")
+        elseif fmt == "percent" then
+            -- UnitHealthPercent returns a secret number in Midnight — comparison (pct > 1) is
+            -- blocked, but string.format with %d accepts secret numbers directly (Plater verified).
+            -- UnitHealthPercent(unit, true) returns 0-100 scale without CurveConstants.ScaleTo100.
+            -- Wrapped in pcall in case the API doesn't exist on this build.
+            local ok, result = pcall(function()
+                local fn = _G.UnitHealthPercent
+                if fn then
+                    local pct = fn(unit, true)
+                    return string.format("%d%%", pct)
+                end
+            end)
+            if ok and result then
+                frame.healthText:SetText(result)
+            else
+                local AbbNums = _G.AbbreviateNumbers
+                frame.healthText:SetText(AbbNums and AbbNums(hp) or "")
+            end
         else
+            -- "current": abbreviated absolute.  "deficit": arithmetic on secrets is blocked;
+            -- fall back to absolute as well.
             local AbbNums = _G.AbbreviateNumbers
             frame.healthText:SetText(AbbNums and AbbNums(hp) or "")
         end
@@ -766,18 +878,26 @@ function Nameplates:UpdateEliteIcon(frame, unit)
         frame.eliteIcon:Hide(); return
     end
 
+    -- Use explicit texture paths like Plater does — SetAtlas names for nameplates
+    -- are unreliable across Midnight builds.
     local classification = UnitClassification and UnitClassification(unit) or ""
     if classification == "worldboss" or classification == "boss" then
-        frame.eliteIcon:SetAtlas(ATLAS_BOSS)
+        frame.eliteIcon:SetTexture([[Interface\Scenarios\ScenarioIcon-Boss]])
+        frame.eliteIcon:SetTexCoord(0, 1, 0, 1)
+        frame.eliteIcon:SetVertexColor(1, 1, 1, 1)
+        frame.eliteIcon:SetDesaturated(false)
         frame.eliteIcon:Show()
-    elseif classification == "rareelite" then
-        frame.eliteIcon:SetAtlas(ATLAS_ELITE)
-        frame.eliteIcon:Show()
-    elseif classification == "elite" then
-        frame.eliteIcon:SetAtlas(ATLAS_ELITE)
+    elseif classification == "rareelite" or classification == "elite" then
+        frame.eliteIcon:SetTexture([[Interface\GLUES\CharacterSelect\Glues-AddOn-Icons]])
+        frame.eliteIcon:SetTexCoord(0.75, 1, 0, 1)
+        frame.eliteIcon:SetVertexColor(1, 0.82, 0.1, 1) -- gold star
+        frame.eliteIcon:SetDesaturated(false)
         frame.eliteIcon:Show()
     elseif classification == "rare" then
-        frame.eliteIcon:SetAtlas(ATLAS_RARE)
+        frame.eliteIcon:SetTexture([[Interface\GLUES\CharacterSelect\Glues-AddOn-Icons]])
+        frame.eliteIcon:SetTexCoord(0.75, 1, 0, 1)
+        frame.eliteIcon:SetVertexColor(1, 1, 1, 1)
+        frame.eliteIcon:SetDesaturated(true)
         frame.eliteIcon:Show()
     else
         frame.eliteIcon:Hide()
@@ -836,12 +956,17 @@ function Nameplates:UpdateTargetGlow(frame, unit)
         frame:SetSize(baseW * growW, baseH * growH)
 
         if db.showTargetArrows ~= false then
+            -- Use dedicated arrow color if set, otherwise fall back to the glow color.
+            local ac = type(db.targetArrowColor) == "table" and db.targetArrowColor or nil
+            local ar = ac and ac[1] or gr
+            local ag = ac and ac[2] or gg
+            local ab = ac and ac[3] or gb
             if frame.arrowL then
-                frame.arrowL:SetVertexColor(gr, gg, gb, 1)
+                frame.arrowL:SetVertexColor(ar, ag, ab, 1)
                 frame.arrowL:Show()
             end
             if frame.arrowR then
-                frame.arrowR:SetVertexColor(gr, gg, gb, 1)
+                frame.arrowR:SetVertexColor(ar, ag, ab, 1)
                 frame.arrowR:Show()
             end
         else
@@ -1084,6 +1209,44 @@ function Nameplates:UpdateCastBar(frame, unit)
     end
 end
 
+function Nameplates:UpdatePower(frame, unit)
+    if not frame or not frame.powerContainer then return end
+    local db = self:GetDB()
+
+    if db.showPowerBar == false then
+        frame.powerContainer:Hide()
+        return
+    end
+    frame.powerContainer:Show()
+
+    local pb = frame.powerBar
+    if not pb then return end
+
+    -- These return secret numbers but SetMinMaxValues/SetValue accept them directly.
+    pb:SetMinMaxValues(0, UnitPowerMax(unit))
+    pb:SetValue(UnitPower(unit))
+
+    -- Determine power type color (UnitPowerType may taint in Midnight — use pcall).
+    local pwrType
+    local ok, result = pcall(function() return UnitPowerType(unit) end)
+    if ok then pwrType = tonumber(result) end
+
+    local pbc = pwrType and _G.PowerBarColor and _G.PowerBarColor[pwrType]
+    if pbc then
+        pb:SetStatusBarColor(pbc.r or 0.22, pbc.g or 0.52, pbc.b or 1.0, 1)
+    else
+        -- Fallback by type index: 0=mana, 1=rage, 3=energy, 6=runic
+        local fallbacks = {
+            [0] = { 0.22, 0.52, 1.00 },
+            [1] = { 1.00, 0.10, 0.10 },
+            [3] = { 1.00, 0.90, 0.10 },
+            [6] = { 0.20, 0.80, 0.90 },
+        }
+        local fc = pwrType and fallbacks[pwrType] or fallbacks[0]
+        pb:SetStatusBarColor(fc[1], fc[2], fc[3], 1)
+    end
+end
+
 function Nameplates:UpdateAllElements(frame, unit)
     if not frame or not unit then return end
     if not UnitExists(unit) then
@@ -1099,6 +1262,7 @@ function Nameplates:UpdateAllElements(frame, unit)
     self:UpdateThreat(frame, unit)
     self:UpdateCastBar(frame, unit)
     self:UpdateAuras(frame, unit)
+    self:UpdatePower(frame, unit)
 end
 
 -- ── Refresh / resize helpers ──────────────────────────────────────────────────
@@ -1123,6 +1287,20 @@ function Nameplates:ApplyThemeToFrame(frame)
         frame.castBg:SetVertexColor(cbgC[1], cbgC[2], cbgC[3], cbgC[4] or 0.92)
     end
     if frame.absorbBar then frame.absorbBar:SetStatusBarTexture(hpTex) end
+
+    -- Power bar texture
+    if frame.powerBar then frame.powerBar:SetStatusBarTexture(hpTex) end
+    if frame.powerContainer then
+        local pbgC = type(db.powerBgColor) == "table" and db.powerBgColor or { 0.05, 0.06, 0.08, 0.92 }
+        local pbdC = type(db.powerBorderColor) == "table" and db.powerBorderColor or { 0.14, 0.15, 0.20, 0.90 }
+        ApplyBackdrop(frame.powerContainer, pbgC[1], pbgC[2], pbgC[3], pbgC[4] or 0.92,
+            pbdC[1], pbdC[2], pbdC[3], pbdC[4] or 0.9)
+        if db.showPowerBar == false then
+            frame.powerContainer:Hide()
+        else
+            frame.powerContainer:Show()
+        end
+    end
 
     -- Frame backdrop colors
     local bgC = type(db.healthBgColor) == "table" and db.healthBgColor or { 0.05, 0.06, 0.08, 0.92 }
@@ -1174,6 +1352,15 @@ function Nameplates:ApplyThemeToFrame(frame)
         frame.arrowR:SetTexCoord(unpack(ARROW_TC_LEFT))
         frame.arrowR:SetSize(arrowSz, arrowSz)
     end
+
+    -- Re-position targetGlow outset: the SetPoint is set at construction time so
+    -- changing targetGlowOutset only takes effect after ClearAllPoints + re-anchor.
+    if frame.targetGlow then
+        local outset = Clamp(db.targetGlowOutset or 4, 1, 12)
+        frame.targetGlow:ClearAllPoints()
+        frame.targetGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", -outset, outset)
+        frame.targetGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", outset, -outset)
+    end
 end
 
 function Nameplates:ResizePlateFrame(frame)
@@ -1188,6 +1375,28 @@ function Nameplates:ResizePlateFrame(frame)
     if frame.threatBar then frame.threatBar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0) end
     if frame.castContainer then frame.castContainer:SetHeight(castH + 2) end
     if frame.castBar then frame.castBar:SetHeight(castH) end
+
+    -- Resize power bar and reposition cast container relative to it.
+    local powerH   = Clamp(db.powerBarHeight or 4, 2, 14)
+    local powerGap = Clamp(db.powerBarGap or 2, 0, 12)
+    if frame.powerContainer and frame.powerBar then
+        frame.powerContainer:SetHeight(powerH + 2)
+        frame.powerBar:SetHeight(powerH)
+        frame.powerContainer:ClearAllPoints()
+        frame.powerContainer:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, -powerGap)
+        frame.powerContainer:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, -powerGap)
+        if db.showPowerBar == false then
+            frame.powerContainer:Hide()
+        else
+            frame.powerContainer:Show()
+        end
+    end
+    if frame.castContainer then
+        local castOffsetY = (db.showPowerBar ~= false) and (-powerGap - powerH - 2 - powerGap) or -powerGap
+        frame.castContainer:ClearAllPoints()
+        frame.castContainer:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, castOffsetY)
+        frame.castContainer:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, castOffsetY)
+    end
 
     -- Resize aura frame width
     if frame.auraFrame then frame.auraFrame:SetWidth(w) end
@@ -1669,6 +1878,9 @@ function Nameplates:OnEnable()
     self:RegisterEvent("UNIT_HEALTH", "OnUnitHealth")
     self:RegisterEvent("UNIT_MAXHEALTH", "OnUnitHealth")
     self:RegisterEvent("UNIT_AURA", "OnUnitAura")
+    self:RegisterEvent("UNIT_POWER_FREQUENT", "OnUnitPower")
+    self:RegisterEvent("UNIT_MAXPOWER", "OnUnitPower")
+    self:RegisterEvent("UNIT_DISPLAYPOWER", "OnUnitDisplayPower")
     self:RegisterEvent("UNIT_SPELLCAST_START", "OnCastEvent")
     self:RegisterEvent("UNIT_SPELLCAST_STOP", "OnCastEvent")
     self:RegisterEvent("UNIT_SPELLCAST_FAILED", "OnCastEvent")
@@ -1683,6 +1895,8 @@ function Nameplates:OnEnable()
     -- threat rings / selection art on PLAYER_REGEN_DISABLED and UNIT_THREAT_*).
     self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnCombatStateChange")
     self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnCombatStateChange")
+    self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", "OnSpecChanged")
+    self:RegisterEvent("PLAYER_ROLES_ASSIGNED", "OnSpecChanged")
     -- Apply CVars
     self:ApplyCVars()
 
@@ -1746,6 +1960,21 @@ function Nameplates:OnUnitAura(_, unit)
     local frame = unit and self._plates[unit]
     if frame and UnitExists(unit) then
         self:UpdateAuras(frame, unit)
+    end
+end
+
+function Nameplates:OnUnitPower(_, unit)
+    local frame = unit and self._plates[unit]
+    if frame and UnitExists(unit) then
+        self:UpdatePower(frame, unit)
+    end
+end
+
+function Nameplates:OnUnitDisplayPower(_, unit)
+    -- Power type changed (e.g. druid shifting form) — re-fetch type and re-color.
+    local frame = unit and self._plates[unit]
+    if frame and UnitExists(unit) then
+        self:UpdatePower(frame, unit)
     end
 end
 
@@ -1813,6 +2042,11 @@ function Nameplates:OnCombatStateChange()
             frame:SetScale(scale)
         end
     end
+end
+
+function Nameplates:OnSpecChanged()
+    -- Invalidate the cached role so GetPlayerIsTank() re-evaluates on next call.
+    _cachedIsTank = nil
 end
 
 function Nameplates:SuppressAllBlizzardPlateChildren()
