@@ -2081,7 +2081,8 @@ function ExperienceDT:OnEvent(panel, event, ...)
                 end
             end
             -- Reset the timer for the new level.
-            ResetXPTimerForLevel(xpData, tonumber(newLevel) or (type(UnitLevel) == "function" and UnitLevel("player") or 0))
+            ResetXPTimerForLevel(xpData,
+                tonumber(newLevel) or (type(UnitLevel) == "function" and UnitLevel("player") or 0))
         end
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- Initialise or re-sync the timer state without counting offline time.

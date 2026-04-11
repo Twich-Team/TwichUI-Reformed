@@ -29,38 +29,38 @@ LF:SetEnabledState(false)
 -- ---------------------------------------------------------------------------
 -- Localized globals
 -- ---------------------------------------------------------------------------
-local LSM             = (T.Libs and T.Libs.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
-local C_Timer         = _G.C_Timer
-local C_Item          = _G.C_Item
-local CreateFrame     = _G.CreateFrame
-local UIParent        = _G.UIParent
-local GetItemInfo     = _G.GetItemInfo
+local LSM                = (T.Libs and T.Libs.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
+local C_Timer            = _G.C_Timer
+local C_Item             = _G.C_Item
+local CreateFrame        = _G.CreateFrame
+local UIParent           = _G.UIParent
+local GetItemInfo        = _G.GetItemInfo
 local GetItemInfoInstant = _G.GetItemInfoInstant or (C_Item and C_Item.GetItemInfoInstant)
-local GetPlayerGuid   = _G.C_PlayerInfo and _G.C_PlayerInfo.GetGUIDForUnit or
+local GetPlayerGuid      = _G.C_PlayerInfo and _G.C_PlayerInfo.GetGUIDForUnit or
     function(u) return _G.UnitGUID(u) end
-local math            = math
-local string          = string
-local table           = table
-local ipairs          = ipairs
-local pairs           = pairs
-local tonumber        = tonumber
-local tostring        = tostring
-local unpack          = table.unpack or _G.unpack
+local math               = math
+local string             = string
+local table              = table
+local ipairs             = ipairs
+local pairs              = pairs
+local tonumber           = tonumber
+local tostring           = tostring
+local unpack             = table.unpack or _G.unpack
 
 -- ---------------------------------------------------------------------------
 -- Constants
 -- ---------------------------------------------------------------------------
-local ADDON_NAME      = "TwichUI_Reformed"
-local MAX_POOL        = 20   -- hard cap on live rows
-local PADDING         = 3    -- vertical gap between rows (px)
-local ENTER_DURATION  = 0.24  -- slide+fade in
-local SHIFT_DURATION  = 0.18 -- row shift translate
-local EXIT_DURATION   = 0.35 -- fade out
-local ENTER_OFFSET_X  = -14    -- softer lateral travel for new rows
-local SHIFT_FADE_FROM = 0.82   -- subtle fade while rows reposition
+local ADDON_NAME         = "TwichUI_Reformed"
+local MAX_POOL           = 20 -- hard cap on live rows
+local PADDING            = 3 -- vertical gap between rows (px)
+local ENTER_DURATION     = 0.24 -- slide+fade in
+local SHIFT_DURATION     = 0.18 -- row shift translate
+local EXIT_DURATION      = 0.35 -- fade out
+local ENTER_OFFSET_X     = -14 -- softer lateral travel for new rows
+local SHIFT_FADE_FROM    = 0.82 -- subtle fade while rows reposition
 
 -- Item quality names / display ordering (mirrors Enum.ItemQuality)
-local QUALITY_NAMES   = {
+local QUALITY_NAMES      = {
     [0] = "Poor",
     [1] = "Common",
     [2] = "Uncommon",
@@ -73,7 +73,7 @@ local QUALITY_NAMES   = {
 }
 
 -- Quality → config key (used for per-quality toggle lookup)
-local QUALITY_DB_KEYS = {
+local QUALITY_DB_KEYS    = {
     [0] = "showPoor",
     [1] = "showCommon",
     [2] = "showUncommon",
@@ -85,7 +85,7 @@ local QUALITY_DB_KEYS = {
 local FALLBACK_ITEM_ICON = 134400
 
 -- Coin icon sizes (pixels at font size 12)
-local COIN_ATLAS      = {
+local COIN_ATLAS         = {
     gold   = "auctionhouse-icon-gold",
     silver = "auctionhouse-icon-silver",
     copper = "auctionhouse-icon-copper",
@@ -210,7 +210,7 @@ local function CreateRowFrame(settings)
     -- Parent to the container so SetPoint offsets are always in the same
     -- coordinate space as the container.  This eliminates the cross-parent
     -- anchor ambiguity that caused rows 2+ to snap to UIParent BOTTOM.
-    local row  = CreateFrame("Frame", nil, container)
+    local row = CreateFrame("Frame", nil, container)
     row:SetSize(fw, rh)
     row:SetFrameStrata("HIGH")
     row:SetAlpha(0)
@@ -301,12 +301,12 @@ local function CreateRowFrame(settings)
     enterFade:SetFromAlpha(0)
     enterFade:SetToAlpha(1)
     enterFade:SetDuration(ENTER_DURATION)
-        enterFade:SetSmoothing("OUT")
+    enterFade:SetSmoothing("OUT")
 
     local enterSlide = enterAG:CreateAnimation("Translation")
-        enterSlide:SetOffset(ENTER_OFFSET_X, 0)
+    enterSlide:SetOffset(ENTER_OFFSET_X, 0)
     enterSlide:SetDuration(ENTER_DURATION)
-        enterSlide:SetSmoothing("OUT")
+    enterSlide:SetSmoothing("OUT")
     row.enterAG = enterAG
 
     -- Fade-out exit animation
@@ -326,14 +326,14 @@ local function CreateRowFrame(settings)
     -- Shift animation
     local shiftAG    = row:CreateAnimationGroup()
     local shiftTrans = shiftAG:CreateAnimation("Translation")
-        local shiftFade  = shiftAG:CreateAnimation("Alpha")
-        shiftFade:SetFromAlpha(SHIFT_FADE_FROM)
-        shiftFade:SetToAlpha(1)
-        shiftFade:SetDuration(SHIFT_DURATION)
-        shiftFade:SetSmoothing("IN_OUT")
-    row.shiftAG      = shiftAG
-    row.shiftTrans   = shiftTrans
-        row.shiftFade    = shiftFade
+    local shiftFade  = shiftAG:CreateAnimation("Alpha")
+    shiftFade:SetFromAlpha(SHIFT_FADE_FROM)
+    shiftFade:SetToAlpha(1)
+    shiftFade:SetDuration(SHIFT_DURATION)
+    shiftFade:SetSmoothing("IN_OUT")
+    row.shiftAG    = shiftAG
+    row.shiftTrans = shiftTrans
+    row.shiftFade  = shiftFade
 
     return row
 end
@@ -408,13 +408,13 @@ local function ShiftRows(settings)
         --    new SetPoint.  Translation goes from (offsetX, offsetY) → (0, 0).
         --    We want to start at old_visual = new_setpoint − dir*amount, so the
         --    offset that puts us at the old position is: -dir * amount.
-            row:SetAlpha(1)
+        row:SetAlpha(1)
         row.shiftTrans:SetOffset(0, -dir * amount)
         row.shiftTrans:SetDuration(SHIFT_DURATION)
-            row.shiftTrans:SetSmoothing("IN_OUT")
-            row.shiftFade:SetFromAlpha(SHIFT_FADE_FROM)
-            row.shiftFade:SetToAlpha(1)
-            row.shiftFade:SetDuration(SHIFT_DURATION)
+        row.shiftTrans:SetSmoothing("IN_OUT")
+        row.shiftFade:SetFromAlpha(SHIFT_FADE_FROM)
+        row.shiftFade:SetToAlpha(1)
+        row.shiftFade:SetDuration(SHIFT_DURATION)
         row.shiftAG:Play()
     end
 end
