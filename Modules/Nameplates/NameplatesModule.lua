@@ -111,6 +111,19 @@ local GLOW_BD                = {
     edgeSize = 6,
 }
 
+-- Arrow texture base folder (contains Arrow0-72, ArrowBracket, ArrowRed, ArrowUp)
+local ARROW_BASE = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Arrows\\"
+-- TexCoords for arrow textures (all assumed to be upward-pointing designs):
+--   Left  arrow (RIGHT of plate facing ←): 90°CW rotation
+--   Right arrow (LEFT of plate facing →): 90°CW + H-flip
+-- These produce inward-pointing arrows from each side.
+local ARROW_TC_LEFT  = { 1, 0, 0, 0, 1, 1, 0, 1 }  -- points ← (right side of plate)
+local ARROW_TC_RIGHT = { 0, 1, 1, 1, 0, 0, 1, 0 }  -- points → (left side of plate)
+
+local function GetArrowTexPath(styleName)
+    return ARROW_BASE .. (styleName or "ArrowUp")
+end
+
 -- CVars we take control of while the module is active
 local NAMEPLATE_CVARS        = {
     nameplateMinAlpha              = "1",
@@ -432,28 +445,25 @@ function Nameplates:BuildPlateFrame(parentPlate)
     frame._normalBdColor = { bdC[1], bdC[2], bdC[3], bdC[4] or 0.9 }
 
     -- ── Target arrows ─────────────────────────────────────────────────────────
-    -- Use ArrowUp.tga (a real arrow shape) with TexCoord rotation so:
-    --   arrowL (left side of plate) points RIGHT →
-    --   arrowR (right side of plate) points LEFT ←
-    -- TexCoords from ElvUI: CW-90° for right, CW-90° + H-flip for left.
+    -- Arrow textures live in Media/Textures/Arrows/  (ArrowUp default, Arrow0-72, etc.)
+    -- ARROW_TC_RIGHT makes the arrow point → (used on the LEFT side of the plate).
+    -- ARROW_TC_LEFT  makes the arrow point ← (used on the RIGHT side of the plate).
     local arrowSize = Clamp(db.targetArrowSize or 18, 8, 32)
-    local ARROW_TEX = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\ArrowUp"
+    local arrowTex  = GetArrowTexPath(db.targetArrowStyle)
 
     local arrowL = frame:CreateTexture(nil, "OVERLAY", nil, 7)
     arrowL:SetSize(arrowSize, arrowSize)
     arrowL:SetPoint("RIGHT", frame, "LEFT", -4, 0)
-    arrowL:SetTexture(ARROW_TEX)
-    -- ArrowUp rotated 90° CW → points right (→), placed on LEFT side
-    arrowL:SetTexCoord(1, 0, 0, 0, 1, 1, 0, 1)
+    arrowL:SetTexture(arrowTex)
+    arrowL:SetTexCoord(table.unpack(ARROW_TC_RIGHT))
     arrowL:Hide()
     frame.arrowL = arrowL
 
     local arrowR = frame:CreateTexture(nil, "OVERLAY", nil, 7)
     arrowR:SetSize(arrowSize, arrowSize)
     arrowR:SetPoint("LEFT", frame, "RIGHT", 4, 0)
-    arrowR:SetTexture(ARROW_TEX)
-    -- ArrowUp rotated 90° CW then H-flipped → points left (←), placed on RIGHT side
-    arrowR:SetTexCoord(0, 1, 1, 1, 0, 0, 1, 0)
+    arrowR:SetTexture(arrowTex)
+    arrowR:SetTexCoord(table.unpack(ARROW_TC_LEFT))
     arrowR:Hide()
     frame.arrowR = arrowR
 
@@ -1115,6 +1125,20 @@ function Nameplates:ApplyThemeToFrame(frame)
     if frame.castText then
         frame.castText:SetFont(cf, cs, cfl)
         if db.castFontShadow then frame.castText:SetShadowOffset(1, -1) else frame.castText:SetShadowOffset(0, 0) end
+    end
+
+    -- Arrow texture refresh (style may have changed in settings)
+    local arrowTex = GetArrowTexPath(db.targetArrowStyle)
+    local arrowSz  = Clamp(db.targetArrowSize or 18, 8, 32)
+    if frame.arrowL then
+        frame.arrowL:SetTexture(arrowTex)
+        frame.arrowL:SetTexCoord(table.unpack(ARROW_TC_RIGHT))
+        frame.arrowL:SetSize(arrowSz, arrowSz)
+    end
+    if frame.arrowR then
+        frame.arrowR:SetTexture(arrowTex)
+        frame.arrowR:SetTexCoord(table.unpack(ARROW_TC_LEFT))
+        frame.arrowR:SetSize(arrowSz, arrowSz)
     end
 end
 

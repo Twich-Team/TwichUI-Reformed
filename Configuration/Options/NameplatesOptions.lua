@@ -415,6 +415,38 @@ function Options:SetTargetArrowSize(_, v)
     self:GetDB().targetArrowSize = math.max(8, math.min(32, math.floor(tonumber(v) or 16))); Refresh()
 end
 
+-- All .tga files in Media/Textures/Arrows/ (Arrow0-72, ArrowBracket, ArrowRed, ArrowUp)
+local ARROW_STYLES_VALUES = nil
+local ARROW_STYLES_SORT   = nil
+local function BuildArrowStyles()
+    if ARROW_STYLES_VALUES then return end
+    ARROW_STYLES_VALUES = {}
+    ARROW_STYLES_SORT   = {}
+    -- ArrowUp first (default)
+    ARROW_STYLES_VALUES["ArrowUp"]      = "Arrow Up (Default)"
+    ARROW_STYLES_VALUES["ArrowBracket"] = "Arrow Bracket"
+    ARROW_STYLES_VALUES["ArrowRed"]     = "Arrow Red"
+    table.insert(ARROW_STYLES_SORT, "ArrowUp")
+    table.insert(ARROW_STYLES_SORT, "ArrowBracket")
+    table.insert(ARROW_STYLES_SORT, "ArrowRed")
+    for i = 0, 72 do
+        local key = "Arrow" .. i
+        ARROW_STYLES_VALUES[key] = "Arrow " .. i
+        table.insert(ARROW_STYLES_SORT, key)
+    end
+end
+
+function Options:GetTargetArrowStyle() return self:GetDB().targetArrowStyle or "ArrowUp" end
+
+function Options:SetTargetArrowStyle(_, v)
+    self:GetDB().targetArrowStyle = v; Refresh()
+end
+
+function Options:GetTargetArrowPreviewTex()
+    local style = self:GetTargetArrowStyle()
+    return "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Arrows\\" .. style
+end
+
 function Options:GetTargetGlowOutset() return self:GetDB().targetGlowOutset or 3 end
 
 function Options:SetTargetGlowOutset(_, v)
@@ -1234,10 +1266,31 @@ function Options:BuildConfiguration()
                         get = function() return Options:GetShowTargetArrows() end,
                         set = function(_, v) Options:SetShowTargetArrows(_, v) end,
                     },
+                    targetArrowStyle = {
+                        type    = "select",
+                        name    = "Arrow Style",
+                        order   = 22,
+                        hidden  = function() return not Options:GetShowTargetArrows() end,
+                        values  = function() BuildArrowStyles(); return ARROW_STYLES_VALUES end,
+                        sorting = function() BuildArrowStyles(); return ARROW_STYLES_SORT end,
+                        get     = function() return Options:GetTargetArrowStyle() end,
+                        set     = function(_, v) Options:SetTargetArrowStyle(_, v) end,
+                    },
+                    targetArrowPreview = {
+                        type        = "description",
+                        name        = "Preview:",
+                        order       = 23,
+                        hidden      = function() return not Options:GetShowTargetArrows() end,
+                        image       = function() return Options:GetTargetArrowPreviewTex() end,
+                        imageCoords = { 0, 1, 0, 1 },
+                        imageWidth  = 32,
+                        imageHeight = 32,
+                        width       = "full",
+                    },
                     targetArrowSize = {
                         type = "range",
                         name = "Arrow Size",
-                        order = 22,
+                        order = 24,
                         min = 8,
                         max = 32,
                         step = 1,
