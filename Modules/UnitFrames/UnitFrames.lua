@@ -15443,8 +15443,111 @@ function UnitFrames:BeginCastbar(name, icon, startMS, endMS, reverse, spellID)
     self:StartStandaloneCastbarUpdates()
 end
 
+function UnitFrames:TryBeginStandardCast(reverse, spellID, attempt, token)
+    if token and self._pendingCastbarStartToken ~= token then
+        return false
+    end
+
+    attempt = tonumber(attempt) or 1
+
+    local name, _, texture, startMS, endMS, _, _, _, activeSpellID
+    if reverse == true then
+        name, _, texture, startMS, endMS, _, _, activeSpellID = UnitChannelInfo("player")
+    else
+        name, _, texture, startMS, endMS, _, _, _, activeSpellID = UnitCastingInfo("player")
+    end
+
+    if not name then
+        if attempt < 6 and C_Timer and type(C_Timer.After) == "function" then
+            C_Timer.After(0.05, function()
+                if UnitFrames._pendingCastbarStartToken ~= token then
+                    return
+                end
+
+                UnitFrames:TryBeginStandardCast(reverse, spellID, attempt + 1, token)
+            end)
+        end
+
+        return false
+    end
+
+    local resolvedSpellID = spellID or activeSpellID
+    local existing = self._castbarState
+    local startSec = (tonumber(startMS) or 0) / 1000
+    local endSec = (tonumber(endMS) or 0) / 1000
+    if existing and existing.reverse == (reverse == true) and existing.spellID == tonumber(resolvedSpellID) and
+        math_abs((existing.startTime or 0) - startSec) < 0.01 and math_abs((existing.endTime or 0) - endSec) < 0.01
+    then
+        self._pendingCastbarStartToken = nil
+        return true
+    end
+
+    self._pendingCastbarStartToken = nil
+    self:BeginCastbar(name, texture, startMS, endMS, reverse == true, resolvedSpellID)
+    return true
+end
+
+function UnitFrames:TryBeginEmpowerCast(spellID, attempt, token)
+    if token and self._pendingEmpowerCastToken ~= token then
+        return false
+    end
+
+    attempt = tonumber(attempt) or 1
+
+    local name, _, texture, startMS, endMS, _, _, _, activeSpellID = UnitCastingInfo("player")
+    if not name then
+        name, _, texture, startMS, endMS, _, _, activeSpellID = UnitChannelInfo("player")
+    end
+
+    if not name then
+        if attempt < 8 and C_Timer and type(C_Timer.After) == "function" then
+            C_Timer.After(0.05, function()
+                if UnitFrames._pendingEmpowerCastToken ~= token then
+                    return
+                end
+
+                UnitFrames:TryBeginEmpowerCast(spellID, attempt + 1, token)
+            end)
+        elseif attempt >= 8 then
+            UFDebug(string.format("[Empower] START: no cast info after %d attempts, giving up", attempt))
+        end
+
+        return false
+    end
+
+    local holdMS = 0
+    if type(_G.GetUnitEmpowerHoldAtMaxTime) == "function" then
+        holdMS = _G.GetUnitEmpowerHoldAtMaxTime("player") or 0
+    end
+
+    local extendedEndMS = (tonumber(endMS) or 0) + holdMS
+    local stagePercentages = nil
+    if type(_G.UnitEmpoweredStagePercentages) == "function" then
+        stagePercentages = _G.UnitEmpoweredStagePercentages("player")
+    end
+
+    UFDebug(string.format("[Empower] START (attempt %d): name=%s startMS=%.0f endMS=%.0f holdMS=%.0f stages=%s",
+        attempt, tostring(name), tonumber(startMS) or 0, tonumber(endMS) or 0, holdMS,
+        stagePercentages and tostring(#stagePercentages) or "nil"))
+
+    local resolvedSpellID = spellID or activeSpellID
+    self:BeginCastbar(name, texture, startMS, extendedEndMS, false, resolvedSpellID)
+
+    local state = self._castbarState
+    if state then
+        state.isEmpowered = true
+        state.empowerStagePercentages = stagePercentages
+    end
+
+    self._pendingEmpowerCastToken = nil
+    self:UpdateCastbarEmpowerMarkers()
+    return true
+end
+
 function UnitFrames:StopCastbar()
     self:UFDiagBump("castStops", 1)
+    self._pendingCastbarStartToken = nil
+    self._pendingEmpowerCastToken = nil
     local castbar = self.frames.castbar
     if castbar then
         castbar._twichReverse = nil
@@ -15468,38 +15571,16 @@ function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
     end
 
     if event == "UNIT_SPELLCAST_START" then
-        local name, _, texture, startMS, endMS, _, _, _, activeSpellID = UnitCastingInfo("player")
-        if name then
-            local resolvedSpellID = spellID or activeSpellID
-            local existing = self._castbarState
-            local startSec = (tonumber(startMS) or 0) / 1000
-            local endSec = (tonumber(endMS) or 0) / 1000
-            if existing and existing.reverse ~= true and existing.spellID == tonumber(resolvedSpellID) and
-                math_abs((existing.startTime or 0) - startSec) < 0.01 and math_abs((existing.endTime or 0) - endSec) < 0.01
-            then
-                return
-            end
-
-            self:BeginCastbar(name, texture, startMS, endMS, false, resolvedSpellID)
-        end
+        self._pendingEmpowerCastToken = nil
+        self._pendingCastbarStartToken = (self._pendingCastbarStartToken or 0) + 1
+        self:TryBeginStandardCast(false, spellID, 1, self._pendingCastbarStartToken)
         return
     end
 
     if event == "UNIT_SPELLCAST_CHANNEL_START" then
-        local name, _, texture, startMS, endMS, _, _, activeSpellID = UnitChannelInfo("player")
-        if name then
-            local resolvedSpellID = spellID or activeSpellID
-            local existing = self._castbarState
-            local startSec = (tonumber(startMS) or 0) / 1000
-            local endSec = (tonumber(endMS) or 0) / 1000
-            if existing and existing.reverse == true and existing.spellID == tonumber(resolvedSpellID) and
-                math_abs((existing.startTime or 0) - startSec) < 0.01 and math_abs((existing.endTime or 0) - endSec) < 0.01
-            then
-                return
-            end
-
-            self:BeginCastbar(name, texture, startMS, endMS, true, resolvedSpellID)
-        end
+        self._pendingEmpowerCastToken = nil
+        self._pendingCastbarStartToken = (self._pendingCastbarStartToken or 0) + 1
+        self:TryBeginStandardCast(true, spellID, 1, self._pendingCastbarStartToken)
         return
     end
 
@@ -15508,65 +15589,43 @@ function UnitFrames:HandlePlayerCastEvent(event, unit, castGUID, spellID)
         or event == "UNIT_SPELLCAST_INTERRUPTED"
         or event == "UNIT_SPELLCAST_CHANNEL_STOP"
     then
+        if UnitCastingInfo("player") then
+            self._pendingEmpowerCastToken = nil
+            self._pendingCastbarStartToken = (self._pendingCastbarStartToken or 0) + 1
+            self:TryBeginStandardCast(false, spellID, 1, self._pendingCastbarStartToken)
+            return
+        end
+
+        if UnitChannelInfo("player") then
+            self._pendingEmpowerCastToken = nil
+            self._pendingCastbarStartToken = (self._pendingCastbarStartToken or 0) + 1
+            self:TryBeginStandardCast(true, spellID, 1, self._pendingCastbarStartToken)
+            return
+        end
+
         self:StopCastbar()
         return
     end
 
     -- Dracthyr empowered cast events.
     if event == "UNIT_SPELLCAST_EMPOWER_START" then
-        -- UnitCastingInfo may not be populated yet on the same frame the event fires.
-        -- Targeted empowered spells (e.g. Augmentation Eruption) can take several frames
-        -- before the engine commits cast data, so retry up to 4 times with short delays.
-        local capturedSpellID = spellID
-        local self_ = self
-        local function TryBeginEmpowerCast(attempt)
-            local name, _, texture, startMS, endMS, _, _, _, activeSpellID = UnitCastingInfo("player")
-            if not name then
-                -- Some builds may report empower as a channel briefly.
-                name, _, texture, startMS, endMS, _, _, activeSpellID = UnitChannelInfo("player")
-            end
-            if not name then
-                if attempt < 4 then
-                    -- Escalate delay: 0, 0.05, 0.1, 0.15 seconds.
-                    C_Timer.After(attempt * 0.05, function()
-                        TryBeginEmpowerCast(attempt + 1)
-                    end)
-                else
-                    UFDebug("[Empower] EMPOWER_START: no cast info after 4 attempts, giving up")
-                end
-                return
-            end
-            -- Extend endMS by the hold-at-max phase (bar holds at 100% before auto-releasing).
-            local holdMS = 0
-            if type(_G.GetUnitEmpowerHoldAtMaxTime) == "function" then
-                holdMS = _G.GetUnitEmpowerHoldAtMaxTime("player") or 0
-            end
-            local extendedEndMS = (tonumber(endMS) or 0) + holdMS
-            -- UnitEmpoweredStagePercentages returns {fraction1, fraction2, ...}.
-            local stagePercentages = nil
-            if type(_G.UnitEmpoweredStagePercentages) == "function" then
-                stagePercentages = _G.UnitEmpoweredStagePercentages("player")
-            end
-            UFDebug(string.format("[Empower] START (attempt %d): name=%s startMS=%.0f endMS=%.0f holdMS=%.0f stages=%s",
-                attempt, tostring(name), tonumber(startMS) or 0, tonumber(endMS) or 0, holdMS,
-                stagePercentages and tostring(#stagePercentages) or "nil"))
-            local resolvedSpellID = capturedSpellID or activeSpellID
-            self_:BeginCastbar(name, texture, startMS, extendedEndMS, false, resolvedSpellID)
-            local state = self_._castbarState
-            if state then
-                state.isEmpowered             = true
-                state.empowerStagePercentages = stagePercentages
-            end
-            self_:UpdateCastbarEmpowerMarkers()
-        end
-        TryBeginEmpowerCast(1)
+        self._pendingEmpowerCastToken = (self._pendingEmpowerCastToken or 0) + 1
+        self:TryBeginEmpowerCast(spellID, 1, self._pendingEmpowerCastToken)
         return
     end
 
     if event == "UNIT_SPELLCAST_EMPOWER_UPDATE" then
+        local state = self._castbarState
+        if not state or not state.isEmpowered then
+            if not self._pendingEmpowerCastToken then
+                self._pendingEmpowerCastToken = 1
+            end
+            self:TryBeginEmpowerCast(spellID, 1, self._pendingEmpowerCastToken)
+            return
+        end
+
         -- Fires repeatedly while the player holds a charge. Retry stage marker placement
         -- only if stage data wasn't available yet when EMPOWER_START fired.
-        local state = self._castbarState
         if state and state.isEmpowered and not state.empowerStagePercentages then
             if type(_G.UnitEmpoweredStagePercentages) == "function" then
                 local stages = _G.UnitEmpoweredStagePercentages("player")
