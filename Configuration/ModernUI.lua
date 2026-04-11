@@ -106,6 +106,13 @@ local NAV_ITEMS = {
         path = { "Quality of Life" },
     },
     {
+        id = "worldGameplayTweaks",
+        title = "World & Gameplay",
+        description = "Map tweaks, automation, social filters, frame behavior, and system polish.",
+        accent = { 0.54, 0.82, 0.46 },
+        path = { "World & Gameplay Tweaks" },
+    },
+    {
         id = "unitFrames",
         title = "Unit Frames",
         description = "Configure your health bars, target frame, and party and raid frames.",
@@ -4024,7 +4031,84 @@ function UI:SetOptionCardControlWidth(card, controlWidth)
     card.Desc:SetJustifyH("LEFT")
 end
 
+function UI:RenderCheckboxToggle(parent, y, width, option, path, key)
+    local info = BuildOptionInfo(path, key, option)
+    local row = CreatePanel(parent, 0.08, 0.08, 0.11, 0.92, 0.08)
+    row:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -y)
+    row:SetSize(width, 32)
+
+    local disabled = IsOptionDisabled(option, info)
+    local value = ResolveOptionMethod(option, info) == true
+    local labelText = GetDisplayName(path, key, option)
+    local descText = ResolveTextValue(option.desc, info)
+
+    local hitbox = CreateFrame("Button", nil, row)
+    hitbox:SetAllPoints(row)
+
+    local box = CreateFrame("Frame", nil, row, "BackdropTemplate")
+    box:SetSize(18, 18)
+    box:SetPoint("LEFT", row, "LEFT", 10, 0)
+    box:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    box:SetBackdropColor(0.08, 0.09, 0.12, disabled and 0.45 or 0.96)
+    box:SetBackdropBorderColor(value and 0.42 or 0.38, value and 0.89 or 0.5, value and 0.63 or 0.58,
+        disabled and 0.18 or 0.42)
+
+    box.Fill = box:CreateTexture(nil, "ARTWORK")
+    box.Fill:SetPoint("TOPLEFT", box, "TOPLEFT", 3, -3)
+    box.Fill:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -3, 3)
+    box.Fill:SetColorTexture(0.42, 0.89, 0.63, value and 0.95 or 0)
+
+    box.Check = box:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    box.Check:SetPoint("CENTER", box, "CENTER", 0, 0)
+    box.Check:SetText("✓")
+    box.Check:SetTextColor(0.05, 0.09, 0.07, value and 1 or 0)
+
+    local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    label:SetPoint("LEFT", box, "RIGHT", 10, 0)
+    label:SetPoint("RIGHT", row, "RIGHT", -12, 0)
+    label:SetJustifyH("LEFT")
+    label:SetText(labelText)
+    label:SetTextColor(disabled and 0.52 or 0.96, disabled and 0.52 or 0.94, disabled and 0.52 or 0.88)
+
+    if descText ~= "" then
+        AttachTooltip(hitbox, labelText, descText)
+    end
+
+    if disabled then
+        row:SetAlpha(0.6)
+    end
+
+    hitbox:SetScript("OnEnter", function()
+        if disabled then
+            return
+        end
+        row:SetBackdropBorderColor(0.98, 0.76, 0.22, 0.26)
+    end)
+    hitbox:SetScript("OnLeave", function()
+        row:SetBackdropBorderColor(0.94, 0.77, 0.28, 0.08)
+    end)
+    hitbox:SetScript("OnClick", function()
+        if disabled then
+            return
+        end
+        self:PlayThemeSound(value and "toggle_off" or "toggle_on")
+        ResolveOptionMethod(option, info, not value)
+        self:RequestRenderCurrentPage()
+    end)
+
+    return y + row:GetHeight() + 6
+end
+
 function UI:RenderToggle(parent, y, width, option, path, key)
+    if option and option.uiStyle == "checkbox" then
+        return self:RenderCheckboxToggle(parent, y, width, option, path, key)
+    end
+
     local info = BuildOptionInfo(path, key, option)
     local card
     card, y = self:CreateOptionCard(parent, y, width, GetDisplayName(path, key, option),
@@ -4661,7 +4745,6 @@ end
 function UI:RenderSection(parent, y, width, section, path, desiredPath, skipTitle)
     local ordered = GetOrderedEntries(section)
     local grouped = {}
-    local standardGroups = {}
 
     if not skipTitle and section.name and section.name ~= "" then
         y = self:RenderDescription(parent, y, ResolveTextValue(section.name, BuildSectionInfo(path, section)), width)
@@ -4675,7 +4758,7 @@ function UI:RenderSection(parent, y, width, section, path, desiredPath, skipTitl
                 if section.childGroups then
                     grouped[#grouped + 1] = entry
                 else
-                    standardGroups[#standardGroups + 1] = entry
+                    y = self:RenderGroupBlock(parent, y, width, entry.option, path, entry.key, desiredPath)
                 end
             else
                 local startY = y
@@ -4691,10 +4774,6 @@ function UI:RenderSection(parent, y, width, section, path, desiredPath, skipTitl
 
     if #grouped > 0 then
         y = self:RenderTabBar(parent, y, width, path, grouped, desiredPath)
-    else
-        for _, entry in ipairs(standardGroups) do
-            y = self:RenderGroupBlock(parent, y, width, entry.option, path, entry.key, desiredPath)
-        end
     end
 
     return y

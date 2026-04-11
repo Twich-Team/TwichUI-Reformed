@@ -1,22 +1,27 @@
-### Version 0.0.13 [ April 06 2026 ]
+### Version 0.0.14 [ April 12 2026 ]
 
-This release focuses on a simplification of the configuration; a seemingly every growing task. Several optimizations have been included as well as a new feature: Particle layers in the Aura Watcher Designer! You can now configure particle effects on frames with aura conditions. For example, if I cast Regrowth on a player, I can configure leaves to appear on that player's frame.
+This is a big release!!
 
-Minor update and bufix releases will continue as I work to implement more new UI-overhaul related logic (tooltips, maps, objective tracking, etc.).
+This release focuses primarily on performance, with a massive CPU performance increase. Additionally, some small bugfixes and minor missing items are included.
+
+Development is currently turning towards completing the MVP of the "UI Overhaul" goal, and will soon enough no longer require ElvUI. The next major feature will be nameplates, followed by damange meter skinning.
+
+However the short-term plan is to continue with performance increases, more pointed towards memory usage, while continuing bugfixes as bugs are found and adding missing features as they are discovered.
+
+### BREAKING CHANGES
+
+- This update introduces an entirely new action bar system, allowing more control and customization. However, it is possible the placement of your spells and keybdings may not remain the same after this update and will require setting up again.
 
 #### BugFixes
 
-- Fixed an issue preventing the position frame in the Interface Designer from properly changing the frame anchor
-- Attempt at fixing an issue where the notification for a new keystone will trigger at random times
-
 #### New
 
-- Added the Particle layer type to the Aura Watcher Designer
-- Added a button to toggle a new appearance frame to the Interface Designer
-- Added a button to toggle the configuration interface from within the Interface Designer
-- Added a button to access the Aura Designer from within the Interface Designer
-- Enhanced the search function of the configuration interface to search within sections as well
+- Rewritten action bar system uses fully in house action bars instead of utilizing Blizzard bars
+- Action bars now have a simple paging system where you can configure via options the paging instead of cryptic codes.
+- Added the extra player power bar (mana for balance druids, ebon might for evokers)
+- A multitude of gameplay tweaks have been added to the new section, "World & Gameplay" in the configuration UI
+- Added a new experience data panel text to show for leveling, includes a timer to see how long you were at each level
 
 #### Other
 
-- Cleaned up the Cast Bar designer so its easier to understand
+- Profiling system added to make it simpler to target inefficient code

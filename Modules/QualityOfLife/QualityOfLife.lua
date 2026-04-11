@@ -14,6 +14,14 @@ function QOL:OnEnable()
     local CM = T:GetModule("Configuration")
     local Options = CM.Options --[[@as any]]
 
+    if Options.MapTweaks and Options.MapTweaks:GetEnabled() then
+        self:GetModule("MapTweaks"):Enable()
+    end
+
+    if Options.GameTweaks and Options.GameTweaks:GetEnabled() then
+        self:GetModule("GameTweaks"):Enable()
+    end
+
     -- Enable submodules
     if Options.AutoLoot and Options.AutoLoot:GetEnabled() then
         self:GetModule("AutoLoot"):Enable()

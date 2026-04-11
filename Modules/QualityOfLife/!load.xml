@@ -1,5 +1,8 @@
 <Ui xmlns='http://www.blizzard.com/wow/ui/'>
     <Include file='QualityOfLife.lua' />
+    <Include file='MapRevealData.lua' />
+    <Include file='MapTweaks.lua' />
+    <Include file='GameTweaks.lua' />
     <Include file='AutoLoot.lua' />
     <Include file='LootFeed.lua' />
     <Include file='Gathering.lua' />
