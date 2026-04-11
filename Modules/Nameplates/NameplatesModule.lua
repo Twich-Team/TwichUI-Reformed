@@ -68,8 +68,31 @@ local math_max               = math.max
 local math_min               = math.min
 local math_floor             = math.floor
 
+-- ── Error reporting helper ────────────────────────────────────────────────────
+-- Routes real (non-taint) pcall errors to the central ErrorLog.
+-- Resolved lazily so Tools is guaranteed to have loaded ReportErr by the time
+-- any plate event fires.
+local function NpErr(context, err)
+    local fn = T.Tools and T.Tools.ReportErr
+    if type(fn) == "function" then fn(context, err) end
+end
+
+-- ── Profiling helpers ───────────────────────────────────────────────────────
+-- Lazy reference — Profiler is assigned to T.Tools.UI.Profiler after full
+-- load so we cannot cache it at file-scope init time.
+local _profilerRef = nil
+local function NpScope(name)
+    if not _profilerRef then
+        _profilerRef = T.Tools and T.Tools.UI and T.Tools.UI.Profiler
+    end
+    return _profilerRef and _profilerRef.BeginScope(name)
+end
+local function NpScopeEnd(scope)
+    if scope and _profilerRef then _profilerRef.EndScope(scope) end
+end
+
 -- ── Debug logging helper ──────────────────────────────────────────────────────
-local _debugConsoleRef       = nil
+local _debugConsoleRef = nil
 local function NpLog(msg)
     if not _debugConsoleRef then
         _debugConsoleRef = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
@@ -434,8 +457,12 @@ end
 -- handling both the old (pure varargs) and new (continuationToken, ...) forms.
 local _slotBuffer = {}
 local function CollectAuraSlots(unit, filter, maxCount)
+    local _scope = NpScope("Nameplates:CollectAuraSlots")
     local count = 0
-    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then return count end
+    if not C_UnitAuras or not C_UnitAuras.GetAuraSlots then
+        NpScopeEnd(_scope)
+        return count
+    end
 
     local continuationToken = nil
     repeat
@@ -469,6 +496,7 @@ local function CollectAuraSlots(unit, filter, maxCount)
         end
     until continuationToken == nil
 
+    NpScopeEnd(_scope)
     return count
 end
 
@@ -1056,6 +1084,7 @@ function Nameplates:UpdateAuras(frame, unit)
     -- SetCooldownFromDurationObject is a Blizzard widget method that accepts tainted
     -- objects safely (no Lua-side return values). This is how Plater does it.
     local function ShowAuraIcon(iconF, aura)
+        local _scope = NpScope("Nameplates:ShowAuraIcon")
         iconF:SetSize(auraSize, auraSize)
         -- icon fileID can be a secret number; wrap in pcall
         if not pcall(function() iconF.tex:SetTexture(aura.icon) end) then
@@ -1081,6 +1110,7 @@ function Nameplates:UpdateAuras(frame, unit)
             cd:Hide()
         end
         iconF:Show()
+        NpScopeEnd(_scope)
     end
 
     -- ── Fetch aura list ───────────────────────────────────────────────────────
@@ -1097,6 +1127,7 @@ function Nameplates:UpdateAuras(frame, unit)
             auraList = getResult
         else
             NpLog(string.format("UpdateAuras(%s): GetUnitAuras FAILED: %s", tostring(unit), tostring(getResult)))
+            NpErr("Nameplates:UpdateAuras:GetUnitAuras", getResult)
         end
     end
 
@@ -1114,6 +1145,7 @@ function Nameplates:UpdateAuras(frame, unit)
         end)
         if not iterOk then
             NpLog(string.format("UpdateAuras(%s): ITERATION ERROR: %s", tostring(unit), tostring(iterErr)))
+            NpErr("Nameplates:UpdateAuras:iteration", iterErr)
         end
     else
         -- ── Fallback: GetAuraSlots / GetAuraDataBySlot (pre-Midnight API) ───────

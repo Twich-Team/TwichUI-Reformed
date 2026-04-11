@@ -615,6 +615,14 @@ function ChatRendererModule:ResolveMessageChannelKey(message)
         return nil
     end
 
+    -- BNet whispers contain a |HBNplayer: hyperlink for the sender.
+    -- Check this FIRST — before any label parsing — because the surrounding
+    -- channel label (e.g. "[Whisper]") is indistinguishable from a regular
+    -- player whisper and would otherwise return "whisper" for incoming BN messages.
+    if message:find("|HBNplayer:", 1, true) then
+        return "battleNetWhisper"
+    end
+
     local styleModule = GetStylingModule()
 
     local channelRef, label = message:match("|Hchannel:([^|]+)|h%[(.-)%]|h")
@@ -650,13 +658,6 @@ function ChatRendererModule:ResolveMessageChannelKey(message)
                 return resolved
             end
         end
-    end
-
-    -- BNet whispers use a distinct link type and should keep their own color.
-    -- Do NOT map regular |Hplayer: to whisper — that hyperlink appears in SAY,
-    -- YELL, PARTY, etc. and would incorrectly colour all player messages pink.
-    if message:find("|HBNplayer:", 1, true) then
-        return "battleNetWhisper"
     end
 
     return nil
@@ -1706,7 +1707,7 @@ function ChatRendererModule:ApplyDeferredCombatAppend(renderer)
             else
                 local prev = entries[index - 1]
                 entry.groupedWithPrevious = prev ~= nil and prev.speakerKey ~= nil and
-                prev.speakerKey == entry.speakerKey
+                    prev.speakerKey == entry.speakerKey
             end
 
             local iconOffset = self:GetEntryIconOffset(entry)

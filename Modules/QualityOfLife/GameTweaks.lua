@@ -28,6 +28,7 @@ local hasanysecretvalues = _G.hasanysecretvalues
 local ItemLocation = _G.ItemLocation
 local StaticPopupDialogs = _G["StaticPopupDialogs"]
 local UIErrorsFrame = _G["UIErrorsFrame"]
+local DEFAULT_CHAT_FRAME = _G.DEFAULT_CHAT_FRAME
 local UIParent = _G.UIParent
 local tonumber = tonumber
 local tostring = tostring
@@ -1156,7 +1157,9 @@ function GT:MERCHANT_SHOW()
             end
         end
         if totalPrice > 0 and Value({ "automation", "autoSellShowSummary" }, true) then
-            T:Print("[TwichUI] Sold junk for " .. C_CurrencyInfo.GetCoinText(totalPrice) .. ".")
+            local moneyStr = T.Tools and T.Tools.Text and T.Tools.Text.FormatCopper(totalPrice)
+                or C_CurrencyInfo.GetCoinText(totalPrice)
+            DEFAULT_CHAT_FRAME:AddMessage("|cff69b86f[TwichUI]|r Sold junk for " .. moneyStr .. ".")
         end
     end
 
@@ -1169,7 +1172,9 @@ function GT:MERCHANT_SHOW()
                 _G.RepairAllItems()
             end
             if repairCost and repairCost > 0 and Value({ "automation", "autoRepairShowSummary" }, true) then
-                T:Print("[TwichUI] Repaired for " .. C_CurrencyInfo.GetCoinText(repairCost) .. ".")
+                local moneyStr = T.Tools and T.Tools.Text and T.Tools.Text.FormatCopper(repairCost)
+                    or C_CurrencyInfo.GetCoinText(repairCost)
+                DEFAULT_CHAT_FRAME:AddMessage("|cff69b86f[TwichUI]|r Repaired for " .. moneyStr .. ".")
             end
         end
     end

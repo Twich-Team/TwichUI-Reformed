@@ -2,9 +2,9 @@
 
 This is a big release!!
 
-This release focuses primarily on performance, with a massive CPU performance increase. Additionally, some small bugfixes and minor missing items are included.
+This release focuses primarily on performance, with a massive CPU performance increase. Additionally, we now have nameplates! some small bugfixes and minor missing items are included.
 
-Development is currently turning towards completing the MVP of the "UI Overhaul" goal, and will soon enough no longer require ElvUI. The next major feature will be nameplates, followed by damange meter skinning.
+Development is currently turning towards completing the MVP of the "UI Overhaul" goal, and will soon enough no longer require ElvUI. The next major feature will be tooltips, followed by minimap, objective tracking, and blizzard frame skinning.
 
 However the short-term plan is to continue with performance increases, more pointed towards memory usage, while continuing bugfixes as bugs are found and adding missing features as they are discovered.
 
@@ -18,7 +18,9 @@ However the short-term plan is to continue with performance increases, more poin
 
 #### New
 
+- Nameplates are now available. Pre-configured to make your priority targets obvious.
 - Rewritten action bar system uses fully in house action bars instead of utilizing Blizzard bars
+- Loot log: an expanding log of recently acquired loot!
 - Action bars now have a simple paging system where you can configure via options the paging instead of cryptic codes.
 - Added the extra player power bar (mana for balance druids, ebon might for evokers)
 - A multitude of gameplay tweaks have been added to the new section, "World & Gameplay" in the configuration UI

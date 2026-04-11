@@ -4861,7 +4861,7 @@ function ActionBars:ApplyCooldownSettings()
         fullSignatureParts[#fullSignatureParts + 1] = tostring(firstButton)
         fullSignatureParts[#fullSignatureParts + 1] = tostring(lastButton)
         fullSignatureParts[#fullSignatureParts + 1] = (not settings or settings.showCooldownSwipe ~= false) and "1" or
-        "0"
+            "0"
     end
 
     local fullSignature = table.concat(fullSignatureParts, ":")
@@ -5281,6 +5281,9 @@ function ActionBars:HideDefaultArt()
                     SafeDebugString(object.GetObjectType and object:GetObjectType() or type(object)))
             else
                 LogDebugf(true, "hide blizzard object failed object=%s error=%s", objectName, SafeDebugString(err))
+                if ErrorLog and ErrorLog.CaptureFailure then
+                    ErrorLog:CaptureFailure("ActionBars.HideDefaultArt.obj." .. objectName, err, 3)
+                end
             end
         end
     end
