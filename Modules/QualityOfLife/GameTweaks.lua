@@ -19,14 +19,12 @@ local C_FriendList = _G.C_FriendList
 local C_GossipInfo = _G.C_GossipInfo
 local C_Map = _G.C_Map
 local C_PetBattles = _G.C_PetBattles
-local C_PetJournal = _G.C_PetJournal
 local C_QuestSession = _G.C_QuestSession
 local C_SummonInfo = _G.C_SummonInfo
 local C_Timer = _G.C_Timer
 local CommunitiesUtil = _G["CommunitiesUtil"]
 local EventToastManagerFrame = _G["EventToastManagerFrame"]
 local ItemLocation = _G.ItemLocation
-local RAID_CLASS_COLORS = _G["RAID_CLASS_COLORS"]
 local StaticPopupDialogs = _G["StaticPopupDialogs"]
 local UIErrorsFrame = _G["UIErrorsFrame"]
 local UIParent = _G.UIParent
@@ -65,7 +63,6 @@ local originalState = {
 
 local bodyguardIDs = { 1733, 1736, 1737, 1738, 1739, 1740, 1741 }
 local bodyguardNames = nil
-local pendingPetDismiss = false
 local mutedSoundBuckets = {
     game = {},
     toy = {},
@@ -178,6 +175,39 @@ local SOUND_PRESETS = {
     },
 }
 
+local TRANSFORM_PRESETS = {
+    blacksmithing = { 388658 },
+    jewelcrafting = { 394015 },
+    tailoring = { 391312 },
+    engineering = { 394007 },
+    enchanting = { 394008 },
+    alchemy = { 394003 },
+    inscription = { 394016 },
+    leatherworking = { 394001 },
+    herbalism = { 394005 },
+    mining = { 394006 },
+    skinning = { 394011 },
+    cooking = { 391775 },
+    fishing = { 394009 },
+    aqir = { 318452 },
+    atomic = { 399502 },
+    atomGoblin = { 1215363 },
+    blight = { 290224 },
+    witch = { 279509 },
+    spraybots = { 301892, 301893, 301894 },
+    hallowed = {
+        172010, 218132, 191703, 24732, 191210, 172015, 24735, 24736, 191698, 191700,
+        172008, 24712, 24713, 191701, 191211, 24710, 24711, 191686, 191688, 24708,
+        24709, 173958, 173959, 191682, 191683, 24723, 191702, 172003, 172020, 191208,
+        24740,
+    },
+    lantern = { 44212 },
+    nobleBunny = { 61734, 61716 },
+    turkey = { 61781 },
+    cursedPickaxe = { 454405 },
+    noggenfogger = { 16593, 1223630, 16595, 1223629 },
+}
+
 local function GetOptions()
     local configurationModule = T:GetModule("Configuration")
     return (configurationModule.Options --[[@as any]]).GameTweaks
@@ -252,6 +282,16 @@ local function CollectPresetSoundIDs(pathKey, presetTable)
     for presetKey, soundRefs in pairs(presetTable) do
         if Value({ "system", pathKey, presetKey }, false) then
             AppendUniqueIDs(ids, ParseSoundRefList(soundRefs))
+        end
+    end
+    return ids
+end
+
+local function CollectPresetNumberIDs(pathKey, presetTable)
+    local ids = {}
+    for presetKey, values in pairs(presetTable) do
+        if Value({ "system", pathKey, presetKey }, false) then
+            AppendUniqueIDs(ids, values)
         end
     end
     return ids
@@ -387,59 +427,7 @@ local function HideQuickJoinToast(enabled)
     end
 end
 
-local function ApplyClassColoring()
-    local enabled = Feature({ "frames", "classColFrames" })
-
-    local function TintTexture(texture, classToken)
-        if not texture then
-            return
-        end
-        if enabled and classToken and RAID_CLASS_COLORS[classToken] then
-            local color = RAID_CLASS_COLORS[classToken]
-            texture:SetVertexColor(color.r, color.g, color.b)
-        else
-            texture:SetVertexColor(1, 1, 1)
-        end
-    end
-
-    if _G.PlayerFrame and _G.PlayerFrame.PlayerFrameContainer and Value({ "frames", "classColPlayer" }, true) then
-        local _, classToken = UnitClass("player")
-        TintTexture(_G.PlayerFrame.PlayerFrameContainer.FrameTexture, classToken)
-    end
-
-    if _G.TargetFrame and _G.TargetFrame.TargetFrameContainer and Value({ "frames", "classColTarget" }, true) then
-        local classToken = nil
-        if UnitExists("target") and UnitIsPlayer("target") then
-            _, classToken = UnitClass("target")
-        end
-        TintTexture(_G.TargetFrame.TargetFrameContainer.FrameTexture, classToken)
-    end
-end
-
-local function ApplyFramePlacement(frame, settings)
-    if not frame or not settings then
-        return
-    end
-    frame:ClearAllPoints()
-    frame:SetPoint(settings.point, UIParent, settings.relativePoint, settings.x, settings.y)
-    if frame.SetScale then
-        frame:SetScale(settings.scale or 1)
-    end
-end
-
 function GT:ApplyFrameTweaks()
-    if _G["UIWidgetTopCenterContainerFrame"] then
-        ApplyFramePlacement(_G["UIWidgetTopCenterContainerFrame"], Value({ "frames", "widgetTop" }, {}))
-        _G["UIWidgetTopCenterContainerFrame"]:SetScale(Feature({ "frames", "manageWidgetTop" }) and
-            Value({ "frames", "widgetTop", "scale" }, 1) or 1)
-    end
-
-    if _G["LossOfControlFrame"] then
-        ApplyFramePlacement(_G["LossOfControlFrame"], Value({ "frames", "control" }, {}))
-        _G["LossOfControlFrame"]:SetScale(Feature({ "frames", "manageControl" }) and
-            Value({ "frames", "control", "scale" }, 1) or 1)
-    end
-
     if _G["BossBanner"] then
         if Feature({ "frames", "hideBossBanner" }) then
             _G["BossBanner"]:UnregisterEvent("ENCOUNTER_LOOT_RECEIVED")
@@ -490,7 +478,6 @@ function GT:ApplyFrameTweaks()
     end
 
     HideQuickJoinToast(Feature({ "frames", "noAlerts" }))
-    ApplyClassColoring()
 end
 
 local function UpdateRestedEmoteSetting()
@@ -546,7 +533,6 @@ local function ApplyCVars()
 
     _G.SetCVar("cameraDistanceMaxZoomFactor",
         Feature({ "system", "maxCameraZoom" }) and "2.6" or tostring(originalState.cameraDistanceMaxZoomFactor or "1.9"))
-    _G.SetAllowLowLevelRaid(Feature({ "system", "noRaidRestrictions" }))
 
     if Feature({ "system", "keepAudioSynced" }) then
         _G.SetCVar("Sound_OutputDriverIndex", "0")
@@ -579,15 +565,9 @@ local function BuildTransformSet()
         return set
     end
 
-    local defaults = {
-        318452, 399502, 1215363, 290224, 44212, 279509, 61781, 454405,
-        61734, 61716, 301892, 301893, 301894, 388658, 394015, 391312,
-        394007, 394008, 394003, 394016, 394001, 394005, 394006, 394011,
-        391775, 16593, 1223630, 16595, 1223629,
-    }
-
-    for index = 1, #defaults do
-        set[defaults[index]] = true
+    local presetIDs = CollectPresetNumberIDs("presetTransforms", TRANSFORM_PRESETS)
+    for index = 1, #presetIDs do
+        set[presetIDs[index]] = true
     end
 
     local custom = ParseNumberList(Value({ "system", "transformSpellIDs" }, ""))
@@ -596,6 +576,26 @@ local function BuildTransformSet()
     end
 
     return set
+end
+
+local function CancelBlockedTransforms()
+    local blocked = BuildTransformSet()
+    if not next(blocked) then
+        return
+    end
+
+    local index = 1
+    while true do
+        local aura = _G.C_UnitAuras and _G.C_UnitAuras.GetAuraDataByIndex and
+            _G.C_UnitAuras.GetAuraDataByIndex("player", index, "HELPFUL")
+        if not aura then
+            break
+        end
+        if aura.spellId and blocked[aura.spellId] then
+            _G.CancelSpellByID(aura.spellId)
+        end
+        index = index + 1
+    end
 end
 
 local function InstallErrorFilter()
@@ -640,29 +640,6 @@ local function InstallHooks()
         return
     end
     hooksInstalled = true
-
-    hooksecurefunc("OpenAllBags", function()
-        if Feature({ "system", "noBagAutomation" }) then
-            _G.CloseAllBags()
-        end
-    end)
-
-    if C_PetJournal and C_PetJournal.SetPetLoadOutInfo then
-        hooksecurefunc(C_PetJournal, "SetPetLoadOutInfo", function()
-            if not Feature({ "system", "noPetAutomation" }) then
-                return
-            end
-            if UnitAffectingCombat("player") then
-                pendingPetDismiss = true
-                GT:RegisterEvent("PLAYER_REGEN_ENABLED")
-                return
-            end
-            local summonedPet = C_PetJournal.GetSummonedPetGUID()
-            if summonedPet then
-                C_PetJournal.SummonPetByGUID(summonedPet)
-            end
-        end)
-    end
 
     if EventToastManagerFrame then
         hooksecurefunc(EventToastManagerFrame, "Show", function()
@@ -834,7 +811,6 @@ function GT:RefreshSettings()
         { path = { "automation", "autoAcceptSummon" }, name = "CONFIRM_SUMMON" },
         { path = { "automation", "autoAcceptRes" },    name = "RESURRECT_REQUEST" },
         { path = { "frames", "hideBodyguard" },        name = "GOSSIP_SHOW" },
-        { path = { "frames", "classColFrames" },       name = "PLAYER_TARGET_CHANGED" },
         { path = { "system", "noTransforms" },         name = "UNIT_AURA" },
         { path = { "system", "noRestedEmotes" },       name = "PLAYER_UPDATE_RESTING" },
         { path = { "system", "noRestedEmotes" },       name = "ZONE_CHANGED_NEW_AREA" },
@@ -851,8 +827,12 @@ function GT:RefreshSettings()
             wanted[events[index].name] = true
         end
     end
-    if pendingPetDismiss then
+
+    if Feature({ "system", "noTransforms" }) then
         wanted.PLAYER_REGEN_ENABLED = true
+        if Value({ "system", "presetTransforms", "fishing" }, false) then
+            wanted.UNIT_SPELLCAST_CHANNEL_STOP = true
+        end
     end
     wanted.PLAYER_ENTERING_WORLD = true
 
@@ -863,9 +843,10 @@ function GT:RefreshSettings()
     local known = {
         "PARTY_INVITE_REQUEST", "GROUP_INVITE_CONFIRMATION", "BN_FRIEND_INVITE_ADDED", "DUEL_REQUESTED",
         "PET_BATTLE_PVP_DUEL_REQUESTED", "CHAT_MSG_WHISPER", "LFG_ROLE_CHECK_SHOW", "QUEST_ACCEPT_CONFIRM",
-        "CONFIRM_SUMMON", "RESURRECT_REQUEST", "GOSSIP_SHOW", "PLAYER_TARGET_CHANGED", "UNIT_AURA",
+        "CONFIRM_SUMMON", "RESURRECT_REQUEST", "GOSSIP_SHOW", "UNIT_AURA",
         "PLAYER_UPDATE_RESTING", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS",
         "VOICE_CHAT_OUTPUT_DEVICES_UPDATED", "CONFIRM_LOOT_ROLL", "CONFIRM_DISENCHANT_ROLL", "PLAYER_REGEN_ENABLED",
+        "UNIT_SPELLCAST_CHANNEL_STOP",
         "PLAYER_ENTERING_WORLD"
     }
     for index = 1, #known do
@@ -880,13 +861,8 @@ function GT:PLAYER_ENTERING_WORLD()
 end
 
 function GT:PLAYER_REGEN_ENABLED()
-    if pendingPetDismiss and Feature({ "system", "noPetAutomation" }) then
-        pendingPetDismiss = false
-        local summonedPet = C_PetJournal.GetSummonedPetGUID()
-        if summonedPet then
-            C_PetJournal.SummonPetByGUID(summonedPet)
-        end
-        self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    if Feature({ "system", "noTransforms" }) then
+        CancelBlockedTransforms()
     end
 end
 
@@ -1026,31 +1002,21 @@ function GT:GOSSIP_SHOW()
     end
 end
 
-function GT:PLAYER_TARGET_CHANGED()
-    ApplyClassColoring()
-end
-
 function GT:UNIT_AURA(_, unit)
     if unit ~= "player" or not Feature({ "system", "noTransforms" }) then
         return
     end
 
-    local blocked = BuildTransformSet()
-    if not next(blocked) then
+    CancelBlockedTransforms()
+end
+
+function GT:UNIT_SPELLCAST_CHANNEL_STOP(_, unit, _, spellID)
+    if unit ~= "player" or spellID ~= 131476 then
         return
     end
 
-    local index = 1
-    while true do
-        local aura = _G.C_UnitAuras and _G.C_UnitAuras.GetAuraDataByIndex and
-            _G.C_UnitAuras.GetAuraDataByIndex("player", index, "HELPFUL")
-        if not aura then
-            break
-        end
-        if aura.spellId and blocked[aura.spellId] then
-            _G.CancelSpellByID(aura.spellId)
-        end
-        index = index + 1
+    if Feature({ "system", "noTransforms" }) and Value({ "system", "presetTransforms", "fishing" }, false) then
+        CancelBlockedTransforms()
     end
 end
 
@@ -1175,10 +1141,8 @@ end
 
 function GT:OnDisable()
     self:UnregisterAllEvents()
-    pendingPetDismiss = false
     RemoveErrorFilter()
 
-    _G.SetAllowLowLevelRaid(false)
     if originalState.ffxGlow ~= nil then _G.SetCVar("ffxGlow", tostring(originalState.ffxGlow)) end
     if originalState.ffxDeath ~= nil then _G.SetCVar("ffxDeath", tostring(originalState.ffxDeath)) end
     if originalState.ffxNether ~= nil then _G.SetCVar("ffxNether", tostring(originalState.ffxNether)) end
@@ -1226,6 +1190,4 @@ function GT:OnDisable()
         _G["BossBanner"]:RegisterEvent("ENCOUNTER_LOOT_RECEIVED")
         _G["BossBanner"]:RegisterEvent("BOSS_KILL")
     end
-
-    ApplyClassColoring()
 end

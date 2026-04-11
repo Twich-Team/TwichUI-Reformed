@@ -13,13 +13,3 @@
 - ElvUI provides skins for almost all standard blizzard interfaces. Please inspect how ElvUI does this, and implement our own skinning system for the blizzard interfaces. It should resemble our current styling, and be reminescent of our goals: performance, clean, modern, eye candy.
 
 # Tweaks
-
-The following newly added tweaks are not needed by our addon:
-
-- Class Colors tab
-- Loss of control tab
-- We can remove the overview tab from both the gameplay and map tweaks tabs, just keep this module enabled
-- System behavior tab
-- Widget top
-
-LEatrix Plus has a set of predefined transform cancels for you to choose, can we add those to the Transforms tabs as checkboxes, similar to how we did the mount adn toy presets.

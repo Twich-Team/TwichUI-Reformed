@@ -50,13 +50,6 @@ local DEFAULT_DB = {
         friendlyCommunities = false,
     },
     frames = {
-        manageWidgetTop = false,
-        widgetTop = { point = "TOP", relativePoint = "TOP", x = 0, y = -15, scale = 1 },
-        manageControl = false,
-        control = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0, scale = 1 },
-        classColFrames = false,
-        classColPlayer = true,
-        classColTarget = true,
         noAlerts = false,
         hideBodyguard = false,
         hideTalkingFrame = false,
@@ -99,13 +92,37 @@ local DEFAULT_DB = {
         },
         muteCustomSounds = false,
         muteCustomSoundIDs = "",
-        noBagAutomation = false,
-        noPetAutomation = false,
-        noRaidRestrictions = false,
         noConfirmLoot = false,
         fasterMovieSkip = false,
         easyItemDestroy = false,
         noTransforms = false,
+        presetTransforms = {
+            blacksmithing = false,
+            jewelcrafting = false,
+            tailoring = false,
+            engineering = false,
+            enchanting = false,
+            alchemy = false,
+            inscription = false,
+            leatherworking = false,
+            herbalism = false,
+            mining = false,
+            skinning = false,
+            cooking = false,
+            fishing = false,
+            aqir = false,
+            atomic = false,
+            atomGoblin = false,
+            blight = false,
+            witch = false,
+            spraybots = false,
+            hallowed = false,
+            lantern = false,
+            nobleBunny = false,
+            turkey = false,
+            cursedPickaxe = false,
+            noggenfogger = false,
+        },
         transformSpellIDs = "",
         addOptNoCombatBox = false,
         addOptNoMountBox = false,
@@ -188,23 +205,5 @@ function Options:SetValue(path, value)
     local module = GetModule()
     if module and module.RefreshSettings then
         module:RefreshSettings()
-    end
-end
-
-function Options:ResetWidgetTopPosition()
-    local db = GetDB()
-    db.frames.widgetTop = { point = "TOP", relativePoint = "TOP", x = 0, y = -15, scale = 1 }
-    local module = GetModule()
-    if module and module.ApplyFrameTweaks then
-        module:ApplyFrameTweaks()
-    end
-end
-
-function Options:ResetControlPosition()
-    local db = GetDB()
-    db.frames.control = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0, scale = 1 }
-    local module = GetModule()
-    if module and module.ApplyFrameTweaks then
-        module:ApplyFrameTweaks()
     end
 end

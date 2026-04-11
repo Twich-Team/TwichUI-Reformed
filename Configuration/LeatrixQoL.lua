@@ -124,19 +124,16 @@ local function BuildMapTab()
         order = 1,
         childGroups = "tab",
         args = {
-            overview = FeatureTab(1, "Overview",
-                "World map tweaks reimplemented inside TwichUI. All features are off by default.", {
-                    enable = {
-                        type = "toggle",
-                        name = "Enable Map Tweaks",
-                        desc = "Enable the TwichUI map tweak module.",
-                        order = 2,
-                        width = 1.5,
-                        handler = MapOptions,
-                        get = "GetEnabled",
-                        set = "SetEnabled",
-                    },
-                }),
+            enable = {
+                type = "toggle",
+                name = "Enable Map Tweaks",
+                desc = "Enable the TwichUI map tweak module.",
+                order = 1,
+                width = 1.5,
+                handler = MapOptions,
+                get = "GetEnabled",
+                set = "SetEnabled",
+            },
             unlock = FeatureTab(10, "Unlock Map", "Manage world map positioning and dragging.", {
                 enable = Toggle({ "unlock", "enabled" }, "Enable Unlock Map",
                     "Allow TwichUI to manage the map frame position.", 2, MapOptions, 1.5,
@@ -187,26 +184,26 @@ end
 
 local function BuildGameTab()
     local isDisabled = function() return not GameOptions:GetEnabled() end
+    local transformsDisabled = function()
+        return isDisabled() or not GameOptions:GetValue({ "system", "noTransforms" }, false)
+    end
+
     return {
         type = "group",
         name = "Gameplay Tweaks",
         order = 2,
         childGroups = "tab",
         args = {
-            overview = FeatureTab(1, "Overview",
-                "Leatrix-style automation, social, frame, system, and text tweaks, implemented for TwichUI and disabled by default.",
-                {
-                    enable = {
-                        type = "toggle",
-                        name = "Enable Gameplay Tweaks",
-                        desc = "Enable the TwichUI gameplay tweak module.",
-                        order = 2,
-                        width = 1.75,
-                        handler = GameOptions,
-                        get = "GetEnabled",
-                        set = "SetEnabled",
-                    },
-                }),
+            enable = {
+                type = "toggle",
+                name = "Enable Gameplay Tweaks",
+                desc = "Enable the TwichUI gameplay tweak module.",
+                order = 1,
+                width = 1.75,
+                handler = GameOptions,
+                get = "GetEnabled",
+                set = "SetEnabled",
+            },
             summon = FeatureTab(10, "Summons", "Auto-accept summons after a configurable delay.", {
                 enable = Toggle({ "automation", "autoAcceptSummon" }, "Enable Auto Accept Summons",
                     "Auto accept summons after the configured delay when out of combat.", 2, GameOptions, 1.9, isDisabled),
@@ -269,12 +266,16 @@ local function BuildGameTab()
                         isDisabled),
                     repairGuild = Toggle({ "automation", "autoRepairGuildFunds" }, "Use Guild Funds",
                         "Use guild repair funds when available.", 3, GameOptions, 1.5,
-                        function() return isDisabled() or
-                            not GameOptions:GetValue({ "automation", "autoRepairGear" }, false) end),
+                        function()
+                            return isDisabled() or
+                                not GameOptions:GetValue({ "automation", "autoRepairGear" }, false)
+                        end),
                     repairSummary = Toggle({ "automation", "autoRepairShowSummary" }, "Show Repair Summary",
                         "Print the repair cost to chat.", 4, GameOptions, 1.5,
-                        function() return isDisabled() or
-                            not GameOptions:GetValue({ "automation", "autoRepairGear" }, false) end),
+                        function()
+                            return isDisabled() or
+                                not GameOptions:GetValue({ "automation", "autoRepairGear" }, false)
+                        end),
                 }),
             partyInvites = FeatureTab(60, "Party Invites", "Accept trusted invites or block untrusted ones.", {
                 acceptFriends = Toggle({ "social", "acceptPartyFriends" }, "Auto Accept Trusted Party Invites",
@@ -309,12 +310,16 @@ local function BuildGameTab()
                         "Invite players who whisper the configured keyword.", 2, GameOptions, 1.7, isDisabled),
                     whisperKey = Input({ "social", "inviteKeyword" }, "Invite Keyword",
                         "Whisper keyword used to request an invite.", 3, GameOptions, 1.4,
-                        function() return isDisabled() or
-                            not GameOptions:GetValue({ "social", "inviteFromWhisper" }, false) end),
+                        function()
+                            return isDisabled() or
+                                not GameOptions:GetValue({ "social", "inviteFromWhisper" }, false)
+                        end),
                     whisperFriends = Toggle({ "social", "inviteFriendsOnly" }, "Trusted Players Only",
                         "Only accept whisper invites from trusted players.", 4, GameOptions, 1.5,
-                        function() return isDisabled() or
-                            not GameOptions:GetValue({ "social", "inviteFromWhisper" }, false) end),
+                        function()
+                            return isDisabled() or
+                                not GameOptions:GetValue({ "social", "inviteFromWhisper" }, false)
+                        end),
                 }),
             trust = FeatureTab(110, "Trust Sources", "Choose which player relationships count as trusted.", {
                 noFriend = Toggle({ "social", "noFriendRequests" }, "Block Friend Requests",
@@ -323,64 +328,6 @@ local function BuildGameTab()
                     "Treat guild members as trusted for social automation.", 3, GameOptions, 1.5, isDisabled),
                 communities = Toggle({ "social", "friendlyCommunities" }, "Trust Communities",
                     "Treat community members as trusted for social automation.", 4, GameOptions, 1.5, isDisabled),
-            }),
-            widgetTop = FeatureTab(120, "Widget Top", "Reposition and scale the top-center widget frame.", {
-                widget = Toggle({ "frames", "manageWidgetTop" }, "Enable Widget Top Management",
-                    "Allow TwichUI to reposition and scale the top-center widget frame.", 2, GameOptions, 2.0, isDisabled),
-                widgetScale = Range({ "frames", "widgetTop", "scale" }, "Widget Top Scale",
-                    "Scale for the top-center widget frame.", 3, GameOptions, 0.5, 2, 0.05, 1.5,
-                    function() return isDisabled() or not GameOptions:GetValue({ "frames", "manageWidgetTop" }, false) end),
-                widgetX = Range({ "frames", "widgetTop", "x" }, "Widget Top X", "Horizontal offset for the widget frame.",
-                    4, GameOptions, -1200, 1200, 1, 1.5,
-                    function() return isDisabled() or not GameOptions:GetValue({ "frames", "manageWidgetTop" }, false) end),
-                widgetY = Range({ "frames", "widgetTop", "y" }, "Vertical offset for the widget frame.", 5, GameOptions,
-                    -1200, 1200, 1, 1.5,
-                    function() return isDisabled() or not GameOptions:GetValue({ "frames", "manageWidgetTop" }, false) end),
-                widgetReset = {
-                    type = "execute",
-                    name = "Reset Widget Top",
-                    desc = "Reset widget-top position and scale.",
-                    order = 6,
-                    disabled = function()
-                        return
-                            isDisabled()
-                    end,
-                    func = function() GameOptions:ResetWidgetTopPosition() end
-                },
-            }),
-            lossOfControl = FeatureTab(130, "Loss Of Control", "Reposition and scale the Loss Of Control frame.", {
-                control = Toggle({ "frames", "manageControl" }, "Enable Loss Of Control Management",
-                    "Allow TwichUI to reposition and scale the Loss Of Control frame.", 2, GameOptions, 2.1, isDisabled),
-                controlScale = Range({ "frames", "control", "scale" }, "Control Scale",
-                    "Scale for the Loss Of Control frame.", 3, GameOptions, 0.5, 2, 0.05, 1.5,
-                    function() return isDisabled() or not GameOptions:GetValue({ "frames", "manageControl" }, false) end),
-                controlX = Range({ "frames", "control", "x" }, "Control X",
-                    "Horizontal offset for the Loss Of Control frame.", 4, GameOptions, -1200, 1200, 1, 1.5,
-                    function() return isDisabled() or not GameOptions:GetValue({ "frames", "manageControl" }, false) end),
-                controlY = Range({ "frames", "control", "y" }, "Control Y",
-                    "Vertical offset for the Loss Of Control frame.", 5, GameOptions, -1200, 1200, 1, 1.5,
-                    function() return isDisabled() or not GameOptions:GetValue({ "frames", "manageControl" }, false) end),
-                controlReset = {
-                    type = "execute",
-                    name = "Reset Loss Of Control",
-                    desc = "Reset the Loss Of Control frame position and scale.",
-                    order = 6,
-                    disabled = function()
-                        return
-                            isDisabled()
-                    end,
-                    func = function() GameOptions:ResetControlPosition() end
-                },
-            }),
-            classColors = FeatureTab(140, "Class Colors", "Apply class tinting to supported Blizzard unit frames.", {
-                classColor = Toggle({ "frames", "classColFrames" }, "Enable Class Color Frames",
-                    "Apply class-color tinting to supported Blizzard unit frames.", 2, GameOptions, 1.9, isDisabled),
-                classPlayer = Toggle({ "frames", "classColPlayer" }, "Color Player Frame",
-                    "Apply class tinting to the Blizzard player frame.", 3, GameOptions, 1.4,
-                    function() return isDisabled() or not GameOptions:GetValue({ "frames", "classColFrames" }, false) end),
-                classTarget = Toggle({ "frames", "classColTarget" }, "Color Target Frame",
-                    "Apply class tinting to the Blizzard target frame.", 4, GameOptions, 1.4,
-                    function() return isDisabled() or not GameOptions:GetValue({ "frames", "classColFrames" }, false) end),
             }),
             popups = FeatureTab(150, "Alerts & Popups", "Hide or suppress Blizzard popups and banners.", {
                 noAlerts = Toggle({ "frames", "noAlerts" }, "Hide Alerts", "Hide standard Blizzard alert toasts.", 2,
@@ -556,16 +503,6 @@ local function BuildGameTab()
                     "Comma-separated custom sound file IDs to mute.", 10, GameOptions, 2.0,
                     function() return isDisabled() or not GameOptions:GetValue({ "system", "muteCustomSounds" }, false) end),
             }),
-            systemBehavior = FeatureTab(190, "System Behavior", "Control Blizzard automation and restriction overrides.",
-                {
-                    bags = Toggle({ "system", "noBagAutomation" }, "Disable Bag Automation",
-                        "Prevent Blizzard bag automation from opening your bags automatically.", 2, GameOptions, 1.75,
-                        isDisabled),
-                    pets = Toggle({ "system", "noPetAutomation" }, "Disable Pet Automation",
-                        "Dismiss summoned battle pets after changing loadouts.", 3, GameOptions, 1.6, isDisabled),
-                    raids = Toggle({ "system", "noRaidRestrictions" }, "Remove Raid Restrictions",
-                        "Allow low-level raid conversion rules to be disabled.", 4, GameOptions, 1.75, isDisabled),
-                }),
             interactions = FeatureTab(200, "Loot & Interaction",
                 "Reduce confirmation friction for loot, movies, and item destruction.", {
                     loot = Toggle({ "system", "noConfirmLoot" }, "Disable Loot Warnings",
@@ -577,12 +514,135 @@ local function BuildGameTab()
                     destroy = Toggle({ "system", "easyItemDestroy" }, "Easy Item Destroy",
                         "Remove the need to type delete when destroying items.", 4, GameOptions, 1.6, isDisabled),
                 }),
-            transforms = FeatureTab(210, "Transforms", "Cancel configured transform auras automatically.", {
+            transforms = FeatureTab(210, "Transforms", "Cancel selected transform auras automatically.", {
                 enable = Toggle({ "system", "noTransforms" }, "Enable Remove Transforms",
-                    "Cancel transform auras for the configured spell IDs.", 2, GameOptions, 1.75, isDisabled),
-                transformIDs = Input({ "system", "transformSpellIDs" }, "Transform Spell IDs",
-                    "Comma-separated aura spell IDs to cancel automatically.", 3, GameOptions, 2.0,
-                    function() return isDisabled() or not GameOptions:GetValue({ "system", "noTransforms" }, false) end),
+                    "Cancel the selected transform auras automatically, including curated Leatrix-style presets.", 2,
+                    GameOptions, 1.75, isDisabled),
+                craftingSection = {
+                    type = "group",
+                    name = "Crafting Professions",
+                    order = 3,
+                    args = {
+                        blacksmithing = Checkbox({ "system", "presetTransforms", "blacksmithing" }, "Blacksmithing",
+                            "Remove the Suited for Smithing transform when it is applied.", 1, GameOptions,
+                            transformsDisabled),
+                        jewelcrafting = Checkbox({ "system", "presetTransforms", "jewelcrafting" }, "Jewelcrafting",
+                            "Remove the An Eye For Shine transform when it is applied.", 2, GameOptions,
+                            transformsDisabled),
+                        tailoring = Checkbox({ "system", "presetTransforms", "tailoring" }, "Tailoring",
+                            "Remove the Wrapped Up In Weaving transform when it is applied.", 3, GameOptions,
+                            transformsDisabled),
+                        engineering = Checkbox({ "system", "presetTransforms", "engineering" }, "Engineering",
+                            "Remove the Ready To Build transform when it is applied.", 4, GameOptions,
+                            transformsDisabled),
+                        enchanting = Checkbox({ "system", "presetTransforms", "enchanting" }, "Enchanting",
+                            "Remove the A Looker's Charm transform when it is applied.", 5, GameOptions,
+                            transformsDisabled),
+                        alchemy = Checkbox({ "system", "presetTransforms", "alchemy" }, "Alchemy",
+                            "Remove the Spark of Madness transform when it is applied.", 6, GameOptions,
+                            transformsDisabled),
+                        inscription = Checkbox({ "system", "presetTransforms", "inscription" }, "Inscription",
+                            "Remove the Artist's Duds transform when it is applied.", 7, GameOptions,
+                            transformsDisabled),
+                        leatherworking = Checkbox({ "system", "presetTransforms", "leatherworking" },
+                            "Leatherworking", "Remove the Sculpting Leather Finery transform when it is applied.",
+                            8, GameOptions, transformsDisabled),
+                    },
+                },
+                gatheringSection = {
+                    type = "group",
+                    name = "Gathering Professions",
+                    order = 4,
+                    args = {
+                        herbalism = Checkbox({ "system", "presetTransforms", "herbalism" }, "Herbalism",
+                            "Remove the A Cultivator's Colors transform when it is applied.", 1, GameOptions,
+                            transformsDisabled),
+                        mining = Checkbox({ "system", "presetTransforms", "mining" }, "Mining",
+                            "Remove the Rockin' Mining Gear transform when it is applied.", 2, GameOptions,
+                            transformsDisabled),
+                        skinning = Checkbox({ "system", "presetTransforms", "skinning" }, "Skinning",
+                            "Remove the Dressed To Kill transform when it is applied.", 3, GameOptions,
+                            transformsDisabled),
+                    },
+                },
+                secondarySection = {
+                    type = "group",
+                    name = "Secondary Professions",
+                    order = 5,
+                    args = {
+                        cooking = Checkbox({ "system", "presetTransforms", "cooking" }, "Cooking",
+                            "Remove the What's Cookin', Good Lookin' transform when it is applied.", 1, GameOptions,
+                            transformsDisabled),
+                        fishing = Checkbox({ "system", "presetTransforms", "fishing" }, "Fishing",
+                            "Remove the Fishing For Attention transform when it is applied.", 2, GameOptions,
+                            transformsDisabled),
+                    },
+                },
+                toySection = {
+                    type = "group",
+                    name = "Toys",
+                    order = 6,
+                    args = {
+                        aqir = Checkbox({ "system", "presetTransforms", "aqir" }, "Aqir Egg Cluster",
+                            "Remove the Aqir Egg Cluster transform when it is applied.", 1, GameOptions,
+                            transformsDisabled),
+                        atomic = Checkbox({ "system", "presetTransforms", "atomic" }, "Atomic Recalibrator",
+                            "Remove the Atomic Recalibrator transform when it is applied.", 2, GameOptions,
+                            transformsDisabled),
+                        atomGoblin = Checkbox({ "system", "presetTransforms", "atomGoblin" },
+                            "Atomic Regoblinator", "Remove the Atomic Regoblinator transform when it is applied.",
+                            3, GameOptions, transformsDisabled),
+                        blight = Checkbox({ "system", "presetTransforms", "blight" }, "Detoxified Blight Grenade",
+                            "Remove the Detoxified Blight Grenade transform when it is applied.", 4, GameOptions,
+                            transformsDisabled),
+                        witch = Checkbox({ "system", "presetTransforms", "witch" }, "Lucille's Sewing Needle",
+                            "Remove the Lucille's Sewing Needle transform when it is applied.", 5, GameOptions,
+                            transformsDisabled),
+                        spraybots = Checkbox({ "system", "presetTransforms", "spraybots" }, "Spraybots",
+                            "Remove Spraybot transforms when they are applied.", 6, GameOptions, transformsDisabled),
+                    },
+                },
+                eventSection = {
+                    type = "group",
+                    name = "Events",
+                    order = 7,
+                    args = {
+                        hallowed = Checkbox({ "system", "presetTransforms", "hallowed" },
+                            "Hallow's End: Hallowed Wand",
+                            "Remove Hallowed Wand transforms when they are applied.", 1, GameOptions,
+                            transformsDisabled),
+                        lantern = Checkbox({ "system", "presetTransforms", "lantern" },
+                            "Hallow's End: Weighted Jack-o'-Lantern",
+                            "Remove the Weighted Jack-o'-Lantern transform when it is applied.", 2, GameOptions,
+                            transformsDisabled),
+                        nobleBunny = Checkbox({ "system", "presetTransforms", "nobleBunny" },
+                            "Noblegarden: Noblegarden Bunny",
+                            "Remove Noblegarden bunny transforms when they are applied.", 3, GameOptions,
+                            transformsDisabled),
+                        turkey = Checkbox({ "system", "presetTransforms", "turkey" },
+                            "Pilgrim's Bounty: Turkey Shooter",
+                            "Remove the Turkey Shooter transform when it is applied.", 4, GameOptions,
+                            transformsDisabled),
+                    },
+                },
+                itemSection = {
+                    type = "group",
+                    name = "Items",
+                    order = 8,
+                    args = {
+                        cursedPickaxe = Checkbox({ "system", "presetTransforms", "cursedPickaxe" },
+                            "Cursed Pickaxe",
+                            "Remove the Cursed Pickaxe transform when it is applied.", 1, GameOptions,
+                            transformsDisabled),
+                        noggenfogger = Checkbox({ "system", "presetTransforms", "noggenfogger" },
+                            "Noggenfogger Elixir",
+                            "Remove the slow fall and shrink Noggenfogger effects while keeping the skeleton transform intact.",
+                            2, GameOptions, transformsDisabled),
+                    },
+                },
+                transformIDs = Input({ "system", "transformSpellIDs" }, "Custom Transform Spell IDs",
+                    "Comma-separated aura spell IDs to cancel in addition to the selected presets.", 9, GameOptions,
+                    2.0, transformsDisabled),
             }),
             tradingPost = FeatureTab(220, "Trading Post",
                 "Disable preview toggles automatically when opening the Trading Post.", {
