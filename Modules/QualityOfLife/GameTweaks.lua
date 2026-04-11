@@ -634,7 +634,12 @@ local function CancelBlockedTransforms()
         end
         local spellID = aura.spellId
         if spellID and not HasSecretValues(spellID) and blocked[spellID] then
-            _G.CancelSpellByID(spellID)
+            -- CancelSpellByID was removed in Midnight; cancel via aura instance ID instead
+            if aura.auraInstanceID and _G.C_UnitAuras and _G.C_UnitAuras.RemoveAura then
+                _G.C_UnitAuras.RemoveAura("player", aura.auraInstanceID)
+            elseif _G.CancelSpellByID then
+                _G.CancelSpellByID(spellID)
+            end
             return
         end
         index = index + 1

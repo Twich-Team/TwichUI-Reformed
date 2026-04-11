@@ -101,6 +101,7 @@ function T:OnInitialize()
         { module = self:GetModule("ActionBars"),                                 enabled = Options.ActionBars:GetEnabled() },
         { module = self:GetModule("Datatexts"),                                  enabled = Options.Datatext:IsModuleEnabled() },
         { module = self:GetModule("UnitFrames"),                                 enabled = Options.UnitFrames:GetEnabled() },
+        { module = self:GetModule("Nameplates"),                                 enabled = Options.Nameplates:IsModuleEnabled() },
         { module = self:GetModule("BestInSlot"),                                 enabled = Options.BestInSlot:IsBestInSlotModuleEnabled() },
         { module = self:GetModule("QualityOfLife"):GetModule("Gathering"),       enabled = Options.Gathering:GetEnabled() },
     }

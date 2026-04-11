@@ -119,6 +119,13 @@ local NAV_ITEMS = {
         accent = { 0.91, 0.45, 0.45 },
         path = { "unitFrames" },
     },
+    {
+        id = "nameplates",
+        title = "Nameplates",
+        description = "Custom in-world nameplates with health bars, cast bars, auras, and threat indicators.",
+        accent = { 0.87, 0.35, 0.35 },
+        path = { "nameplates" },
+    },
 }
 
 local FEATURE_CARDS = {

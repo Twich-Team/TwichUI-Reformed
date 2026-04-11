@@ -33,6 +33,7 @@ local CHARACTER_BINDINGS = 2
 --- @field BestInSlot BestInSlotConfigurationOptions
 --- @field NotificationPanel NotificationPanelConfigurationOptions
 --- @field UnitFrames UnitFramesConfigurationOptions
+--- @field Nameplates NameplatesConfigurationOptions
 --- @field MythicPlusTools MythicPlusToolsConfigurationOptions
 --- @field About AboutConfigurationOptions
 --- @field SatchelWatch SatchelWatchConfigurationOptions
