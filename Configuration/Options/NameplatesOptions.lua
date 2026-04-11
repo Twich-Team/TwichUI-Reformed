@@ -444,7 +444,7 @@ end
 
 function Options:GetTargetArrowPreviewTex()
     local style = self:GetTargetArrowStyle()
-    return "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Arrows\\" .. style
+    return "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Arrows\\" .. style .. ".tga"
 end
 
 function Options:GetTargetGlowOutset() return self:GetDB().targetGlowOutset or 3 end
@@ -1276,16 +1276,36 @@ function Options:BuildConfiguration()
                         get     = function() return Options:GetTargetArrowStyle() end,
                         set     = function(_, v) Options:SetTargetArrowStyle(_, v) end,
                     },
-                    targetArrowPreview = {
+                    targetArrowPreviewHdr = {
+                        type   = "description",
+                        name   = "Arrow Preview  (→ left side    right side ←)",
+                        order  = 23,
+                        hidden = function() return not Options:GetShowTargetArrows() end,
+                        width  = "full",
+                    },
+                    -- Left arrow: points → (placed on the left side of the plate)
+                    targetArrowPreviewL = {
                         type        = "description",
-                        name        = "Preview:",
-                        order       = 23,
+                        name        = "",
+                        order       = 23.1,
                         hidden      = function() return not Options:GetShowTargetArrows() end,
                         image       = function() return Options:GetTargetArrowPreviewTex() end,
-                        imageCoords = { 0, 1, 0, 1 },
-                        imageWidth  = 32,
-                        imageHeight = 32,
-                        width       = "full",
+                        imageCoords = { 0, 1, 1, 1, 0, 0, 1, 0 },  -- points →
+                        imageWidth  = 48,
+                        imageHeight = 48,
+                        width       = "half",
+                    },
+                    -- Right arrow: points ← (placed on the right side of the plate)
+                    targetArrowPreviewR = {
+                        type        = "description",
+                        name        = "",
+                        order       = 23.2,
+                        hidden      = function() return not Options:GetShowTargetArrows() end,
+                        image       = function() return Options:GetTargetArrowPreviewTex() end,
+                        imageCoords = { 1, 0, 0, 0, 1, 1, 0, 1 },  -- points ←
+                        imageWidth  = 48,
+                        imageHeight = 48,
+                        width       = "half",
                     },
                     targetArrowSize = {
                         type = "range",

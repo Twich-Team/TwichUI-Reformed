@@ -105,7 +105,7 @@ local PLAIN_BD               = {
 }
 -- Soft-edge backdrop for the target glow frame.
 -- GlowTex creates a blurred halo; edgeSize=6 gives a visible but not overwhelming ring.
-local GLOW_EDGE              = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\GlowTex"
+local GLOW_EDGE              = "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\GlowTex.tga"
 local GLOW_BD                = {
     edgeFile = GLOW_EDGE,
     edgeSize = 6,
@@ -121,7 +121,7 @@ local ARROW_TC_LEFT  = { 1, 0, 0, 0, 1, 1, 0, 1 }  -- points ← (right side of 
 local ARROW_TC_RIGHT = { 0, 1, 1, 1, 0, 0, 1, 0 }  -- points → (left side of plate)
 
 local function GetArrowTexPath(styleName)
-    return ARROW_BASE .. (styleName or "ArrowUp")
+    return ARROW_BASE .. (styleName or "ArrowUp") .. ".tga"
 end
 
 -- CVars we take control of while the module is active
