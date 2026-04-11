@@ -264,9 +264,68 @@ local function OpenConfigurationPanel(input)
             local mode = tostring(subArgs or ""):lower()
             if mode == "" or mode == "status" then
                 local enabled = profiler.IsMemoryProfilingEnabled and profiler.IsMemoryProfilingEnabled() == true
+                local interval = profiler.GetMemorySampleInterval and profiler:GetMemorySampleInterval() or 5
+                local summary = profiler.GetMemorySummary and profiler:GetMemorySummary() or nil
                 T:Print(string.format("[TwichUI] Profiler memory metrics: %s",
                     enabled and "|cff69b86fENABLED|r" or "|cffff9a6cDISABLED|r"))
-                T:Print("Usage: /tui profile memory on|off|toggle|status")
+                T:Print(string.format("[TwichUI] Memory growth watcher interval: %ss", tostring(interval)))
+                if summary and (summary.sampleCount or 0) > 0 then
+                    T:Print(string.format(
+                        "[TwichUI] AddOn memory: %.2f MB -> %.2f MB (%+.2f MB), peak %.2f MB, largest spike %+.2f MB.",
+                        (summary.baselineAddonKB or 0) / 1024,
+                        (summary.currentAddonKB or 0) / 1024,
+                        (summary.growthKB or 0) / 1024,
+                        (summary.peakAddonKB or 0) / 1024,
+                        (summary.largestSpikeKB or 0) / 1024
+                    ))
+                end
+                T:Print("Usage: /tui profile memory on|off|toggle|status|summary|snapshot|interval <seconds>")
+                return
+            end
+
+            if mode == "summary" then
+                local summary = profiler.GetMemorySummary and profiler:GetMemorySummary() or nil
+                if not summary or (summary.sampleCount or 0) == 0 then
+                    T:Print(
+                    "[TwichUI] No memory growth samples collected yet. Start profiling and let it run through the scenario first.")
+                    return
+                end
+
+                T:Print(string.format(
+                    "[TwichUI] Memory growth summary: start %.2f MB | current %.2f MB | peak %.2f MB | growth %+.2f MB | spike %+.2f MB | samples %d @ %ss",
+                    (summary.baselineAddonKB or 0) / 1024,
+                    (summary.currentAddonKB or 0) / 1024,
+                    (summary.peakAddonKB or 0) / 1024,
+                    (summary.growthKB or 0) / 1024,
+                    (summary.largestSpikeKB or 0) / 1024,
+                    summary.sampleCount or 0,
+                    tostring(summary.sampleInterval or 5)
+                ))
+                return
+            end
+
+            if mode == "snapshot" then
+                local snapshot = profiler.CaptureMemorySnapshot and profiler:CaptureMemorySnapshot("manual") or nil
+                if snapshot then
+                    T:Print(string.format(
+                        "[TwichUI] Memory snapshot: AddOn %.2f MB | Lua %.2f MB | Session delta %+.2f MB | Last delta %+.2f MB",
+                        (snapshot.addonKB or 0) / 1024,
+                        (snapshot.luaKB or 0) / 1024,
+                        (snapshot.deltaFromStartKB or 0) / 1024,
+                        (snapshot.deltaFromPreviousKB or 0) / 1024
+                    ))
+                end
+                return
+            end
+
+            local intervalValue = mode:match("^interval%s+(%d+)$")
+            if not intervalValue then
+                intervalValue = remainder:match("^memory%s+interval%s+(%d+)$")
+            end
+            if intervalValue then
+                if profiler.SetMemorySampleInterval then
+                    profiler:SetMemorySampleInterval(tonumber(intervalValue))
+                end
                 return
             end
 
@@ -292,7 +351,7 @@ local function OpenConfigurationPanel(input)
                 return
             end
 
-            T:Print("[TwichUI] Usage: /tui profile memory on|off|toggle|status")
+            T:Print("[TwichUI] Usage: /tui profile memory on|off|toggle|status|summary|snapshot|interval <seconds>")
             return
         end
 
@@ -317,7 +376,7 @@ local function OpenConfigurationPanel(input)
             T:Print("  report  - Open visual results window")
             T:Print("  window  - Same as report")
             T:Print("  export  - Copy raw data to chat")
-            T:Print("  memory  - Memory metrics (on|off|toggle|status)")
+            T:Print("  memory  - Memory metrics and growth watcher controls")
             T:Print("  clear   - Clear all profiling data")
             T:Print("  status  - Show this help")
             return

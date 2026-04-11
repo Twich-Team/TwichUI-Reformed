@@ -9,6 +9,10 @@ local function GetT()
     return unpack(_G.TwichRx)
 end
 
+local C_AddOns = _G.C_AddOns
+local CreateFrame = _G.CreateFrame
+local GetAddOnMemoryUsage = _G.GetAddOnMemoryUsage
+
 ---@type TwichUI
 local T
 
@@ -42,6 +46,11 @@ local profilingStartTime = 0
 local hookedFunctions = {} -- Track hooked functions for cleanup
 local includeMemoryMetrics = false
 local unpackCompat = _G.unpack
+local UpdateAddOnMemoryUsage = _G.UpdateAddOnMemoryUsage
+
+local ADDON_NAME = "TwichUI_Reformed"
+local DEFAULT_MEMORY_SAMPLE_INTERVAL = 5
+local MAX_MEMORY_SAMPLES = 360
 
 local EXCLUDED_METHODS = {
     OnInitialize = true,
@@ -70,6 +79,25 @@ local EXCLUDED_METHODS = {
     Print = true,
 }
 
+local memorySamples = {}
+local memorySummary = {
+    baselineAddonKB = 0,
+    currentAddonKB = 0,
+    peakAddonKB = 0,
+    growthKB = 0,
+    largestSpikeKB = 0,
+    lastDeltaKB = 0,
+    baselineLuaKB = 0,
+    currentLuaKB = 0,
+    peakLuaKB = 0,
+    peakTimeMs = 0,
+    sampleCount = 0,
+}
+local memoryWatchFrame
+local memorySampleElapsed = 0
+local memorySampleInterval = DEFAULT_MEMORY_SAMPLE_INTERVAL
+local addOnMemoryIndex
+
 local function GetProfilerDB()
     T = T or GetT()
     if not T or not T.db or not T.db.profile then
@@ -81,8 +109,163 @@ local function GetProfilerDB()
     if db.includeMemoryMetrics == nil then
         db.includeMemoryMetrics = false
     end
+    if type(db.memorySampleInterval) ~= "number" or db.memorySampleInterval < 1 then
+        db.memorySampleInterval = DEFAULT_MEMORY_SAMPLE_INTERVAL
+    end
 
     return db
+end
+
+local function ResolveAddOnMemoryIndex()
+    if addOnMemoryIndex then
+        return addOnMemoryIndex
+    end
+
+    if not (C_AddOns and C_AddOns.GetNumAddOns and C_AddOns.GetAddOnInfo) then
+        return nil
+    end
+
+    local count = C_AddOns.GetNumAddOns()
+    for index = 1, count do
+        local name = C_AddOns.GetAddOnInfo(index)
+        if name == ADDON_NAME then
+            addOnMemoryIndex = index
+            return index
+        end
+    end
+
+    return nil
+end
+
+local function GetCurrentMemoryUsage()
+    local addonKB = nil
+    if type(UpdateAddOnMemoryUsage) == "function" then
+        UpdateAddOnMemoryUsage()
+    end
+
+    if type(GetAddOnMemoryUsage) == "function" then
+        local byName = GetAddOnMemoryUsage(ADDON_NAME)
+        if type(byName) == "number" then
+            addonKB = byName
+        end
+
+        if addonKB == nil then
+            local index = ResolveAddOnMemoryIndex()
+            if index then
+                addonKB = GetAddOnMemoryUsage(index)
+            end
+        end
+    end
+
+    return {
+        addonKB = tonumber(addonKB) or 0,
+        luaKB = tonumber(collectgarbage("count")) or 0,
+    }
+end
+
+local function ResetMemoryTracking()
+    memorySamples = {}
+    memorySummary = {
+        baselineAddonKB = 0,
+        currentAddonKB = 0,
+        peakAddonKB = 0,
+        growthKB = 0,
+        largestSpikeKB = 0,
+        lastDeltaKB = 0,
+        baselineLuaKB = 0,
+        currentLuaKB = 0,
+        peakLuaKB = 0,
+        peakTimeMs = 0,
+        peakLuaTimeMs = 0,
+        sampleCount = 0,
+        sampleInterval = memorySampleInterval,
+        durationMs = 0,
+        lastReason = nil,
+    }
+    memorySampleElapsed = 0
+end
+
+local function CaptureMemorySample(reason, nowMs)
+    local usage = GetCurrentMemoryUsage()
+    local currentTimeMs = nowMs or debugprofilestop()
+    local elapsedMs = profilingStartTime > 0 and math.max(0, currentTimeMs - profilingStartTime) or 0
+    local previous = memorySamples[#memorySamples]
+
+    local sample = {
+        reason = reason or "tick",
+        timeMs = elapsedMs,
+        addonKB = usage.addonKB,
+        luaKB = usage.luaKB,
+        deltaFromPreviousKB = previous and (usage.addonKB - previous.addonKB) or 0,
+        deltaFromStartKB = 0,
+    }
+
+    if #memorySamples == 0 then
+        memorySummary.baselineAddonKB = usage.addonKB
+        memorySummary.baselineLuaKB = usage.luaKB
+    end
+
+    sample.deltaFromStartKB = usage.addonKB - (memorySummary.baselineAddonKB or usage.addonKB)
+
+    table.insert(memorySamples, sample)
+    while #memorySamples > MAX_MEMORY_SAMPLES do
+        table.remove(memorySamples, 1)
+    end
+
+    memorySummary.currentAddonKB = usage.addonKB
+    memorySummary.currentLuaKB = usage.luaKB
+    memorySummary.growthKB = sample.deltaFromStartKB
+    memorySummary.lastDeltaKB = sample.deltaFromPreviousKB
+    memorySummary.sampleCount = #memorySamples
+    memorySummary.sampleInterval = memorySampleInterval
+    memorySummary.durationMs = elapsedMs
+    memorySummary.lastReason = sample.reason
+
+    if usage.addonKB >= (memorySummary.peakAddonKB or 0) then
+        memorySummary.peakAddonKB = usage.addonKB
+        memorySummary.peakTimeMs = elapsedMs
+    end
+    if usage.luaKB >= (memorySummary.peakLuaKB or 0) then
+        memorySummary.peakLuaKB = usage.luaKB
+        memorySummary.peakLuaTimeMs = elapsedMs
+    end
+    if sample.deltaFromPreviousKB > (memorySummary.largestSpikeKB or 0) then
+        memorySummary.largestSpikeKB = sample.deltaFromPreviousKB
+        memorySummary.largestSpikeTimeMs = elapsedMs
+    end
+
+    return sample
+end
+
+local function StopMemoryWatcher()
+    if memoryWatchFrame then
+        memoryWatchFrame:SetScript("OnUpdate", nil)
+        memoryWatchFrame:Hide()
+    end
+    memorySampleElapsed = 0
+end
+
+local function StartMemoryWatcher()
+    StopMemoryWatcher()
+
+    if not isProfilingActive then
+        return
+    end
+
+    if not memoryWatchFrame then
+        memoryWatchFrame = CreateFrame("Frame")
+    end
+
+    memoryWatchFrame:Show()
+    memoryWatchFrame:SetScript("OnUpdate", function(_, elapsed)
+        memorySampleElapsed = memorySampleElapsed + elapsed
+        if memorySampleElapsed < memorySampleInterval then
+            return
+        end
+
+        memorySampleElapsed = 0
+        CaptureMemorySample("tick")
+    end)
 end
 
 ---Start a named profiling scope
@@ -101,6 +284,14 @@ local function BeginScope(name)
 
     table.insert(activeScopeStack, scope)
     return scope
+end
+
+local function CaptureWrappedFailure(context, detail, stackLevel)
+    T = T or GetT()
+    local errorLog = T and T.Tools and T.Tools.ErrorLog
+    if errorLog and type(errorLog.CaptureFailure) == "function" then
+        errorLog:CaptureFailure(context, detail, stackLevel or 4)
+    end
 end
 
 ---End a profiling scope and record metrics
@@ -149,9 +340,9 @@ local function EndScope(scope)
         profile.memoryTotalDelta = (profile.memoryTotalDelta or 0) + memoryDelta
         profile.memoryAverageDelta = profile.memoryTotalDelta / profile.memoryCallCount
         profile.memoryMinDelta = (profile.memoryMinDelta == nil) and memoryDelta or
-        math.min(profile.memoryMinDelta, memoryDelta)
+            math.min(profile.memoryMinDelta, memoryDelta)
         profile.memoryMaxDelta = (profile.memoryMaxDelta == nil) and memoryDelta or
-        math.max(profile.memoryMaxDelta, memoryDelta)
+            math.max(profile.memoryMaxDelta, memoryDelta)
         profile.memoryLastDelta = memoryDelta
         profile.memoryBefore = profile.memoryBefore or scope.startMemory
         profile.memoryAfter = endMemory
@@ -178,7 +369,8 @@ local function ProfileFunction(functionName, func)
         EndScope(scope)
 
         if not results[1] then
-            error(results[2])
+            CaptureWrappedFailure(functionName, results[2], 4)
+            error(results[2], 0)
         end
 
         return unpackCompat(results, 2)
@@ -219,7 +411,8 @@ local function RegisterModuleForProfiling(name, tbl, functionNames)
                     EndScope(scope)
 
                     if not results[1] then
-                        error(results[2])
+                        CaptureWrappedFailure(profileName, results[2], 4)
+                        error(results[2], 0)
                     end
 
                     return unpackCompat(results, 2)
@@ -311,8 +504,11 @@ local function StartProfiling()
     profileData = {}
     activeScopeStack = {}
     hookedFunctions = {}
+    ResetMemoryTracking()
     isProfilingActive = true
     profilingStartTime = debugprofilestop()
+    CaptureMemorySample("start", profilingStartTime)
+    StartMemoryWatcher()
 
     -- Use T that we already verified is available
     if not T.GetModule then
@@ -380,6 +576,8 @@ local function StopProfiling()
     end
 
     isProfilingActive = false
+    CaptureMemorySample("stop")
+    StopMemoryWatcher()
     local duration = debugprofilestop() - profilingStartTime
 
     -- Restore original functions
@@ -397,7 +595,9 @@ end
 ---@return string report
 local function GenerateReport()
     if not next(profileData) then
-        return "No profiling data collected."
+        if (memorySummary.sampleCount or 0) == 0 then
+            return "No profiling data collected."
+        end
     end
 
     local lines = {
@@ -413,6 +613,26 @@ local function GenerateReport()
             "Function Name", "Calls", "Total (ms)", "Avg (ms)", "Max (ms)"),
         includeMemoryMetrics and string.rep("─", 108) or string.rep("─", 95),
     }
+
+    if (memorySummary.sampleCount or 0) > 0 then
+        table.insert(lines, string.format(
+            "Memory Growth: start %.2f MB | current %.2f MB | peak %.2f MB | growth %+0.2f MB | largest spike %+0.2f MB | samples %d @ %ss",
+            (memorySummary.baselineAddonKB or 0) / 1024,
+            (memorySummary.currentAddonKB or 0) / 1024,
+            (memorySummary.peakAddonKB or 0) / 1024,
+            (memorySummary.growthKB or 0) / 1024,
+            (memorySummary.largestSpikeKB or 0) / 1024,
+            memorySummary.sampleCount or 0,
+            tostring(memorySummary.sampleInterval or DEFAULT_MEMORY_SAMPLE_INTERVAL)
+        ))
+        table.insert(lines, string.format(
+            "Lua Heap: start %.2f MB | current %.2f MB | peak %.2f MB",
+            (memorySummary.baselineLuaKB or 0) / 1024,
+            (memorySummary.currentLuaKB or 0) / 1024,
+            (memorySummary.peakLuaKB or 0) / 1024
+        ))
+        table.insert(lines, "")
+    end
 
     -- Sort by total time (descending)
     local sorted = {}
@@ -457,9 +677,43 @@ local function ExportData()
         "-- Generated: " .. date("%Y-%m-%d %H:%M:%S"),
         "-- This data can be used to identify performance bottlenecks",
         "-- Memory profiling: " .. (includeMemoryMetrics and "enabled" or "disabled"),
+        "-- Memory sample interval: " .. tostring(memorySampleInterval) .. "s",
         "",
         "local profilingData = {",
     }
+
+    if (memorySummary.sampleCount or 0) > 0 then
+        table.insert(lines, string.format(
+            '    memorySummary = { baselineAddonKB = %.3f, currentAddonKB = %.3f, peakAddonKB = %.3f, growthKB = %.3f, largestSpikeKB = %.3f, baselineLuaKB = %.3f, currentLuaKB = %.3f, peakLuaKB = %.3f, sampleCount = %d, sampleInterval = %d },',
+            memorySummary.baselineAddonKB or 0,
+            memorySummary.currentAddonKB or 0,
+            memorySummary.peakAddonKB or 0,
+            memorySummary.growthKB or 0,
+            memorySummary.largestSpikeKB or 0,
+            memorySummary.baselineLuaKB or 0,
+            memorySummary.currentLuaKB or 0,
+            memorySummary.peakLuaKB or 0,
+            memorySummary.sampleCount or 0,
+            memorySummary.sampleInterval or DEFAULT_MEMORY_SAMPLE_INTERVAL
+        ))
+        table.insert(lines, "    memorySamples = {")
+        local startIndex = math.max(1, #memorySamples - 59)
+        for index = startIndex, #memorySamples do
+            local sample = memorySamples[index]
+            if sample then
+                table.insert(lines, string.format(
+                    '        { t = %.0f, addonKB = %.3f, luaKB = %.3f, deltaStartKB = %.3f, deltaPrevKB = %.3f, reason = "%s" },',
+                    sample.timeMs or 0,
+                    sample.addonKB or 0,
+                    sample.luaKB or 0,
+                    sample.deltaFromStartKB or 0,
+                    sample.deltaFromPreviousKB or 0,
+                    tostring(sample.reason or "tick")
+                ))
+            end
+        end
+        table.insert(lines, "    },")
+    end
 
     for name, profile in pairs(profileData) do
         if includeMemoryMetrics then
@@ -527,8 +781,11 @@ local function GetProfileData()
     return {
         isActive = isProfilingActive,
         memoryProfilingEnabled = includeMemoryMetrics,
+        memorySampleInterval = memorySampleInterval,
         totalProfiles = #sorted,
         profiles = sorted,
+        memorySummary = memorySummary,
+        memorySamples = memorySamples,
         timestamp = date("%Y-%m-%d %H:%M:%S"),
     }
 end
@@ -545,7 +802,7 @@ local function SetMemoryProfilingEnabled(selfOrEnabled, maybeEnabled)
         T:Print(string.format("[TwichUI] Profiler memory metrics %s.", includeMemoryMetrics and "enabled" or "disabled"))
         if isProfilingActive then
             T:Print(
-            "[TwichUI] Note: setting applies to new scope samples immediately; restart profiling for a clean comparison run.")
+                "[TwichUI] Note: setting applies to new scope samples immediately; restart profiling for a clean comparison run.")
         end
     end
 end
@@ -554,10 +811,61 @@ local function IsMemoryProfilingEnabled()
     return includeMemoryMetrics == true
 end
 
+local function SetMemorySampleInterval(selfOrValue, maybeValue)
+    local value = tonumber((maybeValue ~= nil) and maybeValue or selfOrValue) or DEFAULT_MEMORY_SAMPLE_INTERVAL
+    value = math.max(1, math.min(60, math.floor(value + 0.5)))
+    memorySampleInterval = value
+    memorySummary.sampleInterval = value
+
+    local db = GetProfilerDB()
+    if db then
+        db.memorySampleInterval = value
+    end
+
+    if isProfilingActive then
+        StartMemoryWatcher()
+    end
+
+    T = T or GetT()
+    if T and T.Print then
+        T:Print(string.format("[TwichUI] Profiler memory sample interval set to %ds.", value))
+    end
+end
+
+local function GetMemorySampleInterval()
+    return memorySampleInterval
+end
+
+local function GetMemorySummary()
+    return memorySummary
+end
+
+local function GetMemorySamples()
+    return memorySamples
+end
+
+local function CaptureMemorySnapshot(label)
+    if isProfilingActive then
+        return CaptureMemorySample(label or "manual")
+    end
+
+    local usage = GetCurrentMemoryUsage()
+    return {
+        reason = label or "manual",
+        timeMs = 0,
+        addonKB = usage.addonKB,
+        luaKB = usage.luaKB,
+        deltaFromStartKB = 0,
+        deltaFromPreviousKB = 0,
+    }
+end
+
 ---Clear all profiling data
 local function ClearProfiles()
     profileData = {}
     activeScopeStack = {}
+    ResetMemoryTracking()
+    StopMemoryWatcher()
     T = T or GetT()
     if T and T.Print then
         T:Print("[TwichUI] Profiling data cleared.")
@@ -580,6 +888,12 @@ local TwichUIProfiler = {
     IsActive = function() return isProfilingActive end,
     SetMemoryProfilingEnabled = SetMemoryProfilingEnabled,
     IsMemoryProfilingEnabled = IsMemoryProfilingEnabled,
+    SetMemorySampleInterval = SetMemorySampleInterval,
+    GetMemorySampleInterval = GetMemorySampleInterval,
+    GetMemorySummary = GetMemorySummary,
+    GetMemorySamples = GetMemorySamples,
+    CaptureMemorySnapshot = CaptureMemorySnapshot,
+    GetCurrentMemoryUsage = GetCurrentMemoryUsage,
 }
 
 -- Lazy initialization of T and attachment
@@ -590,6 +904,8 @@ local function InitializeProfiler()
     local db = GetProfilerDB()
     if db then
         includeMemoryMetrics = db.includeMemoryMetrics == true
+        memorySampleInterval = math.max(1,
+            math.min(60, math.floor((db.memorySampleInterval or DEFAULT_MEMORY_SAMPLE_INTERVAL) + 0.5)))
     end
 
     T.Tools = T.Tools or {}

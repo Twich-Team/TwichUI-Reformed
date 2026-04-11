@@ -24,6 +24,7 @@ local C_SummonInfo = _G.C_SummonInfo
 local C_Timer = _G.C_Timer
 local CommunitiesUtil = _G["CommunitiesUtil"]
 local EventToastManagerFrame = _G["EventToastManagerFrame"]
+local hasanysecretvalues = _G.hasanysecretvalues
 local ItemLocation = _G.ItemLocation
 local StaticPopupDialogs = _G["StaticPopupDialogs"]
 local UIErrorsFrame = _G["UIErrorsFrame"]
@@ -578,6 +579,17 @@ local function BuildTransformSet()
     return set
 end
 
+local function HasSecretValues(...)
+    if type(hasanysecretvalues) == "function" then
+        local ok, hasSecret = pcall(hasanysecretvalues, ...)
+        if ok and hasSecret then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function CancelBlockedTransforms()
     local blocked = BuildTransformSet()
     if not next(blocked) then
@@ -591,11 +603,25 @@ local function CancelBlockedTransforms()
         if not aura then
             break
         end
-        if aura.spellId and blocked[aura.spellId] then
-            _G.CancelSpellByID(aura.spellId)
+        local spellID = aura.spellId
+        if spellID and not HasSecretValues(spellID) and blocked[spellID] then
+            _G.CancelSpellByID(spellID)
         end
         index = index + 1
     end
+end
+
+local function IsCriticalUiError(err)
+    if HasSecretValues(err) then
+        return true
+    end
+
+    return err == _G.ERR_INV_FULL
+        or err == _G.ERR_QUEST_LOG_FULL
+        or err == _G.ERR_RAID_GROUP_ONLY
+        or err == _G.ERR_PLAYER_DEAD
+        or err == _G.ERR_PET_SPELL_DEAD
+        or err == _G.ERR_PARTY_LFG_TELEPORT_IN_COMBAT
 end
 
 local function InstallErrorFilter()
@@ -606,13 +632,11 @@ local function InstallErrorFilter()
     originalErrorHandler = originalErrorHandler or UIErrorsFrame:GetScript("OnEvent")
     UIErrorsFrame:SetScript("OnEvent", function(self, event, id, err, ...)
         if event == "UI_ERROR_MESSAGE" and Feature({ "text", "hideErrorMessages" }) then
-            if Value({ "text", "showCriticalErrors" }, true) then
-                if err == _G.ERR_INV_FULL or err == _G.ERR_QUEST_LOG_FULL or err == _G.ERR_RAID_GROUP_ONLY or err == _G.ERR_PLAYER_DEAD or err == _G.ERR_PET_SPELL_DEAD or err == _G.ERR_PARTY_LFG_TELEPORT_IN_COMBAT then
-                    if originalErrorHandler then
-                        return originalErrorHandler(self, event, id, err, ...)
-                    end
-                    return
+            if Value({ "text", "showCriticalErrors" }, true) and IsCriticalUiError(err) then
+                if originalErrorHandler then
+                    return originalErrorHandler(self, event, id, err, ...)
                 end
+                return
             end
             return
         end

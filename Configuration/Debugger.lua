@@ -84,16 +84,37 @@ local function BuildDebugConsoleConfiguration()
                 type = "toggle",
                 order = 0,
                 name = "Enable Memory Metrics",
-                desc = "Track per-call memory deltas (KB) during profiling sessions. Keep disabled for lowest overhead.",
+                desc =
+                "Track per-call memory deltas (KB) during profiling sessions. This is separate from the session memory growth watcher.",
                 get = function()
                     local profiler = GetProfiler()
                     return profiler and profiler.IsMemoryProfilingEnabled and profiler.IsMemoryProfilingEnabled() or
-                    false
+                        false
                 end,
                 set = function(_, value)
                     local profiler = GetProfiler()
                     if profiler and profiler.SetMemoryProfilingEnabled then
                         profiler.SetMemoryProfilingEnabled(value == true)
+                    end
+                end,
+            },
+            memorySampleInterval = {
+                type = "range",
+                order = 5,
+                name = "Memory Sample Interval",
+                desc =
+                "How often the profiler snapshots total TwichUI memory while profiling. Lower gives better leak visibility with slightly more overhead.",
+                min = 1,
+                max = 60,
+                step = 1,
+                get = function()
+                    local profiler = GetProfiler()
+                    return profiler and profiler.GetMemorySampleInterval and profiler:GetMemorySampleInterval() or 5
+                end,
+                set = function(_, value)
+                    local profiler = GetProfiler()
+                    if profiler and profiler.SetMemorySampleInterval then
+                        profiler:SetMemorySampleInterval(value)
                     end
                 end,
             },
@@ -147,10 +168,18 @@ local function BuildDebugConsoleConfiguration()
                     local memory = profiler.IsMemoryProfilingEnabled and profiler.IsMemoryProfilingEnabled() == true
                     local profileData = profiler.GetProfileData and profiler:GetProfileData() or nil
                     local count = profileData and profileData.totalProfiles or 0
-                    return string.format("Status: %s | Memory: %s | Profiles: %d",
+                    local summary = profileData and profileData.memorySummary or nil
+                    local growth = summary and summary.growthKB or 0
+                    local samples = summary and summary.sampleCount or 0
+                    local interval = profiler.GetMemorySampleInterval and profiler:GetMemorySampleInterval() or 5
+                    return string.format(
+                        "Status: %s | Call Memory: %s | Profiles: %d | Growth: %+0.2f MB | Samples: %d @ %ss",
                         active and "|cff69b86fACTIVE|r" or "|cffff9a6cINACTIVE|r",
                         memory and "|cff69b86fON|r" or "|cffff9a6cOFF|r",
-                        count)
+                        count,
+                        (growth or 0) / 1024,
+                        samples,
+                        tostring(interval))
                 end,
             },
         }),

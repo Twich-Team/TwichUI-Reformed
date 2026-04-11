@@ -143,8 +143,28 @@ local function AppendEntry(detail)
     end
 
     local now = time()
-    if db._lastDetail == detail and db._lastCapturedAt == now then
-        return nil
+    local dateStrNow = date("%Y-%m-%d %H:%M:%S")
+
+    for index, existing in ipairs(db.errors) do
+        if existing and existing.detail == detail then
+            existing.count = (tonumber(existing.count) or 1) + 1
+            existing.lastSeenAt = now
+            existing.dateStr = dateStrNow
+
+            if index > 1 then
+                table.remove(db.errors, index)
+                table.insert(db.errors, 1, existing)
+            end
+
+            local viewer = Tools.UI and Tools.UI.ErrorLogViewer
+            if viewer and viewer.frame and viewer.frame:IsShown() then
+                viewer:Refresh()
+            end
+
+            db._lastDetail = detail
+            db._lastCapturedAt = now
+            return existing
+        end
     end
 
     db._lastDetail = detail
@@ -152,9 +172,12 @@ local function AppendEntry(detail)
 
     local entry = {
         id = now,
-        dateStr = date("%Y-%m-%d %H:%M:%S"),
+        dateStr = dateStrNow,
         short = MakeShort(detail),
         detail = detail,
+        count = 1,
+        firstSeenAt = now,
+        lastSeenAt = now,
     }
 
     table.insert(db.errors, 1, entry)
@@ -257,6 +280,19 @@ end
 function ErrorLog:GetCount()
     local db = GetLogsDB()
     return db and #db.errors or 0
+end
+
+function ErrorLog:GetTotalOccurrences()
+    local db = GetLogsDB()
+    if not db or type(db.errors) ~= "table" then
+        return 0
+    end
+
+    local total = 0
+    for _, entry in ipairs(db.errors) do
+        total = total + (tonumber(entry and entry.count) or 1)
+    end
+    return total
 end
 
 --- Clear all captured errors.

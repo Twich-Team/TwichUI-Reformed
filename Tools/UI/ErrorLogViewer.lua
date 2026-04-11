@@ -168,6 +168,12 @@ local function MakeListRow(parent)
     nameLabel:SetWordWrap(false)
     row.nameLabel = nameLabel
 
+    local countLabel = row:CreateFontString(nil, "OVERLAY")
+    countLabel:SetPoint("RIGHT", row, "RIGHT", -8, -7)
+    countLabel:SetJustifyH("RIGHT")
+    ApplyFont(countLabel, 9, CLR_WARN[1], CLR_WARN[2], CLR_WARN[3])
+    row.countLabel = countLabel
+
     -- Accent bar on left edge (shown when selected)
     local bar = row:CreateTexture(nil, "BORDER")
     bar:SetPoint("TOPLEFT", row, "TOPLEFT", 1, -1)
@@ -451,9 +457,19 @@ function ErrorLogViewer:Refresh()
     if count == 0 then
         frame.countLabel:SetText("No errors captured")
     elseif count == 1 then
-        frame.countLabel:SetText("1 error captured")
+        local totalOccurrences = el.GetTotalOccurrences and el:GetTotalOccurrences() or count
+        if totalOccurrences > count then
+            frame.countLabel:SetText(string.format("1 unique error | %d occurrences", totalOccurrences))
+        else
+            frame.countLabel:SetText("1 error captured")
+        end
     else
-        frame.countLabel:SetText(count .. " errors captured")
+        local totalOccurrences = el.GetTotalOccurrences and el:GetTotalOccurrences() or count
+        if totalOccurrences > count then
+            frame.countLabel:SetText(string.format("%d unique errors | %d occurrences", count, totalOccurrences))
+        else
+            frame.countLabel:SetText(count .. " errors captured")
+        end
     end
 
     -- Recycle rows: hide all existing
@@ -489,6 +505,10 @@ function ErrorLogViewer:Refresh()
 
         row.dateLabel:SetText(entry.dateStr or "")
         row.nameLabel:SetText(entry.short or "Unknown error")
+        if row.countLabel then
+            local occurrenceCount = tonumber(entry.count) or 1
+            row.countLabel:SetText(occurrenceCount > 1 and ("x" .. occurrenceCount) or "")
+        end
 
         -- Re-apply selection state
         if i == self.selectedIndex then
@@ -547,7 +567,12 @@ function ErrorLogViewer:SelectEntry(index, entry)
     if newRow then SetRowSelected(newRow, true) end
 
     -- Update detail panel
-    frame.detailHeader:SetText("Error Details  |cff55667a—  " .. (entry.dateStr or "") .. "|r")
+    local occurrenceCount = tonumber(entry.count) or 1
+    local headerText = "Error Details  |cff55667a—  " .. (entry.dateStr or "") .. "|r"
+    if occurrenceCount > 1 then
+        headerText = headerText .. "  |cffff9a6cx" .. occurrenceCount .. "|r"
+    end
+    frame.detailHeader:SetText(headerText)
     local detail = entry.detail or entry.short or ""
     frame.detailEditBox:SetText(detail)
     frame.detailEditBox:SetFocus()

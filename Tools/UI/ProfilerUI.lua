@@ -45,7 +45,7 @@ local FRAME_MIN_W = 820
 local FRAME_MIN_H = 520
 local FRAME_MAX_W = 1600
 local FRAME_MAX_H = 1100
-local TITLEBAR_H = 52
+local TITLEBAR_H = 68
 local ROW_H = 36
 local CHART_ROW_H = 28
 local INSET = 6
@@ -177,6 +177,22 @@ end
 local function FormatKB(kb)
     kb = tonumber(kb) or 0
     return format("%.2f", kb)
+end
+
+local function FormatMemoryCompact(kb)
+    kb = tonumber(kb) or 0
+    if math.abs(kb) >= 1024 then
+        return format("%.2f MB", kb / 1024)
+    end
+    return format("%.0f KB", kb)
+end
+
+local function FormatSignedMemoryCompact(kb)
+    kb = tonumber(kb) or 0
+    if kb >= 0 then
+        return "+" .. FormatMemoryCompact(kb)
+    end
+    return "-" .. FormatMemoryCompact(math.abs(kb))
 end
 
 -- Get severity color based on execution time
@@ -513,12 +529,12 @@ local function BuildFrame()
     titleBar:SetHeight(TITLEBAR_H)
 
     local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    title:SetPoint("LEFT", titleBar, "LEFT", 12, 0)
+    title:SetPoint("TOPLEFT", titleBar, "TOPLEFT", 12, -8)
     title:SetText("Profiler Results")
     title:SetTextColor(CLR_ACCENT[1], CLR_ACCENT[2], CLR_ACCENT[3])
 
     local status = titleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    status:SetPoint("LEFT", title, "RIGHT", 20, 0)
+    status:SetPoint("TOPLEFT", title, "TOPRIGHT", 16, -1)
     status:SetText("")
     status:SetTextColor(CLR_TEXT_MUT[1], CLR_TEXT_MUT[2], CLR_TEXT_MUT[3])
     frame.__status = status
@@ -534,6 +550,16 @@ local function BuildFrame()
         ProfilerUI:Refresh()
     end)
     refreshBtn:SetPoint("RIGHT", closeBtn, "LEFT", -8, 0)
+
+    local memorySummary = titleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    memorySummary:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+    memorySummary:SetPoint("RIGHT", refreshBtn, "LEFT", -12, 0)
+    memorySummary:SetJustifyH("LEFT")
+    memorySummary:SetJustifyV("TOP")
+    memorySummary:SetTextColor(CLR_TEXT_MUT[1], CLR_TEXT_MUT[2], CLR_TEXT_MUT[3])
+    memorySummary:SetWordWrap(true)
+    memorySummary:SetText("Memory growth watcher is idle.")
+    frame.__memorySummary = memorySummary
 
     -- Column headers
     local headerPanel = Panel(frame, CLR_BG_MID[1], CLR_BG_MID[2], CLR_BG_MID[3], 0.6)
@@ -858,10 +884,30 @@ function ProfilerUI:Refresh()
     -- Update status
     local isActive = profileData.isActive and "|cff69b86f◌ RECORDING|r" or "|cffff9a6cSTOPPED|r"
     local memoryEnabled = profileData.memoryProfilingEnabled == true
-    frame.__status:SetText(format("%d profiles | %s | Memory: %s",
+    frame.__status:SetText(format("%d profiles | %s | Call Memory: %s | Growth Watch: %ss",
         profileData.totalProfiles,
         isActive,
-        memoryEnabled and "|cff69b86fON|r" or "|cffff9a6cOFF|r"))
+        memoryEnabled and "|cff69b86fON|r" or "|cffff9a6cOFF|r",
+        tostring(profileData.memorySampleInterval or 5)))
+
+    local memorySummary = profileData.memorySummary or {}
+    if frame.__memorySummary then
+        if (memorySummary.sampleCount or 0) > 0 then
+            frame.__memorySummary:SetText(format(
+                "Addon %s -> %s (%s), peak %s, largest spike %s. Lua heap now %s, peak %s.",
+                FormatMemoryCompact(memorySummary.baselineAddonKB),
+                FormatMemoryCompact(memorySummary.currentAddonKB),
+                FormatSignedMemoryCompact(memorySummary.growthKB),
+                FormatMemoryCompact(memorySummary.peakAddonKB),
+                FormatSignedMemoryCompact(memorySummary.largestSpikeKB),
+                FormatMemoryCompact(memorySummary.currentLuaKB),
+                FormatMemoryCompact(memorySummary.peakLuaKB)
+            ))
+        else
+            frame.__memorySummary:SetText(
+            "Memory growth watcher is idle. Start profiling and let it run through the scenario you want to inspect.")
+        end
+    end
     if frame.__headers and frame.__headers.memAvg and frame.__headers.memMax then
         frame.__memoryEnabled = memoryEnabled
         frame.__headers.memAvg:SetShown(memoryEnabled)

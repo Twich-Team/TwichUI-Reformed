@@ -14,7 +14,19 @@ A comprehensive profiling system for identifying performance bottlenecks in Twic
 /tui profile export     - Export data to chat (copy-paste to a file)
 /tui profile clear      - Clear all profiling data
 /tui profile status     - Show available commands
+/tui profile memory summary   - Print session memory growth summary
+/tui profile memory snapshot  - Force a memory sample now
+/tui profile memory interval 5 - Set growth sample interval in seconds
 ```
+
+### Memory Growth Watcher
+
+The profiler now has two different memory views:
+
+- **Per-call memory metrics**: memory delta at function scope boundaries. Useful for spotting alloc-heavy handlers.
+- **Session memory growth watcher**: periodic snapshots of total `TwichUI_Reformed` memory and Lua heap while profiling is active. Useful for tracking steady growth from 30 MB to 200 MB style problems.
+
+The growth watcher runs automatically while profiling is active, even if per-call memory metrics are off.
 
 ## Visual Window
 
@@ -100,6 +112,43 @@ This outputs Lua-formatted data you can:
 - Use in external analysis tools
 - Store for comparison between runs
 
+### Scenario 3: Track a Long Memory Climb
+
+1. Set a sample interval that matches the problem shape:
+
+   ```
+   /tui profile memory interval 5
+   ```
+
+2. Start profiling before the activity that leaks or retains memory:
+
+   ```
+   /tui profile start
+   ```
+
+3. Play through the scenario until memory has clearly climbed.
+
+4. Print a summary and take a forced snapshot:
+
+   ```
+   /tui profile memory summary
+   /tui profile memory snapshot
+   ```
+
+5. Stop profiling and open the report window:
+
+   ```
+   /tui profile stop
+   /tui profile report
+   ```
+
+Look for:
+
+- **Large positive growth** with very small or no recovery
+- **Repeated large spikes** during specific actions
+- **Lua heap growth** that tracks with addon growth
+- **Per-call memory offenders** that line up with the time period of growth
+
 ## Understanding the Metrics
 
 | Metric         | What It Means                 | Warning Signs                                        |
@@ -108,6 +157,17 @@ This outputs Lua-formatted data you can:
 | **Calls**      | Number of times executed      | High = called very often (may need caching)          |
 | **Avg (ms)**   | Average time per execution    | High = single call is expensive                      |
 | **Max (ms)**   | Longest single execution      | High = creates lag spikes                            |
+
+For leak hunting, also watch these session-level memory fields:
+
+| Metric               | What It Means                                    | Warning Signs                           |
+| -------------------- | ------------------------------------------------ | --------------------------------------- |
+| **Start AddOn MB**   | Memory when profiling began                      | Baseline only                           |
+| **Current AddOn MB** | Current TwichUI addon memory                     | Keeps climbing with no recovery         |
+| **Peak AddOn MB**    | Highest TwichUI addon memory seen during session | Much higher than current after spikes   |
+| **Growth MB**        | Net change since start                           | Large positive drift over time          |
+| **Largest Spike**    | Biggest one-sample increase                      | Large bursts tied to one feature/action |
+| **Lua Heap MB**      | Whole Lua heap size                              | Grows with addon memory and stays high  |
 
 ## Visual Window Guide
 
@@ -152,6 +212,13 @@ The header shows the profiling status:
 
 - **◌ RECORDING** (green) — Currently profiling
 - **STOPPED** (red) — Profiling complete, no new data being collected
+
+When growth samples exist, the header also shows:
+
+- Addon memory start/current/peak
+- Net growth across the run
+- Largest observed spike between samples
+- Current and peak Lua heap
 
 ## Programmatic Usage
 
@@ -257,6 +324,7 @@ The profiler has minimal overhead:
 - Profiling only runs when explicitly started
 - Each scope entry/exit uses `debugprofilestop()` (WoW's built-in profiler)
 - Profiling data is stored in memory (cleared when profiling is stopped)
+- The memory growth watcher samples total addon memory on an interval, which is far cheaper than wrapping every function solely to detect long-term growth
 
 **Note**: Profiling WILL impact frame rate while active. Use it for diagnostic purposes, not during critical gameplay.
 
