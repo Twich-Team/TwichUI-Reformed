@@ -151,8 +151,25 @@ function ConfigurationModule:RebuildOptionsTableSections()
     end
 
     for name, func in pairs(self.registeredConfigurationFunctions) do
-        local section = func()
-        self.optionsTable.args[name] = section
+        local ok, result = pcall(func)
+        if ok and result then
+            self.optionsTable.args[name] = result
+        else
+            -- Section failed to build — insert a placeholder so the user can diagnose
+            local err = ok and "returned nil" or tostring(result)
+            self.optionsTable.args[name] = {
+                type  = "group",
+                name  = "|cffff4444" .. tostring(name) .. " [Error]|r",
+                order = 9999,
+                args  = {
+                    msg = {
+                        type = "description",
+                        order = 0,
+                        name = "|cffff4444Section failed to build:|r\n" .. tostring(err),
+                    },
+                },
+            }
+        end
     end
 
     ApplyAlphabeticalRootSectionOrder(self.optionsTable)

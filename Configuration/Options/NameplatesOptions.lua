@@ -505,6 +505,52 @@ function Options:BuildConfiguration()
                         order = 2,
                         func  = function() Options:ToggleTestMode() end,
                     },
+                    diagDump = {
+                        type  = "execute",
+                        name  = "Dump Plate State to Chat",
+                        desc  = "Prints live nameplate frame diagnostics to the chat window. Equivalent to /tui npdebug.",
+                        order = 3,
+                        func  = function()
+                            local mod = T:GetModule("Nameplates", true)
+                            if not mod then
+                                T:Print("[NP] Module not loaded."); return
+                            end
+                            local db = mod.GetDB and mod:GetDB()
+                            if db then
+                                T:Print(string.format("[NP] healthFormat=%s  healthFontSize=%s  healthFont=%s",
+                                    tostring(db.healthFormat), tostring(db.healthFontSize), tostring(db.healthFont)))
+                                T:Print(string.format("[NP] healthTextAnchor=%s  showAbsorb=%s",
+                                    tostring(db.healthTextAnchor), tostring(db.showAbsorb)))
+                            end
+                            T:Print(string.format("[NP] IsEnabled=%s", tostring(mod:IsEnabled())))
+                            local total, visible = 0, 0
+                            if mod._plates then
+                                for _, frame in pairs(mod._plates) do
+                                    total = total + 1
+                                    if frame and frame:IsShown() then visible = visible + 1 end
+                                end
+                            end
+                            T:Print(string.format("[NP] Tracked plates: %d  Visible: %d", total, visible))
+                            if mod._plates then
+                                for unit, frame in pairs(mod._plates) do
+                                    if frame and frame:IsShown() then
+                                        T:Print(string.format("[NP] Sample unit: %s", tostring(unit)))
+                                        local ht = frame.healthText
+                                        if ht then
+                                            local font, size = ht:GetFont()
+                                            T:Print(string.format(
+                                                "  healthText: IsShown=%s Text='%s' Points=%d Font=%s sz=%s",
+                                                tostring(ht:IsShown()), tostring(ht:GetText() or ""),
+                                                ht:GetNumPoints(), tostring(font), tostring(size)))
+                                        else
+                                            T:Print("  healthText: NOT CREATED")
+                                        end
+                                        break
+                                    end
+                                end
+                            end
+                        end,
+                    },
                     sep1 = { type = "header", name = "Layout", order = 10 },
                     width = {
                         type = "range",
@@ -587,9 +633,9 @@ function Options:BuildConfiguration()
                         set = function(_, v) Options:SetHealthColorMode(_, v) end,
                     },
                     healthCustomColor = {
-                        type = "color",
-                        name = "Custom Health Color",
-                        order = 2,
+                        type     = "color",
+                        name     = "Custom Health Color",
+                        order    = 2,
                         hasAlpha = false,
                         hidden   = function() return Options:GetHealthColorMode() ~= "custom" end,
                         get      = function() return Options:GetHealthCustomColor() end,
@@ -654,22 +700,22 @@ function Options:BuildConfiguration()
                         set = function(_, r, g, b, a) SetReactionColor("colorRare", r, g, b, a) end,
                     },
                     colorByCaster = {
-                        type = "toggle",
-                        name = "Differentiate Casters",
+                        type  = "toggle",
+                        name  = "Differentiate Casters",
                         order = 24,
-                        desc =
+                        desc  =
                         "Use a separate color for NPC units that are inherently caster-type (e.g. Paladin healer NPCs, detected via class type — not active casting).",
-                        get  = function() return Options:GetColorByCaster() end,
-                        set  = function(_, v) Options:SetColorByCaster(_, v) end,
+                        get   = function() return Options:GetColorByCaster() end,
+                        set   = function(_, v) Options:SetColorByCaster(_, v) end,
                     },
                     colorNpcCaster = {
-                        type = "color",
-                        name = "NPC Caster Color",
-                        order = 25,
+                        type     = "color",
+                        name     = "NPC Caster Color",
+                        order    = 25,
                         hasAlpha = false,
-                        hidden = function() return not Options:GetColorByCaster() end,
-                        get    = function() return GetReactionColor("colorNpcCaster", 0.90, 0.45, 0.22) end,
-                        set    = function(_, r, g, b, a) SetReactionColor("colorNpcCaster", r, g, b, a) end,
+                        hidden   = function() return not Options:GetColorByCaster() end,
+                        get      = function() return GetReactionColor("colorNpcCaster", 0.90, 0.45, 0.22) end,
+                        set      = function(_, r, g, b, a) SetReactionColor("colorNpcCaster", r, g, b, a) end,
                     },
                 },
             },
@@ -953,9 +999,9 @@ function Options:BuildConfiguration()
                         set = function(_, v) Options:SetShowName(_, v) end,
                     },
                     nameFormat = {
-                        type = "select",
-                        name = "Name Format",
-                        order = 2,
+                        type   = "select",
+                        name   = "Name Format",
+                        order  = 2,
                         values = NAME_FORMAT_VALUES,
                         hidden = function() return not Options:GetShowName() end,
                         get    = function() return Options:GetNameFormat() end,
@@ -1027,49 +1073,49 @@ function Options:BuildConfiguration()
                         set = function(_, v) Options:SetShowAuras(_, v) end,
                     },
                     auraFilter = {
-                        type = "select",
-                        name = "Aura Filter",
-                        order = 2,
+                        type   = "select",
+                        name   = "Aura Filter",
+                        order  = 2,
                         values = AURA_FILTER_VALUES,
                         hidden = function() return not Options:GetShowAuras() end,
                         get    = function() return Options:GetAuraFilter() end,
                         set    = function(_, v) Options:SetAuraFilter(_, v) end,
                     },
                     auraOnlyMine = {
-                        type = "toggle",
-                        name = "Show Only Mine",
-                        order = 3,
+                        type   = "toggle",
+                        name   = "Show Only Mine",
+                        order  = 3,
                         desc   = "Only display auras applied by you.",
                         hidden = function() return not Options:GetShowAuras() end,
                         get    = function() return Options:GetAuraOnlyMine() end,
                         set    = function(_, v) Options:SetAuraOnlyMine(_, v) end,
                     },
                     auraMax = {
-                        type = "range",
-                        name = "Max Auras",
-                        order = 4,
-                        min = 1,
-                        max = 10,
-                        step = 1,
+                        type   = "range",
+                        name   = "Max Auras",
+                        order  = 4,
+                        min    = 1,
+                        max    = 10,
+                        step   = 1,
                         hidden = function() return not Options:GetShowAuras() end,
                         get    = function() return Options:GetAuraMax() end,
                         set    = function(_, v) Options:SetAuraMax(_, v) end,
                     },
                     auraSize = {
-                        type = "range",
-                        name = "Icon Size",
-                        order = 5,
-                        min = 12,
-                        max = 40,
-                        step = 1,
+                        type   = "range",
+                        name   = "Icon Size",
+                        order  = 5,
+                        min    = 12,
+                        max    = 40,
+                        step   = 1,
                         hidden = function() return not Options:GetShowAuras() end,
                         get    = function() return Options:GetAuraSize() end,
                         set    = function(_, v) Options:SetAuraSize(_, v) end,
                     },
                     auraShowTimer = {
-                        type = "toggle",
-                        name = "Show Timer Text",
-                        order = 6,
+                        type   = "toggle",
+                        name   = "Show Timer Text",
+                        order  = 6,
                         hidden = function() return not Options:GetShowAuras() end,
                         get    = function() return Options:GetAuraShowTimer() end,
                         set    = function(_, v) Options:SetAuraShowTimer(_, v) end,
@@ -1088,9 +1134,9 @@ function Options:BuildConfiguration()
                         set = function(_, v) Options:SetAuraTimerFontSize(_, v) end,
                     },
                     auraTestMode = {
-                        type = "toggle",
-                        name = "Show in Preview Mode",
-                        order = 8,
+                        type   = "toggle",
+                        name   = "Show in Preview Mode",
+                        order  = 8,
                         desc   = "Display fake aura icons when preview / test mode is active.",
                         hidden = function() return not Options:GetShowAuras() end,
                         get    = function() return Options:GetAuraTestMode() end,
@@ -1106,13 +1152,13 @@ function Options:BuildConfiguration()
                 order = 9,
                 args  = {
                     showTargetGlow = {
-                        type = "toggle",
-                        name = "Target / Focus Glow",
+                        type  = "toggle",
+                        name  = "Target / Focus Glow",
                         order = 1,
                         width = "full",
-                        desc = "Highlight target and focus with a colored glow.",
-                        get  = function() return Options:GetShowTargetGlow() end,
-                        set  = function(_, v) Options:SetShowTargetGlow(_, v) end,
+                        desc  = "Highlight target and focus with a colored glow.",
+                        get   = function() return Options:GetShowTargetGlow() end,
+                        set   = function(_, v) Options:SetShowTargetGlow(_, v) end,
                     },
                     targetGlowOutset = {
                         type = "range",
@@ -1126,22 +1172,22 @@ function Options:BuildConfiguration()
                         set = function(_, v) Options:SetTargetGlowOutset(_, v) end,
                     },
                     targetGlowColor = {
-                        type = "color",
-                        name = "Target Glow Color",
-                        order = 3,
+                        type     = "color",
+                        name     = "Target Glow Color",
+                        order    = 3,
                         hasAlpha = true,
-                        hidden = function() return not Options:GetShowTargetGlow() end,
-                        get    = function() return Options:GetTargetGlowColor() end,
-                        set    = function(_, r, g, b, a) Options:SetTargetGlowColor(_, r, g, b, a) end,
+                        hidden   = function() return not Options:GetShowTargetGlow() end,
+                        get      = function() return Options:GetTargetGlowColor() end,
+                        set      = function(_, r, g, b, a) Options:SetTargetGlowColor(_, r, g, b, a) end,
                     },
                     focusGlowColor = {
-                        type = "color",
-                        name = "Focus Glow Color",
-                        order = 4,
+                        type     = "color",
+                        name     = "Focus Glow Color",
+                        order    = 4,
                         hasAlpha = true,
-                        hidden = function() return not Options:GetShowTargetGlow() end,
-                        get    = function() return Options:GetFocusGlowColor() end,
-                        set    = function(_, r, g, b, a) Options:SetFocusGlowColor(_, r, g, b, a) end,
+                        hidden   = function() return not Options:GetShowTargetGlow() end,
+                        get      = function() return Options:GetFocusGlowColor() end,
+                        set      = function(_, r, g, b, a) Options:SetFocusGlowColor(_, r, g, b, a) end,
                     },
                     sepGrow = { type = "header", name = "Target Scale", order = 10 },
                     targetGrowWidth = {
@@ -1194,12 +1240,12 @@ function Options:BuildConfiguration()
                 order = 10,
                 args  = {
                     showThreat = {
-                        type = "toggle",
-                        name = "Threat Accent",
+                        type  = "toggle",
+                        name  = "Threat Accent",
                         order = 1,
-                        desc = "Color the left edge of enemy plates based on threat level.",
-                        get  = function() return Options:GetShowThreat() end,
-                        set  = function(_, v) Options:SetShowThreat(_, v) end,
+                        desc  = "Color the left edge of enemy plates based on threat level.",
+                        get   = function() return Options:GetShowThreat() end,
+                        set   = function(_, v) Options:SetShowThreat(_, v) end,
                     },
                     showAbsorb = {
                         type = "toggle",

@@ -23,45 +23,55 @@
       • CVars applied through pcall + C_CVar fallback
 ]]
 
-local TwichRx                = _G.TwichRx
+local TwichRx             = _G.TwichRx
 ---@type TwichUI
-local T                      = unpack(TwichRx)
+local T                   = unpack(TwichRx)
 
 ---@class NameplatesModule : AceModule, AceEvent-3.0, AceTimer-3.0
-local Nameplates             = T:NewModule("Nameplates", "AceEvent-3.0", "AceTimer-3.0")
+local Nameplates          = T:NewModule("Nameplates", "AceEvent-3.0", "AceTimer-3.0")
 
 -- ── WoW API locals ──────────────────────────────────────────────────────────
-local CreateFrame            = _G.CreateFrame
-local UIParent               = _G.UIParent
-local C_NamePlate            = _G.C_NamePlate
-local C_UnitAuras            = _G.C_UnitAuras
-local C_Timer                = _G.C_Timer
-local C_Spell                = _G.C_Spell
-local UnitReaction           = _G.UnitReaction
-local UnitExists             = _G.UnitExists
-local UnitHealth             = _G.UnitHealth
-local UnitHealthMax          = _G.UnitHealthMax
-local UnitName               = _G.UnitName
-local UnitIsPlayer           = _G.UnitIsPlayer
-local UnitLevel              = _G.UnitLevel
-local UnitIsUnit             = _G.UnitIsUnit
-local UnitClass              = _G.UnitClass
-local UnitAffectingCombat    = _G.UnitAffectingCombat
-local UnitThreatSituation    = _G.UnitThreatSituation
-local UnitIsTapDenied        = _G.UnitIsTapDenied
-local UnitGetTotalAbsorbs    = _G.UnitGetTotalAbsorbs
-local UnitIsDeadOrGhost      = _G.UnitIsDeadOrGhost
-local UnitCastingInfo        = _G.UnitCastingInfo
-local UnitChannelInfo        = _G.UnitChannelInfo
-local UnitClassification     = _G.UnitClassification
-local GetTime                = _G.GetTime
-local RAID_CLASS_COLORS      = _G.RAID_CLASS_COLORS
-local C_ClassColor           = _G.C_ClassColor
-local math_max               = math.max
-local math_min               = math.min
-local math_floor             = math.floor
+local CreateFrame         = _G.CreateFrame
+local UIParent            = _G.UIParent
+local C_NamePlate         = _G.C_NamePlate
+local C_UnitAuras         = _G.C_UnitAuras
+local C_Timer             = _G.C_Timer
+local C_Spell             = _G.C_Spell
+local UnitReaction        = _G.UnitReaction
+local UnitExists          = _G.UnitExists
+local UnitHealth          = _G.UnitHealth
+local UnitHealthMax       = _G.UnitHealthMax
+local UnitName            = _G.UnitName
+local UnitIsPlayer        = _G.UnitIsPlayer
+local UnitLevel           = _G.UnitLevel
+local UnitIsUnit          = _G.UnitIsUnit
+local UnitClass           = _G.UnitClass
+local UnitAffectingCombat = _G.UnitAffectingCombat
+local UnitThreatSituation = _G.UnitThreatSituation
+local UnitIsTapDenied     = _G.UnitIsTapDenied
+local UnitGetTotalAbsorbs = _G.UnitGetTotalAbsorbs
+local UnitIsDeadOrGhost   = _G.UnitIsDeadOrGhost
+local UnitCastingInfo     = _G.UnitCastingInfo
+local UnitChannelInfo     = _G.UnitChannelInfo
+local UnitClassification  = _G.UnitClassification
+local GetTime             = _G.GetTime
+local RAID_CLASS_COLORS   = _G.RAID_CLASS_COLORS
+local C_ClassColor        = _G.C_ClassColor
+local math_max            = math.max
+local math_min            = math.min
+local math_floor          = math.floor
 
--- ── Module defaults ──────────────────────────────────────────────────────────
+-- ── Debug logging helper ──────────────────────────────────────────────────────
+local _debugConsoleRef    = nil
+local function NpLog(msg)
+    if not _debugConsoleRef then
+        _debugConsoleRef = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+    end
+    if _debugConsoleRef and type(_debugConsoleRef.Log) == "function" then
+        _debugConsoleRef:Log("nameplates", msg, false)
+    end
+end
+
 local NP_DEFAULT_WIDTH       = 220
 local NP_DEFAULT_HEIGHT      = 22
 local NP_DEFAULT_CAST_HEIGHT = 12
@@ -470,18 +480,20 @@ function Nameplates:BuildPlateFrame(parentPlate)
     nameText:SetJustifyH(db.nameJustify or "LEFT")
     nameText:SetTextColor(1, 1, 1, 1)
     nameText:SetWordWrap(false)
-    frame.nameText         = nameText
+    frame.nameText     = nameText
 
     -- ── Health text ───────────────────────────────────────────────────────────
-    local hf, hs, hfl      = GetPlateFont("health", Clamp(db.healthFontSize or 9, 6, 18), db)
-    local hTextAnchor      = db.healthTextAnchor or "RIGHT"
-    local hTextOX, hTextOY = db.healthTextOffsetX or (hTextAnchor == "RIGHT" and -3 or 3),
-        db.healthTextOffsetY or 0
-    local healthText       = healthBar:CreateFontString(nil, "OVERLAY")
+    local hf, hs, hfl  = GetPlateFont("health", Clamp(db.healthFontSize or 9, 6, 18), db)
+    local hTextJustify = db.healthTextAnchor or "RIGHT"     -- "LEFT", "CENTER", or "RIGHT"
+    local hTextOX      = db.healthTextOffsetX or 0
+    local hTextOY      = db.healthTextOffsetY or 0
+    local healthText   = healthBar:CreateFontString(nil, "OVERLAY")
     healthText:SetFont(hf, hs, hfl)
     if db.healthFontShadow then healthText:SetShadowOffset(1, -1) else healthText:SetShadowOffset(0, 0) end
-    healthText:SetPoint(hTextAnchor, healthBar, hTextAnchor, hTextOX, hTextOY)
-    healthText:SetJustifyH(hTextAnchor == "LEFT" and "LEFT" or "RIGHT")
+    -- Span the full healthBar width so the FontString has size; justify controls L/C/R position.
+    healthText:SetPoint("LEFT", healthBar, "LEFT", 4 + hTextOX, hTextOY)
+    healthText:SetPoint("RIGHT", healthBar, "RIGHT", -4 + hTextOX, hTextOY)
+    healthText:SetJustifyH(hTextJustify)
     healthText:SetTextColor(1, 1, 1, 1)
     frame.healthText = healthText
 
@@ -542,13 +554,14 @@ function Nameplates:BuildPlateFrame(parentPlate)
     castShield:Hide()
     frame.castShield = castShield
 
-    -- Cast spell name text
+    -- Cast spell name text — parented to castBar (not castContainer) so it renders
+    -- above the castBar's fill rather than being covered by the child Frame.
     local cf, cs, cfl = GetPlateFont("cast", Clamp(db.castFontSize or 9, 6, 16), db)
-    local castText = castContainer:CreateFontString(nil, "OVERLAY")
+    local castText = castBar:CreateFontString(nil, "OVERLAY")
     castText:SetFont(cf, cs, cfl)
     if db.castFontShadow then castText:SetShadowOffset(1, -1) else castText:SetShadowOffset(0, 0) end
-    castText:SetPoint("LEFT", castContainer, "LEFT", 4, 0)
-    castText:SetPoint("RIGHT", castContainer, "RIGHT", -4, 0)
+    castText:SetPoint("LEFT", castBar, "LEFT", 4, 0)
+    castText:SetPoint("RIGHT", castBar, "RIGHT", -4, 0)
     castText:SetJustifyH("CENTER")
     castText:SetTextColor(1, 1, 1, 0.9)
     castText:SetWordWrap(false)
@@ -616,47 +629,35 @@ function Nameplates:UpdateHealth(frame, unit)
     frame.healthBar:SetMinMaxValues(0, hpMax)
     frame.healthBar:SetValue(hp)
 
-    -- Absorb overlay — absorb value is secret; never compare to a numeric literal.
-    -- Truthiness (if absorb) is safe; numeric comparisons (absorb ~= 0) are not.
+    -- Absorb overlay.
+    -- In Midnight, UnitGetTotalAbsorbs returns a secret number. Comparison (absorb > 0) is blocked
+    -- by the taint system — even inside pcall it fails as an upvalue comparison error.
+    -- Solution: always set the bar and show it; zero absorb produces zero fill (visually absent).
     if db.showAbsorb ~= false and UnitGetTotalAbsorbs then
         local absorb = UnitGetTotalAbsorbs(unit)
-        if absorb then
-            frame.absorbBar:SetMinMaxValues(0, hpMax)
-            frame.absorbBar:SetValue(absorb)
-            frame.absorbBar:Show()
-        else
-            frame.absorbBar:Hide()
-        end
+        frame.absorbBar:SetMinMaxValues(0, hpMax)
+        frame.absorbBar:SetValue(absorb)
+        frame.absorbBar:Show()
+    else
+        frame.absorbBar:Hide()
     end
 
-    -- Health text — all arithmetic is inside pcall so a taint error is silenced.
-    -- If the values are secret (non-numeric to Lua) we simply clear the text.
+    -- Health text.
+    -- In Midnight, ALL Lua arithmetic on nameplate unit health secrets is blocked by the taint
+    -- system — direct division, multiplication, and comparison all fail with:
+    --   "attempt to perform arithmetic on local/upvalue 'hp' (a secret number value tainted by ...)"
+    -- Plater explicitly skips health arithmetic for Midnight (IS_WOW_PROJECT_MIDNIGHT guards in
+    -- QuickHealthUpdate / OnUpdateHealth) with a --TODO: MIDNIGHT!! comment in UpdateLifePercentText.
+    -- The only safe display path is AbbreviateNumbers(hp): a WoW C API that accepts secret numbers
+    -- and returns a real formatted string ("125k", "1.2M", etc.).
+    -- All health text formats (percent, current, deficit) display abbreviated absolute health.
     if frame.healthText then
-        local fmt = db.healthFormat
-        if not fmt or fmt == "none" then
+        local fmt = db.healthFormat or "percent"
+        if fmt == "none" then
             frame.healthText:SetText("")
         else
-            local ok, text = pcall(function()
-                local h  = tonumber(hp) or 0
-                local hm = tonumber(hpMax) or 1
-                if hm == 0 then hm = 1 end
-                if fmt == "percent" then
-                    return string.format("%d%%", math_floor(h / hm * 100 + 0.5))
-                elseif fmt == "current" then
-                    if h >= 1000000 then
-                        return string.format("%.1fM", h / 1000000)
-                    elseif h >= 1000 then
-                        return string.format("%.1fk", h / 1000)
-                    else
-                        return tostring(math_floor(h))
-                    end
-                elseif fmt == "deficit" then
-                    local deficit = hm - h
-                    return deficit > 0 and string.format("-%d", math_floor(deficit)) or ""
-                end
-                return ""
-            end)
-            frame.healthText:SetText(ok and text or "")
+            local AbbNums = _G.AbbreviateNumbers
+            frame.healthText:SetText(AbbNums and AbbNums(hp) or "")
         end
     end
 
@@ -982,7 +983,10 @@ end
 
 function Nameplates:UpdateAllElements(frame, unit)
     if not frame or not unit then return end
-    if not UnitExists(unit) then return end
+    if not UnitExists(unit) then
+        NpLog(string.format("UpdateAllElements skipped: UnitExists(%s)=false", tostring(unit)))
+        return
+    end
 
     self:UpdateHealth(frame, unit)
     self:UpdateName(frame, unit)
@@ -1705,4 +1709,174 @@ function Nameplates:RegisterMovers()
             },
         },
     })
+end
+
+-- ── Debug report ─────────────────────────────────────────────────────────────
+function Nameplates:BuildDebugReport()
+    local lines = {}
+    local function add(s) lines[#lines + 1] = s end
+
+    add("=== Nameplates Debug Report ===")
+    add("")
+
+    -- DB snapshot
+    add("--- DB ---")
+    local db = self:GetDB()
+    if db then
+        local keys = {
+            "enabled", "width", "height", "alpha", "scale",
+            "healthColorMode", "healthFont", "healthFontSize", "healthFontFlags",
+            "healthFormat", "healthTextAnchor", "showAbsorb",
+            "castFont", "castFontSize", "castHeight",
+            "nameFont", "nameFontSize", "nameFontFlags",
+            "showLevel", "showEliteIcon", "showTargetGlow", "showTargetArrow",
+            "showThreat", "showAuras", "auraSize", "auraMax",
+        }
+        for _, k in ipairs(keys) do
+            local v = db[k]
+            add(string.format("  %-28s = %s", k, tostring(v)))
+        end
+    else
+        add("  DB unavailable")
+    end
+    add("")
+
+    -- Theme
+    add("--- Theme ---")
+    local theme = self._themeCache or (T and T:GetModule("Theme", true))
+    if theme and type(theme.Get) == "function" then
+        for _, k in ipairs({ "statusBarTexture", "globalFont", "primaryColor" }) do
+            local ok, v = pcall(theme.Get, theme, k)
+            add(string.format("  %-28s = %s", k, ok and tostring(v) or "error"))
+        end
+    else
+        add("  Theme module unavailable")
+    end
+    add("")
+
+    -- Plate count
+    local total, visible = 0, 0
+    for _, frame in pairs(self._plates) do
+        total = total + 1
+        if frame and frame:IsShown() then visible = visible + 1 end
+    end
+    add(string.format("--- Plates: %d tracked / %d visible ---", total, visible))
+
+    -- First visible plate detail
+    local found = false
+    for unit, frame in pairs(self._plates) do
+        if frame and frame:IsShown() then
+            found = true
+            add(string.format("  sample unit : %s", tostring(unit)))
+            add(string.format("  frame size  : %.0f x %.0f", frame:GetWidth(), frame:GetHeight()))
+
+            local hb = frame.healthBar
+            if hb then
+                add(string.format("  healthBar   : IsShown=%s  w=%.0f h=%.0f",
+                    tostring(hb:IsShown()), hb:GetWidth(), hb:GetHeight()))
+            end
+
+            local ht = frame.healthText
+            if ht then
+                local font, size, flags = ht:GetFont()
+                add(string.format("  healthText  : IsShown=%s  text=%q  pts=%d",
+                    tostring(ht:IsShown()), tostring(ht:GetText() or ""), ht:GetNumPoints()))
+                add(string.format("  healthFont  : %s  sz=%s  flags=%s",
+                    tostring(font), tostring(size), tostring(flags)))
+            else
+                add("  healthText  : NOT CREATED")
+            end
+
+            local ab = frame.absorbBar
+            if ab then
+                add(string.format("  absorbBar   : IsShown=%s", tostring(ab:IsShown())))
+            end
+
+            local cb = frame.castBar
+            if cb then
+                add(string.format("  castBar     : IsShown=%s  w=%.0f h=%.0f",
+                    tostring(cb:IsShown()), cb:GetWidth(), cb:GetHeight()))
+            end
+
+            local ct = frame.castText
+            if ct then
+                add(string.format("  castText    : IsShown=%s  text=%q  pts=%d",
+                    tostring(ct:IsShown()), tostring(ct:GetText() or ""), ct:GetNumPoints()))
+            else
+                add("  castText    : NOT CREATED")
+            end
+
+            local ti = frame.targetIndicator
+            if ti then
+                add(string.format("  targetArrow : IsShown=%s", tostring(ti:IsShown())))
+            end
+
+            local ei = frame.eliteIcon
+            if ei then
+                add(string.format("  eliteIcon   : IsShown=%s", tostring(ei:IsShown())))
+            end
+
+            break
+        end
+    end
+    if not found then
+        add("  (no visible plates in range)")
+    end
+
+    add("")
+    add("=== End Nameplates Report ===")
+
+    -- Append any diagnostic log lines captured since load.
+    -- Lines may contain secret strings if previous code passed secrets to NpLog;
+    -- use a safe per-element tostring that falls back to "<secret>" instead of
+    -- crashing table.concat with an invalid value.
+    local dc = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+    if dc and dc.GetLines then
+        local logLines = dc:GetLines("nameplates")
+        if logLines and #logLines > 0 then
+            add("")
+            add("--- Diagnostic log (last " .. math.min(#logLines, 20) .. ") ---")
+            local start = math.max(1, #logLines - 19)
+            for i = start, #logLines do
+                local v = logLines[i]
+                if type(v) == "string" then
+                    add(v)
+                else
+                    local ok, s = pcall(tostring, v)
+                    add((ok and type(s) == "string") and s or "<secret>")
+                end
+            end
+        end
+    end
+
+    -- Safe concat: guard against any secrets that slipped into the lines table.
+    local out = {}
+    for i, v in ipairs(lines) do
+        if type(v) == "string" then
+            out[i] = v
+        else
+            local ok, s = pcall(tostring, v)
+            out[i] = (ok and type(s) == "string") and s or "<secret@" .. tostring(i) .. ">"
+        end
+    end
+    return table.concat(out, "\n")
+end
+
+-- ── DebugConsole source registration ────────────────────────────────────────
+do
+    local DebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+    if DebugConsole and DebugConsole.RegisterSource then
+        DebugConsole:RegisterSource("nameplates", {
+            title       = "Nameplates",
+            order       = 30,
+            aliases     = { "np", "nameplate" },
+            maxLines    = 200,
+            isEnabled   = function()
+                return Nameplates:IsEnabled()
+            end,
+            buildReport = function()
+                return Nameplates:BuildDebugReport()
+            end,
+        })
+    end
 end

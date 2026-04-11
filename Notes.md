@@ -2,7 +2,12 @@
 
 ## NOTES
 
-- Please look at plater and there large selection of advanced configurations. we need some more of that. Particularly, at minimum I need to configure colors for when im tanking and have or do not have aggro, stacking settings, screen clamping, etc.
+- Please look at plater and their large selection of advanced configurations. we need some more of that. Particularly, at minimum I need to configure colors for when im tanking and have or do not have aggro, if im not tanking and have aggro, stacking settings, screen clamping, etc.
+
+- I cannot see the health text or the cast text
+- In the fonts section, i cant tell what settings are for what, you need to create subsections so i know which settings are for health, etc.
+- I cannot see target arrow or glow. I do see an outline that is offset (padded) from the health bar, that i cannot control
+- I do not see icons for elites or bosses when enabled
 
 # Tweaks
 

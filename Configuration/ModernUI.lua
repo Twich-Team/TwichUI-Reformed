@@ -126,6 +126,13 @@ local NAV_ITEMS = {
         accent = { 0.87, 0.35, 0.35 },
         path = { "nameplates" },
     },
+    {
+        id = "debugger",
+        title = "Debug",
+        description = "Debug console, profiler controls, nameplate diagnostics, and registered log sources.",
+        accent = { 0.55, 0.55, 0.60 },
+        path = { "Debugger" },
+    },
 }
 
 local FEATURE_CARDS = {

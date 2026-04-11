@@ -287,7 +287,7 @@ local function OpenConfigurationPanel(input)
                 local summary = profiler.GetMemorySummary and profiler:GetMemorySummary() or nil
                 if not summary or (summary.sampleCount or 0) == 0 then
                     T:Print(
-                    "[TwichUI] No memory growth samples collected yet. Start profiling and let it run through the scenario first.")
+                        "[TwichUI] No memory growth samples collected yet. Start profiling and let it run through the scenario first.")
                     return
                 end
 
@@ -399,6 +399,67 @@ local function OpenConfigurationPanel(input)
             moversModule:Deactivate()
         else
             moversModule:Toggle()
+        end
+        return
+    end
+
+    if primaryCommand == "npdebug" then
+        local mod = T:GetModule("Nameplates", true)
+        if not mod then
+            T:Print("[TwichUI] Nameplates module not loaded.")
+            return
+        end
+
+        -- DB status
+        local db = mod.GetDB and mod:GetDB()
+        if db then
+            T:Print(string.format("[NP] healthFormat: %s  healthFontSize: %s  healthFont: %s",
+                tostring(db.healthFormat), tostring(db.healthFontSize), tostring(db.healthFont)))
+            T:Print(string.format("[NP] healthTextAnchor: %s  showAbsorb: %s",
+                tostring(db.healthTextAnchor), tostring(db.showAbsorb)))
+        else
+            T:Print("[NP] Could not read DB.")
+        end
+
+        -- Module enable state
+        T:Print(string.format("[NP] Module IsEnabled: %s", tostring(mod:IsEnabled())))
+
+        -- Plate count
+        local total, visible = 0, 0
+        if mod._plates then
+            for _, frame in pairs(mod._plates) do
+                total = total + 1
+                if frame and frame:IsShown() then visible = visible + 1 end
+            end
+        end
+        T:Print(string.format("[NP] Tracked plates: %d  Visible: %d", total, visible))
+
+        -- First visible plate frame dump
+        if mod._plates then
+            for unit, frame in pairs(mod._plates) do
+                if frame and frame:IsShown() then
+                    T:Print(string.format("[NP] Sample plate unit: %s", tostring(unit)))
+                    local ht = frame.healthText
+                    if ht then
+                        local font, size, flags = ht:GetFont()
+                        T:Print(string.format("  healthText: IsShown=%s  Text='%s'  Points=%d  Font=%s sz=%s",
+                            tostring(ht:IsShown()), tostring(ht:GetText() or ""),
+                            ht:GetNumPoints(), tostring(font), tostring(size)))
+                    else
+                        T:Print("  healthText: NOT CREATED on this frame")
+                    end
+                    local hb = frame.healthBar
+                    if hb then
+                        T:Print(string.format("  healthBar: w=%.0f h=%.0f IsShown=%s",
+                            hb:GetWidth(), hb:GetHeight(), tostring(hb:IsShown())))
+                    end
+                    local ab = frame.absorbBar
+                    if ab then
+                        T:Print(string.format("  absorbBar: IsShown=%s", tostring(ab:IsShown())))
+                    end
+                    break
+                end
+            end
         end
         return
     end
