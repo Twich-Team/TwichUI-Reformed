@@ -15,6 +15,7 @@ local NONE_SOUND_VALUE = "__none"
 local DEFAULT_NOTIFICATION_DISPLAY_TIME = 8
 local DEFAULT_FONT = "__default"
 local DEFAULT_BAR_TEXTURE = "Blizzard"
+local INTERRUPT_TRACKER_TEMP_DISABLED = true
 
 local function GetGlobalBarTexture()
     local theme = T:GetModule("Theme", true)
@@ -627,11 +628,15 @@ function Options:SetTrackerStyle(info, value)
 end
 
 function Options:GetInterruptTrackerEnabled()
+    if INTERRUPT_TRACKER_TEMP_DISABLED then
+        return false
+    end
+
     return self:GetDB().interruptTrackerEnabled ~= false
 end
 
 function Options:SetInterruptTrackerEnabled(info, value)
-    self:GetDB().interruptTrackerEnabled = NormalizeBoolean(value)
+    self:GetDB().interruptTrackerEnabled = INTERRUPT_TRACKER_TEMP_DISABLED and false or NormalizeBoolean(value)
     local module = GetModule()
     if module and module.RefreshInterruptFrame then
         module:RefreshInterruptFrame()
@@ -1136,6 +1141,14 @@ function Options:TestMythicPlusCheckpointNotification()
 end
 
 function Options:StartInterruptPreview()
+    if INTERRUPT_TRACKER_TEMP_DISABLED then
+        local module = GetModule()
+        if module and module.SetInterruptPreviewEnabled then
+            module:SetInterruptPreviewEnabled(false)
+        end
+        return
+    end
+
     local module = GetModule()
     if module and module.SetInterruptPreviewEnabled then
         module:SetInterruptPreviewEnabled(true)

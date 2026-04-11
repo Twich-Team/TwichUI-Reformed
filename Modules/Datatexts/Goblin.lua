@@ -18,6 +18,7 @@ local DatatextModule = T:GetModule("Datatexts")
 ---@field professions table list of the player's professions
 local GDT = DatatextModule:NewModule("Goblin")
 
+local C_TradeSkillUI = _G.C_TradeSkillUI
 local GetMoney = GetMoney
 local GetProfessions = GetProfessions
 
@@ -241,7 +242,15 @@ end
 local function OpenProfessionByIndex(idx)
     if not idx then return end
 
-    local name, icon, skillLevel, maxSkillLevel, numAbilities, spellOffset = GetProfessionInfo(idx)
+    local name, icon, skillLevel, maxSkillLevel, numAbilities, spellOffset, skillLine = GetProfessionInfo(idx)
+
+    if skillLine and C_TradeSkillUI and type(C_TradeSkillUI.OpenTradeSkill) == "function" then
+        local opened = C_TradeSkillUI.OpenTradeSkill(skillLine)
+        if opened then
+            return
+        end
+    end
+
     if spellOffset and numAbilities and numAbilities > 0 then
         CastSpell(spellOffset + 1, "spell")
     end

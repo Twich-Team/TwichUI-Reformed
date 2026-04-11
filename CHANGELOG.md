@@ -14,6 +14,8 @@ However the short-term plan is to continue with performance increases, more poin
 
 #### BugFixes
 
+- Fixed an issue where the profession frame would not open when toggled from the gold data panel text.
+
 #### New
 
 - Rewritten action bar system uses fully in house action bars instead of utilizing Blizzard bars
@@ -25,3 +27,4 @@ However the short-term plan is to continue with performance increases, more poin
 #### Other
 
 - Profiling system added to make it simpler to target inefficient code
+- Temporarily disabled the Mythic+ Interrupt tracker as it is not currently reliable

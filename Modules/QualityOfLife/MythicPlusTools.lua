@@ -1365,7 +1365,7 @@ local function FindBestEncounterJournalInstance(mapID, mapName)
                 elseif instanceKey ~= "" and searchKey ~= "" and
                     (instanceKey:find(searchKey, 1, true) or searchKey:find(instanceKey, 1, true)) then
                     partialMatch = partialMatch or
-                    { tier = tierIndex, id = instanceID, name = instanceName, isRaid = isRaid }
+                        { tier = tierIndex, id = instanceID, name = instanceName, isRaid = isRaid }
                 end
 
                 instanceIndex = instanceIndex + 1
@@ -1861,6 +1861,8 @@ local function PlayerKnowsSpell(spellID)
     return false
 end
 
+local INTERRUPT_TRACKER_TEMP_DISABLED = true
+
 function MPT:GetDB()
     local options = GetOptions()
     return options and options:GetDB() or {}
@@ -1872,6 +1874,9 @@ function MPT:IsFeatureEnabled(featureKey)
         return db.deathNotificationEnabled ~= false
     end
     if featureKey == "interruptTracker" then
+        if INTERRUPT_TRACKER_TEMP_DISABLED then
+            return false
+        end
         return db.interruptTrackerEnabled ~= false
     end
     if featureKey == "mythicPlusTimer" then
@@ -2490,7 +2495,8 @@ function MPT:EnsureKeystoneHelperPanel()
 
     local bgR, bgG, bgB, _, borderR, borderG, borderB = GetBackdropColors()
 
-    local panelFontPath = GetGlobalFontPath() or _G.STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF"
+    local panelFontPath                               = GetGlobalFontPath() or _G.STANDARD_TEXT_FONT or
+    "Fonts\\FRIZQT__.TTF"
     local function SetPanelFont(fontString, size)
         if not fontString then
             return
@@ -2502,7 +2508,7 @@ function MPT:EnsureKeystoneHelperPanel()
     end
 
     -- ── Frame ─────────────────────────────────────────────────────────────
-    local frame                                       = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    local frame = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     frame:SetSize(W, TOTAL_H)
     frame:SetFrameStrata("HIGH")
     frame:SetClampedToScreen(true)
@@ -4667,9 +4673,11 @@ end
 
 function MPT:SetInterruptPreviewEnabled(enabled)
     self:EnsureRuntime()
-    self.preview.interrupts = enabled == true
+    self.preview.interrupts = (not INTERRUPT_TRACKER_TEMP_DISABLED) and enabled == true
     self.preview.interruptsStartedAt = GetTime()
-    self:RefreshInterruptRoster()
+    if self.preview.interrupts then
+        self:RefreshInterruptRoster()
+    end
     self:RefreshInterruptFrame()
 end
 
@@ -4681,7 +4689,9 @@ function MPT:SetMythicPlusTimerPreviewEnabled(enabled)
 end
 
 function MPT:RefreshAllState()
-    self:RefreshInterruptRoster()
+    if self:IsFeatureEnabled("interruptTracker") then
+        self:RefreshInterruptRoster()
+    end
     self:RefreshInterruptFrame()
     self:RefreshMythicPlusTimerFrame()
 end
@@ -4694,13 +4704,17 @@ end
 
 function MPT:GROUP_ROSTER_UPDATE()
     self:RegisterPartyWatchers()
-    self:RefreshInterruptRoster()
+    if self:IsFeatureEnabled("interruptTracker") then
+        self:RefreshInterruptRoster()
+    end
     self:RefreshInterruptFrame()
 end
 
 function MPT:PLAYER_SPECIALIZATION_CHANGED(_, unit)
     if unit == "player" then
-        self:RefreshInterruptRoster()
+        if self:IsFeatureEnabled("interruptTracker") then
+            self:RefreshInterruptRoster()
+        end
         self:RefreshInterruptFrame()
     end
 end
@@ -4789,6 +4803,10 @@ function MPT:COMBAT_LOG_EVENT_UNFILTERED()
     end
 
     if subEvent == "SPELL_INTERRUPT" or subEvent == "SPELL_CAST_SUCCESS" then
+        if not self:IsFeatureEnabled("interruptTracker") then
+            return
+        end
+
         if self:IsSourceInCurrentParty(sourceGUID, sourceName) or subEvent == "SPELL_INTERRUPT" then
             self:LogDebugf(false,
                 "combatlog event=%s source=%s guid=%s spellID=%s dest=%s destGUID=%s",
@@ -5213,6 +5231,12 @@ function MPT:BuildInterruptRoster()
 end
 
 function MPT:RefreshInterruptRoster()
+    if not self:IsFeatureEnabled("interruptTracker") then
+        self.interruptMembers = {}
+        self.interruptOrder = {}
+        return
+    end
+
     self:BuildInterruptRoster()
 end
 
