@@ -455,7 +455,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     arrowL:SetSize(arrowSize, arrowSize)
     arrowL:SetPoint("RIGHT", frame, "LEFT", -4, 0)
     arrowL:SetTexture(arrowTex)
-    arrowL:SetTexCoord(table.unpack(ARROW_TC_RIGHT))
+    arrowL:SetTexCoord(unpack(ARROW_TC_RIGHT))
     arrowL:Hide()
     frame.arrowL = arrowL
 
@@ -463,7 +463,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     arrowR:SetSize(arrowSize, arrowSize)
     arrowR:SetPoint("LEFT", frame, "RIGHT", 4, 0)
     arrowR:SetTexture(arrowTex)
-    arrowR:SetTexCoord(table.unpack(ARROW_TC_LEFT))
+    arrowR:SetTexCoord(unpack(ARROW_TC_LEFT))
     arrowR:Hide()
     frame.arrowR = arrowR
 
@@ -1132,12 +1132,12 @@ function Nameplates:ApplyThemeToFrame(frame)
     local arrowSz  = Clamp(db.targetArrowSize or 18, 8, 32)
     if frame.arrowL then
         frame.arrowL:SetTexture(arrowTex)
-        frame.arrowL:SetTexCoord(table.unpack(ARROW_TC_RIGHT))
+        frame.arrowL:SetTexCoord(unpack(ARROW_TC_RIGHT))
         frame.arrowL:SetSize(arrowSz, arrowSz)
     end
     if frame.arrowR then
         frame.arrowR:SetTexture(arrowTex)
-        frame.arrowR:SetTexCoord(table.unpack(ARROW_TC_LEFT))
+        frame.arrowR:SetTexCoord(unpack(ARROW_TC_LEFT))
         frame.arrowR:SetSize(arrowSz, arrowSz)
     end
 end

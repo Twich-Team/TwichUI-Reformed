@@ -4,10 +4,9 @@
 
 - Please look at plater and their large selection of advanced configurations. we need some more of that. Particularly, at minimum I need to configure colors for when im tanking and have or do not have aggro, if im not tanking and have aggro, stacking settings, screen clamping, etc.
 
-- I cannot see the health text or the cast text
-- In the fonts section, i cant tell what settings are for what, you need to create subsections so i know which settings are for health, etc.
-- I cannot see target arrow or glow. I do see an outline that is offset (padded) from the health bar, that i cannot control
 - I do not see icons for elites or bosses when enabled
+- The outline setting for the name doesnt seem to change anything. same with the other texts too.
+- In the config, we have a text, textures, etc. sections. we should have those configuration options grouped with the part of the nameplate they are for. for example, instead of having a font section, those settings should be in the tabs that represent them like Health will have the font settings for health. same as texture. i dont want them separate like they are right now.
 
 # Tweaks
 
