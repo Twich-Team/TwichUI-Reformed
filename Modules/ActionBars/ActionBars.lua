@@ -2395,25 +2395,14 @@ function ActionBars:CreateInfrastructure()
         -- For LAB-based bars: propagate page state to child buttons via ChildUpdate.
         -- For legacy bars (pet/stance): the state driver is never registered, so this fires only if paging is active.
         holder:SetAttribute("_onstate-page", [[
+            -- The state driver already encodes the correct page number.
+            -- Do NOT call HasVehicleActionBar()/GetVehicleBarIndex() etc. here —
+            -- those are not whitelisted in the WoW Midnight restricted environment
+            -- and would silently fail, collapsing page to nil → 1.
             local page = tonumber(newstate)
-            if newstate == 'possess' or newstate == '11' then
-                if HasVehicleActionBar() then
-                    page = GetVehicleBarIndex()
-                elseif HasOverrideActionBar() then
-                    page = GetOverrideBarIndex()
-                elseif HasTempShapeshiftActionBar() then
-                    page = GetTempShapeshiftBarIndex()
-                elseif HasBonusActionBar() then
-                    page = GetBonusBarIndex()
-                else
-                    page = 11
-                end
-            end
-
             if not page or page < 1 then
                 page = 1
             end
-
             self:SetAttribute('state', page)
             control:ChildUpdate('state', page)
         ]])
@@ -4288,6 +4277,16 @@ function ActionBars:GetOrCreateLABButtons(definition)
             button.parentBarKey = definition.key
             button.parentBarIndex = index
             self.labButtons[definition.key][index] = button
+            -- Suppress CooldownFlash when the bar is faded (mouseover bars).
+            -- The animation group can force-show itself even when holder alpha is 0.
+            if button.CooldownFlash and button.CooldownFlash.Stop then
+                hooksecurefunc(button.CooldownFlash, "Play", function(flash)
+                    local h = ActionBars.holders[flash:GetParent() and flash:GetParent().parentBarKey]
+                    if h and h:GetAlpha() == 0 then
+                        flash:Stop()
+                    end
+                end)
+            end
         end
         buttons[#buttons + 1] = button
     end
@@ -5046,7 +5045,18 @@ function ActionBars:SetBarHoverState(barKey, hovered)
         return
     end
 
-    holder:SetAlpha(self:GetTargetAlpha(settings, hovered == true))
+    local alpha = self:GetTargetAlpha(settings, hovered == true)
+    holder:SetAlpha(alpha)
+
+    -- Stop any in-progress CooldownFlash animations when the bar fades out.
+    if alpha == 0 then
+        local buttons = self.barButtons[barKey] or {}
+        for _, button in ipairs(buttons) do
+            if button.CooldownFlash and button.CooldownFlash.Stop then
+                button.CooldownFlash:Stop()
+            end
+        end
+    end
 end
 
 function ActionBars:ScheduleBarFade(barKey)
