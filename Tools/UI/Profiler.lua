@@ -661,8 +661,119 @@ local function GenerateReport()
         end
     end
 
+    if includeMemoryMetrics then
+        local memorySuspects = {}
+        for _, profile in ipairs(sorted) do
+            local memoryNet = ((profile.memoryAfter or 0) - (profile.memoryBefore or 0))
+            if memoryNet > 0 then
+                table.insert(memorySuspects, {
+                    profile = profile,
+                    memoryNet = memoryNet,
+                })
+            end
+        end
+        table.sort(memorySuspects, function(a, b)
+            if a.memoryNet == b.memoryNet then
+                return (a.profile.memoryMaxDelta or 0) > (b.profile.memoryMaxDelta or 0)
+            end
+            return a.memoryNet > b.memoryNet
+        end)
+
+        table.insert(lines, "")
+        table.insert(lines, "Top Memory Growth Suspects (retained net KB):")
+        if #memorySuspects == 0 then
+            table.insert(lines, "  None recorded yet.")
+        else
+            for index = 1, math.min(10, #memorySuspects) do
+                local entry = memorySuspects[index]
+                local profile = entry.profile
+                table.insert(lines, string.format(
+                    "  %d. %-32s | net %+10.3f KB | max %+10.3f KB | avg %+10.3f KB | calls %d",
+                    index,
+                    profile.name:sub(1, 32),
+                    entry.memoryNet,
+                    profile.memoryMaxDelta or 0,
+                    profile.memoryAverageDelta or 0,
+                    profile.callCount or 0
+                ))
+            end
+        end
+    end
+
     table.insert(lines, "")
     return table.concat(lines, "\n")
+end
+
+local function AppendMemorySummaryExportLines(lines)
+    if not lines or (memorySummary.sampleCount or 0) <= 0 then
+        return
+    end
+
+    table.insert(lines, string.format(
+        "-- Memory growth summary: start %.2f MB | current %.2f MB | peak %.2f MB | growth %+0.2f MB | spike %+0.2f MB | samples %d @ %ss",
+        (memorySummary.baselineAddonKB or 0) / 1024,
+        (memorySummary.currentAddonKB or 0) / 1024,
+        (memorySummary.peakAddonKB or 0) / 1024,
+        (memorySummary.growthKB or 0) / 1024,
+        (memorySummary.largestSpikeKB or 0) / 1024,
+        memorySummary.sampleCount or 0,
+        tostring(memorySummary.sampleInterval or DEFAULT_MEMORY_SAMPLE_INTERVAL)
+    ))
+    table.insert(lines, string.format(
+        "-- Lua heap summary: start %.2f MB | current %.2f MB | peak %.2f MB",
+        (memorySummary.baselineLuaKB or 0) / 1024,
+        (memorySummary.currentLuaKB or 0) / 1024,
+        (memorySummary.peakLuaKB or 0) / 1024
+    ))
+    table.insert(lines, string.format(
+        "-- Memory timing: peak at %.2fs | largest spike at %.2fs",
+        (memorySummary.peakTimeMs or 0) / 1000,
+        (memorySummary.largestSpikeTimeMs or 0) / 1000
+    ))
+end
+
+local function AppendMemorySuspectExportLines(lines)
+    if not lines or not includeMemoryMetrics then
+        return
+    end
+
+    local memorySuspects = {}
+    for _, profile in pairs(profileData) do
+        local memoryNet = ((profile.memoryAfter or 0) - (profile.memoryBefore or 0))
+        if memoryNet > 0 then
+            table.insert(memorySuspects, {
+                profile = profile,
+                memoryNet = memoryNet,
+            })
+        end
+    end
+
+    table.sort(memorySuspects, function(a, b)
+        if a.memoryNet == b.memoryNet then
+            return (a.profile.memoryMaxDelta or 0) > (b.profile.memoryMaxDelta or 0)
+        end
+        return a.memoryNet > b.memoryNet
+    end)
+
+    table.insert(lines, "-- Top retained-memory suspects:")
+    if #memorySuspects == 0 then
+        table.insert(lines, "-- None recorded yet")
+        return
+    end
+
+    for index = 1, math.min(10, #memorySuspects) do
+        local entry = memorySuspects[index]
+        local profile = entry.profile
+        table.insert(lines, string.format(
+            "-- %d. %s: net %+0.3f KB | max %+0.3f KB | avg %+0.3f KB | calls %d",
+            index,
+            profile.name,
+            entry.memoryNet,
+            profile.memoryMaxDelta or 0,
+            profile.memoryAverageDelta or 0,
+            profile.callCount or 0
+        ))
+    end
 end
 
 ---Export profiling data as a formatted table
@@ -678,9 +789,11 @@ local function ExportData()
         "-- This data can be used to identify performance bottlenecks",
         "-- Memory profiling: " .. (includeMemoryMetrics and "enabled" or "disabled"),
         "-- Memory sample interval: " .. tostring(memorySampleInterval) .. "s",
-        "",
-        "local profilingData = {",
     }
+
+    AppendMemorySummaryExportLines(lines)
+    table.insert(lines, "")
+    table.insert(lines, "local profilingData = {")
 
     if (memorySummary.sampleCount or 0) > 0 then
         table.insert(lines, string.format(
@@ -764,6 +877,11 @@ local function ExportData()
             profile.name,
             profile.totalTime,
             profile.callCount))
+    end
+
+    if includeMemoryMetrics then
+        table.insert(lines, "")
+        AppendMemorySuspectExportLines(lines)
     end
 
     return table.concat(lines, "\n")

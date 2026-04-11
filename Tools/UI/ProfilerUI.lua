@@ -46,6 +46,7 @@ local FRAME_MIN_H = 520
 local FRAME_MAX_W = 1600
 local FRAME_MAX_H = 1100
 local TITLEBAR_H = 68
+local MEMORY_PANEL_H = 68
 local ROW_H = 36
 local CHART_ROW_H = 28
 local INSET = 6
@@ -193,6 +194,43 @@ local function FormatSignedMemoryCompact(kb)
         return "+" .. FormatMemoryCompact(kb)
     end
     return "-" .. FormatMemoryCompact(math.abs(kb))
+end
+
+local function BuildMemorySuspectText(profiles, limit)
+    if type(profiles) ~= "table" then
+        return "Top retained suspects: none yet."
+    end
+
+    local suspects = {}
+    for _, profile in ipairs(profiles) do
+        local memoryNet = ((profile.memoryAfter or 0) - (profile.memoryBefore or 0))
+        if memoryNet > 0 then
+            table.insert(suspects, {
+                name = profile.name,
+                memoryNet = memoryNet,
+                memoryMaxDelta = profile.memoryMaxDelta or 0,
+            })
+        end
+    end
+
+    table.sort(suspects, function(a, b)
+        if a.memoryNet == b.memoryNet then
+            return a.memoryMaxDelta > b.memoryMaxDelta
+        end
+        return a.memoryNet > b.memoryNet
+    end)
+
+    if #suspects == 0 then
+        return "Top retained suspects: none with positive retained growth yet."
+    end
+
+    local pieces = {}
+    for index = 1, math.min(limit or 3, #suspects) do
+        local suspect = suspects[index]
+        pieces[index] = format("%s (%s)", suspect.name, FormatSignedMemoryCompact(suspect.memoryNet))
+    end
+
+    return "Top retained suspects: " .. table.concat(pieces, " | ")
 end
 
 -- Get severity color based on execution time
@@ -551,20 +589,45 @@ local function BuildFrame()
     end)
     refreshBtn:SetPoint("RIGHT", closeBtn, "LEFT", -8, 0)
 
-    local memorySummary = titleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    memorySummary:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
-    memorySummary:SetPoint("RIGHT", refreshBtn, "LEFT", -12, 0)
-    memorySummary:SetJustifyH("LEFT")
-    memorySummary:SetJustifyV("TOP")
-    memorySummary:SetTextColor(CLR_TEXT_MUT[1], CLR_TEXT_MUT[2], CLR_TEXT_MUT[3])
-    memorySummary:SetWordWrap(true)
-    memorySummary:SetText("Memory growth watcher is idle.")
-    frame.__memorySummary = memorySummary
+    local memoryPanel = Panel(frame, CLR_BG_MID[1], CLR_BG_MID[2], CLR_BG_MID[3], 0.55)
+    memoryPanel:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 0, 0)
+    memoryPanel:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT", 0, 0)
+    memoryPanel:SetHeight(MEMORY_PANEL_H)
+    frame.__memoryPanel = memoryPanel
+
+    local memoryLabel = memoryPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    memoryLabel:SetPoint("TOPLEFT", memoryPanel, "TOPLEFT", 10, -7)
+    memoryLabel:SetText("Memory Summary")
+    memoryLabel:SetTextColor(CLR_ACCENT[1], CLR_ACCENT[2], CLR_ACCENT[3])
+
+    local memoryPrimary = memoryPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    memoryPrimary:SetPoint("TOPLEFT", memoryLabel, "BOTTOMLEFT", 0, -4)
+    memoryPrimary:SetPoint("RIGHT", memoryPanel, "RIGHT", -10, 0)
+    memoryPrimary:SetJustifyH("LEFT")
+    memoryPrimary:SetTextColor(CLR_TEXT_HI[1], CLR_TEXT_HI[2], CLR_TEXT_HI[3])
+    memoryPrimary:SetWordWrap(true)
+    frame.__memoryPrimary = memoryPrimary
+
+    local memorySecondary = memoryPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    memorySecondary:SetPoint("TOPLEFT", memoryPrimary, "BOTTOMLEFT", 0, -2)
+    memorySecondary:SetPoint("RIGHT", memoryPanel, "RIGHT", -10, 0)
+    memorySecondary:SetJustifyH("LEFT")
+    memorySecondary:SetTextColor(CLR_TEXT_MUT[1], CLR_TEXT_MUT[2], CLR_TEXT_MUT[3])
+    memorySecondary:SetWordWrap(true)
+    frame.__memorySecondary = memorySecondary
+
+    local memorySuspects = memoryPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    memorySuspects:SetPoint("TOPLEFT", memorySecondary, "BOTTOMLEFT", 0, -2)
+    memorySuspects:SetPoint("RIGHT", memoryPanel, "RIGHT", -10, 0)
+    memorySuspects:SetJustifyH("LEFT")
+    memorySuspects:SetTextColor(CLR_TEXT_MUT[1], CLR_TEXT_MUT[2], CLR_TEXT_MUT[3])
+    memorySuspects:SetWordWrap(true)
+    frame.__memorySuspects = memorySuspects
 
     -- Column headers
     local headerPanel = Panel(frame, CLR_BG_MID[1], CLR_BG_MID[2], CLR_BG_MID[3], 0.6)
-    headerPanel:SetPoint("TOPLEFT", titleBar, "BOTTOMLEFT", 0, 0)
-    headerPanel:SetPoint("TOPRIGHT", titleBar, "BOTTOMRIGHT", 0, 0)
+    headerPanel:SetPoint("TOPLEFT", memoryPanel, "BOTTOMLEFT", 0, 0)
+    headerPanel:SetPoint("TOPRIGHT", memoryPanel, "BOTTOMRIGHT", 0, 0)
     headerPanel:SetHeight(26)
     headerPanel:SetFrameLevel(titleBar:GetFrameLevel() + 2)
     frame.__headerPanel = headerPanel
@@ -891,21 +954,34 @@ function ProfilerUI:Refresh()
         tostring(profileData.memorySampleInterval or 5)))
 
     local memorySummary = profileData.memorySummary or {}
-    if frame.__memorySummary then
+    if frame.__memoryPrimary and frame.__memorySecondary and frame.__memorySuspects then
         if (memorySummary.sampleCount or 0) > 0 then
-            frame.__memorySummary:SetText(format(
-                "Addon %s -> %s (%s), peak %s, largest spike %s. Lua heap now %s, peak %s.",
+            frame.__memoryPrimary:SetText(format(
+                "Addon %s -> %s (%s), peak %s, largest spike %s.",
                 FormatMemoryCompact(memorySummary.baselineAddonKB),
                 FormatMemoryCompact(memorySummary.currentAddonKB),
                 FormatSignedMemoryCompact(memorySummary.growthKB),
                 FormatMemoryCompact(memorySummary.peakAddonKB),
-                FormatSignedMemoryCompact(memorySummary.largestSpikeKB),
-                FormatMemoryCompact(memorySummary.currentLuaKB),
-                FormatMemoryCompact(memorySummary.peakLuaKB)
+                FormatSignedMemoryCompact(memorySummary.largestSpikeKB)
             ))
+            frame.__memorySecondary:SetText(format(
+                "Lua heap %s -> %s, peak %s. Samples: %d @ %ss. Peak at %.2fs, spike at %.2fs.",
+                FormatMemoryCompact(memorySummary.baselineLuaKB),
+                FormatMemoryCompact(memorySummary.currentLuaKB),
+                FormatMemoryCompact(memorySummary.peakLuaKB),
+                memorySummary.sampleCount or 0,
+                tostring(memorySummary.sampleInterval or 5),
+                (memorySummary.peakTimeMs or 0) / 1000,
+                (memorySummary.largestSpikeTimeMs or 0) / 1000
+            ))
+            frame.__memorySuspects:SetText(BuildMemorySuspectText(profiles, 3))
         else
-            frame.__memorySummary:SetText(
-            "Memory growth watcher is idle. Start profiling and let it run through the scenario you want to inspect.")
+            frame.__memoryPrimary:SetText(
+                "Memory growth watcher is idle. Start profiling and let it run through the scenario you want to inspect.")
+            frame.__memorySecondary:SetText(
+                "The export and report summary populate once the session has at least one captured memory sample.")
+            frame.__memorySuspects:SetText(
+            "Top retained suspects will appear here once retained-growth data is captured.")
         end
     end
     if frame.__headers and frame.__headers.memAvg and frame.__headers.memMax then
