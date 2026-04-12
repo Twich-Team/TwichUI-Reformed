@@ -229,6 +229,15 @@ local NAME_ANCHOR_POINTS = {
     BELOW_RIGHT   = "Below Right",
 }
 
+local CAST_ICON_ANCHOR_POINTS = {
+    LEFT = "Left",
+    RIGHT = "Right",
+    TOPLEFT = "Top Left",
+    TOPRIGHT = "Top Right",
+    BOTTOMLEFT = "Bottom Left",
+    BOTTOMRIGHT = "Bottom Right",
+}
+
 local RAID_MARKER_POINTS = {
     TOP = "Top",
     BOTTOM = "Bottom",
@@ -411,6 +420,43 @@ function Options:GetShowCastBar() return self:GetDB().showCastBar ~= false end
 
 function Options:SetShowCastBar(_, v)
     self:GetDB().showCastBar = v == true; Refresh()
+end
+
+function Options:GetCastIconAnchor()
+    local anchor = self:GetDB().castIconAnchor
+    return CAST_ICON_ANCHOR_POINTS[anchor] and anchor or "LEFT"
+end
+
+function Options:SetCastIconAnchor(_, v)
+    self:GetDB().castIconAnchor = CAST_ICON_ANCHOR_POINTS[v] and v or "LEFT"
+    Refresh()
+end
+
+function Options:GetCastIconSize()
+    return math.max(8, math.min(48, tonumber(self:GetDB().castIconSize) or self:GetCastHeight()))
+end
+
+function Options:SetCastIconSize(_, v)
+    self:GetDB().castIconSize = math.max(8, math.min(48, math.floor(tonumber(v) or self:GetCastHeight())))
+    Refresh()
+end
+
+function Options:GetCastIconOffsetX()
+    return math.max(-40, math.min(40, tonumber(self:GetDB().castIconOffsetX) or -2))
+end
+
+function Options:SetCastIconOffsetX(_, v)
+    self:GetDB().castIconOffsetX = math.max(-40, math.min(40, tonumber(v) or -2))
+    Refresh()
+end
+
+function Options:GetCastIconOffsetY()
+    return math.max(-40, math.min(40, tonumber(self:GetDB().castIconOffsetY) or 0))
+end
+
+function Options:SetCastIconOffsetY(_, v)
+    self:GetDB().castIconOffsetY = math.max(-40, math.min(40, tonumber(v) or 0))
+    Refresh()
 end
 
 -- Cast bar colour
@@ -1860,6 +1906,49 @@ function Options:BuildConfiguration()
                                 get      = function() return Options:GetCastColor() end,
                                 set      = function(_, r, g, b, a) Options:SetCastColor(_, r, g, b, a) end,
                             },
+                            sep_castIcon = { type = "header", name = "Cast Icon", order = 3 },
+                            castIconAnchor = {
+                                type   = "select",
+                                name   = "Icon Anchor",
+                                order  = 3.1,
+                                values = CAST_ICON_ANCHOR_POINTS,
+                                hidden = function() return not Options:GetShowCastBar() end,
+                                get    = function() return Options:GetCastIconAnchor() end,
+                                set    = function(_, v) Options:SetCastIconAnchor(_, v) end,
+                            },
+                            castIconSize = {
+                                type   = "range",
+                                name   = "Icon Size",
+                                order  = 3.2,
+                                min    = 8,
+                                max    = 48,
+                                step   = 1,
+                                hidden = function() return not Options:GetShowCastBar() end,
+                                get    = function() return Options:GetCastIconSize() end,
+                                set    = function(_, v) Options:SetCastIconSize(_, v) end,
+                            },
+                            castIconOffsetX = {
+                                type   = "range",
+                                name   = "Offset X",
+                                order  = 3.3,
+                                min    = -40,
+                                max    = 40,
+                                step   = 1,
+                                hidden = function() return not Options:GetShowCastBar() end,
+                                get    = function() return Options:GetCastIconOffsetX() end,
+                                set    = function(_, v) Options:SetCastIconOffsetX(_, v) end,
+                            },
+                            castIconOffsetY = {
+                                type   = "range",
+                                name   = "Offset Y",
+                                order  = 3.4,
+                                min    = -40,
+                                max    = 40,
+                                step   = 1,
+                                hidden = function() return not Options:GetShowCastBar() end,
+                                get    = function() return Options:GetCastIconOffsetY() end,
+                                set    = function(_, v) Options:SetCastIconOffsetY(_, v) end,
+                            },
                             sep_emphasis = { type = "header", name = "Casting Emphasis", order = 5 },
                             castEmphasisEnabled = {
                                 type  = "toggle",
@@ -3007,6 +3096,95 @@ function Options:BuildConfiguration()
                                 end,
                                 set      = function(_, r, g, b, a)
                                     Options:GetFriendlyDB().castColor = { r, g, b, a or 1 }; Refresh()
+                                end,
+                            },
+                            sep_castIcon = { type = "header", name = "Cast Icon", order = 3 },
+                            castIconAnchor = {
+                                type   = "select",
+                                name   = "Icon Anchor",
+                                order  = 3.1,
+                                values = CAST_ICON_ANCHOR_POINTS,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showCastBar
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowCastBar()
+                                end,
+                                get    = function()
+                                    local anchor = Options:GetFriendlyDB().castIconAnchor
+                                    if CAST_ICON_ANCHOR_POINTS[anchor] then return anchor end
+                                    return Options:GetCastIconAnchor()
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().castIconAnchor = CAST_ICON_ANCHOR_POINTS[v] and v or "LEFT"
+                                    Refresh()
+                                end,
+                            },
+                            castIconSize = {
+                                type   = "range",
+                                name   = "Icon Size",
+                                order  = 3.2,
+                                min    = 8,
+                                max    = 48,
+                                step   = 1,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showCastBar
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowCastBar()
+                                end,
+                                get    = function()
+                                    return math.max(8, math.min(48,
+                                        tonumber(Options:GetFriendlyDB().castIconSize) or Options:GetCastIconSize()))
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().castIconSize = math.max(8,
+                                        math.min(48, math.floor(tonumber(v) or Options:GetCastIconSize())))
+                                    Refresh()
+                                end,
+                            },
+                            castIconOffsetX = {
+                                type   = "range",
+                                name   = "Offset X",
+                                order  = 3.3,
+                                min    = -40,
+                                max    = 40,
+                                step   = 1,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showCastBar
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowCastBar()
+                                end,
+                                get    = function()
+                                    local v = Options:GetFriendlyDB().castIconOffsetX
+                                    if v ~= nil then return math.max(-40, math.min(40, tonumber(v) or -2)) end
+                                    return Options:GetCastIconOffsetX()
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().castIconOffsetX = math.max(-40,
+                                        math.min(40, tonumber(v) or -2))
+                                    Refresh()
+                                end,
+                            },
+                            castIconOffsetY = {
+                                type   = "range",
+                                name   = "Offset Y",
+                                order  = 3.4,
+                                min    = -40,
+                                max    = 40,
+                                step   = 1,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showCastBar
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowCastBar()
+                                end,
+                                get    = function()
+                                    local v = Options:GetFriendlyDB().castIconOffsetY
+                                    if v ~= nil then return math.max(-40, math.min(40, tonumber(v) or 0)) end
+                                    return Options:GetCastIconOffsetY()
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().castIconOffsetY = math.max(-40,
+                                        math.min(40, tonumber(v) or 0))
+                                    Refresh()
                                 end,
                             },
                             sep_emphasis = { type = "header", name = "Casting Emphasis", order = 5 },

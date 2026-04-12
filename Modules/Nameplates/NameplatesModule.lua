@@ -232,6 +232,77 @@ local AURA_ANCHOR_LAYOUTS = {
     BELOW_RIGHT = { point = "TOPRIGHT", relativePoint = "BOTTOMRIGHT", x = 0, direction = -1 },
 }
 
+local CAST_ICON_LAYOUTS = {
+    LEFT = {
+        iconPoint = "RIGHT",
+        iconRelativePoint = "LEFT",
+        iconX = -2,
+        iconY = 0,
+        shieldPoint = "LEFT",
+        shieldRelativePoint = "RIGHT",
+        shieldX = 2,
+        shieldY = 0,
+        horizontal = true,
+    },
+    RIGHT = {
+        iconPoint = "LEFT",
+        iconRelativePoint = "RIGHT",
+        iconX = 2,
+        iconY = 0,
+        shieldPoint = "RIGHT",
+        shieldRelativePoint = "LEFT",
+        shieldX = -2,
+        shieldY = 0,
+        horizontal = true,
+    },
+    TOPLEFT = {
+        iconPoint = "BOTTOMRIGHT",
+        iconRelativePoint = "TOPLEFT",
+        iconX = -2,
+        iconY = 2,
+        shieldPoint = "BOTTOMLEFT",
+        shieldRelativePoint = "TOPRIGHT",
+        shieldX = 2,
+        shieldY = 2,
+        horizontal = true,
+    },
+    TOPRIGHT = {
+        iconPoint = "BOTTOMLEFT",
+        iconRelativePoint = "TOPRIGHT",
+        iconX = 2,
+        iconY = 2,
+        shieldPoint = "BOTTOMRIGHT",
+        shieldRelativePoint = "TOPLEFT",
+        shieldX = -2,
+        shieldY = 2,
+        horizontal = true,
+    },
+    BOTTOMLEFT = {
+        iconPoint = "TOPRIGHT",
+        iconRelativePoint = "BOTTOMLEFT",
+        iconX = -2,
+        iconY = -2,
+        shieldPoint = "TOPLEFT",
+        shieldRelativePoint = "BOTTOMRIGHT",
+        shieldX = 2,
+        shieldY = -2,
+        horizontal = true,
+        extendsBottom = true,
+    },
+    BOTTOMRIGHT = {
+        iconPoint = "TOPLEFT",
+        iconRelativePoint = "BOTTOMRIGHT",
+        iconX = 2,
+        iconY = -2,
+        shieldPoint = "TOPRIGHT",
+        shieldRelativePoint = "BOTTOMLEFT",
+        shieldX = -2,
+        shieldY = -2,
+        horizontal = true,
+        extendsBottom = true,
+    },
+}
+
 local RAID_MARKER_POINTS = {
     TOP = true,
     BOTTOM = true,
@@ -257,6 +328,45 @@ local function NormalizeAuraAnchor(anchor)
         return anchor
     end
     return "ABOVE_LEFT"
+end
+
+local function NormalizeCastIconAnchor(anchor)
+    if CAST_ICON_LAYOUTS[anchor] then
+        return anchor
+    end
+    return "LEFT"
+end
+
+local function GetCastIconLayoutMetrics(db)
+    local iconAnchor = NormalizeCastIconAnchor(db.castIconAnchor)
+    local layout = CAST_ICON_LAYOUTS[iconAnchor] or CAST_ICON_LAYOUTS.LEFT
+    local iconSize = Clamp(db.castIconSize or db.castHeight or NP_DEFAULT_CAST_HEIGHT, 8, 48)
+    local offsetX = Clamp(tonumber(db.castIconOffsetX) or -2, -40, 40)
+    local offsetY = Clamp(tonumber(db.castIconOffsetY) or 0, -40, 40)
+    local footprint = layout.horizontal and (iconSize + math.abs(offsetX) + 6) or 0
+    local bottomPad = layout.extendsBottom and (iconSize + math.max(0, -offsetY) + 4) or 0
+    return layout, iconSize, offsetX, offsetY, footprint, bottomPad
+end
+
+local function ApplyCastIconLayout(frame, db)
+    if not frame or not frame.castContainer then return end
+
+    local layout, iconSize, offsetX, offsetY = GetCastIconLayoutMetrics(db)
+    local shieldSize = Clamp(math.max(iconSize, (db.castHeight or NP_DEFAULT_CAST_HEIGHT) + 4), 12, 52)
+
+    if frame.castIcon then
+        frame.castIcon:ClearAllPoints()
+        frame.castIcon:SetSize(iconSize, iconSize)
+        frame.castIcon:SetPoint(layout.iconPoint, frame.castContainer, layout.iconRelativePoint,
+            (layout.iconX or 0) + offsetX, (layout.iconY or 0) + offsetY)
+    end
+
+    if frame.castShield then
+        frame.castShield:ClearAllPoints()
+        frame.castShield:SetSize(shieldSize, shieldSize)
+        frame.castShield:SetPoint(layout.shieldPoint, frame.castContainer, layout.shieldRelativePoint,
+            (layout.shieldX or 0) - offsetX, (layout.shieldY or 0) + offsetY)
+    end
 end
 
 local function GetAuraRowWidth(db)
@@ -920,7 +1030,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     -- kills BuildPlateFrame before self._plates[unitID] is set → 0 plates tracked.
     -- Fix: use fixed frame levels.  Our frame at 140 sits above Blizzard's UnitFrame.
     local frame         = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    frame._isTwichFrame = true       -- used by suppression loops to skip our own frame
+    frame._isTwichFrame = true -- used by suppression loops to skip our own frame
     -- MIDNIGHT LAYOUT NOTE: any direct child of the Blizzard nameplate plate can have its
     -- dimensions coerced by the plate's C-side layout. Keep the TwichUI plate root on
     -- UIParent and anchor it to the Blizzard plate instead so the size is entirely ours.
@@ -1125,18 +1235,15 @@ function Nameplates:BuildPlateFrame(parentPlate)
 
     -- Spell icon (left of cast container)
     local castIcon = castContainer:CreateTexture(nil, "OVERLAY")
-    castIcon:SetSize(castH, castH)
-    castIcon:SetPoint("RIGHT", castContainer, "LEFT", -2, 0)
     castIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     frame.castIcon = castIcon
 
     -- Interrupt shield (right of cast container)
     local castShield = castContainer:CreateTexture(nil, "OVERLAY")
-    castShield:SetSize(castH + 4, castH + 4)
-    castShield:SetPoint("LEFT", castContainer, "RIGHT", 2, 0)
     castShield:SetAtlas("nameplates-InterruptShield")
     castShield:Hide()
     frame.castShield = castShield
+    ApplyCastIconLayout(frame, db)
 
     -- Cast spell name text — parented to castBar (not castContainer) so it renders
     -- above the castBar's fill rather than being covered by the child Frame.
@@ -2251,6 +2358,7 @@ function Nameplates:ApplyThemeToFrame(frame)
         frame.castText:SetFont(cf, cs, cfl)
         if db.castFontShadow then frame.castText:SetShadowOffset(1, -1) else frame.castText:SetShadowOffset(0, 0) end
     end
+    ApplyCastIconLayout(frame, db)
 
     -- Arrow texture refresh (style may have changed in settings)
     local arrowTex = GetArrowTexPath(db.targetArrowStyle)
@@ -2316,6 +2424,7 @@ function Nameplates:ResizePlateFrame(frame)
         frame.castContainer:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 0, castOffsetY)
         frame.castContainer:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", 0, castOffsetY)
     end
+    ApplyCastIconLayout(frame, db)
 
     -- Resize aura frame width
     if frame.auraFrame then frame.auraFrame:SetWidth(w) end
@@ -2335,7 +2444,11 @@ function Nameplates:UpdatePlateStackingBounds(frame)
     local powerGap = Clamp(db.powerBarGap or 2, 0, 12)
     local powerH = (db.showPowerBar == false) and 0 or (Clamp(db.powerBarHeight or 4, 2, 14) + 2)
     local castH = (db.showCastBar == false) and 0 or (Clamp(db.castHeight or NP_DEFAULT_CAST_HEIGHT, 6, 30) + 2)
-    local castSidePad = (db.showCastBar == false) and 0 or (castH + 4)
+    local _, _, _, _, castSidePad, castBottomPad = GetCastIconLayoutMetrics(db)
+    if db.showCastBar == false then
+        castSidePad = 0
+        castBottomPad = 0
+    end
     local nativeCarrier = frame._plate.UnitFrame or frame._plate
     local nativeW = 0
     local nativeH = 0
@@ -2354,6 +2467,7 @@ function Nameplates:UpdatePlateStackingBounds(frame)
         if powerH > 0 then
             visualH = visualH + powerGap
         end
+        visualH = visualH + castBottomPad
     end
 
     local boundsW = math.max(baseW + castSidePad * 2, nativeW) * widthScale
@@ -3416,6 +3530,7 @@ function Nameplates:BuildDebugReport()
         "healthColorMode", "healthFont", "healthFontSize", "healthFontFlags",
         "healthFormat", "healthTextAnchor", "showAbsorb",
         "castFont", "castFontSize", "castHeight", "showCastBar", "showPowerBar",
+        "castIconAnchor", "castIconSize", "castIconOffsetX", "castIconOffsetY",
         "nameFont", "nameFontSize", "nameFontFlags", "nameAnchorPoint", "nameJustify", "nameWidth",
         "nameOffsetX", "nameOffsetY",
         "showLevel", "showEliteIcon", "showRaidMarker", "raidMarkerPoint", "raidMarkerOffsetX", "raidMarkerOffsetY",
