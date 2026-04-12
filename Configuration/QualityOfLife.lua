@@ -2559,33 +2559,23 @@ local function BuildLootFeedTab()
                     get = "GetDisplayTime",
                     set = "SetDisplayTime",
                 },
-                bgAlpha = {
-                    type = "range",
-                    name = "Background Opacity",
-                    desc = "Opacity of the row background.",
+                themeSurfaceNote = {
+                    type = "description",
+                    name =
+                    "Loot feed row background and border colors now follow the global Appearance settings automatically.",
                     order = 9,
-                    min = 0,
-                    max = 1,
-                    step = 0.05,
-                    isPercent = true,
+                    fontSize = "medium",
+                },
+                masqueEnabled = {
+                    type = "toggle",
+                    name = "Masque Skinning",
+                    desc = "Enable optional Masque skinning for loot feed icons when the Masque addon is installed.",
+                    order = 10,
+                    width = 1.5,
                     disabled = IsDisabled,
                     handler = LFOptions,
-                    get = "GetBgAlpha",
-                    set = "SetBgAlpha",
-                },
-                bgColor = {
-                    type = "color",
-                    name = "Background Color",
-                    desc = "RGB color tint of the row background.",
-                    order = 10,
-                    hasAlpha = false,
-                    disabled = IsDisabled,
-                    get = function()
-                        return LFOptions:GetBgColor()
-                    end,
-                    set = function(_, r, g, b)
-                        LFOptions:SetBgColor(nil, r, g, b)
-                    end,
+                    get = "GetMasqueEnabled",
+                    set = "SetMasqueEnabled",
                 },
                 scale = {
                     type = "range",

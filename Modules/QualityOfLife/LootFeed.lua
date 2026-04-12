@@ -58,6 +58,7 @@ local SHIFT_DURATION     = 0.18 -- row shift translate
 local EXIT_DURATION      = 0.35 -- fade out
 local ENTER_OFFSET_X     = -14  -- softer lateral travel for new rows
 local SHIFT_FADE_FROM    = 0.82 -- subtle fade while rows reposition
+local ROW_FADE_START     = 0.61 -- keep more solid area than the original fade, but less than the previous pass
 
 -- Item quality names / display ordering (mirrors Enum.ItemQuality)
 local QUALITY_NAMES      = {
@@ -170,6 +171,18 @@ local function GetEffectiveFeedWidth(settings)
     return settings.feedWidth or 270
 end
 
+local function GetFontValues()
+    local values = { __default = "Default" }
+    if LSM and type(LSM.HashTable) == "function" then
+        local fonts = LSM:HashTable("font") or {}
+        for key, value in pairs(fonts) do
+            values[key] = value
+        end
+    end
+
+    return values
+end
+
 -- ---------------------------------------------------------------------------
 -- Helper: format copper amount as coloured coin string
 -- ---------------------------------------------------------------------------
@@ -202,6 +215,9 @@ local container  = nil
 
 local pool       = {} -- { row, ... } free rows
 local activeRows = {} -- { {row, key, exitTimer, quantity, ...}, ... } FIFO newest
+
+local ApplyRowTheme
+local ApplyRowFont
 
 -- Used row metatable / helpers --
 
@@ -247,7 +263,7 @@ local function CreateRowFrame(settings)
     -- Parent to the container so SetPoint offsets are always in the same
     -- coordinate space as the container.  This eliminates the cross-parent
     -- anchor ambiguity that caused rows 2+ to snap to UIParent BOTTOM.
-    local row = CreateFrame("Frame", nil, container)
+    local row = CreateFrame("Frame", nil, container, "BackdropTemplate")
     row:SetSize(fw, rh)
     row:SetFrameStrata("HIGH")
     row:SetAlpha(0)
@@ -261,23 +277,53 @@ local function CreateRowFrame(settings)
     end)
     row:SetScript("OnDragStart", ForwardDragStart)
     row:SetScript("OnDragStop", ForwardDragStop)
+    row:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
 
-    -- Subtle dark background
-    local bg = row:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    bg:SetColorTexture(
-        settings.bgColorR or 0,
-        settings.bgColorG or 0,
-        settings.bgColorB or 0,
-        settings.bgAlpha or 0.45
-    )
-    row.bg = bg
+    local bgSolid = row:CreateTexture(nil, "BACKGROUND")
+    bgSolid:SetPoint("TOPLEFT", row, "TOPLEFT", 1, -1)
+    bgSolid:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 1, 1)
+    row.bgSolid = bgSolid
 
-    -- Left accent stripe (TwichUI primary teal)
+    local bgFade = row:CreateTexture(nil, "BACKGROUND")
+    bgFade:SetPoint("TOPRIGHT", row, "TOPRIGHT", -1, -1)
+    bgFade:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -1, 1)
+    row.bgFade = bgFade
+
+    local borderLeft = row:CreateTexture(nil, "BORDER")
+    borderLeft:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    borderLeft:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    borderLeft:SetWidth(1)
+    row.borderLeft = borderLeft
+
+    local borderTopSolid = row:CreateTexture(nil, "BORDER")
+    borderTopSolid:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    borderTopSolid:SetHeight(1)
+    row.borderTopSolid = borderTopSolid
+
+    local borderTopFade = row:CreateTexture(nil, "BORDER")
+    borderTopFade:SetPoint("TOPRIGHT", row, "TOPRIGHT", 0, 0)
+    borderTopFade:SetHeight(1)
+    row.borderTopFade = borderTopFade
+
+    local borderBottomSolid = row:CreateTexture(nil, "BORDER")
+    borderBottomSolid:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    borderBottomSolid:SetHeight(1)
+    row.borderBottomSolid = borderBottomSolid
+
+    local borderBottomFade = row:CreateTexture(nil, "BORDER")
+    borderBottomFade:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", 0, 0)
+    borderBottomFade:SetHeight(1)
+    row.borderBottomFade = borderBottomFade
+
+    -- Left accent stripe follows the global primary theme color.
     local stripe = row:CreateTexture(nil, "BORDER")
     stripe:SetSize(2, rh)
     stripe:SetPoint("LEFT", row, "LEFT", 0, 0)
-    stripe:SetColorTexture(0.098, 0.788, 0.78, 1) -- #19c9c7
     row.stripe = stripe
 
     -- Icon button (supports hyperlink clicks)
@@ -329,6 +375,12 @@ local function CreateRowFrame(settings)
     end
     txt:SetWordWrap(false)
     row.txt = txt
+
+    ApplyRowTheme(row, settings)
+    ApplyRowFont(row, settings)
+    if LF and type(LF.RegisterRowWithMasque) == "function" then
+        LF:RegisterRowWithMasque(row)
+    end
 
     -- Slide-in enter animation
     local enterAG = row:CreateAnimationGroup()
@@ -399,6 +451,158 @@ local function ReleaseRow(row)
     pool[#pool + 1] = row
 end
 
+local function IterateAllRows(callback)
+    for _, row in ipairs(pool) do
+        callback(row)
+    end
+
+    for _, entry in ipairs(activeRows) do
+        if entry and entry.row then
+            callback(entry.row)
+        end
+    end
+end
+
+ApplyRowTheme = function(row, settings)
+    if not row then
+        return
+    end
+
+    local width = row.GetWidth and row:GetWidth() or 0
+    local fadeStart = math.max(0, math.floor((width * ROW_FADE_START) + 0.5))
+    local fadeWidth = math.max(1, width - fadeStart - 1)
+
+    if row.bgSolid then
+        row.bgSolid:SetTexture("Interface\\Buttons\\WHITE8X8")
+        row.bgSolid:SetPoint("RIGHT", row, "LEFT", fadeStart, 0)
+        row.bgSolid:SetColorTexture(
+            settings.bgColorR or 0.05,
+            settings.bgColorG or 0.06,
+            settings.bgColorB or 0.08,
+            settings.bgAlpha or 0.94
+        )
+    end
+
+    if row.bgFade then
+        row.bgFade:SetWidth(fadeWidth)
+        row.bgFade:SetTexture("Interface\\Buttons\\WHITE8X8")
+        if row.bgFade.SetGradient and _G.CreateColor then
+            row.bgFade:SetGradient("HORIZONTAL",
+                _G.CreateColor(
+                    settings.bgColorR or 0.05,
+                    settings.bgColorG or 0.06,
+                    settings.bgColorB or 0.08,
+                    settings.bgAlpha or 0.94),
+                _G.CreateColor(
+                    settings.bgColorR or 0.05,
+                    settings.bgColorG or 0.06,
+                    settings.bgColorB or 0.08,
+                    0))
+        elseif row.bgFade.SetGradientAlpha then
+            row.bgFade:SetGradientAlpha("HORIZONTAL",
+                settings.bgColorR or 0.05,
+                settings.bgColorG or 0.06,
+                settings.bgColorB or 0.08,
+                settings.bgAlpha or 0.94,
+                settings.bgColorR or 0.05,
+                settings.bgColorG or 0.06,
+                settings.bgColorB or 0.08,
+                0)
+        else
+            row.bgFade:SetColorTexture(
+                settings.bgColorR or 0.05,
+                settings.bgColorG or 0.06,
+                settings.bgColorB or 0.08,
+                settings.bgAlpha or 0.94
+            )
+        end
+    end
+
+    if row.SetBackdropBorderColor then
+        row:SetBackdropColor(0, 0, 0, 0)
+        row:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+
+    local borderR = settings.borderColorR or 0.24
+    local borderG = settings.borderColorG or 0.26
+    local borderB = settings.borderColorB or 0.32
+    local borderA = settings.borderAlpha or 0.85
+
+    if row.borderLeft then
+        row.borderLeft:SetTexture("Interface\\Buttons\\WHITE8X8")
+        row.borderLeft:SetColorTexture(borderR, borderG, borderB, borderA)
+    end
+
+    if row.borderTopSolid then
+        row.borderTopSolid:SetPoint("RIGHT", row, "LEFT", fadeStart, 0)
+        row.borderTopSolid:SetTexture("Interface\\Buttons\\WHITE8X8")
+        row.borderTopSolid:SetColorTexture(borderR, borderG, borderB, borderA)
+    end
+
+    if row.borderBottomSolid then
+        row.borderBottomSolid:SetPoint("RIGHT", row, "LEFT", fadeStart, 0)
+        row.borderBottomSolid:SetTexture("Interface\\Buttons\\WHITE8X8")
+        row.borderBottomSolid:SetColorTexture(borderR, borderG, borderB, borderA)
+    end
+
+    if row.borderTopFade then
+        row.borderTopFade:SetWidth(fadeWidth)
+        row.borderTopFade:SetTexture("Interface\\Buttons\\WHITE8X8")
+        if row.borderTopFade.SetGradient and _G.CreateColor then
+            row.borderTopFade:SetGradient("HORIZONTAL",
+                _G.CreateColor(borderR, borderG, borderB, borderA),
+                _G.CreateColor(borderR, borderG, borderB, 0))
+        elseif row.borderTopFade.SetGradientAlpha then
+            row.borderTopFade:SetGradientAlpha("HORIZONTAL", borderR, borderG, borderB, borderA, borderR, borderG,
+                borderB, 0)
+        else
+            row.borderTopFade:SetColorTexture(borderR, borderG, borderB, borderA)
+        end
+    end
+
+    if row.borderBottomFade then
+        row.borderBottomFade:SetWidth(fadeWidth)
+        row.borderBottomFade:SetTexture("Interface\\Buttons\\WHITE8X8")
+        if row.borderBottomFade.SetGradient and _G.CreateColor then
+            row.borderBottomFade:SetGradient("HORIZONTAL",
+                _G.CreateColor(borderR, borderG, borderB, borderA),
+                _G.CreateColor(borderR, borderG, borderB, 0))
+        elseif row.borderBottomFade.SetGradientAlpha then
+            row.borderBottomFade:SetGradientAlpha("HORIZONTAL", borderR, borderG, borderB, borderA, borderR,
+                borderG, borderB, 0)
+        else
+            row.borderBottomFade:SetColorTexture(borderR, borderG, borderB, borderA)
+        end
+    end
+
+    if row.stripe then
+        row.stripe:SetColorTexture(
+            settings.stripeColorR or 0.10,
+            settings.stripeColorG or 0.72,
+            settings.stripeColorB or 0.74,
+            0.95)
+    end
+end
+
+ApplyRowFont = function(row, settings)
+    if not row or not row.txt then
+        return
+    end
+
+    local fontPath = nil
+    if LSM and settings.font and settings.font ~= "__default" then
+        fontPath = LSM:Fetch("font", settings.font, true)
+    end
+    if not fontPath then
+        fontPath = (T.Tools and T.Tools.Media and T.Tools.Media:GetFont()) or nil
+    end
+    if fontPath then
+        row.txt:SetFont(fontPath, settings.fontSize or 12, settings.fontOutline or "OUTLINE")
+    else
+        row.txt:SetFontObject("GameFontNormal")
+    end
+end
+
 local function ApplyContainerPosition(settings)
     if not container then
         return
@@ -442,6 +646,13 @@ end
 
 local function BuildDesignerExtras()
     return {
+        {
+            label = "Theme Surface",
+            type = "label",
+            tab = "appearance",
+            tabLabel = "Appearance",
+            text = "Background and border styling follow the global Appearance settings.",
+        },
         {
             label = "Position Mode",
             type = "select",
@@ -545,6 +756,63 @@ local function BuildDesignerExtras()
             end,
         },
         {
+            label = "Icon Size",
+            type = "range",
+            tab = "layout",
+            tabLabel = "Layout",
+            min = 14,
+            max = 40,
+            step = 1,
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetIconSize() or 22
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetIconSize(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Max Rows",
+            type = "range",
+            tab = "layout",
+            tabLabel = "Layout",
+            min = 1,
+            max = 15,
+            step = 1,
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetMaxRows() or 8
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetMaxRows(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Display Time",
+            type = "range",
+            tab = "layout",
+            tabLabel = "Layout",
+            min = 1,
+            max = 30,
+            step = 0.5,
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetDisplayTime() or 5
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetDisplayTime(nil, value)
+                end
+            end,
+        },
+        {
             label = "Scale",
             type = "range",
             tab = "appearance",
@@ -564,6 +832,267 @@ local function BuildDesignerExtras()
             end,
         },
         {
+            label = "Font",
+            type = "select",
+            dialogControl = "LSM30_Font",
+            tab = "appearance",
+            tabLabel = "Appearance",
+            values = function()
+                return (LSM and LSM:HashTable("font")) or GetFontValues()
+            end,
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetFont() or "__default"
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetFont(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Font Size",
+            type = "range",
+            tab = "appearance",
+            tabLabel = "Appearance",
+            min = 8,
+            max = 20,
+            step = 1,
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetFontSize() or 12
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetFontSize(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Font Outline",
+            type = "select",
+            tab = "appearance",
+            tabLabel = "Appearance",
+            values = {
+                NONE = "None",
+                OUTLINE = "Outline",
+                THICKOUTLINE = "Thick Outline",
+            },
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetFontOutline() or "OUTLINE"
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetFontOutline(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Masque Skinning",
+            type = "toggle",
+            tab = "appearance",
+            tabLabel = "Appearance",
+            desc = "Requires the Masque addon to be installed.",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetMasqueEnabled() or false
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetMasqueEnabled(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Show Items",
+            type = "toggle",
+            tab = "content",
+            tabLabel = "Content",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetShowItems() or true
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetShowItems(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Show Gold",
+            type = "toggle",
+            tab = "content",
+            tabLabel = "Content",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetShowGold() or true
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetShowGold(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Show Currency",
+            type = "toggle",
+            tab = "content",
+            tabLabel = "Content",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetShowCurrency() or true
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetShowCurrency(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Stack Duplicates",
+            type = "toggle",
+            tab = "content",
+            tabLabel = "Content",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetStackDuplicates() or true
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetStackDuplicates(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Show Poor",
+            type = "toggle",
+            tab = "filters",
+            tabLabel = "Filters",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetShowPoor() or false
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetShowPoor(nil, value)
+                end
+            end,
+            disabled = function()
+                local opts = GetOptions()
+                return not opts or not opts:GetShowItems()
+            end,
+        },
+        {
+            label = "Show Common",
+            type = "toggle",
+            tab = "filters",
+            tabLabel = "Filters",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetShowCommon() or true
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetShowCommon(nil, value)
+                end
+            end,
+            disabled = function()
+                local opts = GetOptions()
+                return not opts or not opts:GetShowItems()
+            end,
+        },
+        {
+            label = "Show Uncommon",
+            type = "toggle",
+            tab = "filters",
+            tabLabel = "Filters",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetShowUncommon() or true
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetShowUncommon(nil, value)
+                end
+            end,
+            disabled = function()
+                local opts = GetOptions()
+                return not opts or not opts:GetShowItems()
+            end,
+        },
+        {
+            label = "Show Rare",
+            type = "toggle",
+            tab = "filters",
+            tabLabel = "Filters",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetShowRare() or true
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetShowRare(nil, value)
+                end
+            end,
+            disabled = function()
+                local opts = GetOptions()
+                return not opts or not opts:GetShowItems()
+            end,
+        },
+        {
+            label = "Show Epic",
+            type = "toggle",
+            tab = "filters",
+            tabLabel = "Filters",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetShowEpic() or true
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetShowEpic(nil, value)
+                end
+            end,
+            disabled = function()
+                local opts = GetOptions()
+                return not opts or not opts:GetShowItems()
+            end,
+        },
+        {
+            label = "Show Legendary",
+            type = "toggle",
+            tab = "filters",
+            tabLabel = "Filters",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetShowLegendary() or true
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetShowLegendary(nil, value)
+                end
+            end,
+            disabled = function()
+                local opts = GetOptions()
+                return not opts or not opts:GetShowItems()
+            end,
+        },
+        {
             label = "Reset Custom Position",
             type = "execute",
             tab = "layout",
@@ -578,6 +1107,24 @@ local function BuildDesignerExtras()
             disabled = function()
                 local opts = GetOptions()
                 return not opts or opts:GetChatDockMode() ~= "none"
+            end,
+        },
+        {
+            label = "Show Preview",
+            type = "execute",
+            tab = "preview",
+            tabLabel = "Preview",
+            func = function()
+                LF:ShowPreview()
+            end,
+        },
+        {
+            label = "Hide Preview",
+            type = "execute",
+            tab = "preview",
+            tabLabel = "Preview",
+            func = function()
+                LF:HidePreview()
             end,
         },
     }
@@ -727,14 +1274,8 @@ local function PopulateRow(entry, icon, text, link, quality, settings)
 
     row:SetSize(fw, rh)
     row.icon:SetSize(isz, isz)
-
-    -- Background color (re-apply when settings change)
-    row.bg:SetColorTexture(
-        settings.bgColorR or 0,
-        settings.bgColorG or 0,
-        settings.bgColorB or 0,
-        settings.bgAlpha or 0.45
-    )
+    ApplyRowTheme(row, settings)
+    ApplyRowFont(row, settings)
 
     -- Icon texture
     if icon then
@@ -766,18 +1307,6 @@ local function PopulateRow(entry, icon, text, link, quality, settings)
     row.txt:SetText(text)
     row.link = link
     row.icon.link = link
-
-    -- Font (re-apply in case settings changed)
-    local fontPath = nil
-    if LSM and settings.font and settings.font ~= "__default" then
-        fontPath = LSM:Fetch("font", settings.font, true)
-    end
-    if not fontPath then
-        fontPath = (T.Tools and T.Tools.Media and T.Tools.Media:GetFont()) or nil
-    end
-    if fontPath then
-        row.txt:SetFont(fontPath, fs, fout)
-    end
 end
 
 -- ---------------------------------------------------------------------------
@@ -1142,10 +1671,88 @@ function LF:HidePreview()
     end
 end
 
+function LF:RegisterRowWithMasque(row)
+    if not row or not row.icon or not self._masqueGroup or row._lootFeedMasqueRegistered then
+        return
+    end
+
+    self._masqueGroup:AddButton(row.icon, {
+        Icon         = row.icon.tex,
+        Border       = row.icon.border,
+        Highlight    = nil,
+        Normal       = false,
+        Pushed       = false,
+        Disabled     = false,
+        Checked      = false,
+        Cooldown     = nil,
+        AutoCast     = nil,
+        AutoCastable = nil,
+        HotKey       = nil,
+        Count        = false,
+        Name         = nil,
+        Duration     = false,
+        FloatingBG   = nil,
+        Flash        = nil,
+    })
+    row._lootFeedMasqueRegistered = true
+end
+
+function LF:ApplyMasqueSettings()
+    local settings = GetSettings()
+    local wantMasque = settings.masqueEnabled == true
+
+    if wantMasque then
+        if not self._masqueGroup then
+            local Masque = LibStub and LibStub("Masque", true)
+            if Masque then
+                self._masqueGroup = Masque:Group("TwichUI Reformed", "Loot Feed Icons")
+                IterateAllRows(function(row)
+                    row._lootFeedMasqueRegistered = nil
+                end)
+            end
+        end
+
+        if self._masqueGroup then
+            IterateAllRows(function(row)
+                self:RegisterRowWithMasque(row)
+            end)
+            if self._masqueGroup.ReSkin then
+                self._masqueGroup:ReSkin()
+            end
+        end
+    else
+        if self._masqueGroup then
+            if type(self._masqueGroup.Delete) == "function" then
+                self._masqueGroup:Delete()
+            end
+            self._masqueGroup = nil
+        end
+
+        IterateAllRows(function(row)
+            row._lootFeedMasqueRegistered = nil
+        end)
+    end
+end
+
+function LF:OnThemeChanged()
+    local settings = GetSettings()
+    IterateAllRows(function(row)
+        ApplyRowTheme(row, settings)
+        ApplyRowFont(row, settings)
+    end)
+end
+
 -- ---------------------------------------------------------------------------
 -- Public: refresh layout (called when settings change live)
 -- ---------------------------------------------------------------------------
 function LF:RefreshLayout()
+    if self._masqueGroup then
+        if type(self._masqueGroup.Delete) == "function" then
+            self._masqueGroup:Delete()
+        end
+        self._masqueGroup = nil
+    end
+
     -- Clear all current rows and recreate from nothing
     for _, entry in ipairs(activeRows) do
         if entry.exitTimer then
@@ -1172,6 +1779,8 @@ function LF:RefreshLayout()
         ApplyContainerPosition(settings)
         ApplyContainerInteractivity(settings)
     end
+
+    self:ApplyMasqueSettings()
 end
 
 function LF:OnEnteringWorld()
@@ -1202,6 +1811,10 @@ function LF:OnEnable()
     self:RegisterEvent("CHAT_MSG_MONEY", "CHAT_MSG_MONEY")
     self:RegisterEvent("CHAT_MSG_CURRENCY", "CHAT_MSG_CURRENCY")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnEnteringWorld")
+    self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
+
+    self:ApplyMasqueSettings()
+    self:OnThemeChanged()
 
     -- Register with the Interface Designer (Mover module)
     local moversModule = _G.TwichMoverModule
@@ -1271,6 +1884,16 @@ end
 
 function LF:OnDisable()
     self:UnregisterAllEvents()
+    self:UnregisterMessage("TWICH_THEME_CHANGED")
+    if self._masqueGroup then
+        if type(self._masqueGroup.Delete) == "function" then
+            self._masqueGroup:Delete()
+        end
+        self._masqueGroup = nil
+    end
+    IterateAllRows(function(row)
+        row._lootFeedMasqueRegistered = nil
+    end)
 
     -- Cancel all pending timers
     if moneyBatchTimer then

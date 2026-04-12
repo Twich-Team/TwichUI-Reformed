@@ -2,7 +2,7 @@
 
 This is a massive release!!
 
-This release focuses primarily on performance, with a massive CPU performance increase. Additionally, we now have nameplates! some small bugfixes and minor missing items are included.
+This release focuses primarily on performance, with a massive CPU performance increase. Additionally, we now have nameplates and a loot feed! Some small bugfixes and minor missing items are included.
 
 Development is currently turning towards completing the MVP of the "UI Overhaul" goal, and will soon enough no longer require ElvUI. The next major feature will be tooltips, followed by minimap, objective tracking, and blizzard frame skinning.
 
@@ -15,6 +15,7 @@ However the short-term plan is to continue with performance increases, more poin
 #### BugFixes
 
 - Fixed an issue where the profession frame would not open when toggled from the gold data panel text.
+- Fixed an issue where the leave vehicle button was not appearing.
 
 #### New
 
@@ -31,3 +32,4 @@ However the short-term plan is to continue with performance increases, more poin
 
 - Profiling system added to make it simpler to target inefficient code
 - Temporarily disabled the Mythic+ Interrupt tracker as it is not currently reliable
+- Performed styling cleanup on various modules so the default styles align with the globally set appearances better

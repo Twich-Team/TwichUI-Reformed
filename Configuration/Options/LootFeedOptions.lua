@@ -27,6 +27,36 @@ local function GetModule()
     return T:GetModule("QualityOfLife"):GetModule("LootFeed")
 end
 
+local function GetThemeModule()
+    return T:GetModule("Theme", true)
+end
+
+local function GetThemeColor(key, fallback)
+    local theme = GetThemeModule()
+    local getColor = theme and theme["GetColor"] or nil
+    if theme and type(getColor) == "function" then
+        local color = getColor(theme, key)
+        if type(color) == "table" then
+            return color[1] or fallback[1], color[2] or fallback[2], color[3] or fallback[3]
+        end
+    end
+
+    return fallback[1], fallback[2], fallback[3]
+end
+
+local function GetThemeValue(key, fallback)
+    local theme = GetThemeModule()
+    local getValue = theme and theme["Get"] or nil
+    if theme and type(getValue) == "function" then
+        local value = getValue(theme, key)
+        if value ~= nil then
+            return value
+        end
+    end
+
+    return fallback
+end
+
 local function RefreshLayout()
     local m = GetModule()
     local refresh = m and m["RefreshLayout"] or nil
@@ -40,6 +70,9 @@ end
 -- ---------------------------------------------------------------------------
 function Options:GetAll()
     local db = GetDB()
+    local bgR, bgG, bgB = GetThemeColor("backgroundColor", { 0.05, 0.06, 0.08 })
+    local borderR, borderG, borderB = GetThemeColor("borderColor", { 0.24, 0.26, 0.32 })
+    local primaryR, primaryG, primaryB = GetThemeColor("primaryColor", { 0.10, 0.72, 0.74 })
     return {
         enabled         = db.enabled ~= false,
         locked          = db.locked == true,
@@ -55,11 +88,19 @@ function Options:GetAll()
         fontSize        = db.fontSize or 12,
         fontOutline     = db.fontOutline or "OUTLINE",
         font            = db.font or "__default",
-        bgAlpha         = db.bgAlpha ~= nil and db.bgAlpha or 0.45,
-        bgColorR        = db.bgColorR ~= nil and db.bgColorR or 0,
-        bgColorG        = db.bgColorG ~= nil and db.bgColorG or 0,
-        bgColorB        = db.bgColorB ~= nil and db.bgColorB or 0,
+        bgAlpha         = GetThemeValue("backgroundAlpha", 0.94),
+        bgColorR        = bgR,
+        bgColorG        = bgG,
+        bgColorB        = bgB,
+        borderAlpha     = GetThemeValue("borderAlpha", 0.85),
+        borderColorR    = borderR,
+        borderColorG    = borderG,
+        borderColorB    = borderB,
+        stripeColorR    = primaryR,
+        stripeColorG    = primaryG,
+        stripeColorB    = primaryB,
         scale           = db.scale or 1.0,
+        masqueEnabled   = db.masqueEnabled == true,
         showItems       = db.showItems ~= false,
         showGold        = db.showGold ~= false,
         showCurrency    = db.showCurrency ~= false,
@@ -195,6 +236,18 @@ function Options:SetIconSize(_, value)
 end
 
 -- ---------------------------------------------------------------------------
+-- Masque support
+-- ---------------------------------------------------------------------------
+function Options:GetMasqueEnabled()
+    return GetDB().masqueEnabled == true
+end
+
+function Options:SetMasqueEnabled(_, value)
+    GetDB().masqueEnabled = value == true
+    RefreshLayout()
+end
+
+-- ---------------------------------------------------------------------------
 -- Display time
 -- ---------------------------------------------------------------------------
 function Options:GetDisplayTime()
@@ -233,12 +286,10 @@ end
 -- Background alpha
 -- ---------------------------------------------------------------------------
 function Options:GetBgAlpha()
-    local v = GetDB().bgAlpha
-    return v ~= nil and v or 0.45
+    return GetThemeValue("backgroundAlpha", 0.94)
 end
 
 function Options:SetBgAlpha(_, value)
-    GetDB().bgAlpha = value
     RefreshLayout()
 end
 
@@ -304,18 +355,10 @@ end
 -- Background color (RGB)
 -- ---------------------------------------------------------------------------
 function Options:GetBgColor()
-    local db = GetDB()
-    local r = db.bgColorR ~= nil and db.bgColorR or 0
-    local g = db.bgColorG ~= nil and db.bgColorG or 0
-    local b = db.bgColorB ~= nil and db.bgColorB or 0
-    return r, g, b
+    return GetThemeColor("backgroundColor", { 0.05, 0.06, 0.08 })
 end
 
 function Options:SetBgColor(_, r, g, b)
-    local db = GetDB()
-    db.bgColorR = r
-    db.bgColorG = g
-    db.bgColorB = b
     RefreshLayout()
 end
 
