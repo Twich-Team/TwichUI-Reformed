@@ -22,6 +22,7 @@ local C_PetBattles = _G.C_PetBattles
 local C_QuestSession = _G.C_QuestSession
 local C_SummonInfo = _G.C_SummonInfo
 local C_Timer = _G.C_Timer
+local GetInstanceInfo = _G.GetInstanceInfo
 local CommunitiesUtil = _G["CommunitiesUtil"]
 local EventToastManagerFrame = _G["EventToastManagerFrame"]
 local hasanysecretvalues = _G.hasanysecretvalues
@@ -221,6 +222,56 @@ end
 
 local function Feature(path)
     return GetOptions():GetEnabled() and Value(path, false) == true
+end
+
+local _gtDebugConsole = nil
+local function GTLog(message)
+    if not _gtDebugConsole then
+        _gtDebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+    end
+    if _gtDebugConsole and type(_gtDebugConsole.Log) == "function" then
+        _gtDebugConsole:Log("gametweaks", message, false)
+    end
+end
+
+local PVP_AUTO_RELEASE_WORLD_MAPS = {
+    [123] = true,  -- Wintergrasp
+    [244] = true,  -- Tol Barad
+    [588] = true,  -- Ashran
+    [622] = true,  -- Ashran Alliance Base
+    [624] = true,  -- Ashran Horde Base
+    [1478] = true, -- Ashran PvP variant
+}
+
+local function GetAutoReleaseContext()
+    local mapID = (C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")) or 0
+    local instanceName, _, _, _, _, _, _, instanceMapID, instanceGroupSize, lfgDungeonID = GetInstanceInfo()
+    local _, instanceType = GetInstanceInfo()
+
+    return {
+        mapID = mapID or 0,
+        instanceName = tostring(instanceName or ""),
+        instanceType = tostring(instanceType or "none"),
+        instanceMapID = instanceMapID or 0,
+        instanceGroupSize = instanceGroupSize or 0,
+        lfgDungeonID = lfgDungeonID or 0,
+    }
+end
+
+local function ShouldAutoReleaseInContext(ctx)
+    if not ctx then
+        return false, "no_context"
+    end
+
+    if ctx.instanceType == "pvp" or ctx.instanceType == "arena" then
+        return true, "pvp_instance"
+    end
+
+    if PVP_AUTO_RELEASE_WORLD_MAPS[ctx.mapID] then
+        return true, "pvp_world_zone"
+    end
+
+    return false, "non_pvp_context"
 end
 
 local function SaveOriginalCVar(slot, cvar)
@@ -758,7 +809,19 @@ local function InstallHooks()
             return
         end
 
+        local ctx = GetAutoReleaseContext()
+        local allowed, reason = ShouldAutoReleaseInContext(ctx)
+        GTLog(string.format(
+            "autoReleasePvP DEATH popup: allowed=%s reason=%s instanceType=%s instanceName=%s mapID=%s instanceMapID=%s lfgDungeonID=%s",
+            tostring(allowed), tostring(reason), tostring(ctx.instanceType), tostring(ctx.instanceName),
+            tostring(ctx.mapID), tostring(ctx.instanceMapID), tostring(ctx.lfgDungeonID)))
+
+        if not allowed then
+            return
+        end
+
         if C_DeathInfo.GetSelfResurrectOptions() and #C_DeathInfo.GetSelfResurrectOptions() > 0 then
+            GTLog("autoReleasePvP skipped: self-resurrect option available")
             return
         end
 
@@ -780,14 +843,22 @@ local function InstallHooks()
 
         local mapID = C_Map.GetBestMapForUnit("player") or 0
         if shouldSkip(mapID) then
+            GTLog(string.format("autoReleasePvP skipped: excluded mapID=%s", tostring(mapID)))
             return
         end
 
         local delay = (Value({ "automation", "releaseDelayMs" }, 0) or 0) / 1000
+        GTLog(string.format("autoReleasePvP scheduled: delay=%.3f mapID=%s instanceType=%s", delay, tostring(mapID),
+            tostring(ctx.instanceType)))
         C_Timer.After(delay, function()
             local dialog = _G.StaticPopup_Visible("DEATH")
             if dialog and not IsShiftKeyDown() then
+                GTLog("autoReleasePvP executing: clicking DEATH popup")
                 _G.StaticPopup_OnClick(_G[dialog], 1)
+            elseif not dialog then
+                GTLog("autoReleasePvP canceled: DEATH popup no longer visible")
+            else
+                GTLog("autoReleasePvP canceled: Shift held down")
             end
         end)
     end)
