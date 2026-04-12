@@ -120,6 +120,7 @@ local NP_DEFAULT_AURA_SIZE   = 20
 local NP_DEFAULT_AURA_MAX    = 5
 local NP_MAX_AURA_POOL       = 10 -- pre-allocated icons per plate
 local TARGET_GROW_ANIM_SEC   = 0.14
+local RANGE_FADE_ANIM_SEC    = 0.16
 
 -- Default reaction colours used when healthColorMode = "reaction"
 -- These are the built-in fallbacks; users can override each via DB.
@@ -1062,6 +1063,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     frame._isTestPreview   = false
     frame._currentWidth    = w
     frame._currentHeight   = h
+    frame._currentAlpha    = 1
 
     local sizeAnimDriver   = CreateFrame("Frame", nil, frame)
     sizeAnimDriver:Hide()
@@ -1093,6 +1095,38 @@ function Nameplates:BuildPlateFrame(parentPlate)
     end)
     frame._sizeAnimDriver = sizeAnimDriver
 
+    local alphaAnimDriver = CreateFrame("Frame", nil, frame)
+    alphaAnimDriver:Hide()
+    alphaAnimDriver:SetScript("OnUpdate", function(_, elapsed)
+        if not frame._alphaAnimDuration then
+            alphaAnimDriver:Hide()
+            return
+        end
+
+        frame._alphaAnimElapsed = (frame._alphaAnimElapsed or 0) + elapsed
+        local progress = Clamp(frame._alphaAnimElapsed / frame._alphaAnimDuration, 0, 1)
+        local eased = EaseOutCubic(progress)
+        local alpha = frame._alphaAnimStart + ((frame._alphaAnimTarget - frame._alphaAnimStart) * eased)
+
+        Nameplates:SetPlateFrameAlpha(frame, alpha)
+
+        if progress >= 1 then
+            Nameplates:SetPlateFrameAlpha(frame, frame._alphaAnimTarget)
+            frame._alphaAnimElapsed = nil
+            frame._alphaAnimDuration = nil
+            frame._alphaAnimStart = nil
+            frame._alphaAnimTarget = nil
+            alphaAnimDriver:Hide()
+
+            if frame._alphaAnimOnFinished then
+                local callback = frame._alphaAnimOnFinished
+                frame._alphaAnimOnFinished = nil
+                callback(frame)
+            end
+        end
+    end)
+    frame._alphaAnimDriver = alphaAnimDriver
+
     return frame
 end
 
@@ -1117,6 +1151,7 @@ function Nameplates:ReleasePlateFrame(frame)
     -- Cancel any active cast animation on the shared ticker.
     _stopCastTicker(frame)
     self:StopPlateSizeAnimation(frame)
+    self:StopPlateAlphaAnimation(frame)
     frame._unit            = nil
     frame._plate           = nil
     frame._casting         = false
@@ -1164,6 +1199,55 @@ function Nameplates:StopPlateSizeAnimation(frame)
     frame._sizeAnimTargetHeight = nil
     if frame._sizeAnimDriver then
         frame._sizeAnimDriver:Hide()
+    end
+end
+
+function Nameplates:SetPlateFrameAlpha(frame, alpha)
+    if not frame then return end
+
+    local resolvedAlpha = Clamp(alpha or frame._currentAlpha or frame:GetAlpha() or 1, 0, 1)
+    frame._currentAlpha = resolvedAlpha
+    frame:SetAlpha(resolvedAlpha)
+    if frame.targetGlow then
+        frame.targetGlow:SetAlpha(resolvedAlpha)
+    end
+end
+
+function Nameplates:StopPlateAlphaAnimation(frame)
+    if not frame then return end
+    frame._alphaAnimElapsed = nil
+    frame._alphaAnimDuration = nil
+    frame._alphaAnimStart = nil
+    frame._alphaAnimTarget = nil
+    frame._alphaAnimOnFinished = nil
+    if frame._alphaAnimDriver then
+        frame._alphaAnimDriver:Hide()
+    end
+end
+
+function Nameplates:AnimatePlateFrameAlpha(frame, alpha, duration, onFinished, instant)
+    if not frame then return end
+
+    local targetAlpha = Clamp(alpha or frame._currentAlpha or frame:GetAlpha() or 1, 0, 1)
+    local currentAlpha = Clamp(frame._currentAlpha or frame:GetAlpha() or targetAlpha, 0, 1)
+    local fadeDuration = Clamp(duration or RANGE_FADE_ANIM_SEC, 0.01, 1)
+
+    if instant or math.abs(targetAlpha - currentAlpha) < 0.01 then
+        self:StopPlateAlphaAnimation(frame)
+        self:SetPlateFrameAlpha(frame, targetAlpha)
+        if onFinished then onFinished(frame) end
+        return
+    end
+
+    frame._alphaAnimElapsed = 0
+    frame._alphaAnimDuration = fadeDuration
+    frame._alphaAnimStart = currentAlpha
+    frame._alphaAnimTarget = targetAlpha
+    frame._alphaAnimOnFinished = onFinished
+
+    self:SetPlateFrameAlpha(frame, currentAlpha)
+    if frame._alphaAnimDriver then
+        frame._alphaAnimDriver:Show()
     end
 end
 
@@ -2158,11 +2242,12 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     local db         = self:GetEffectiveDB(unitID)
     local alpha      = Clamp(db.alpha or 1, 0.1, 1)
     local scale      = Clamp(db.scale or 1, 0.5, 2)
-    frame:SetAlpha(alpha)
     frame:SetScale(scale)
+    self:SetPlateFrameAlpha(frame, 0)
     frame:Show()
 
     self:UpdateAllElements(frame, unitID)
+    self:AnimatePlateFrameAlpha(frame, alpha, RANGE_FADE_ANIM_SEC)
 
     -- If cast test mode is running, start a fake cast on this new plate
     if self._castTestMode then
@@ -2177,9 +2262,12 @@ end
 function Nameplates:OnNamePlateRemoved(_, unitID)
     local frame = self._plates[unitID]
     if not frame then return end
-    self:ReleasePlateFrame(frame)
-    _auraThrottle[unitID] = nil
     self._plates[unitID] = nil
+    _auraThrottle[unitID] = nil
+    self:StopPlateSizeAnimation(frame)
+    self:AnimatePlateFrameAlpha(frame, 0, RANGE_FADE_ANIM_SEC, function(f)
+        self:ReleasePlateFrame(f)
+    end)
 end
 
 -- ── Test mode ─────────────────────────────────────────────────────────────────
@@ -2697,7 +2785,7 @@ function Nameplates:OnCombatStateChange()
     for unitID, frame in pairs(self._plates) do
         if frame then
             local edb = self:GetEffectiveDB(unitID)
-            frame:SetAlpha(Clamp(edb.alpha or 1, 0.1, 1))
+            self:SetPlateFrameAlpha(frame, Clamp(edb.alpha or 1, 0.1, 1))
             frame:SetScale(Clamp(edb.scale or 1, 0.5, 2))
         end
     end
@@ -2812,7 +2900,7 @@ function Nameplates:RegisterMovers()
                 set = function(v)
                     self2:GetDB().alpha = v
                     for _, frame in pairs(self2._plates) do
-                        frame:SetAlpha(v)
+                        self2:SetPlateFrameAlpha(frame, v)
                     end
                 end,
             },
