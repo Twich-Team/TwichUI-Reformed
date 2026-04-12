@@ -1159,7 +1159,7 @@ end
 
 function Nameplates:UpdateTargetGlow(frame, unit)
     if not frame or not frame.targetGlow then return end
-    local db = self:GetDB()
+    local db = self:GetEffectiveDB(unit)
 
     -- Helper: restore the frame's normal border colour from stored state or DB.
     local function RestoreBorder()
@@ -1615,13 +1615,7 @@ function Nameplates:ApplyThemeToFrame(frame)
     if frame.nameText then
         frame.nameText:SetFont(nf, ns, nfl)
         if db.nameFontShadow then frame.nameText:SetShadowOffset(1, -1) else frame.nameText:SetShadowOffset(0, 0) end
-        -- Re-apply anchor point and horizontal justify whenever theme/settings change.
-        local nameAnchorPt   = db.nameAnchorPoint or "BOTTOMLEFT"
-        local nameOX, nameOY = db.nameOffsetX or 2, db.nameOffsetY or 3
-        frame.nameText:ClearAllPoints()
-        frame.nameText:SetWidth(math_max(frame:GetWidth() - 4, 1))
-        frame.nameText:SetPoint(nameAnchorPt, frame, nameAnchorPt, nameOX, nameOY)
-        frame.nameText:SetJustifyH(db.nameJustify or "LEFT")
+        ApplyNameTextLayout(frame, db)
         -- Color is handled by UpdateName (class color, custom, or default white).
     end
     if frame.healthText then
