@@ -23,54 +23,54 @@
       • CVars applied through pcall + C_CVar fallback
 ]]
 
-local TwichRx                = _G.TwichRx
+local TwichRx                              = _G.TwichRx
 ---@type TwichUI
-local T                      = unpack(TwichRx)
+local T                                    = unpack(TwichRx)
 
 ---@class NameplatesModule : AceModule, AceEvent-3.0, AceTimer-3.0
-local Nameplates             = T:NewModule("Nameplates", "AceEvent-3.0", "AceTimer-3.0")
+local Nameplates                           = T:NewModule("Nameplates", "AceEvent-3.0", "AceTimer-3.0")
 
 -- ── WoW API locals ──────────────────────────────────────────────────────────
-local CreateFrame            = _G.CreateFrame
-local UIParent               = _G.UIParent
-local C_NamePlate            = _G.C_NamePlate
-local C_NamePlate_SetNamePlateEnemySize = C_NamePlate and C_NamePlate.SetNamePlateEnemySize
+local CreateFrame                          = _G.CreateFrame
+local UIParent                             = _G.UIParent
+local C_NamePlate                          = _G.C_NamePlate
+local C_NamePlate_SetNamePlateEnemySize    = C_NamePlate and C_NamePlate.SetNamePlateEnemySize
 local C_NamePlate_SetNamePlateFriendlySize = C_NamePlate and C_NamePlate.SetNamePlateFriendlySize
-local C_UnitAuras            = _G.C_UnitAuras
-local C_Timer                = _G.C_Timer
-local C_Spell                = _G.C_Spell
-local UnitReaction           = _G.UnitReaction
-local UnitExists             = _G.UnitExists
-local UnitHealth             = _G.UnitHealth
-local UnitHealthMax          = _G.UnitHealthMax
-local UnitName               = _G.UnitName
-local UnitIsPlayer           = _G.UnitIsPlayer
-local UnitIsFriend           = _G.UnitIsFriend
-local UnitCanAttack          = _G.UnitCanAttack
-local UnitLevel              = _G.UnitLevel
-local UnitIsUnit             = _G.UnitIsUnit
-local UnitClass              = _G.UnitClass
-local UnitAffectingCombat    = _G.UnitAffectingCombat
-local UnitThreatSituation    = _G.UnitThreatSituation
-local UnitIsTapDenied        = _G.UnitIsTapDenied
-local UnitGetTotalAbsorbs    = _G.UnitGetTotalAbsorbs
-local UnitIsDeadOrGhost      = _G.UnitIsDeadOrGhost
-local UnitCastingInfo        = _G.UnitCastingInfo
-local UnitChannelInfo        = _G.UnitChannelInfo
-local UnitClassification     = _G.UnitClassification
-local UnitPower              = _G.UnitPower
-local UnitPowerMax           = _G.UnitPowerMax
-local UnitPowerType          = _G.UnitPowerType
-local UnitGroupRolesAssigned = _G.UnitGroupRolesAssigned
-local GetSpecalization       = _G.GetSpecialization
-local GetSpecalizationRole   = _G.GetSpecializationRole
-local GetTime                = _G.GetTime
-local CooldownFrame_Set      = _G.CooldownFrame_Set
-local RAID_CLASS_COLORS      = _G.RAID_CLASS_COLORS
-local C_ClassColor           = _G.C_ClassColor
-local math_max               = math.max
-local math_min               = math.min
-local math_floor             = math.floor
+local C_UnitAuras                          = _G.C_UnitAuras
+local C_Timer                              = _G.C_Timer
+local C_Spell                              = _G.C_Spell
+local UnitReaction                         = _G.UnitReaction
+local UnitExists                           = _G.UnitExists
+local UnitHealth                           = _G.UnitHealth
+local UnitHealthMax                        = _G.UnitHealthMax
+local UnitName                             = _G.UnitName
+local UnitIsPlayer                         = _G.UnitIsPlayer
+local UnitIsFriend                         = _G.UnitIsFriend
+local UnitCanAttack                        = _G.UnitCanAttack
+local UnitLevel                            = _G.UnitLevel
+local UnitIsUnit                           = _G.UnitIsUnit
+local UnitClass                            = _G.UnitClass
+local UnitAffectingCombat                  = _G.UnitAffectingCombat
+local UnitThreatSituation                  = _G.UnitThreatSituation
+local UnitIsTapDenied                      = _G.UnitIsTapDenied
+local UnitGetTotalAbsorbs                  = _G.UnitGetTotalAbsorbs
+local UnitIsDeadOrGhost                    = _G.UnitIsDeadOrGhost
+local UnitCastingInfo                      = _G.UnitCastingInfo
+local UnitChannelInfo                      = _G.UnitChannelInfo
+local UnitClassification                   = _G.UnitClassification
+local UnitPower                            = _G.UnitPower
+local UnitPowerMax                         = _G.UnitPowerMax
+local UnitPowerType                        = _G.UnitPowerType
+local UnitGroupRolesAssigned               = _G.UnitGroupRolesAssigned
+local GetSpecalization                     = _G.GetSpecialization
+local GetSpecalizationRole                 = _G.GetSpecializationRole
+local GetTime                              = _G.GetTime
+local CooldownFrame_Set                    = _G.CooldownFrame_Set
+local RAID_CLASS_COLORS                    = _G.RAID_CLASS_COLORS
+local C_ClassColor                         = _G.C_ClassColor
+local math_max                             = math.max
+local math_min                             = math.min
+local math_floor                           = math.floor
 
 -- ── Error reporting helper ────────────────────────────────────────────────────
 -- Routes real (non-taint) pcall errors to the central ErrorLog.
@@ -215,13 +215,13 @@ local AURA_THROTTLE_SEC  = 0.15
 -- ── Shared cast bar ticker ────────────────────────────────────────────────────
 -- A single OnUpdate closure drives ALL active cast bars instead of one per plate.
 -- At 10+ casts simultaneously this cuts N callbacks/frame down to 1.
-local _activeCastPlates  = {}   -- frame → true
+local _activeCastPlates  = {} -- frame → true
 local _castTickerActive  = false
 local _castTickerFrame   = CreateFrame("Frame", "TwichUI_NpCastTicker", UIParent)
 
 local function _castTickerFn()
-    local now      = GetTime()
-    local anyLeft  = false
+    local now     = GetTime()
+    local anyLeft = false
     for frame in pairs(_activeCastPlates) do
         if not frame._casting then
             _activeCastPlates[frame] = nil
@@ -406,7 +406,7 @@ function Nameplates:IsFriendlyUnit(unit)
     -- UnitIsFriend and UnitCanAttack return TRUE BOOLEANS and are safe to compare.
     if UnitIsFriend then
         local f = UnitIsFriend(unit, "player")
-        if f == true  then return true  end
+        if f == true then return true end
         if f == false then return false end -- explicit false = enemy/neutral
     end
     -- Fallback: if the player cannot attack the unit it is effectively friendly.
@@ -675,10 +675,10 @@ function Nameplates:BuildPlateFrame(parentPlate)
     -- MIDNIGHT LAYOUT NOTE: any direct child of the Blizzard nameplate plate can have its
     -- dimensions coerced by the plate's C-side layout. Keep the TwichUI plate root on
     -- UIParent and anchor it to the Blizzard plate instead so the size is entirely ours.
-    local plate = parentPlate or UIParent
+    local plate               = parentPlate or UIParent
     frame:SetSize(w, h)
-    frame:SetPoint("TOPLEFT",     plate, "CENTER", -w / 2,  h / 2)
-    frame:SetPoint("BOTTOMRIGHT", plate, "CENTER",  w / 2, -h / 2)
+    frame:SetPoint("TOPLEFT", plate, "CENTER", -w / 2, h / 2)
+    frame:SetPoint("BOTTOMRIGHT", plate, "CENTER", w / 2, -h / 2)
     frame:SetFrameLevel(NP_FRAME_LEVEL)
     ApplyBackdrop(frame, bgC[1], bgC[2], bgC[3], bgC[4], bdC[1], bdC[2], bdC[3], bdC[4])
 
@@ -727,7 +727,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     -- Do NOT use SetHeight — with anchor-based frame sizing that call is redundant
     -- and can produce a visible grey gap when the value differs from the frame's
     -- actual rendered height.
-    healthBar:SetPoint("TOPLEFT",     frame, "TOPLEFT",     1, -1)
+    healthBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
     healthBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
     healthBar:SetStatusBarTexture(hpTex)
     healthBar:SetStatusBarColor(COLOR_HOSTILE[1], COLOR_HOSTILE[2], COLOR_HOSTILE[3], 1)
@@ -769,7 +769,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     if db.nameFontShadow then nameText:SetShadowOffset(1, -1) else nameText:SetShadowOffset(0, 0) end
     nameText:SetTextColor(1, 1, 1, 1)
     nameText:SetWordWrap(false)
-    frame.nameText     = nameText
+    frame.nameText = nameText
     ApplyNameTextLayout(frame, db, w)
 
     -- ── Health text ───────────────────────────────────────────────────────────
@@ -936,19 +936,19 @@ function Nameplates:BuildPlateFrame(parentPlate)
     end
 
     auraFrame:Hide()
-    frame.auraFrame      = auraFrame
+    frame.auraFrame        = auraFrame
 
     -- Cast state tracking
-    frame._casting       = false
-    frame._channeling    = false
-    frame._castStart     = 0
-    frame._castEnd       = 0
-    frame._castMax       = 1
+    frame._casting         = false
+    frame._channeling      = false
+    frame._castStart       = 0
+    frame._castEnd         = 0
+    frame._castMax         = 1
     frame._castObservedAt  = 0
     frame._castDurationSec = 1
-    frame._onCastEnd     = nil
-    frame._unit          = nil
-    frame._isTestPreview = false
+    frame._onCastEnd       = nil
+    frame._unit            = nil
+    frame._isTestPreview   = false
 
     return frame
 end
@@ -983,11 +983,11 @@ function Nameplates:ReleasePlateFrame(frame)
     -- Hide all sub-elements so recycled frames start invisible.
     frame:Hide()
     if frame.castContainer then frame.castContainer:Hide() end
-    if frame.targetGlow    then frame.targetGlow:Hide()    end
-    if frame.auraFrame     then frame.auraFrame:Hide()     end
-    if frame.absorbBar     then frame.absorbBar:Hide()     end
-    if frame.arrowL        then frame.arrowL:Hide()        end
-    if frame.arrowR        then frame.arrowR:Hide()        end
+    if frame.targetGlow then frame.targetGlow:Hide() end
+    if frame.auraFrame then frame.auraFrame:Hide() end
+    if frame.absorbBar then frame.absorbBar:Hide() end
+    if frame.arrowL then frame.arrowL:Hide() end
+    if frame.arrowR then frame.arrowR:Hide() end
     self._platePool[#self._platePool + 1] = frame
 end
 
@@ -1210,8 +1210,8 @@ function Nameplates:UpdateTargetGlow(frame, unit)
         local fh = baseH * growH
         if frame._plate then
             frame:ClearAllPoints()
-            frame:SetPoint("TOPLEFT",     frame._plate, "CENTER", -fw / 2,  fh / 2)
-            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER",  fw / 2, -fh / 2)
+            frame:SetPoint("TOPLEFT", frame._plate, "CENTER", -fw / 2, fh / 2)
+            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", fw / 2, -fh / 2)
         end
 
         if db.showTargetArrows ~= false then
@@ -1249,8 +1249,8 @@ function Nameplates:UpdateTargetGlow(frame, unit)
         if frame.arrowR then frame.arrowR:Hide() end
         if frame._plate then
             frame:ClearAllPoints()
-            frame:SetPoint("TOPLEFT",     frame._plate, "CENTER", -baseW / 2,  baseH / 2)
-            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER",  baseW / 2, -baseH / 2)
+            frame:SetPoint("TOPLEFT", frame._plate, "CENTER", -baseW / 2, baseH / 2)
+            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", baseW / 2, -baseH / 2)
         end
     else
         RestoreBorder()
@@ -1259,8 +1259,8 @@ function Nameplates:UpdateTargetGlow(frame, unit)
         if frame.arrowR then frame.arrowR:Hide() end
         if frame._plate then
             frame:ClearAllPoints()
-            frame:SetPoint("TOPLEFT",     frame._plate, "CENTER", -baseW / 2,  baseH / 2)
-            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER",  baseW / 2, -baseH / 2)
+            frame:SetPoint("TOPLEFT", frame._plate, "CENTER", -baseW / 2, baseH / 2)
+            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", baseW / 2, -baseH / 2)
         end
     end
 end
@@ -1670,8 +1670,8 @@ function Nameplates:ResizePlateFrame(frame)
     if frame._plate then
         frame:ClearAllPoints()
         frame:SetSize(w, h)
-        frame:SetPoint("TOPLEFT",     frame._plate, "CENTER", -w / 2,  h / 2)
-        frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER",  w / 2, -h / 2)
+        frame:SetPoint("TOPLEFT", frame._plate, "CENTER", -w / 2, h / 2)
+        frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", w / 2, -h / 2)
     end
     ApplyNameTextLayout(frame, db, w)
     -- healthBar fills the frame via BOTTOMRIGHT anchor; no explicit SetHeight needed.
@@ -1835,9 +1835,9 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     -- default to hidden and are shown only when UNIT_POWER_BAR_SHOW fires.
     frame._showPower = (UnitIsPlayer(unitID) == true)
 
-    local db             = self:GetEffectiveDB(unitID)
-    local alpha          = Clamp(db.alpha or 1, 0.1, 1)
-    local scale          = Clamp(db.scale or 1, 0.5, 2)
+    local db         = self:GetEffectiveDB(unitID)
+    local alpha      = Clamp(db.alpha or 1, 0.1, 1)
+    local scale      = Clamp(db.scale or 1, 0.5, 2)
     frame:SetAlpha(alpha)
     frame:SetScale(scale)
     frame:Show()
@@ -2125,7 +2125,7 @@ function Nameplates:StartFakeCast(frame)
     frame._castDurationSec = spell.duration
     frame._castEnd         = now + spell.duration
     -- Reschedule the next fake cast when this one ends (replaces the old per-frame reschedule).
-    frame._onCastEnd = function(f)
+    frame._onCastEnd       = function(f)
         f._onCastEnd = nil
         if Nameplates._castTestMode and f and f:IsShown() then
             C_Timer.After(0.5 + math.random() * 1.5, function()
@@ -2617,7 +2617,8 @@ function Nameplates:BuildDebugReport()
             add(string.format("  unit name   : %s", unitName))
             add(string.format("  routing     : _isFriendly=%s  UnitIsFriend=%s  UnitCanAttack=%s  UnitIsPlayer=%s",
                 tostring(frame._isFriendly), tostring(isFriend), tostring(canAttack), tostring(isPlayer)))
-            add(string.format("  db source   : %s", (effDB == rawFriendlyDB or frame._isFriendly) and "friendly" or "main"))
+            add(string.format("  db source   : %s",
+                (effDB == rawFriendlyDB or frame._isFriendly) and "friendly" or "main"))
             add(string.format("  db heights  : main=%s  friendly=%s  effective=%s",
                 fmtValue(rawMainDB and rawMainDB.height),
                 fmtValue(rawFriendlyDB and rawFriendlyDB.height),
@@ -2672,7 +2673,8 @@ function Nameplates:BuildDebugReport()
                     local nt = frame.nameText
                     local p1, relTo, p2, x, y = nt:GetPoint(1)
                     local relName = relTo and relTo.GetName and relTo:GetName() or tostring(relTo)
-                    return string.format("  nameText    : IsShown=%s  w=%.0f  justify=%s  p1=%s rel=%s p2=%s x=%.0f y=%.0f",
+                    return string.format(
+                        "  nameText    : IsShown=%s  w=%.0f  justify=%s  p1=%s rel=%s p2=%s x=%.0f y=%.0f",
                         tostring(nt:IsShown()), nt:GetWidth(), tostring(nt:GetJustifyH()),
                         tostring(p1), tostring(relName), tostring(p2), x or 0, y or 0)
                 end)

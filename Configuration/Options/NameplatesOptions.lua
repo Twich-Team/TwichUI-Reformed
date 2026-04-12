@@ -1031,7 +1031,9 @@ function Options:BuildConfiguration()
                         order = 5,
                         desc  = "Color the name text with the unit's class color (players only).",
                         get   = function() return Options:GetDB().nameColorClass == true end,
-                        set   = function(_, v) Options:GetDB().nameColorClass = v == true; Refresh() end,
+                        set   = function(_, v)
+                            Options:GetDB().nameColorClass = v == true; Refresh()
+                        end,
                     },
                     sep_font = { type = "header", name = "Name Text Font", order = 10 },
                     nameFontFace = {
@@ -1553,76 +1555,95 @@ function Options:BuildConfiguration()
                         args  = {
                             intro = {
                                 type  = "description",
-                                name  = "Settings here apply only to friendly nameplates (party, raid, friendly NPCs). Any value not changed here inherits from the enemy configuration.",
+                                name  =
+                                "Settings here apply only to friendly nameplates (party, raid, friendly NPCs). Any value not changed here inherits from the enemy configuration.",
                                 order = 0,
                                 width = "full",
                             },
                             sep_layout = { type = "header", name = "Dimensions", order = 5 },
                             width = {
-                                type    = "range",
-                                name    = "Bar Width",
-                                order   = 6,
-                                min     = 60, max = 500, step = 5, bigStep = 10,
-                                get     = function() return Options:GetFriendlyDB().width or Options:GetWidth() end,
-                                set     = function(_, v)
-                                    Options:GetFriendlyDB().width = math.max(60, math.min(500, math.floor(tonumber(v) or 220)))
+                                type = "range",
+                                name = "Bar Width",
+                                order = 6,
+                                min = 60,
+                                max = 500,
+                                step = 5,
+                                bigStep = 10,
+                                get = function() return Options:GetFriendlyDB().width or Options:GetWidth() end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().width = math.max(60,
+                                        math.min(500, math.floor(tonumber(v) or 220)))
                                     Refresh()
                                 end,
                             },
                             height = {
-                                type    = "range",
-                                name    = "Bar Height",
-                                order   = 7,
-                                min     = 8, max = 60, step = 1,
-                                get     = function() return Options:GetFriendlyDB().height or Options:GetHeight() end,
-                                set     = function(_, v)
-                                    Options:GetFriendlyDB().height = math.max(8, math.min(60, math.floor(tonumber(v) or 22)))
+                                type = "range",
+                                name = "Bar Height",
+                                order = 7,
+                                min = 8,
+                                max = 60,
+                                step = 1,
+                                get = function() return Options:GetFriendlyDB().height or Options:GetHeight() end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().height = math.max(8,
+                                        math.min(60, math.floor(tonumber(v) or 22)))
                                     Refresh()
                                 end,
                             },
                             castHeight = {
-                                type    = "range",
-                                name    = "Cast Bar Height",
-                                order   = 8,
-                                min     = 6, max = 30, step = 1,
-                                get     = function() return Options:GetFriendlyDB().castHeight or Options:GetCastHeight() end,
-                                set     = function(_, v)
-                                    Options:GetFriendlyDB().castHeight = math.max(6, math.min(30, math.floor(tonumber(v) or 12)))
+                                type = "range",
+                                name = "Cast Bar Height",
+                                order = 8,
+                                min = 6,
+                                max = 30,
+                                step = 1,
+                                get = function() return Options:GetFriendlyDB().castHeight or Options:GetCastHeight() end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().castHeight = math.max(6,
+                                        math.min(30, math.floor(tonumber(v) or 12)))
                                     Refresh()
                                 end,
                             },
                             sep_vis = { type = "header", name = "Visibility", order = 15 },
                             alpha = {
-                                type    = "range",
-                                name    = "Alpha",
-                                order   = 16,
-                                min     = 0.05, max = 1.0, step = 0.05,
-                                get     = function() return Options:GetFriendlyDB().alpha or Options:GetAlpha() end,
-                                set     = function(_, v)
+                                type = "range",
+                                name = "Alpha",
+                                order = 16,
+                                min = 0.05,
+                                max = 1.0,
+                                step = 0.05,
+                                get = function() return Options:GetFriendlyDB().alpha or Options:GetAlpha() end,
+                                set = function(_, v)
                                     Options:GetFriendlyDB().alpha = math.max(0.05, math.min(1, tonumber(v) or 1))
                                     Refresh()
                                 end,
                             },
                             scale = {
-                                type    = "range",
-                                name    = "Scale",
-                                order   = 17,
-                                min     = 0.5, max = 2.0, step = 0.05,
-                                get     = function() return Options:GetFriendlyDB().scale or Options:GetScale() end,
-                                set     = function(_, v)
+                                type = "range",
+                                name = "Scale",
+                                order = 17,
+                                min = 0.5,
+                                max = 2.0,
+                                step = 0.05,
+                                get = function() return Options:GetFriendlyDB().scale or Options:GetScale() end,
+                                set = function(_, v)
                                     Options:GetFriendlyDB().scale = math.max(0.5, math.min(2, tonumber(v) or 1))
                                     Refresh()
                                 end,
                             },
                             maxDistance = {
-                                type  = "range",
-                                name  = "Visibility Distance",
-                                desc  = "Maximum range at which friendly nameplates appear (yards).",
+                                type = "range",
+                                name = "Visibility Distance",
+                                desc = "Maximum range at which friendly nameplates appear (yards).",
                                 order = 18,
-                                min   = 20, max = 100, step = 5,
-                                get   = function() return Options:GetFriendlyDB().nameplateMaxDistance or Options:GetMaxDistance() end,
-                                set   = function(_, v)
-                                    Options:GetFriendlyDB().nameplateMaxDistance = math.max(20, math.min(100, math.floor(tonumber(v) or 60)))
+                                min = 20,
+                                max = 100,
+                                step = 5,
+                                get = function() return Options:GetFriendlyDB().nameplateMaxDistance or
+                                    Options:GetMaxDistance() end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().nameplateMaxDistance = math.max(20,
+                                        math.min(100, math.floor(tonumber(v) or 60)))
                                     Refresh()
                                 end,
                             },
@@ -1640,8 +1661,11 @@ function Options:BuildConfiguration()
                                 name   = "Health Color Mode",
                                 order  = 1,
                                 values = HEALTH_COLOR_MODES,
-                                get    = function() return Options:GetFriendlyDB().healthColorMode or Options:GetHealthColorMode() end,
-                                set    = function(_, v) Options:GetFriendlyDB().healthColorMode = v; Refresh() end,
+                                get    = function() return Options:GetFriendlyDB().healthColorMode or
+                                    Options:GetHealthColorMode() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().healthColorMode = v; Refresh()
+                                end,
                             },
                             healthCustomColor = {
                                 type     = "color",
@@ -1649,7 +1673,8 @@ function Options:BuildConfiguration()
                                 order    = 2,
                                 hasAlpha = false,
                                 hidden   = function()
-                                    return (Options:GetFriendlyDB().healthColorMode or Options:GetHealthColorMode()) ~= "custom"
+                                    return (Options:GetFriendlyDB().healthColorMode or Options:GetHealthColorMode()) ~=
+                                    "custom"
                                 end,
                                 get      = function()
                                     local c = Options:GetFriendlyDB().healthCustomColor or { 0.28, 0.88, 0.42, 1 }
@@ -1688,8 +1713,11 @@ function Options:BuildConfiguration()
                                 name   = "Health Text Format",
                                 order  = 2,
                                 values = HEALTH_FORMAT_VALUES,
-                                get    = function() return Options:GetFriendlyDB().healthFormat or Options:GetHealthFormat() end,
-                                set    = function(_, v) Options:GetFriendlyDB().healthFormat = v; Refresh() end,
+                                get    = function() return Options:GetFriendlyDB().healthFormat or
+                                    Options:GetHealthFormat() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().healthFormat = v; Refresh()
+                                end,
                             },
                             showAbsorb = {
                                 type  = "toggle",
@@ -1700,7 +1728,9 @@ function Options:BuildConfiguration()
                                     if v ~= nil then return v end
                                     return Options:GetShowAbsorb()
                                 end,
-                                set   = function(_, v) Options:GetFriendlyDB().showAbsorb = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().showAbsorb = v == true; Refresh()
+                                end,
                             },
                             sep_tex = { type = "header", name = "Health Bar", order = 10 },
                             healthBarTexture = {
@@ -1751,13 +1781,17 @@ function Options:BuildConfiguration()
                                 end,
                             },
                             healthFontSize = {
-                                type  = "range",
-                                name  = "Font Size",
+                                type = "range",
+                                name = "Font Size",
                                 order = 22,
-                                min   = 6, max = 18, step = 1,
-                                get   = function() return Options:GetFriendlyDB().healthFontSize or Options:GetHealthFontSize() end,
-                                set   = function(_, v)
-                                    Options:GetFriendlyDB().healthFontSize = math.max(6, math.min(18, math.floor(tonumber(v) or 9)))
+                                min = 6,
+                                max = 18,
+                                step = 1,
+                                get = function() return Options:GetFriendlyDB().healthFontSize or
+                                    Options:GetHealthFontSize() end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().healthFontSize = math.max(6,
+                                        math.min(18, math.floor(tonumber(v) or 9)))
                                     Refresh()
                                 end,
                             },
@@ -1767,14 +1801,18 @@ function Options:BuildConfiguration()
                                 order  = 23,
                                 values = OUTLINE_VALUES,
                                 get    = function() return Options:GetFriendlyDB().healthFontOutline or "OUTLINE" end,
-                                set    = function(_, v) Options:GetFriendlyDB().healthFontOutline = v; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().healthFontOutline = v; Refresh()
+                                end,
                             },
                             healthFontShadow = {
                                 type  = "toggle",
                                 name  = "Drop Shadow",
                                 order = 24,
                                 get   = function() return Options:GetFriendlyDB().healthFontShadow == true end,
-                                set   = function(_, v) Options:GetFriendlyDB().healthFontShadow = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().healthFontShadow = v == true; Refresh()
+                                end,
                             },
                             healthTextAnchor = {
                                 type   = "select",
@@ -1782,7 +1820,9 @@ function Options:BuildConfiguration()
                                 order  = 25,
                                 values = ANCHOR_TEXTS,
                                 get    = function() return Options:GetFriendlyDB().healthTextAnchor or "RIGHT" end,
-                                set    = function(_, v) Options:GetFriendlyDB().healthTextAnchor = v; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().healthTextAnchor = v; Refresh()
+                                end,
                             },
                         },
                     },
@@ -1802,7 +1842,9 @@ function Options:BuildConfiguration()
                                     if v ~= nil then return v end
                                     return Options:GetShowName()
                                 end,
-                                set   = function(_, v) Options:GetFriendlyDB().showName = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().showName = v == true; Refresh()
+                                end,
                             },
                             nameFormat = {
                                 type   = "select",
@@ -1810,7 +1852,9 @@ function Options:BuildConfiguration()
                                 order  = 2,
                                 values = NAME_FORMAT_VALUES,
                                 get    = function() return Options:GetFriendlyDB().nameFormat or Options:GetNameFormat() end,
-                                set    = function(_, v) Options:GetFriendlyDB().nameFormat = v; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().nameFormat = v; Refresh()
+                                end,
                             },
                             showLevel = {
                                 type  = "toggle",
@@ -1821,7 +1865,9 @@ function Options:BuildConfiguration()
                                     if v ~= nil then return v end
                                     return Options:GetShowLevel()
                                 end,
-                                set   = function(_, v) Options:GetFriendlyDB().showLevel = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().showLevel = v == true; Refresh()
+                                end,
                             },
                             showEliteIcon = {
                                 type  = "toggle",
@@ -1832,7 +1878,9 @@ function Options:BuildConfiguration()
                                     if v ~= nil then return v end
                                     return Options:GetShowEliteIcon()
                                 end,
-                                set   = function(_, v) Options:GetFriendlyDB().showEliteIcon = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().showEliteIcon = v == true; Refresh()
+                                end,
                             },
                             nameColorClass = {
                                 type  = "toggle",
@@ -1844,7 +1892,9 @@ function Options:BuildConfiguration()
                                     if v ~= nil then return v end
                                     return Options:GetDB().nameColorClass == true
                                 end,
-                                set   = function(_, v) Options:GetFriendlyDB().nameColorClass = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().nameColorClass = v == true; Refresh()
+                                end,
                             },
                             sep_font = { type = "header", name = "Name Text Font", order = 10 },
                             nameFontFace = {
@@ -1858,13 +1908,16 @@ function Options:BuildConfiguration()
                                 end,
                             },
                             nameFontSize = {
-                                type  = "range",
-                                name  = "Font Size",
+                                type = "range",
+                                name = "Font Size",
                                 order = 12,
-                                min   = 6, max = 20, step = 1,
-                                get   = function() return Options:GetFriendlyDB().nameFontSize or Options:GetNameFontSize() end,
-                                set   = function(_, v)
-                                    Options:GetFriendlyDB().nameFontSize = math.max(6, math.min(20, math.floor(tonumber(v) or 10)))
+                                min = 6,
+                                max = 20,
+                                step = 1,
+                                get = function() return Options:GetFriendlyDB().nameFontSize or Options:GetNameFontSize() end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().nameFontSize = math.max(6,
+                                        math.min(20, math.floor(tonumber(v) or 10)))
                                     Refresh()
                                 end,
                             },
@@ -1874,14 +1927,18 @@ function Options:BuildConfiguration()
                                 order  = 13,
                                 values = OUTLINE_VALUES,
                                 get    = function() return Options:GetFriendlyDB().nameFontOutline or "OUTLINE" end,
-                                set    = function(_, v) Options:GetFriendlyDB().nameFontOutline = v; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().nameFontOutline = v; Refresh()
+                                end,
                             },
                             nameFontShadow = {
                                 type  = "toggle",
                                 name  = "Drop Shadow",
                                 order = 14,
                                 get   = function() return Options:GetFriendlyDB().nameFontShadow == true end,
-                                set   = function(_, v) Options:GetFriendlyDB().nameFontShadow = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().nameFontShadow = v == true; Refresh()
+                                end,
                             },
                             sep_pos = { type = "header", name = "Name Position", order = 20 },
                             nameAnchorPoint = {
@@ -1890,7 +1947,9 @@ function Options:BuildConfiguration()
                                 order  = 21,
                                 values = NAME_ANCHOR_POINTS,
                                 get    = function() return Options:GetFriendlyDB().nameAnchorPoint or "BOTTOMLEFT" end,
-                                set    = function(_, v) Options:GetFriendlyDB().nameAnchorPoint = v; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().nameAnchorPoint = v; Refresh()
+                                end,
                             },
                             nameJustify = {
                                 type   = "select",
@@ -1898,23 +1957,33 @@ function Options:BuildConfiguration()
                                 order  = 22,
                                 values = ANCHOR_HALIGN,
                                 get    = function() return Options:GetFriendlyDB().nameJustify or "LEFT" end,
-                                set    = function(_, v) Options:GetFriendlyDB().nameJustify = v; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().nameJustify = v; Refresh()
+                                end,
                             },
                             nameOffsetX = {
-                                type  = "range",
-                                name  = "Offset X",
+                                type = "range",
+                                name = "Offset X",
                                 order = 23,
-                                min   = -20, max = 20, step = 1,
-                                get   = function() return Options:GetFriendlyDB().nameOffsetX or 2 end,
-                                set   = function(_, v) Options:GetFriendlyDB().nameOffsetX = v; Refresh() end,
+                                min = -20,
+                                max = 20,
+                                step = 1,
+                                get = function() return Options:GetFriendlyDB().nameOffsetX or 2 end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().nameOffsetX = v; Refresh()
+                                end,
                             },
                             nameOffsetY = {
-                                type  = "range",
-                                name  = "Offset Y",
+                                type = "range",
+                                name = "Offset Y",
                                 order = 24,
-                                min   = -20, max = 20, step = 1,
-                                get   = function() return Options:GetFriendlyDB().nameOffsetY or 3 end,
-                                set   = function(_, v) Options:GetFriendlyDB().nameOffsetY = v; Refresh() end,
+                                min = -20,
+                                max = 20,
+                                step = 1,
+                                get = function() return Options:GetFriendlyDB().nameOffsetY or 3 end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().nameOffsetY = v; Refresh()
+                                end,
                             },
                         },
                     },
@@ -1930,13 +1999,16 @@ function Options:BuildConfiguration()
                                 name  = "Show Cast Bar",
                                 order = 1,
                                 width = "full",
-                                desc  = "Show cast bars on friendly nameplates. Disable to hide cast bars only on friendlies.",
+                                desc  =
+                                "Show cast bars on friendly nameplates. Disable to hide cast bars only on friendlies.",
                                 get   = function()
                                     local v = Options:GetFriendlyDB().showCastBar
                                     if v ~= nil then return v end
                                     return Options:GetShowCastBar()
                                 end,
-                                set   = function(_, v) Options:GetFriendlyDB().showCastBar = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().showCastBar = v == true; Refresh()
+                                end,
                             },
                             castColor = {
                                 type     = "color",
@@ -2000,13 +2072,16 @@ function Options:BuildConfiguration()
                                 end,
                             },
                             castFontSize = {
-                                type  = "range",
-                                name  = "Font Size",
+                                type = "range",
+                                name = "Font Size",
                                 order = 22,
-                                min   = 6, max = 16, step = 1,
-                                get   = function() return Options:GetFriendlyDB().castFontSize or Options:GetCastFontSize() end,
-                                set   = function(_, v)
-                                    Options:GetFriendlyDB().castFontSize = math.max(6, math.min(16, math.floor(tonumber(v) or 9)))
+                                min = 6,
+                                max = 16,
+                                step = 1,
+                                get = function() return Options:GetFriendlyDB().castFontSize or Options:GetCastFontSize() end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().castFontSize = math.max(6,
+                                        math.min(16, math.floor(tonumber(v) or 9)))
                                     Refresh()
                                 end,
                             },
@@ -2016,14 +2091,18 @@ function Options:BuildConfiguration()
                                 order  = 23,
                                 values = OUTLINE_VALUES,
                                 get    = function() return Options:GetFriendlyDB().castFontOutline or "OUTLINE" end,
-                                set    = function(_, v) Options:GetFriendlyDB().castFontOutline = v; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().castFontOutline = v; Refresh()
+                                end,
                             },
                             castFontShadow = {
                                 type  = "toggle",
                                 name  = "Drop Shadow",
                                 order = 24,
                                 get   = function() return Options:GetFriendlyDB().castFontShadow == true end,
-                                set   = function(_, v) Options:GetFriendlyDB().castFontShadow = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().castFontShadow = v == true; Refresh()
+                                end,
                             },
                         },
                     },
@@ -2039,43 +2118,54 @@ function Options:BuildConfiguration()
                                 name  = "Show Power Bar",
                                 order = 1,
                                 width = "full",
-                                desc  = "Show power bars on friendly nameplates. Disable to hide power bars only on friendlies.",
+                                desc  =
+                                "Show power bars on friendly nameplates. Disable to hide power bars only on friendlies.",
                                 get   = function()
                                     local v = Options:GetFriendlyDB().showPowerBar
                                     if v ~= nil then return v end
                                     return Options:GetShowPowerBar()
                                 end,
-                                set   = function(_, v) Options:GetFriendlyDB().showPowerBar = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().showPowerBar = v == true; Refresh()
+                                end,
                             },
                             powerBarHeight = {
-                                type   = "range",
-                                name   = "Bar Height",
-                                order  = 2,
-                                min    = 2, max = 14, step = 1,
+                                type = "range",
+                                name = "Bar Height",
+                                order = 2,
+                                min = 2,
+                                max = 14,
+                                step = 1,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showPowerBar
                                     if v ~= nil then return not v end
                                     return not Options:GetShowPowerBar()
                                 end,
-                                get    = function() return Options:GetFriendlyDB().powerBarHeight or Options:GetPowerBarHeight() end,
+                                get    = function() return Options:GetFriendlyDB().powerBarHeight or
+                                    Options:GetPowerBarHeight() end,
                                 set    = function(_, v)
-                                    Options:GetFriendlyDB().powerBarHeight = math.max(2, math.min(14, math.floor(tonumber(v) or 4)))
+                                    Options:GetFriendlyDB().powerBarHeight = math.max(2,
+                                        math.min(14, math.floor(tonumber(v) or 4)))
                                     Refresh()
                                 end,
                             },
                             powerBarGap = {
-                                type   = "range",
-                                name   = "Gap from Health Bar",
-                                order  = 3,
-                                min    = 0, max = 12, step = 1,
+                                type = "range",
+                                name = "Gap from Health Bar",
+                                order = 3,
+                                min = 0,
+                                max = 12,
+                                step = 1,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showPowerBar
                                     if v ~= nil then return not v end
                                     return not Options:GetShowPowerBar()
                                 end,
-                                get    = function() return Options:GetFriendlyDB().powerBarGap or Options:GetPowerBarGap() end,
+                                get    = function() return Options:GetFriendlyDB().powerBarGap or
+                                    Options:GetPowerBarGap() end,
                                 set    = function(_, v)
-                                    Options:GetFriendlyDB().powerBarGap = math.max(0, math.min(12, math.floor(tonumber(v) or 2)))
+                                    Options:GetFriendlyDB().powerBarGap = math.max(0,
+                                        math.min(12, math.floor(tonumber(v) or 2)))
                                     Refresh()
                                 end,
                             },
@@ -2134,7 +2224,9 @@ function Options:BuildConfiguration()
                                     if v ~= nil then return v end
                                     return Options:GetShowAuras()
                                 end,
-                                set   = function(_, v) Options:GetFriendlyDB().showAuras = v == true; Refresh() end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().showAuras = v == true; Refresh()
+                                end,
                             },
                             auraFilter = {
                                 type   = "select",
@@ -2147,7 +2239,9 @@ function Options:BuildConfiguration()
                                     return not Options:GetShowAuras()
                                 end,
                                 get    = function() return Options:GetFriendlyDB().auraFilter or Options:GetAuraFilter() end,
-                                set    = function(_, v) Options:GetFriendlyDB().auraFilter = v; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().auraFilter = v; Refresh()
+                                end,
                             },
                             auraOnlyMine = {
                                 type   = "toggle",
@@ -2160,13 +2254,17 @@ function Options:BuildConfiguration()
                                     return not Options:GetShowAuras()
                                 end,
                                 get    = function() return Options:GetFriendlyDB().auraOnlyMine == true end,
-                                set    = function(_, v) Options:GetFriendlyDB().auraOnlyMine = v == true; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().auraOnlyMine = v == true; Refresh()
+                                end,
                             },
                             auraMax = {
-                                type   = "range",
-                                name   = "Max Auras",
-                                order  = 4,
-                                min    = 1, max = 10, step = 1,
+                                type = "range",
+                                name = "Max Auras",
+                                order = 4,
+                                min = 1,
+                                max = 10,
+                                step = 1,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showAuras
                                     if v ~= nil then return not v end
@@ -2174,15 +2272,18 @@ function Options:BuildConfiguration()
                                 end,
                                 get    = function() return Options:GetFriendlyDB().auraMax or Options:GetAuraMax() end,
                                 set    = function(_, v)
-                                    Options:GetFriendlyDB().auraMax = math.max(1, math.min(10, math.floor(tonumber(v) or 5)))
+                                    Options:GetFriendlyDB().auraMax = math.max(1,
+                                        math.min(10, math.floor(tonumber(v) or 5)))
                                     Refresh()
                                 end,
                             },
                             auraSize = {
-                                type   = "range",
-                                name   = "Icon Size",
-                                order  = 5,
-                                min    = 12, max = 40, step = 1,
+                                type = "range",
+                                name = "Icon Size",
+                                order = 5,
+                                min = 12,
+                                max = 40,
+                                step = 1,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showAuras
                                     if v ~= nil then return not v end
@@ -2190,7 +2291,8 @@ function Options:BuildConfiguration()
                                 end,
                                 get    = function() return Options:GetFriendlyDB().auraSize or Options:GetAuraSize() end,
                                 set    = function(_, v)
-                                    Options:GetFriendlyDB().auraSize = math.max(12, math.min(40, math.floor(tonumber(v) or 20)))
+                                    Options:GetFriendlyDB().auraSize = math.max(12,
+                                        math.min(40, math.floor(tonumber(v) or 20)))
                                     Refresh()
                                 end,
                             },
@@ -2208,7 +2310,9 @@ function Options:BuildConfiguration()
                                     if v ~= nil then return v end
                                     return Options:GetAuraShowTimer()
                                 end,
-                                set    = function(_, v) Options:GetFriendlyDB().auraShowTimer = v == true; Refresh() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().auraShowTimer = v == true; Refresh()
+                                end,
                             },
                         },
                     },
