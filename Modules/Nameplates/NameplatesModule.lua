@@ -681,14 +681,25 @@ function Nameplates:ResolveHealthColor(unit, db)
             return DBColor(db, "colorTapped", COLOR_TAPPED)
         end
 
-        -- Classification sub-type colours (hostile only).
-        -- Classification always wins — a boss that is also a caster class stays boss color.
+        -- Hostile override priority:
+        --   1. Boss/worldboss
+        --   2. Caster NPCs (when enabled)
+        --   3. Remaining classification colours (rare/miniboss/etc.)
         local reaction = UnitReaction and UnitReaction(unit, "player")
         if reaction and reaction <= 3 then
             local cl = UnitClassification and UnitClassification(unit) or ""
             if cl == "worldboss" or cl == "boss" then
                 return DBColor(db, "colorBoss", COLOR_BOSS)
-            elseif cl == "rareelite" then
+            end
+
+            if db.colorByCaster then
+                local baseClass = UnitClassBase and UnitClassBase(unit)
+                if baseClass == "PALADIN" then
+                    return DBColor(db, "colorNpcCaster", COLOR_NPC_CASTER)
+                end
+            end
+
+            if cl == "rareelite" then
                 return DBColor(db, "colorMiniboss", COLOR_MINIBOSS)
             elseif cl == "rare" then
                 return DBColor(db, "colorRare", COLOR_RARE)
@@ -700,14 +711,6 @@ function Nameplates:ResolveHealthColor(unit, db)
                     return DBColor(db, "colorBoss", COLOR_BOSS)
                 elseif lvl >= (maxLvl + 1) then
                     return DBColor(db, "colorMiniboss", COLOR_MINIBOSS)
-                end
-            end
-
-            -- Caster-type NPC detection (only for non-classified hostiles).
-            if db.colorByCaster then
-                local baseClass = UnitClassBase and UnitClassBase(unit)
-                if baseClass == "PALADIN" then
-                    return DBColor(db, "colorNpcCaster", COLOR_NPC_CASTER)
                 end
             end
 
