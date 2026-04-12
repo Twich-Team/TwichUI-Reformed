@@ -634,20 +634,31 @@ end
 local cachedTransformSet
 local cachedTransformSignature
 
+local function GetSortedTransformPresetKeys()
+    local keys = {}
+    for key in pairs(TRANSFORM_PRESETS) do
+        keys[#keys + 1] = key
+    end
+    table.sort(keys)
+    return keys
+end
+
 local function BuildTransformSignature()
     if not Feature({ "system", "noTransforms" }) then
         return "disabled"
     end
 
-    return table.concat({
+    local parts = {
         tostring(Value({ "system", "transformSpellIDs" }, "") or ""),
-        tostring(Value({ "system", "presetTransforms", "fishing" }, false) and 1 or 0),
-        tostring(Value({ "system", "presetTransforms", "druidTravel" }, false) and 1 or 0),
-        tostring(Value({ "system", "presetTransforms", "druidFlight" }, false) and 1 or 0),
-        tostring(Value({ "system", "presetTransforms", "mountEquipment" }, false) and 1 or 0),
-        tostring(Value({ "system", "presetTransforms", "chefHat" }, false) and 1 or 0),
-        tostring(Value({ "system", "presetTransforms", "noblegarden" }, false) and 1 or 0)
-    }, "|")
+    }
+
+    local presetKeys = GetSortedTransformPresetKeys()
+    for index = 1, #presetKeys do
+        local key = presetKeys[index]
+        parts[#parts + 1] = key .. ":" .. tostring(Value({ "system", "presetTransforms", key }, false) and 1 or 0)
+    end
+
+    return table.concat(parts, "|")
 end
 
 local function GetCachedTransformSet()
@@ -677,24 +688,19 @@ local function CancelBlockedTransforms()
         return
     end
 
-    local index = 1
-    while true do
-        local aura = _G.C_UnitAuras and _G.C_UnitAuras.GetAuraDataByIndex and
-            _G.C_UnitAuras.GetAuraDataByIndex("player", index, "HELPFUL")
-        if not aura then
-            break
-        end
-        local spellID = aura.spellId
-        if spellID and not HasSecretValues(spellID) and blocked[spellID] then
-            -- CancelSpellByID was removed in Midnight; cancel via aura instance ID instead
-            if aura.auraInstanceID and _G.C_UnitAuras and _G.C_UnitAuras.RemoveAura then
-                _G.C_UnitAuras.RemoveAura("player", aura.auraInstanceID)
-            elseif _G.CancelSpellByID then
-                _G.CancelSpellByID(spellID)
+    local cancelUnitBuff = _G.CancelUnitBuff
+    for index = 1, 40 do
+        local aura = _G.C_UnitAuras and _G.C_UnitAuras.GetBuffDataByIndex and
+            _G.C_UnitAuras.GetBuffDataByIndex("player", index)
+        if aura then
+            local spellID = aura.spellId
+            if spellID and not HasSecretValues(spellID) and blocked[spellID] then
+                if not _G.UnitAffectingCombat("player") and type(cancelUnitBuff) == "function" then
+                    cancelUnitBuff("player", index)
+                end
+                return
             end
-            return
         end
-        index = index + 1
     end
 end
 
