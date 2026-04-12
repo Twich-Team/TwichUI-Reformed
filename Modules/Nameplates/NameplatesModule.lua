@@ -119,6 +119,7 @@ local NP_DEFAULT_CAST_HEIGHT = 12
 local NP_DEFAULT_AURA_SIZE   = 20
 local NP_DEFAULT_AURA_MAX    = 5
 local NP_MAX_AURA_POOL       = 10 -- pre-allocated icons per plate
+local TARGET_GROW_ANIM_SEC   = 0.14
 
 -- Default reaction colours used when healthColorMode = "reaction"
 -- These are the built-in fallbacks; users can override each via DB.
@@ -231,6 +232,11 @@ local function ApplyNameTextLayout(frame, db, width)
     nameText:SetSpacing(0)
     nameText:SetPoint(layout.point, anchorFrame, layout.relativePoint, (layout.x or 0) + nameOX, (layout.y or 0) + nameOY)
     nameText:SetJustifyH(justify)
+end
+
+local function EaseOutCubic(progress)
+    local inv = 1 - Clamp(progress or 0, 0, 1)
+    return 1 - (inv * inv * inv)
 end
 
 -- CVars we take control of while the module is active
@@ -1054,6 +1060,38 @@ function Nameplates:BuildPlateFrame(parentPlate)
     frame._onCastEnd       = nil
     frame._unit            = nil
     frame._isTestPreview   = false
+    frame._currentWidth    = w
+    frame._currentHeight   = h
+
+    local sizeAnimDriver   = CreateFrame("Frame", nil, frame)
+    sizeAnimDriver:Hide()
+    sizeAnimDriver:SetScript("OnUpdate", function(_, elapsed)
+        if not frame._sizeAnimDuration then
+            sizeAnimDriver:Hide()
+            return
+        end
+
+        frame._sizeAnimElapsed = (frame._sizeAnimElapsed or 0) + elapsed
+        local progress = Clamp(frame._sizeAnimElapsed / frame._sizeAnimDuration, 0, 1)
+        local eased = EaseOutCubic(progress)
+        local width = frame._sizeAnimStartWidth + ((frame._sizeAnimTargetWidth - frame._sizeAnimStartWidth) * eased)
+        local height = frame._sizeAnimStartHeight + ((frame._sizeAnimTargetHeight - frame._sizeAnimStartHeight) * eased)
+
+        Nameplates:SetPlateFrameGeometry(frame, width, height, Nameplates:GetEffectiveDB(frame._unit))
+
+        if progress >= 1 then
+            Nameplates:SetPlateFrameGeometry(frame, frame._sizeAnimTargetWidth, frame._sizeAnimTargetHeight,
+                Nameplates:GetEffectiveDB(frame._unit))
+            frame._sizeAnimElapsed = nil
+            frame._sizeAnimDuration = nil
+            frame._sizeAnimStartWidth = nil
+            frame._sizeAnimStartHeight = nil
+            frame._sizeAnimTargetWidth = nil
+            frame._sizeAnimTargetHeight = nil
+            sizeAnimDriver:Hide()
+        end
+    end)
+    frame._sizeAnimDriver = sizeAnimDriver
 
     return frame
 end
@@ -1078,6 +1116,7 @@ function Nameplates:ReleasePlateFrame(frame)
     if not frame then return end
     -- Cancel any active cast animation on the shared ticker.
     _stopCastTicker(frame)
+    self:StopPlateSizeAnimation(frame)
     frame._unit            = nil
     frame._plate           = nil
     frame._casting         = false
@@ -1095,6 +1134,65 @@ function Nameplates:ReleasePlateFrame(frame)
     if frame.arrowL then frame.arrowL:Hide() end
     if frame.arrowR then frame.arrowR:Hide() end
     self._platePool[#self._platePool + 1] = frame
+end
+
+function Nameplates:SetPlateFrameGeometry(frame, width, height, db)
+    if not frame or not frame._plate then return end
+
+    local resolvedWidth = Clamp(width or frame._currentWidth or frame:GetWidth() or NP_DEFAULT_WIDTH, 60, 600)
+    local resolvedHeight = Clamp(height or frame._currentHeight or frame:GetHeight() or NP_DEFAULT_HEIGHT, 8, 60)
+    local effectiveDB = db or self:GetEffectiveDB(frame._unit)
+
+    frame._currentWidth = resolvedWidth
+    frame._currentHeight = resolvedHeight
+    frame:ClearAllPoints()
+    frame:SetSize(resolvedWidth, resolvedHeight)
+    frame:SetPoint("TOPLEFT", frame._plate, "CENTER", -resolvedWidth / 2, resolvedHeight / 2)
+    frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", resolvedWidth / 2, -resolvedHeight / 2)
+
+    ApplyNameTextLayout(frame, effectiveDB, resolvedWidth)
+    if frame.auraFrame then frame.auraFrame:SetWidth(resolvedWidth) end
+end
+
+function Nameplates:StopPlateSizeAnimation(frame)
+    if not frame then return end
+    frame._sizeAnimElapsed = nil
+    frame._sizeAnimDuration = nil
+    frame._sizeAnimStartWidth = nil
+    frame._sizeAnimStartHeight = nil
+    frame._sizeAnimTargetWidth = nil
+    frame._sizeAnimTargetHeight = nil
+    if frame._sizeAnimDriver then
+        frame._sizeAnimDriver:Hide()
+    end
+end
+
+function Nameplates:AnimatePlateFrameGeometry(frame, width, height, db, instant)
+    if not frame or not frame._plate then return end
+
+    local effectiveDB = db or self:GetEffectiveDB(frame._unit)
+    local targetWidth = Clamp(width or frame._currentWidth or frame:GetWidth() or NP_DEFAULT_WIDTH, 60, 600)
+    local targetHeight = Clamp(height or frame._currentHeight or frame:GetHeight() or NP_DEFAULT_HEIGHT, 8, 60)
+    local currentWidth = Clamp(frame._currentWidth or frame:GetWidth() or targetWidth, 60, 600)
+    local currentHeight = Clamp(frame._currentHeight or frame:GetHeight() or targetHeight, 8, 60)
+
+    if instant or (math.abs(targetWidth - currentWidth) < 0.5 and math.abs(targetHeight - currentHeight) < 0.5) then
+        self:StopPlateSizeAnimation(frame)
+        self:SetPlateFrameGeometry(frame, targetWidth, targetHeight, effectiveDB)
+        return
+    end
+
+    frame._sizeAnimElapsed = 0
+    frame._sizeAnimDuration = TARGET_GROW_ANIM_SEC
+    frame._sizeAnimStartWidth = currentWidth
+    frame._sizeAnimStartHeight = currentHeight
+    frame._sizeAnimTargetWidth = targetWidth
+    frame._sizeAnimTargetHeight = targetHeight
+
+    self:SetPlateFrameGeometry(frame, currentWidth, currentHeight, effectiveDB)
+    if frame._sizeAnimDriver then
+        frame._sizeAnimDriver:Show()
+    end
 end
 
 -- ── Element updaters ──────────────────────────────────────────────────────────
@@ -1280,6 +1378,8 @@ function Nameplates:UpdateTargetGlow(frame, unit)
         frame.targetGlow:Hide()
         if frame.arrowL then frame.arrowL:Hide() end
         if frame.arrowR then frame.arrowR:Hide() end
+        self:AnimatePlateFrameGeometry(frame, Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600),
+            Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60), db)
         return
     end
 
@@ -1287,6 +1387,8 @@ function Nameplates:UpdateTargetGlow(frame, unit)
     local isFocus  = UnitIsUnit and UnitIsUnit(unit, "focus")
     local baseW    = Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600)
     local baseH    = Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60)
+    local targetW  = baseW
+    local targetH  = baseH
 
     if isTarget then
         -- Resolve target glow colour (custom DB override or theme accent).
@@ -1312,13 +1414,8 @@ function Nameplates:UpdateTargetGlow(frame, unit)
             and Clamp(db.targetGrowWidth, 0.5, 2) or 1
         local growH = (db.targetGrowHeight and db.targetGrowHeight ~= 1)
             and Clamp(db.targetGrowHeight, 0.5, 2) or 1
-        local fw = baseW * growW
-        local fh = baseH * growH
-        if frame._plate then
-            frame:ClearAllPoints()
-            frame:SetPoint("TOPLEFT", frame._plate, "CENTER", -fw / 2, fh / 2)
-            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", fw / 2, -fh / 2)
-        end
+        targetW = baseW * growW
+        targetH = baseH * growH
 
         if db.showTargetArrows ~= false then
             -- Use dedicated arrow color if set, otherwise fall back to the glow color.
@@ -1353,22 +1450,14 @@ function Nameplates:UpdateTargetGlow(frame, unit)
 
         if frame.arrowL then frame.arrowL:Hide() end
         if frame.arrowR then frame.arrowR:Hide() end
-        if frame._plate then
-            frame:ClearAllPoints()
-            frame:SetPoint("TOPLEFT", frame._plate, "CENTER", -baseW / 2, baseH / 2)
-            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", baseW / 2, -baseH / 2)
-        end
     else
         RestoreBorder()
         frame.targetGlow:Hide()
         if frame.arrowL then frame.arrowL:Hide() end
         if frame.arrowR then frame.arrowR:Hide() end
-        if frame._plate then
-            frame:ClearAllPoints()
-            frame:SetPoint("TOPLEFT", frame._plate, "CENTER", -baseW / 2, baseH / 2)
-            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", baseW / 2, -baseH / 2)
-        end
     end
+
+    self:AnimatePlateFrameGeometry(frame, targetW, targetH, db)
 end
 
 function Nameplates:UpdateThreat(frame, unit)
@@ -1773,13 +1862,7 @@ function Nameplates:ResizePlateFrame(frame)
     -- on direct children, which caused the frame to remain at the initial
     -- (main-DB) height while the health bar was already resized to the correct
     -- (friendly-DB) height -- producing the grey gap the user saw.
-    if frame._plate then
-        frame:ClearAllPoints()
-        frame:SetSize(w, h)
-        frame:SetPoint("TOPLEFT", frame._plate, "CENTER", -w / 2, h / 2)
-        frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", w / 2, -h / 2)
-    end
-    ApplyNameTextLayout(frame, db, w)
+    self:SetPlateFrameGeometry(frame, w, h, db)
     -- healthBar fills the frame via BOTTOMRIGHT anchor; no explicit SetHeight needed.
     if frame.threatBar then frame.threatBar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0) end
     if frame.castContainer then frame.castContainer:SetHeight(castH + 2) end

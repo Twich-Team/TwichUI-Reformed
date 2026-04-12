@@ -13,6 +13,8 @@
 - Our data text menus should use the background and border settings from the global appearance section in our configuration interface
 - Need raid markers on unit frames and name plates
 
+- I am standing infront of a caster mob, but it is colored the rare elite color. it should prioritize caster coloring unless its a boss. So boss color is priority 1, then caster, then the rest.
+
 # Tweaks
 
 ## IDEAS/FUTURE
