@@ -363,10 +363,41 @@ function Nameplates:GetDB()
     return self._dbCache
 end
 
+-- ── Friendly unit / DB helpers ────────────────────────────────────────────────
+-- A unit is "friendly" when its reaction to the player is >= 5 (Friendly/Honored/…).
+-- Party/raid members, pets, and friendly NPCs all qualify; hostiles, neutrals, and
+-- the player's own nameplate do not.
+function Nameplates:IsFriendlyUnit(unit)
+    if not unit then return false end
+    local reaction = UnitReaction and UnitReaction(unit, "player")
+    return reaction ~= nil and reaction >= 5
+end
+
+-- Returns db.friendly with an __index fallback to the main DB so any key not
+-- explicitly set in the friendly sub-table inherits the enemy value.
+-- The result is cached and rebuilt whenever InvalidateCache() is called.
+function Nameplates:GetFriendlyDB()
+    if self._friendlyDBCache then return self._friendlyDBCache end
+    local db = self:GetDB()
+    if not db.friendly then db.friendly = {} end
+    -- __index metatable: reads fall through to the main DB for unset keys.
+    self._friendlyDBCache = setmetatable(db.friendly, { __index = db })
+    return self._friendlyDBCache
+end
+
+-- Returns the appropriate DB for a unit: friendly merged-DB or main DB.
+function Nameplates:GetEffectiveDB(unit)
+    if unit and self:IsFriendlyUnit(unit) then
+        return self:GetFriendlyDB()
+    end
+    return self:GetDB()
+end
+
 function Nameplates:InvalidateCache()
-    self._optionsCache = nil
-    self._dbCache      = nil
-    self._themeCache   = nil
+    self._optionsCache    = nil
+    self._dbCache         = nil
+    self._themeCache      = nil
+    self._friendlyDBCache = nil
 end
 
 -- ── Health colour resolution ──────────────────────────────────────────────────
@@ -905,7 +936,7 @@ end
 -- ── Element updaters ──────────────────────────────────────────────────────────
 function Nameplates:UpdateHealth(frame, unit)
     if not frame or not frame.healthBar then return end
-    local db    = self:GetDB()
+    local db    = self:GetEffectiveDB(unit)
 
     -- In Midnight, UnitHealth/UnitHealthMax for nameplate units return secret numbers.
     -- Secret numbers CAN be passed directly to StatusBar API calls but will error
@@ -979,7 +1010,7 @@ end
 
 function Nameplates:UpdateName(frame, unit)
     if not frame or not frame.nameText then return end
-    local db = self:GetDB()
+    local db = self:GetEffectiveDB(unit)
     if db.showName == false then
         frame.nameText:SetText("")
         return
@@ -999,7 +1030,7 @@ end
 
 function Nameplates:UpdateLevel(frame, unit)
     if not frame or not frame.levelText then return end
-    local db = self:GetDB()
+    local db = self:GetEffectiveDB(unit)
     if db.showLevel == false then
         frame.levelText:SetText("")
         return
@@ -1018,7 +1049,7 @@ end
 
 function Nameplates:UpdateEliteIcon(frame, unit)
     if not frame or not frame.eliteIcon then return end
-    local db = self:GetDB()
+    local db = self:GetEffectiveDB(unit)
     if db.showEliteIcon == false then
         frame.eliteIcon:Hide(); return
     end
@@ -1145,7 +1176,7 @@ end
 
 function Nameplates:UpdateThreat(frame, unit)
     if not frame or not frame.threatBar then return end
-    local db = self:GetDB()
+    local db = self:GetEffectiveDB(unit)
     if db.showThreat == false then
         frame.threatBar:SetVertexColor(0, 0, 0, 0)
         return
@@ -1165,7 +1196,7 @@ end
 
 function Nameplates:UpdateAuras(frame, unit)
     if not frame or not frame.auraFrame then return end
-    local db = self:GetDB()
+    local db = self:GetEffectiveDB(unit)
     if db.showAuras == false then
         frame.auraFrame:Hide()
         return
@@ -1281,7 +1312,7 @@ end
 
 function Nameplates:UpdateCastBar(frame, unit)
     if not frame or not frame.castContainer then return end
-    local db = self:GetDB()
+    local db = self:GetEffectiveDB(unit)
 
     if db.showCastBar == false then
         frame._casting = false
@@ -1371,7 +1402,7 @@ end
 
 function Nameplates:UpdatePower(frame, unit)
     if not frame or not frame.powerContainer then return end
-    local db = self:GetDB()
+    local db = self:GetEffectiveDB(unit)
 
     if db.showPowerBar == false then
         frame.powerContainer:Hide()
@@ -1428,7 +1459,7 @@ end
 -- ── Refresh / resize helpers ──────────────────────────────────────────────────
 function Nameplates:ApplyThemeToFrame(frame)
     if not frame then return end
-    local db    = self:GetDB()
+    local db    = self:GetEffectiveDB(frame and frame._unit)
     local hpTex = GetPlateTexture("healthBarTexture", db)
     local cTex  = GetPlateTexture("castBarTexture", db)
     local bgTex = GetPlateTexture("healthBgTexture", db)
@@ -1525,7 +1556,7 @@ end
 
 function Nameplates:ResizePlateFrame(frame)
     if not frame then return end
-    local db    = self:GetDB()
+    local db    = self:GetEffectiveDB(frame and frame._unit)
     local w     = Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600)
     local h     = Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60)
     local castH = Clamp(db.castHeight or NP_DEFAULT_CAST_HEIGHT, 6, 30)
@@ -1659,7 +1690,7 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     frame._plate         = plate -- store direct ref to avoid GetNamePlateForUnit on any unit token
     self._plates[unitID] = frame
 
-    local db             = self:GetDB()
+    local db             = self:GetEffectiveDB(unitID)
     local alpha          = Clamp(db.alpha or 1, 0.1, 1)
     local scale          = Clamp(db.scale or 1, 0.5, 2)
     frame:SetAlpha(alpha)
@@ -2171,13 +2202,11 @@ function Nameplates:OnCombatStateChange()
         if blizzUF then blizzUF:SetAlpha(0) end
     end
     -- Re-assert our own frame alphas in case anything disturbed them.
-    local db    = self:GetDB()
-    local alpha = Clamp(db.alpha or 1, 0.1, 1)
-    local scale = Clamp(db.scale or 1, 0.5, 2)
-    for _, frame in pairs(self._plates) do
+    for unitID, frame in pairs(self._plates) do
         if frame then
-            frame:SetAlpha(alpha)
-            frame:SetScale(scale)
+            local edb = self:GetEffectiveDB(unitID)
+            frame:SetAlpha(Clamp(edb.alpha or 1, 0.1, 1))
+            frame:SetScale(Clamp(edb.scale or 1, 0.5, 2))
         end
     end
 end
@@ -2200,9 +2229,10 @@ end
 function Nameplates:Refresh()
     self:InvalidateCache()
     -- Update cooldown timer font on all existing icon pools when settings change.
-    local fSize = Clamp(self:GetDB().auraTimerFontSize or 8, 6, 28)
     local function updatePoolFont(frame)
         if frame and frame.auraFrame and frame.auraFrame.icons then
+            local edb   = Nameplates:GetEffectiveDB(frame._unit)
+            local fSize = Clamp(edb.auraTimerFontSize or 8, 6, 28)
             for _, iconF in ipairs(frame.auraFrame.icons) do
                 if iconF.cooldown and iconF.cooldown.Timer then
                     iconF.cooldown.Timer:SetFont(_G.STANDARD_TEXT_FONT, fSize, "OUTLINE")
