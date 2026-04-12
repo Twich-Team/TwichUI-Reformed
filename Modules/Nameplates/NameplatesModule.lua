@@ -124,6 +124,12 @@ local NP_MAX_AURA_POOL       = 10 -- pre-allocated icons per plate
 local TARGET_GROW_ANIM_SEC   = 0.14
 local RANGE_FADE_ANIM_SEC    = 0.16
 local STATE_FADE_ANIM_SEC    = 0.18
+local NP_BASE_FRAME_LEVEL    = 140
+local NP_BASE_GLOW_LEVEL     = 138
+local NP_CAST_FRAME_LEVEL    = 170
+local NP_CAST_GLOW_LEVEL     = 168
+local NP_TARGET_FRAME_LEVEL  = 180
+local NP_TARGET_GLOW_LEVEL   = 178
 
 -- Default reaction colours used when healthColorMode = "reaction"
 -- These are the built-in fallbacks; users can override each via DB.
@@ -170,6 +176,27 @@ local ARROW_TC_RIGHT         = { 0, 1, 1, 1, 0, 0, 1, 0 } -- points → (left si
 
 local function GetArrowTexPath(styleName)
     return ARROW_BASE .. (styleName or "ArrowUp") .. ".tga"
+end
+
+local function ApplyPlateFrameLevels(frame, frameLevel, glowLevel)
+    if not frame then return end
+
+    frame:SetFrameLevel(frameLevel)
+    if frame.targetGlow then
+        frame.targetGlow:SetFrameLevel(glowLevel)
+    end
+    if frame.powerContainer then
+        frame.powerContainer:SetFrameLevel(frameLevel + 1)
+    end
+    if frame.castContainer then
+        frame.castContainer:SetFrameLevel(frameLevel + 2)
+    end
+    if frame.auraFrame then
+        frame.auraFrame:SetFrameLevel(frameLevel + 3)
+    end
+    if frame.raidMarkerOverlay then
+        frame.raidMarkerOverlay:SetFrameLevel(frameLevel + 10)
+    end
 end
 
 local LEGACY_NAME_ANCHORS = {
@@ -871,39 +898,37 @@ end
 
 -- ── Frame construction ────────────────────────────────────────────────────────
 function Nameplates:BuildPlateFrame(parentPlate)
-    local db                  = self:GetDB()
-    local w                   = Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600)
-    local h                   = Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60)
-    local castH               = Clamp(db.castHeight or NP_DEFAULT_CAST_HEIGHT, 6, 30)
-    local auraMax             = Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 0, NP_MAX_AURA_POOL)
-    local auraSize            = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
-    local hpTex               = GetPlateTexture("healthBarTexture", db)
-    local castTex             = GetPlateTexture("castBarTexture", db)
-    local bgTex               = GetPlateTexture("healthBgTexture", db)
+    local db            = self:GetDB()
+    local w             = Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600)
+    local h             = Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60)
+    local castH         = Clamp(db.castHeight or NP_DEFAULT_CAST_HEIGHT, 6, 30)
+    local auraMax       = Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 0, NP_MAX_AURA_POOL)
+    local auraSize      = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
+    local hpTex         = GetPlateTexture("healthBarTexture", db)
+    local castTex       = GetPlateTexture("castBarTexture", db)
+    local bgTex         = GetPlateTexture("healthBgTexture", db)
 
-    local bgC                 = type(db.healthBgColor) == "table" and db.healthBgColor or { 0.05, 0.06, 0.08, 0.92 }
-    local bdC                 = type(db.healthBorderColor) == "table" and db.healthBorderColor or
+    local bgC           = type(db.healthBgColor) == "table" and db.healthBgColor or { 0.05, 0.06, 0.08, 0.92 }
+    local bdC           = type(db.healthBorderColor) == "table" and db.healthBorderColor or
         { 0.14, 0.15, 0.20, 0.90 }
-    local cbgC                = type(db.castBgColor) == "table" and db.castBgColor or { 0.05, 0.06, 0.08, 0.92 }
-    local cbdC                = type(db.castBorderColor) == "table" and db.castBorderColor or { 0.14, 0.15, 0.20, 0.90 }
+    local cbgC          = type(db.castBgColor) == "table" and db.castBgColor or { 0.05, 0.06, 0.08, 0.92 }
+    local cbdC          = type(db.castBorderColor) == "table" and db.castBorderColor or { 0.14, 0.15, 0.20, 0.90 }
 
     -- ── Root frame ────────────────────────────────────────────────────────────
     -- MIDNIGHT SECRET: parentPlate:GetFrameLevel() returns a secret/tainted number.
     -- ANY arithmetic on it (+ 3, - 1) causes a secret-arithmetic crash that silently
     -- kills BuildPlateFrame before self._plates[unitID] is set → 0 plates tracked.
     -- Fix: use fixed frame levels.  Our frame at 140 sits above Blizzard's UnitFrame.
-    local NP_FRAME_LEVEL      = 140
-    local NP_GLOW_FRAME_LEVEL = 138
-    local frame               = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
-    frame._isTwichFrame       = true -- used by suppression loops to skip our own frame
+    local frame         = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
+    frame._isTwichFrame = true       -- used by suppression loops to skip our own frame
     -- MIDNIGHT LAYOUT NOTE: any direct child of the Blizzard nameplate plate can have its
     -- dimensions coerced by the plate's C-side layout. Keep the TwichUI plate root on
     -- UIParent and anchor it to the Blizzard plate instead so the size is entirely ours.
-    local plate               = parentPlate or UIParent
+    local plate         = parentPlate or UIParent
     frame:SetSize(w, h)
     frame:SetPoint("TOPLEFT", plate, "CENTER", -w / 2, h / 2)
     frame:SetPoint("BOTTOMRIGHT", plate, "CENTER", w / 2, -h / 2)
-    frame:SetFrameLevel(NP_FRAME_LEVEL)
+    frame:SetFrameLevel(NP_BASE_FRAME_LEVEL)
     ApplyBackdrop(frame, bgC[1], bgC[2], bgC[3], bgC[4], bdC[1], bdC[2], bdC[3], bdC[4])
 
     -- ── Target / focus glow ring ──────────────────────────────────────────────
@@ -911,7 +936,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     local targetGlow = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     targetGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", -glowOutset, glowOutset)
     targetGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", glowOutset, -glowOutset)
-    targetGlow:SetFrameLevel(NP_GLOW_FRAME_LEVEL)
+    targetGlow:SetFrameLevel(NP_BASE_GLOW_LEVEL)
     if targetGlow.SetBackdrop then
         targetGlow:SetBackdrop(GLOW_BD)
     end
@@ -1030,7 +1055,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     -- ── Raid target marker ───────────────────────────────────────────────────
     local raidMarkerOverlay = CreateFrame("Frame", nil, frame)
     raidMarkerOverlay:SetAllPoints()
-    raidMarkerOverlay:SetFrameLevel(NP_FRAME_LEVEL + 10)
+    raidMarkerOverlay:SetFrameLevel(NP_BASE_FRAME_LEVEL + 10)
     raidMarkerOverlay:EnableMouse(false)
     frame.raidMarkerOverlay = raidMarkerOverlay
 
@@ -1252,6 +1277,8 @@ function Nameplates:BuildPlateFrame(parentPlate)
     end)
     frame._alphaAnimDriver = alphaAnimDriver
 
+    ApplyPlateFrameLevels(frame, NP_BASE_FRAME_LEVEL, NP_BASE_GLOW_LEVEL)
+
     return frame
 end
 
@@ -1293,7 +1320,27 @@ function Nameplates:ReleasePlateFrame(frame)
     if frame.absorbBar then frame.absorbBar:Hide() end
     if frame.arrowL then frame.arrowL:Hide() end
     if frame.arrowR then frame.arrowR:Hide() end
+    ApplyPlateFrameLevels(frame, NP_BASE_FRAME_LEVEL, NP_BASE_GLOW_LEVEL)
     self._platePool[#self._platePool + 1] = frame
+end
+
+function Nameplates:UpdatePlateDrawPriority(frame, unit)
+    if not frame then return end
+
+    local frameLevel = NP_BASE_FRAME_LEVEL
+    local glowLevel = NP_BASE_GLOW_LEVEL
+    local isTarget = unit and UnitIsUnit and UnitIsUnit(unit, "target")
+    local isCasting = frame._casting == true
+
+    if isTarget then
+        frameLevel = NP_TARGET_FRAME_LEVEL
+        glowLevel = NP_TARGET_GLOW_LEVEL
+    elseif isCasting then
+        frameLevel = NP_CAST_FRAME_LEVEL
+        glowLevel = NP_CAST_GLOW_LEVEL
+    end
+
+    ApplyPlateFrameLevels(frame, frameLevel, glowLevel)
 end
 
 function Nameplates:SetPlateFrameGeometry(frame, width, height, db)
@@ -1675,6 +1722,7 @@ function Nameplates:UpdateTargetGlow(frame, unit)
     end
 
     local isCasting = frame._casting == true and db.castEmphasisEnabled == true
+    self:UpdatePlateDrawPriority(frame, unit)
 
     if db.showTargetGlow == false and not isCasting then
         RestoreBorder()
