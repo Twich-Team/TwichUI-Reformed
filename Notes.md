@@ -2,6 +2,8 @@
 
 ## NOTES
 
+- We are still not capturing all lua errors coming from us. I got this from bugsack. please fix this error, and update our error handler to ensure we are catching ALL lua errors for twichui. i have bugsack and buggrabber in the addon references if we need to reference how they catch bugs.
+
 - Can we investigate nameplate stacking options? I beleive plater and elvui have these options. I would like to be able to customize how they stack or clamp to the screen. for example if i have pulled a lot of enemies, i may not want some overlapping over each other so i can always ensure i see cast bars. Please look at plater and elvui for their stacking/positioning options for nameplates and see if we can implement any of these options.
 
 - In our nameplate configuration, lets make it more logical for players. Separate into two sub-tabs: Enemy and Friendly. Then each of those have their relevant configuration tabs within them
@@ -14,7 +16,7 @@
 - Our notifications background and borders should use the same colors from the global appearance section in our configuration interface
 - Our data text menus should use the background and border settings from the global appearance section in our configuration interface
 
-- In the interface designer, the loot feed preview button overlaps the enable button
+- Since we have been fighting this for so long, can we just create our own secure frame that shows an exit button?
 
 # Tweaks
 
@@ -35,3 +37,4 @@
 - BigWigs skin
 - Advanced keybinding system
 - Transmog collection system
+- "Loadable on demand" configuration

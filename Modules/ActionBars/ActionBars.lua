@@ -85,6 +85,9 @@ local MOUSEOVER_FADE_DELAY = 0.08
 local DEBUG_SOURCE_KEY = "actionbars"
 local PIXEL_GLOW_ALPHA = 0.9
 local FAILED_ACTION_FEEDBACK_WINDOW = 0.6
+local VEHICLE_EXIT_TEXTURE_UP = "Interface\\Vehicles\\UI-Vehicles-Button-Exit-Up"
+local VEHICLE_EXIT_TEXTURE_DOWN = "Interface\\Vehicles\\UI-Vehicles-Button-Exit-Down"
+local VEHICLE_EXIT_ICON_TEXTURE = "Interface\\Vehicles\\UI-Vehicles-Button-Exit-Down-Icon"
 
 local PAGING_SUPPORTED_BARS = {
     bar1 = true,
@@ -421,49 +424,220 @@ local function FormatFramePoint(frame)
         tonumber(yOffset) or 0)
 end
 
+local RestoreButtonArtTextures
+local UpdateVehicleExitArtOverlay
+local ApplyVehicleExitButtonArt
+
+local function ScheduleVehicleExitOverlayRefresh(button)
+    if not button or not C_Timer or type(C_Timer.After) ~= "function" then
+        return
+    end
+
+    C_Timer.After(0, function()
+        if not button then
+            return
+        end
+
+        ApplyVehicleExitButtonArt(button)
+        UpdateVehicleExitArtOverlay(button)
+    end)
+end
+
+local function EnsureVehicleExitArtOverlay(button)
+    if not button or type(button.CreateTexture) ~= "function" then
+        return nil
+    end
+
+    local overlay = button.__twichuiVehicleExitIcon
+    if overlay then
+        return overlay
+    end
+
+    overlay = button:CreateTexture(nil, "OVERLAY", nil, 7)
+    overlay:SetPoint("CENTER", button, "CENTER", 0, 0)
+    overlay:SetSize(max((button:GetWidth() or 32) - 8, 18), max((button:GetHeight() or 32) - 8, 18))
+    overlay:SetTexture(VEHICLE_EXIT_ICON_TEXTURE)
+    overlay:SetTexCoord(0, 1, 0, 1)
+    overlay:SetBlendMode("BLEND")
+    overlay:SetVertexColor(1, 1, 1, 0.92)
+    overlay:SetAlpha(1)
+    overlay:Hide()
+    button.__twichuiVehicleExitIcon = overlay
+
+    return overlay
+end
+
+UpdateVehicleExitArtOverlay = function(button)
+    local overlay = EnsureVehicleExitArtOverlay(button)
+    if not overlay then
+        return
+    end
+
+    overlay:SetSize(max((button:GetWidth() or 32) - 8, 18), max((button:GetHeight() or 32) - 8, 18))
+
+    overlay:SetTexture(VEHICLE_EXIT_ICON_TEXTURE)
+    overlay:SetTexCoord(0, 1, 0, 1)
+
+    local red, green, blue, alpha = 1, 1, 1, 0.92
+    if button.IsEnabled and button:IsEnabled() == false then
+        red, green, blue, alpha = 0.72, 0.72, 0.72, 0.72
+    elseif button.GetButtonState and button:GetButtonState() == "PUSHED" then
+        red, green, blue, alpha = 1, 1, 1, 1
+    elseif button.IsMouseOver and button:IsMouseOver() then
+        red, green, blue, alpha = 1, 1, 1, 1
+    end
+
+    overlay:SetVertexColor(red, green, blue, alpha)
+
+    if button.IsShown and button:IsShown() then
+        overlay:SetAlpha(1)
+        overlay:Show()
+    else
+        overlay:Hide()
+    end
+end
+
+ApplyVehicleExitButtonArt = function(button)
+    if not button then
+        return
+    end
+
+    if button.SetNormalTexture then
+        button:SetNormalTexture(VEHICLE_EXIT_TEXTURE_UP)
+    end
+    if button.SetPushedTexture then
+        button:SetPushedTexture(VEHICLE_EXIT_TEXTURE_DOWN)
+    end
+    if button.SetDisabledTexture then
+        button:SetDisabledTexture(VEHICLE_EXIT_TEXTURE_UP)
+    end
+    if button.SetHighlightTexture then
+        button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    end
+
+    local normalTexture = button.GetNormalTexture and button:GetNormalTexture() or nil
+    if normalTexture then
+        normalTexture:SetAlpha(1)
+        normalTexture:Show()
+        normalTexture:SetTexCoord(0.220625, 0.799375, 0.220625, 0.779375)
+    end
+
+    local pushedTexture = button.GetPushedTexture and button:GetPushedTexture() or nil
+    if pushedTexture then
+        pushedTexture:SetAlpha(1)
+        pushedTexture:Show()
+        pushedTexture:SetTexCoord(0.140625, 0.859375, 0.140625, 0.859375)
+    end
+
+    local disabledTexture = button.GetDisabledTexture and button:GetDisabledTexture() or nil
+    if disabledTexture then
+        disabledTexture:SetAlpha(0.85)
+        disabledTexture:Show()
+        disabledTexture:SetTexCoord(0.220625, 0.799375, 0.220625, 0.779375)
+    end
+
+    local highlightTexture = button.GetHighlightTexture and button:GetHighlightTexture() or nil
+    if highlightTexture then
+        highlightTexture:SetAlpha(1)
+        highlightTexture:SetTexCoord(0, 1, 0, 1)
+    end
+
+    UpdateVehicleExitArtOverlay(button)
+
+    if button.__twichVehicleExitArtOverlayHooked ~= true then
+        button.__twichVehicleExitArtOverlayHooked = true
+        button:HookScript("OnShow", UpdateVehicleExitArtOverlay)
+        button:HookScript("OnHide", UpdateVehicleExitArtOverlay)
+        button:HookScript("OnEnable", UpdateVehicleExitArtOverlay)
+        button:HookScript("OnDisable", UpdateVehicleExitArtOverlay)
+        button:HookScript("OnMouseDown", UpdateVehicleExitArtOverlay)
+        button:HookScript("OnMouseUp", UpdateVehicleExitArtOverlay)
+        button:HookScript("OnEnter", UpdateVehicleExitArtOverlay)
+        button:HookScript("OnLeave", UpdateVehicleExitArtOverlay)
+    end
+end
+
+local function GetVehicleExitRuntimeState(button, holder)
+    local canExitVehicle = type(CanExitVehicle) == "function" and CanExitVehicle() == true or false
+    local hasVehicleUI = type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") == true or false
+    local onTaxi = type(UnitOnTaxi) == "function" and UnitOnTaxi("player") == true or false
+    local hasVehicleBar = type(HasVehicleActionBar) == "function" and HasVehicleActionBar() == true or false
+    local hasOverrideBar = type(HasOverrideActionBar) == "function" and HasOverrideActionBar() == true or false
+    local canExit = canExitVehicle or hasVehicleUI or onTaxi or hasVehicleBar or hasOverrideBar
+
+    return {
+        canExit = canExit,
+        canExitVehicle = canExitVehicle,
+        hasVehicleUI = hasVehicleUI,
+        onTaxi = onTaxi,
+        hasVehicleBar = hasVehicleBar,
+        hasOverrideBar = hasOverrideBar,
+        holderShown = holder and holder.IsShown and holder:IsShown() or false,
+        buttonShown = button and button.IsShown and button:IsShown() or false,
+        buttonParent = button and button.GetParent and button:GetParent() or nil,
+        iconShown = button and button.GetNormalTexture and button:GetNormalTexture() and
+            button:GetNormalTexture().IsShown and
+            button:GetNormalTexture():IsShown() or false,
+        iconAlpha = button and button.GetNormalTexture and button:GetNormalTexture() and
+            button:GetNormalTexture().GetAlpha and
+            button:GetNormalTexture():GetAlpha() or 0,
+        iconTexture = button and button.GetNormalTexture and button:GetNormalTexture() and
+            button:GetNormalTexture().GetTexture and
+            button:GetNormalTexture():GetTexture() or nil,
+        iconAtlas = button and button.GetNormalTexture and button:GetNormalTexture() and
+            button:GetNormalTexture().GetAtlas and
+            button:GetNormalTexture():GetAtlas() or nil,
+        overlayShown = button and button.__twichuiVehicleExitIcon and button.__twichuiVehicleExitIcon.IsShown and
+            button.__twichuiVehicleExitIcon:IsShown() or false,
+        overlayAtlas = button and button.__twichuiVehicleExitIcon and button.__twichuiVehicleExitIcon.GetAtlas and
+            button.__twichuiVehicleExitIcon:GetAtlas() or nil,
+        overlayTexture = button and button.__twichuiVehicleExitIcon and button.__twichuiVehicleExitIcon.GetTexture and
+            button.__twichuiVehicleExitIcon:GetTexture() or nil,
+    }
+end
+
+local function CaptureVehicleExitRuntimeState(button, holder, reason)
+    local state = GetVehicleExitRuntimeState(button, holder)
+    state.reason = reason or "unknown"
+
+    if button then
+        button.__twichVehicleExitRuntimeState = state
+    end
+
+    if holder then
+        holder.__twichVehicleExitRuntimeState = state
+    end
+
+    return state
+end
+
 local function EnsureVehicleExitButtonAnchored(button, holder)
     if not button or not holder then
         return
     end
 
-    if not button.__twichuiVehicleExitIcon then
-        local icon = button:CreateTexture(nil, "ARTWORK")
-        icon:SetPoint("TOPLEFT", button, "TOPLEFT", 4, -4)
-        icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -4, 4)
-        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-        button.__twichuiVehicleExitIcon = icon
+    local originalState = ActionBars and ActionBars.originalButtons and ActionBars.originalButtons[button] or nil
+    if originalState and originalState.artTextures then
+        RestoreButtonArtTextures(button, originalState.artTextures)
     end
+    ApplyVehicleExitButtonArt(button)
 
-    local vehicleIcon = button.__twichuiVehicleExitIcon
-    if vehicleIcon then
-        if vehicleIcon.SetAtlas then
-            vehicleIcon:SetAtlas("UI-Vehicles-Button-Exit-Down", true)
-        else
-            vehicleIcon:SetTexture("Interface\\Vehicles\\UI-Vehicles-Button-Exit-Up")
+    button.__twichuiIcon = nil
+    button.__twichuiIconCached = true
+
+    local function SyncVehicleExitVisibility(reason)
+        local state = CaptureVehicleExitRuntimeState(button, holder, reason)
+
+        if not InCombatLockdown() then
+            holder:SetShown(state.canExit)
+            button:SetShown(state.canExit)
         end
-        vehicleIcon:SetAlpha(1)
-        vehicleIcon:Show()
-    end
 
-    if button.SetNormalTexture then
-        button:SetNormalTexture(nil)
-    end
-    if button.SetPushedTexture then
-        button:SetPushedTexture(nil)
-    end
-    if button.SetHighlightTexture then
-        button:SetHighlightTexture(nil)
-    end
-    if button.SetDisabledTexture then
-        button:SetDisabledTexture(nil)
-    end
+        UpdateVehicleExitArtOverlay(button)
 
-    local function SyncVehicleExitVisibility()
-        local holderShown = holder and holder.IsShown and holder:IsShown() or false
-        local canExit = (type(CanExitVehicle) == "function" and CanExitVehicle() == true)
-            or (type(UnitHasVehicleUI) == "function" and UnitHasVehicleUI("player") == true)
-            or (type(UnitOnTaxi) == "function" and UnitOnTaxi("player") == true)
-        button:SetShown(holderShown and canExit)
+        if ActionBars and ActionBars.DebugVehicleExitState then
+            ActionBars:DebugVehicleExitState(reason or "sync", button, holder, state)
+        end
     end
 
     button.__twichVehicleExitHolder = holder
@@ -487,6 +661,22 @@ local function EnsureVehicleExitButtonAnchored(button, holder)
                 selfButton:SetPoint("CENTER", desiredHolder, "CENTER", 0, 0)
             end
         end)
+        if type(button.Update) == "function" then
+            hooksecurefunc(button, "Update", function(selfButton)
+                ApplyVehicleExitButtonArt(selfButton)
+                if selfButton.__twichVehicleExitSync then
+                    selfButton.__twichVehicleExitSync("button-update")
+                end
+            end)
+        end
+        if type(button.UpdateShownState) == "function" then
+            hooksecurefunc(button, "UpdateShownState", function(selfButton)
+                ApplyVehicleExitButtonArt(selfButton)
+                if selfButton.__twichVehicleExitSync then
+                    selfButton.__twichVehicleExitSync("button-update-shown-state")
+                end
+            end)
+        end
     end
 
     if holder.__twichVehicleExitVisibilityHooked ~= true then
@@ -494,19 +684,39 @@ local function EnsureVehicleExitButtonAnchored(button, holder)
         holder:HookScript("OnShow", function(selfHolder)
             local vehicleButton = selfHolder.__twichVehicleExitButton
             if vehicleButton then
-                SyncVehicleExitVisibility()
+                SyncVehicleExitVisibility("holder-onshow")
             end
         end)
         holder:HookScript("OnHide", function(selfHolder)
             local vehicleButton = selfHolder.__twichVehicleExitButton
             if vehicleButton then
-                SyncVehicleExitVisibility()
+                SyncVehicleExitVisibility("holder-onhide")
+            end
+        end)
+    end
+
+    if button.__twichVehicleExitVisibilityHooked ~= true then
+        button.__twichVehicleExitVisibilityHooked = true
+        button:HookScript("OnShow", function(selfButton)
+            ApplyVehicleExitButtonArt(selfButton)
+            UpdateVehicleExitArtOverlay(selfButton)
+            ScheduleVehicleExitOverlayRefresh(selfButton)
+            CaptureVehicleExitRuntimeState(selfButton, selfButton.__twichVehicleExitHolder, "button-onshow")
+            if ActionBars and ActionBars.DebugVehicleExitState then
+                ActionBars:DebugVehicleExitState("button-onshow", selfButton, selfButton.__twichVehicleExitHolder)
+            end
+        end)
+        button:HookScript("OnHide", function(selfButton)
+            CaptureVehicleExitRuntimeState(selfButton, selfButton.__twichVehicleExitHolder, "button-onhide")
+            if ActionBars and ActionBars.DebugVehicleExitState then
+                ActionBars:DebugVehicleExitState("button-onhide", selfButton, selfButton.__twichVehicleExitHolder)
             end
         end)
     end
 
     holder.__twichVehicleExitButton = button
-    SyncVehicleExitVisibility()
+    button.__twichVehicleExitSync = SyncVehicleExitVisibility
+    SyncVehicleExitVisibility("ensure-anchor")
 end
 
 local function IsDebugEnabled()
@@ -527,6 +737,55 @@ local function LogDebugf(shouldShow, messageFormat, ...)
     end
 
     return DebugConsole:Logf(DEBUG_SOURCE_KEY, shouldShow, messageFormat, ...)
+end
+
+function ActionBars:DebugVehicleExitState(reason, button, holder, cachedState)
+    local state = cachedState or CaptureVehicleExitRuntimeState(button, holder, reason)
+    local signature = table.concat({
+        tostring(reason or "unknown"),
+        tostring(state.canExit),
+        tostring(state.canExitVehicle),
+        tostring(state.hasVehicleUI),
+        tostring(state.onTaxi),
+        tostring(state.hasVehicleBar),
+        tostring(state.hasOverrideBar),
+        tostring(state.holderShown),
+        tostring(state.buttonShown),
+        tostring(state.iconShown),
+        format("%.2f", tonumber(state.iconAlpha) or 0),
+    }, "|")
+
+    if holder and holder.__twichVehicleExitLastDebugSignature == signature then
+        return
+    end
+
+    if holder then
+        holder.__twichVehicleExitLastDebugSignature = signature
+    end
+
+    LogDebugf(false,
+        "vehicle exit state reason=%s canExit=%s canExitVehicle=%s hasVehicleUI=%s onTaxi=%s hasVehicleBar=%s hasOverrideBar=%s holderShown=%s buttonShown=%s iconShown=%s iconAlpha=%.2f overlayShown=%s parent=%s point=%s",
+        SafeDebugString(reason),
+        tostring(state.canExit),
+        tostring(state.canExitVehicle),
+        tostring(state.hasVehicleUI),
+        tostring(state.onTaxi),
+        tostring(state.hasVehicleBar),
+        tostring(state.hasOverrideBar),
+        tostring(state.holderShown),
+        tostring(state.buttonShown),
+        tostring(state.iconShown),
+        tonumber(state.iconAlpha) or 0,
+        tostring(state.overlayShown),
+        state.buttonParent and state.buttonParent.GetName and state.buttonParent:GetName() or "nil",
+        FormatFramePoint(button))
+    LogDebugf(false,
+        "vehicle exit art reason=%s atlas=%s texture=%s overlayAtlas=%s overlayTexture=%s",
+        SafeDebugString(reason),
+        SafeDebugString(state.iconAtlas),
+        SafeDebugString(state.iconTexture),
+        SafeDebugString(state.overlayAtlas),
+        SafeDebugString(state.overlayTexture))
 end
 
 local function CapturePoints(frame)
@@ -629,6 +888,7 @@ local function CaptureTexture(texture)
         alpha = texture.GetAlpha and texture:GetAlpha() or 1,
         shown = texture.IsShown and texture:IsShown() or true,
         texture = texture.GetTexture and texture:GetTexture() or nil,
+        atlas = texture.GetAtlas and texture:GetAtlas() or nil,
         blendMode = texture.GetBlendMode and texture:GetBlendMode() or nil,
         texCoord = { left, right, top, bottom },
     }
@@ -660,7 +920,9 @@ local function RestoreTexture(texture, state)
         return
     end
 
-    if texture.SetTexture and state.texture ~= nil then
+    if texture.SetAtlas and state.atlas ~= nil and state.atlas ~= "" then
+        texture:SetAtlas(state.atlas, false)
+    elseif texture.SetTexture and state.texture ~= nil then
         texture:SetTexture(state.texture)
     end
     if texture.SetTexCoord and state.texCoord then
@@ -799,7 +1061,7 @@ local function CaptureButtonArtTextures(button)
     return captured
 end
 
-local function RestoreButtonArtTextures(button, states)
+function RestoreButtonArtTextures(button, states)
     if type(states) ~= "table" then
         return
     end
@@ -1246,6 +1508,8 @@ function ActionBars:OnEnable()
     LogDebug("action bars enabled", false)
     EnsureGridHooksInstalled(self)
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "HandlePlayerEnteringWorld")
+    self:RegisterEvent("PLAYER_GAINS_VEHICLE_DATA", "HandleVehicleDataChanged")
+    self:RegisterEvent("PLAYER_LOSES_VEHICLE_DATA", "HandleVehicleDataChanged")
     self:RegisterEvent("SPELLS_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED", "RefreshButtonStates")
     self:RegisterEvent("UPDATE_SHAPESHIFT_FORMS", "RequestRefresh")
@@ -1253,8 +1517,13 @@ function ActionBars:OnEnable()
     self:RegisterEvent("PET_BAR_UPDATE_USABLE", "RequestRefresh")
     self:RegisterEvent("UPDATE_EXTRA_ACTIONBAR", "RequestRefresh")
     self:RegisterEvent("UPDATE_VEHICLE_ACTIONBAR", "RequestRefresh")
+    self:RegisterEvent("UPDATE_OVERRIDE_ACTIONBAR", "RequestRefresh")
+    self:RegisterEvent("UPDATE_POSSESS_BAR", "RequestRefresh")
+    self:RegisterEvent("VEHICLE_UPDATE", "RequestRefresh")
     self:RegisterEvent("UNIT_ENTERED_VEHICLE", "RequestRefresh")
+    self:RegisterEvent("UNIT_ENTERING_VEHICLE", "RequestRefresh")
     self:RegisterEvent("UNIT_EXITED_VEHICLE", "RequestRefresh")
+    self:RegisterEvent("UNIT_EXITING_VEHICLE", "RequestRefresh")
     self:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
     self:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
     self:RegisterEvent("UPDATE_BINDINGS", "OnBindingsChanged")
@@ -1280,6 +1549,7 @@ end
 function ActionBars:HandlePlayerEnteringWorld()
     self.pendingRefresh = true
     EnsureGridHooksInstalled(self)
+    LogDebug("player entering world; scheduling action bar refresh", false)
 
     if not (C_Timer and type(C_Timer.After) == "function") then
         self:RefreshModuleState()
@@ -1293,7 +1563,28 @@ function ActionBars:HandlePlayerEnteringWorld()
         end
 
         ActionBars:RefreshModuleState()
+        ActionBars:RefreshVehicleExitStartupState("player-entering-world-initial")
     end)
+
+    C_Timer.After(0.4, function()
+        local db = ActionBars:GetDB()
+        if not db or db.enabled == false or not ActionBars:IsEnabled() then
+            return
+        end
+
+        LogDebug("player entering world follow-up refresh", false)
+        ActionBars:RequestRefresh()
+        ActionBars:RefreshVehicleExitStartupState("player-entering-world-follow-up")
+    end)
+end
+
+function ActionBars:HandleVehicleDataChanged(_, unitTarget)
+    if unitTarget and unitTarget ~= "player" then
+        return
+    end
+
+    self:RequestRefresh()
+    self:RefreshVehicleExitStartupState("vehicle-data-changed")
 end
 
 function ActionBars:OnDisable()
@@ -1449,6 +1740,53 @@ function ActionBars:RequestRefresh()
     self:QueueRefreshAll()
 end
 
+function ActionBars:RefreshVehicleExitStartupState(reason)
+    if not (C_Timer and type(C_Timer.After) == "function") then
+        return
+    end
+
+    local function ReapplyVehicleExitArt(delaySeconds, delayedReason)
+        C_Timer.After(delaySeconds, function()
+            local db = ActionBars:GetDB()
+            if not db or db.enabled == false or not ActionBars:IsEnabled() then
+                return
+            end
+
+            local holder = ActionBars.holders and ActionBars.holders.vehicleExit or nil
+            local button = ActionBars.barButtons and ActionBars.barButtons.vehicleExit and
+                ActionBars.barButtons.vehicleExit[1] or
+                _G.MainMenuBarVehicleLeaveButton
+            if not button then
+                return
+            end
+
+            if holder then
+                EnsureVehicleExitButtonAnchored(button, holder)
+            else
+                ApplyVehicleExitButtonArt(button)
+                UpdateVehicleExitArtOverlay(button)
+                ScheduleVehicleExitOverlayRefresh(button)
+            end
+
+            if button.__twichVehicleExitSync then
+                button.__twichVehicleExitSync(delayedReason)
+            else
+                ApplyVehicleExitButtonArt(button)
+                UpdateVehicleExitArtOverlay(button)
+                ScheduleVehicleExitOverlayRefresh(button)
+            end
+
+            LogDebugf(false, "vehicle exit startup refresh reason=%s canExit=%s shown=%s",
+                SafeDebugString(delayedReason),
+                tostring(type(CanExitVehicle) == "function" and CanExitVehicle() == true or false),
+                tostring(button.IsShown and button:IsShown() or false))
+        end)
+    end
+
+    ReapplyVehicleExitArt(0, reason or "startup")
+    ReapplyVehicleExitArt(0.15, (reason or "startup") .. "-delayed")
+end
+
 function ActionBars:BuildDebugReport()
     local lines = {
         "TwichUI Action Bars Debug Report",
@@ -1502,6 +1840,35 @@ function ActionBars:BuildDebugReport()
             tostring(barDB.enabled == true),
             buttonCount)
     end
+
+    local vehicleHolder = self.holders.vehicleExit
+    local vehicleButton = self.barButtons.vehicleExit and self.barButtons.vehicleExit[1] or
+    _G.MainMenuBarVehicleLeaveButton
+    local vehicleState = CaptureVehicleExitRuntimeState(vehicleButton, vehicleHolder, "debug-report")
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Vehicle Exit"
+    lines[#lines + 1] = string.format(
+        "canExit=%s canExitVehicle=%s hasVehicleUI=%s onTaxi=%s hasVehicleBar=%s hasOverrideBar=%s",
+        tostring(vehicleState.canExit),
+        tostring(vehicleState.canExitVehicle),
+        tostring(vehicleState.hasVehicleUI),
+        tostring(vehicleState.onTaxi),
+        tostring(vehicleState.hasVehicleBar),
+        tostring(vehicleState.hasOverrideBar))
+    lines[#lines + 1] = string.format(
+        "holderShown=%s buttonShown=%s iconShown=%s iconAlpha=%.2f overlayShown=%s atlas=%s texture=%s overlayAtlas=%s overlayTexture=%s parent=%s point=%s",
+        tostring(vehicleState.holderShown),
+        tostring(vehicleState.buttonShown),
+        tostring(vehicleState.iconShown),
+        tonumber(vehicleState.iconAlpha) or 0,
+        tostring(vehicleState.overlayShown),
+        SafeDebugString(vehicleState.iconAtlas),
+        SafeDebugString(vehicleState.iconTexture),
+        SafeDebugString(vehicleState.overlayAtlas),
+        SafeDebugString(vehicleState.overlayTexture),
+        vehicleState.buttonParent and vehicleState.buttonParent.GetName and vehicleState.buttonParent:GetName() or "nil",
+        FormatFramePoint(vehicleButton))
 
     return table.concat(lines, "\n")
 end
@@ -2452,7 +2819,9 @@ end
 
 function ActionBars:GetButtonIcon(button)
     if not button then return nil end
-    if button.__twichuiIconCached then return button.__twichuiIcon end
+    if button.__twichuiIconCached and button.__twichuiIcon then
+        return button.__twichuiIcon
+    end
     local icon = button.icon or button.Icon or (button.GetName and _G[button:GetName() .. "Icon"]) or nil
     button.__twichuiIcon = icon
     button.__twichuiIconCached = true
@@ -4631,12 +5000,13 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
     end
 
     if barKey == "vehicleExit" then
+        local originalState = self.originalButtons and self.originalButtons[button] or nil
+        if originalState and originalState.artTextures then
+            RestoreButtonArtTextures(button, originalState.artTextures)
+        end
+        ApplyVehicleExitButtonArt(button)
         if button.__twichuiABChrome then
             button.__twichuiABChrome:Hide()
-        end
-        if button.__twichuiVehicleExitIcon then
-            button.__twichuiVehicleExitIcon:Show()
-            button.__twichuiVehicleExitIcon:SetAlpha(1)
         end
         self:HideButtonHoverEffect(button)
         self:HideFailedActionFeedback(button)
@@ -5439,7 +5809,7 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
             ApplyButtonGridState(button, actionBarDB.showGrid == true)
 
             if definition.key == "vehicleExit" then
-                button:SetShown(holder:IsShown())
+                CaptureVehicleExitRuntimeState(button, holder, "layout-button")
             else
                 button:Show()
             end
@@ -5453,23 +5823,16 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
     if definition.key == "vehicleExit" then
         pcall(UnregisterStateDriver, holder, "visibility")
 
-        local visibility = tostring(barSettings.visibility or "")
-        local hasVehicle = visibility:find("vehicleui", 1, true) ~= nil
-        local hasOverride = visibility:find("overridebar", 1, true) ~= nil
-        local hasPossess = visibility:find("possessbar", 1, true) ~= nil
-        if visibility == "" or (hasVehicle and not hasOverride and not hasPossess) then
-            visibility = "[vehicleui][overridebar][possessbar] show; hide"
-        end
-
-        local ok = pcall(RegisterStateDriver, holder, "visibility", visibility)
-        if not ok then
-            pcall(RegisterStateDriver, holder, "visibility", "[vehicleui][overridebar][possessbar] show; hide")
+        if buttons[1] then
+            EnsureVehicleExitButtonAnchored(buttons[1], holder)
         end
     else
         self:ApplyVisibility(holder, barSettings)
     end
     holder:SetAlpha(self:GetTargetAlpha(barSettings, false))
-    holder:Show()
+    if definition.key ~= "vehicleExit" then
+        holder:Show()
+    end
 end
 
 function ActionBars:ApplyMasqueSettings(actionBarDB)
@@ -5497,18 +5860,34 @@ function ActionBars:ApplyMasqueSettings(actionBarDB)
             self.masqueButtons[definition.key] = self.masqueButtons[definition.key] or {}
 
             for _, button in ipairs(buttons) do
-                if not self.masqueButtons[definition.key][button] then
-                    group:AddButton(button, {
-                        Icon = self:GetButtonIcon(button),
-                        Cooldown = self:GetButtonCooldown(button),
-                        HotKey = self:GetButtonHotKey(button),
-                        Count = self:GetButtonCount(button),
-                        Name = self:GetButtonMacroName(button),
-                        Border = button.Border or _G[button:GetName() .. "Border"],
-                        Normal = _G[button:GetName() .. "NormalTexture"],
-                        Highlight = button:GetHighlightTexture(),
-                    })
-                    self.masqueButtons[definition.key][button] = true
+                if definition.key == "vehicleExit" then
+                    if group.RemoveButton then
+                        group:RemoveButton(button)
+                    end
+                    self.masqueButtons[definition.key][button] = nil
+
+                    local originalState = self.originalButtons and self.originalButtons[button] or nil
+                    if originalState and originalState.artTextures then
+                        RestoreButtonArtTextures(button, originalState.artTextures)
+                    end
+
+                    ApplyVehicleExitButtonArt(button)
+                    UpdateVehicleExitArtOverlay(button)
+                    ScheduleVehicleExitOverlayRefresh(button)
+                else
+                    if not self.masqueButtons[definition.key][button] then
+                        group:AddButton(button, {
+                            Icon = self:GetButtonIcon(button),
+                            Cooldown = self:GetButtonCooldown(button),
+                            HotKey = self:GetButtonHotKey(button),
+                            Count = self:GetButtonCount(button),
+                            Name = self:GetButtonMacroName(button),
+                            Border = button.Border or _G[button:GetName() .. "Border"],
+                            Normal = _G[button:GetName() .. "NormalTexture"],
+                            Highlight = button:GetHighlightTexture(),
+                        })
+                        self.masqueButtons[definition.key][button] = true
+                    end
                 end
 
                 if button.__twichuiABChrome then
@@ -5526,7 +5905,9 @@ function ActionBars:ApplyMasqueSettings(actionBarDB)
             end
 
             for _, button in ipairs(buttons) do
-                SuppressButtonArtTextures(button)
+                if definition.key ~= "vehicleExit" then
+                    SuppressButtonArtTextures(button)
+                end
                 SuppressButtonAnimationEffects(button)
                 SuppressSpellCastAnim(button)
             end

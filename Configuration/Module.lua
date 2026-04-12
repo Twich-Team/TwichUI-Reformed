@@ -157,6 +157,9 @@ function ConfigurationModule:RebuildOptionsTableSections()
         else
             -- Section failed to build — insert a placeholder so the user can diagnose
             local err = ok and "returned nil" or tostring(result)
+            if not ok and T.Tools and type(T.Tools.ReportErr) == "function" then
+                T.Tools.ReportErr("ConfigurationModule:RebuildOptionsTableSections:" .. tostring(name), result)
+            end
             self.optionsTable.args[name] = {
                 type  = "group",
                 name  = "|cffff4444" .. tostring(name) .. " [Error]|r",

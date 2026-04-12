@@ -14,8 +14,10 @@ local T               = unpack(TwichRx)
 ---@type Tools
 local Tools           = T.Tools
 
+local CreateFrame     = _G.CreateFrame
 local date            = _G.date
 local debugstack      = _G.debugstack
+local EventRegistry   = _G.EventRegistry
 local geterrorhandler = _G.geterrorhandler
 local LibStub         = _G.LibStub
 local math            = math
@@ -26,6 +28,7 @@ local table           = table
 local time            = _G.time
 local tostring        = tostring
 local type            = type
+local ipairs          = ipairs
 
 local ADDON_NAME      = "TwichUI_Reformed"
 local DEFAULT_MAX     = 100
@@ -111,6 +114,22 @@ end
 
 local function IsOurError(msg, stack)
     return ContainsOurSource(msg) or ContainsOurSource(stack)
+end
+
+local function FindBugGrabberEntry(errorId)
+    local db = _G.BugGrabberDB and _G.BugGrabberDB.errors
+    if type(db) ~= "table" or errorId == nil then
+        return nil
+    end
+
+    for index = #db, 1, -1 do
+        local entry = db[index]
+        if entry and tostring(entry) == tostring(errorId) then
+            return entry
+        end
+    end
+
+    return nil
 end
 
 --- Extracts a short one-line summary from the full error string.
@@ -236,8 +255,65 @@ function ErrorLog:CaptureFailure(context, detail, stackLevel)
     self:Capture(detail, context, stack)
 end
 
+function ErrorLog:_EnsureEventCapture()
+    if self._eventFrame then
+        return
+    end
+
+    local frame = CreateFrame("Frame")
+    frame:RegisterEvent("ADDON_ACTION_BLOCKED")
+    frame:RegisterEvent("ADDON_ACTION_FORBIDDEN")
+    frame:RegisterEvent("LUA_WARNING")
+    frame:SetScript("OnEvent", function(_, event, ...)
+        if event == "LUA_WARNING" then
+            local warningText = ...
+            if type(warningText) == "string" and ContainsOurSource(warningText) then
+                self:Capture(warningText, "LUA_WARNING")
+            end
+            return
+        end
+
+        local addonName, addonFunc = ...
+        if type(addonName) == "string" and addonName == ADDON_NAME then
+            self:Capture(string.format("%s: %s (%s)", event, addonName, tostring(addonFunc or "<unknown>")),
+                event)
+        end
+    end)
+
+    self._eventFrame = frame
+end
+
+function ErrorLog:_EnsureBugGrabberBridge()
+    if self._bugGrabberBridgeInstalled == true then
+        return
+    end
+    if not EventRegistry or type(EventRegistry.RegisterCallback) ~= "function" then
+        return
+    end
+
+    EventRegistry:RegisterCallback("BugGrabber.BugGrabbed", function(_, errorId)
+        local entry = FindBugGrabberEntry(errorId)
+        if type(entry) ~= "table" then
+            return
+        end
+
+        local message = entry.message
+        local stack = entry.stack
+        if not IsOurError(message, stack) then
+            return
+        end
+
+        self:Capture(message, "BugGrabber", stack)
+    end, self)
+
+    self._bugGrabberBridgeInstalled = true
+end
+
 --- Install the chained error handler.  Safe to call multiple times (no-op after first).
 function ErrorLog:Install()
+    self:_EnsureEventCapture()
+    self:_EnsureBugGrabberBridge()
+
     local current = geterrorhandler()
     if self._handler and current == self._handler then
         self.installed = true
