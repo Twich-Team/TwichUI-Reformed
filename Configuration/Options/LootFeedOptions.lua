@@ -18,7 +18,10 @@ ConfigurationModule.Options.LootFeed = Options
 local function GetDB()
     local profile = ConfigurationModule:GetProfileDB()
     if not profile.lootFeed then
-        profile.lootFeed = {}
+        profile.lootFeed = {
+            enabled = true,
+            chatDockMode = "right",
+        }
     end
     return profile.lootFeed
 end

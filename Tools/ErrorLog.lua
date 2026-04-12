@@ -7,33 +7,35 @@
 
     Install is deferred until after the DB is available (called from Core.lua).
 ]]
-local TwichRx         = _G.TwichRx
+local TwichRx                = _G.TwichRx
 ---@type TwichUI
-local T               = unpack(TwichRx)
+local T                      = unpack(TwichRx)
 
 ---@type Tools
-local Tools           = T.Tools
+local Tools                  = T.Tools
 
-local CreateFrame     = _G.CreateFrame
-local date            = _G.date
-local debugstack      = _G.debugstack
-local EventRegistry   = _G.EventRegistry
-local geterrorhandler = _G.geterrorhandler
-local LibStub         = _G.LibStub
-local math            = math
-local pcall           = pcall
-local PlaySoundFile   = _G.PlaySoundFile
-local seterrorhandler = _G.seterrorhandler
-local table           = table
-local time            = _G.time
-local tostring        = tostring
-local type            = type
-local ipairs          = ipairs
+local CreateFrame            = _G.CreateFrame
+local date                   = _G.date
+local debugstack             = _G.debugstack
+local EventRegistry          = _G.EventRegistry
+local geterrorhandler        = _G.geterrorhandler
+local LibStub                = _G.LibStub
+local math                   = math
+local pcall                  = pcall
+local PlaySoundFile          = _G.PlaySoundFile
+local seterrorhandler        = _G.seterrorhandler
+local table                  = table
+local time                   = _G.time
+local GetTime                = _G.GetTime or _G.GetTimePreciseSec or _G.time
+local tostring               = tostring
+local type                   = type
+local ipairs                 = ipairs
 
-local ADDON_NAME      = "TwichUI_Reformed"
-local DEFAULT_MAX     = 100
-local DEFAULT_SOUND   = "TwichUI Alert 1"
-local SHORT_MAX_LEN   = 220
+local ADDON_NAME             = "TwichUI_Reformed"
+local DEFAULT_MAX            = 100
+local DEFAULT_SOUND          = "TwichUI Alert 1"
+local DEFAULT_SOUND_THROTTLE = 5
+local SHORT_MAX_LEN          = 220
 
 ---@class TwichUIErrorLog
 ---@field installed boolean
@@ -42,9 +44,9 @@ local SHORT_MAX_LEN   = 220
 ---@field Capture fun(self:TwichUIErrorLog, detail:any, context:string|nil, stack:string|nil)
 ---@field CaptureFailure fun(self:TwichUIErrorLog, context:string|nil, detail:any, stackLevel:number|nil)
 ---@field _InjectTestError fun(self:TwichUIErrorLog, msg:string)
-local ErrorLog        = (Tools.ErrorLog or {}) --[[@as TwichUIErrorLog]]
-Tools.ErrorLog        = ErrorLog
-ErrorLog.installed    = ErrorLog.installed or false
+local ErrorLog               = (Tools.ErrorLog or {}) --[[@as TwichUIErrorLog]]
+Tools.ErrorLog               = ErrorLog
+ErrorLog.installed           = ErrorLog.installed or false
 
 -- ---------------------------------------------------------------------------
 -- Private helpers
@@ -60,12 +62,16 @@ local function GetLogsDB()
             suppressChatOutput = false,
             playAlertSound = false,
             alertSound = DEFAULT_SOUND,
+            alertSoundThrottle = DEFAULT_SOUND_THROTTLE,
             popupOnError = false,
         }
     end
     if db.errorLog.suppressChatOutput == nil then db.errorLog.suppressChatOutput = false end
     if db.errorLog.playAlertSound == nil then db.errorLog.playAlertSound = false end
     if db.errorLog.popupOnError == nil then db.errorLog.popupOnError = false end
+    if type(db.errorLog.alertSoundThrottle) ~= "number" then
+        db.errorLog.alertSoundThrottle = DEFAULT_SOUND_THROTTLE
+    end
     if type(db.errorLog.alertSound) ~= "string" or db.errorLog.alertSound == "" then
         db.errorLog.alertSound = DEFAULT_SOUND
     end
@@ -75,6 +81,13 @@ end
 local function PlayAlertSound()
     local db = GetLogsDB()
     if not db or db.playAlertSound ~= true then
+        return
+    end
+
+    local throttle = math.max(0, tonumber(db.alertSoundThrottle) or DEFAULT_SOUND_THROTTLE)
+    local now = type(GetTime) == "function" and GetTime() or time()
+    local lastPlayedAt = tonumber(ErrorLog._lastAlertSoundAt)
+    if throttle > 0 and lastPlayedAt and (now - lastPlayedAt) < throttle then
         return
     end
 
@@ -98,6 +111,7 @@ local function PlayAlertSound()
 
     if soundPath and type(PlaySoundFile) == "function" then
         PlaySoundFile(soundPath, "Master")
+        ErrorLog._lastAlertSoundAt = now
     end
 end
 
@@ -459,6 +473,17 @@ function ErrorLog:SetAlertSound(value)
         return
     end
     db.alertSound = value
+end
+
+function ErrorLog:GetAlertSoundThrottle()
+    local db = GetLogsDB()
+    return math.max(0, tonumber(db and db.alertSoundThrottle) or DEFAULT_SOUND_THROTTLE)
+end
+
+function ErrorLog:SetAlertSoundThrottle(value)
+    local db = GetLogsDB()
+    if not db then return end
+    db.alertSoundThrottle = math.max(0, math.min(60, math.floor(tonumber(value) or DEFAULT_SOUND_THROTTLE)))
 end
 
 function ErrorLog:GetPopupOnError()

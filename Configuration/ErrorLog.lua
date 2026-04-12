@@ -116,6 +116,27 @@ local function BuildErrorLogConfiguration()
                     if el then el:SetAlertSound(value) end
                 end,
             },
+            alertSoundThrottle = {
+                type = "range",
+                order = 30,
+                name = "Sound Throttle",
+                desc = "Minimum time in seconds between error alert sounds. Set to 0 to play on every captured error.",
+                min = 0,
+                max = 60,
+                step = 1,
+                disabled = function()
+                    local el = GetErrorLog()
+                    return not (el and el:GetPlayAlertSound())
+                end,
+                get = function()
+                    local el = GetErrorLog()
+                    return el and el:GetAlertSoundThrottle() or 5
+                end,
+                set = function(_, value)
+                    local el = GetErrorLog()
+                    if el then el:SetAlertSoundThrottle(value) end
+                end,
+            },
         }),
         actions       = W.IGroup(20, "Actions", {
             open = {

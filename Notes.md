@@ -2,15 +2,7 @@
 
 ## NOTES
 
-- We are still not capturing all lua errors coming from us. I got this from bugsack. please fix this error, and update our error handler to ensure we are catching ALL lua errors for twichui. i have bugsack and buggrabber in the addon references if we need to reference how they catch bugs.
-
-- Our automatic remove transform isnt functioning, at least for crafting profession transforms. please look at leatrix plus and determine what we are doing wrong and fix.
-
-- Our notifications background and borders should use the same colors from the global appearance section in our configuration interface
-- Our data text menus should use the background and border settings from the global appearance section in our configuration interface
-- Need raid markers on unit frames and name plates
-- Lets set the default loot feed anchor to the right of chat, and enable it by default.
-- Our error handler has an option to make a sound on error. Can we add a throttle to that? for example, if its getting many errors rapidly, we only play the sound every so often
+- Need raid markers on unit frames
 
 # Tweaks
 

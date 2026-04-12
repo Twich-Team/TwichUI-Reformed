@@ -105,7 +105,7 @@ local function GetSettings()
     return {
         enabled         = true,
         locked          = false,
-        chatDockMode    = "none",
+        chatDockMode    = "right",
         x               = 100,
         y               = 200,
         growUp          = true,
