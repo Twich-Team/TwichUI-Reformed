@@ -170,9 +170,71 @@ local NAMEPLATE_CVARS    = {
 
 -- ── Module state ─────────────────────────────────────────────────────────────
 Nameplates._plates       = {} -- unitID → custom plate frame
+Nameplates._platePool    = {} -- recycled plate frames waiting for reuse
 Nameplates._testPlates   = {} -- list of { frame, anchor } for test mode
 Nameplates._testMode     = false
 Nameplates._castTestMode = false
+-- Throttle table: unitID → last aura-refresh timestamp.
+-- UNIT_AURA fires for every mob on every aura change; capping at ~6/sec per
+-- unit prevents O(n) GetUnitAuras bursts when pulling groups.
+local _auraThrottle      = {}
+local AURA_THROTTLE_SEC  = 0.15
+
+-- ── Shared cast bar ticker ────────────────────────────────────────────────────
+-- A single OnUpdate closure drives ALL active cast bars instead of one per plate.
+-- At 10+ casts simultaneously this cuts N callbacks/frame down to 1.
+local _activeCastPlates  = {}   -- frame → true
+local _castTickerActive  = false
+local _castTickerFrame   = CreateFrame("Frame", "TwichUI_NpCastTicker", UIParent)
+
+local function _castTickerFn()
+    local now      = GetTime()
+    local anyLeft  = false
+    for frame in pairs(_activeCastPlates) do
+        if not frame._casting then
+            _activeCastPlates[frame] = nil
+            if frame.castContainer then frame.castContainer:Hide() end
+            -- Fire optional post-cast callback (used by cast test mode to reschedule).
+            if frame._onCastEnd then frame._onCastEnd(frame) end
+        else
+            anyLeft       = true
+            local dur     = frame._castDurationSec or 1
+            local elapsed = now - (frame._castObservedAt or now)
+            local clamped = math_min(elapsed, dur)
+            if frame._channeling then
+                frame.castBar:SetValue(math_max(0, dur - clamped))
+            else
+                frame.castBar:SetValue(clamped)
+            end
+            if elapsed >= dur then
+                frame._casting = false
+                _activeCastPlates[frame] = nil
+                if frame.castContainer then frame.castContainer:Hide() end
+                if frame._onCastEnd then frame._onCastEnd(frame) end
+            end
+        end
+    end
+    if not anyLeft then
+        _castTickerFrame:SetScript("OnUpdate", nil)
+        _castTickerActive = false
+    end
+end
+
+local function _startCastTicker(frame)
+    _activeCastPlates[frame] = true
+    if not _castTickerActive then
+        _castTickerActive = true
+        _castTickerFrame:SetScript("OnUpdate", _castTickerFn)
+    end
+end
+
+local function _stopCastTicker(frame)
+    _activeCastPlates[frame] = nil
+    if not next(_activeCastPlates) then
+        _castTickerFrame:SetScript("OnUpdate", nil)
+        _castTickerActive = false
+    end
+end
 
 -- Hidden off-screen parent used to reparent Blizzard nameplate sub-frames so
 -- they receive no events, take no screen space, and never become visible.
@@ -793,10 +855,51 @@ function Nameplates:BuildPlateFrame(parentPlate)
     frame._castStart     = 0
     frame._castEnd       = 0
     frame._castMax       = 1
+    frame._castObservedAt  = 0
+    frame._castDurationSec = 1
+    frame._onCastEnd     = nil
     frame._unit          = nil
     frame._isTestPreview = false
 
     return frame
+end
+
+-- ── Frame pool acquisition / release ─────────────────────────────────────────
+-- Recycling plate frames avoids allocating ~25 sub-frames per mob on every pull.
+function Nameplates:AcquirePlateFrame(plate)
+    local frame = tremove(self._platePool)
+    if frame then
+        -- Reparent to new Blizzard plate so positioning is correct.
+        frame:SetParent(plate)
+        if frame.targetGlow then frame.targetGlow:SetParent(plate) end
+        frame:ClearAllPoints()
+        frame:SetPoint("CENTER", plate, "CENTER", 0, 0)
+        frame._isTestPreview = false
+        return frame
+    end
+    return self:BuildPlateFrame(plate)
+end
+
+function Nameplates:ReleasePlateFrame(frame)
+    if not frame then return end
+    -- Cancel any active cast animation on the shared ticker.
+    _stopCastTicker(frame)
+    frame._unit            = nil
+    frame._plate           = nil
+    frame._casting         = false
+    frame._channeling      = false
+    frame._castObservedAt  = 0
+    frame._castDurationSec = 1
+    frame._onCastEnd       = nil
+    -- Hide all sub-elements so recycled frames start invisible.
+    frame:Hide()
+    if frame.castContainer then frame.castContainer:Hide() end
+    if frame.targetGlow    then frame.targetGlow:Hide()    end
+    if frame.auraFrame     then frame.auraFrame:Hide()     end
+    if frame.absorbBar     then frame.absorbBar:Hide()     end
+    if frame.arrowL        then frame.arrowL:Hide()        end
+    if frame.arrowR        then frame.arrowR:Hide()        end
+    self._platePool[#self._platePool + 1] = frame
 end
 
 -- ── Element updaters ──────────────────────────────────────────────────────────
@@ -1206,10 +1309,7 @@ function Nameplates:UpdateCastBar(frame, unit)
     if not name then
         frame._casting = false
         frame.castContainer:Hide()
-        if frame._castScriptActive then
-            frame:SetScript("OnUpdate", nil)
-            frame._castScriptActive = false
-        end
+        _stopCastTicker(frame)
         return
     end
 
@@ -1265,30 +1365,8 @@ function Nameplates:UpdateCastBar(frame, unit)
     end
 
     frame.castContainer:Show()
-
-    if not frame._castScriptActive then
-        frame._castScriptActive = true
-        frame:SetScript("OnUpdate", function(self2)
-            if not self2._casting then
-                self2:SetScript("OnUpdate", nil)
-                self2._castScriptActive = false
-                return
-            end
-            -- All values here are non-secret GetTime() arithmetic — safe in Midnight.
-            local elapsed = GetTime() - self2._castObservedAt
-            local dur     = self2._castDurationSec or 1
-            local clamped = math_min(elapsed, dur)
-            if self2._channeling then
-                self2.castBar:SetValue(math_max(0, dur - clamped))
-            else
-                self2.castBar:SetValue(clamped)
-            end
-            if elapsed >= dur then
-                self2._casting = false
-                self2.castContainer:Hide()
-            end
-        end)
-    end
+    -- Register with the shared single-ticker instead of spawning a new OnUpdate per plate.
+    _startCastTicker(frame)
 end
 
 function Nameplates:UpdatePower(frame, unit)
@@ -1576,7 +1654,7 @@ function Nameplates:OnNamePlateAdded(_, unitID)
         end
     end)
 
-    local frame          = self:BuildPlateFrame(plate)
+    local frame          = self:AcquirePlateFrame(plate)
     frame._unit          = unitID
     frame._plate         = plate -- store direct ref to avoid GetNamePlateForUnit on any unit token
     self._plates[unitID] = frame
@@ -1603,17 +1681,8 @@ end
 function Nameplates:OnNamePlateRemoved(_, unitID)
     local frame = self._plates[unitID]
     if not frame then return end
-
-    -- Stop any OnUpdate script
-    if frame._castScriptActive then
-        frame:SetScript("OnUpdate", nil)
-        frame._castScriptActive = false
-    end
-
-    frame._unit    = nil
-    frame._casting = false
-    frame:Hide()
-    -- Release back to garbage collection; pool can be added later if needed
+    self:ReleasePlateFrame(frame)
+    _auraThrottle[unitID] = nil
     self._plates[unitID] = nil
 end
 
@@ -1822,9 +1891,7 @@ function Nameplates:ExitTestMode()
     self._testMode = false
     for _, entry in ipairs(self._testPlates) do
         if entry.frame then
-            if entry.frame._castScriptActive then
-                entry.frame:SetScript("OnUpdate", nil)
-            end
+            _stopCastTicker(entry.frame)
             entry.frame:Hide()
         end
         if entry.anchor then entry.anchor:Hide() end
@@ -1883,40 +1950,22 @@ function Nameplates:StartFakeCast(frame)
     frame.castBar:SetMinMaxValues(0, spell.duration)
     frame.castBar:SetValue(0)
     frame.castContainer:Show()
-
-    if not frame._castScriptActive then
-        frame._castScriptActive = true
-        frame:SetScript("OnUpdate", function(self2)
-            if not self2._casting then
-                self2:SetScript("OnUpdate", nil)
-                self2._castScriptActive = false
-                self2.castContainer:Hide()
-                -- Reschedule next fake cast if test mode still active
-                if Nameplates._castTestMode and self2 and self2:IsShown() then
-                    C_Timer.After(0.5 + math.random() * 1.5, function()
-                        if Nameplates._castTestMode and self2 and self2:IsShown() then
-                            Nameplates:StartFakeCast(self2)
-                        end
-                    end)
+    -- Use shared ticker; assign custom OnUpdate fields so _castTickerFn can drive it.
+    frame._castObservedAt  = now
+    frame._castDurationSec = spell.duration
+    frame._castEnd         = now + spell.duration
+    -- Reschedule the next fake cast when this one ends (replaces the old per-frame reschedule).
+    frame._onCastEnd = function(f)
+        f._onCastEnd = nil
+        if Nameplates._castTestMode and f and f:IsShown() then
+            C_Timer.After(0.5 + math.random() * 1.5, function()
+                if Nameplates._castTestMode and f and f:IsShown() then
+                    Nameplates:StartFakeCast(f)
                 end
-                return
-            end
-            local now2 = GetTime()
-            local max2 = self2._castMax
-            if self2._channeling then
-                local remaining = math_max(0, self2._castEnd - now2)
-                self2.castBar:SetMinMaxValues(0, max2)
-                self2.castBar:SetValue(remaining)
-            else
-                local elapsed = math_min(now2 - self2._castStart, max2)
-                self2.castBar:SetMinMaxValues(0, max2)
-                self2.castBar:SetValue(elapsed)
-            end
-            if now2 >= self2._castEnd then
-                self2._casting = false
-            end
-        end)
+            end)
+        end
     end
+    _startCastTicker(frame)
 end
 
 function Nameplates:EnterCastBarTestMode()
@@ -1938,10 +1987,7 @@ function Nameplates:ExitCastBarTestMode()
     self._castTestMode = false
     for _, frame in pairs(self._plates) do
         frame._casting = false
-        if frame._castScriptActive then
-            frame:SetScript("OnUpdate", nil)
-            frame._castScriptActive = false
-        end
+        _stopCastTicker(frame)
         if frame.castContainer then frame.castContainer:Hide() end
     end
 end
@@ -1968,7 +2014,10 @@ function Nameplates:OnEnable()
     self:RegisterEvent("UNIT_HEALTH", "OnUnitHealth")
     self:RegisterEvent("UNIT_MAXHEALTH", "OnUnitHealth")
     self:RegisterEvent("UNIT_AURA", "OnUnitAura")
-    self:RegisterEvent("UNIT_POWER_FREQUENT", "OnUnitPower")
+    -- UNIT_POWER_FREQUENT fires every ~0.1s for every unit in combat.
+    -- With 10+ mobs that is ~100 callbacks/sec. UNIT_POWER_UPDATE fires only when
+    -- power actually changes, which is far less often for nameplated mobs.
+    self:RegisterEvent("UNIT_POWER_UPDATE", "OnUnitPower")
     self:RegisterEvent("UNIT_MAXPOWER", "OnUnitPower")
     self:RegisterEvent("UNIT_DISPLAYPOWER", "OnUnitDisplayPower")
     self:RegisterEvent("UNIT_SPELLCAST_START", "OnCastEvent")
@@ -2030,12 +2079,16 @@ function Nameplates:OnDisable()
 
     -- Clean up every custom frame
     for unitID, frame in pairs(self._plates) do
-        if frame._castScriptActive then
-            frame:SetScript("OnUpdate", nil)
-        end
+        _stopCastTicker(frame)
         frame:Hide()
     end
     wipe(self._plates)
+    -- Clear the pool too so stale frames don't accumulate across enable/disable cycles.
+    wipe(self._platePool)
+    wipe(_activeCastPlates)
+    wipe(_auraThrottle)
+    _castTickerFrame:SetScript("OnUpdate", nil)
+    _castTickerActive = false
 end
 
 -- ── Event handlers ───────────────────────────────────────────────────────────
@@ -2048,9 +2101,14 @@ end
 
 function Nameplates:OnUnitAura(_, unit)
     local frame = unit and self._plates[unit]
-    if frame and UnitExists(unit) then
-        self:UpdateAuras(frame, unit)
-    end
+    if not frame or not UnitExists(unit) then return end
+    -- Throttle: auras change fire in bursts for every mob simultaneously.
+    -- Skip if updated within the last AURA_THROTTLE_SEC seconds.
+    local now = GetTime()
+    local last = _auraThrottle[unit]
+    if last and (now - last) < AURA_THROTTLE_SEC then return end
+    _auraThrottle[unit] = now
+    self:UpdateAuras(frame, unit)
 end
 
 function Nameplates:OnUnitPower(_, unit)
@@ -2102,25 +2160,15 @@ end
 
 -- Blizzard re-shows its threat rings, selection art, and aggro overlays when entering
 -- combat or when threat changes.  Individual plates already have OnShow hooks from
--- OnNamePlateAdded, but new plates spawned mid-combat need the same treatment.
--- We iterate via GetNamePlates() which does NOT require unit tokens — safe to call anywhere.
+-- OnNamePlateAdded that force blizzUF alpha to 0 — no child sweep needed here.
 function Nameplates:OnCombatStateChange()
     if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
     local plates = C_NamePlate.GetNamePlates()
     if not plates then return end
+    -- Re-zero blizzUF alpha (hooks handle OnShow; this catches any direct SetAlpha calls).
     for _, plate in ipairs(plates) do
         local blizzUF = plate.UnitFrame
-        if blizzUF then
-            blizzUF:SetAlpha(0) -- re-zero; hooks already installed from OnNamePlateAdded
-        end
-        pcall(function()
-            local children = { plate:GetChildren() }
-            for _, child in ipairs(children) do
-                if child ~= blizzUF and not child._isTwichFrame then
-                    child:SetAlpha(0)
-                end
-            end
-        end)
+        if blizzUF then blizzUF:SetAlpha(0) end
     end
     -- Re-assert our own frame alphas in case anything disturbed them.
     local db    = self:GetDB()

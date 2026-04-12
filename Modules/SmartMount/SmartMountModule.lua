@@ -81,6 +81,16 @@ local function CanUseSoar(options)
         return false
     end
 
+    -- Soar can never be used inside instanced content (dungeons, raids, arenas).
+    -- IsFlyableArea() can incorrectly return true for some Midnight instance lobbies
+    -- and does not know about per-instance flying restrictions. IsInInstance() is the
+    -- definitive check: if we are in any instance, Soar will fail at cast time.
+    local inInstance = IsInInstance and IsInInstance() or false
+    if inInstance then return false end
+
+    -- Zone must actually support flying (outdoor flyable check).
+    if not IsFlyAbleArea() then return false end
+
     if not IsSpellKnownSafe(SOAR_SPELL_ID) then
         return false
     end
@@ -184,7 +194,9 @@ function SmartMountModule:GetSecureAction()
         end
     end
 
-    return nil, nil
+    -- Last resort: use the random favorite mount macro when no specific mount is
+    -- configured or usable (e.g. Dracthyr with only Soar set but Soar is blocked).
+    return "macro", "/run C_MountJournal.SummonRandomFavoriteMount()"
 end
 
 function SmartMountModule:RefreshSecureAction()
@@ -234,10 +246,7 @@ function SmartMountModule:MountUp()
     local flyable = IsFlyAbleArea() or false
 
     if flyable and CanUseSoar(Options) then
-        local fallbackMountID = flyingMountID
-        if MountUtilityModule:IsMountUsable(fallbackMountID) then
-            SummonByID(fallbackMountID)
-        end
+        CastSoar()
         return
     end
 
@@ -252,6 +261,12 @@ function SmartMountModule:MountUp()
     if MountUtilityModule:IsMountUsable(fallbackMountID) then
         SummonByID(fallbackMountID)
         return
+    end
+
+    -- Last resort: summon a random favorite mount when no specific mount is configured
+    -- or neither configured mount is currently usable.
+    if C_MountJournal and type(C_MountJournal.SummonRandomFavoriteMount) == "function" then
+        C_MountJournal.SummonRandomFavoriteMount()
     end
 end
 

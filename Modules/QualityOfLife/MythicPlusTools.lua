@@ -5142,7 +5142,11 @@ function MPT:PollDeathState()
     for _, member in pairs(self.interruptMembers or {}) do
         if member.unit and UnitExists(member.unit) then
             local dead = UnitIsDeadOrGhost(member.unit) == true
-            local deathKey = member.guid or member.name
+            -- Use the UNIT TOKEN as the state key, not member.guid/name.
+            -- Multiple interruptMembers entries can share the same unit token
+            -- (e.g. "Player-Server" and "Player" created by different code paths).
+            -- Keying by unit ensures only one alive→dead transition fires per unit.
+            local deathKey = member.unit
             local wasDead = self.partyDeathState[deathKey] == true
             if dead and not wasDead then
                 self.partyDeathState[deathKey] = true
@@ -5803,10 +5807,21 @@ function MPT:HandleUnitDeath(destGUID, destName)
 
     local now = GetTime()
     local dedupeKey = member.guid or member.name
-    if self.lastSeenDeaths[dedupeKey] and now - self.lastSeenDeaths[dedupeKey] < 0.5 then
+    -- 3 second window: covers both CLEU-path + poll-path firing within the same death
+    -- event, and prevents UNIT_DIED + UNIT_DESTROYED doubling for the same entity.
+    if self.lastSeenDeaths[dedupeKey] and now - self.lastSeenDeaths[dedupeKey] < 3.0 then
         return
     end
     self.lastSeenDeaths[dedupeKey] = now
+
+    -- Cross-check: if the matched member has a unit token, verify it is actually
+    -- dead right now. This guards against name-based false positives where a mob's
+    -- short name collides with a party member's short name.
+    if member.unit and UnitExists(member.unit) then
+        if not UnitIsDeadOrGhost(member.unit) then
+            return
+        end
+    end
 
     self.deathCount = (self.deathCount or 0) + 1
     tinsert(self.deathWindow, now)
