@@ -640,8 +640,14 @@ function Nameplates:BuildPlateFrame(parentPlate)
     local NP_GLOW_FRAME_LEVEL = 138
     local frame               = CreateFrame("Frame", nil, parentPlate or UIParent, "BackdropTemplate")
     frame._isTwichFrame       = true -- used by suppression loops to skip our own frame
-    frame:SetSize(w, h)
-    frame:SetPoint("CENTER", parentPlate or UIParent, "CENTER", 0, 0)
+    -- MIDNIGHT LAYOUT NOTE: frame:SetSize on a child of a nameplate plate is silently
+    -- overridden by Blizzard's C-side nameplate layout (plate forces its own height on
+    -- direct children).  Use two diagonal WoW anchor points instead — the layout engine
+    -- derives width and height from the anchor offsets, which are pure Lua numbers that
+    -- the plate system cannot override.
+    local plate = parentPlate or UIParent
+    frame:SetPoint("TOPLEFT",     plate, "CENTER", -w / 2,  h / 2)
+    frame:SetPoint("BOTTOMRIGHT", plate, "CENTER",  w / 2, -h / 2)
     frame:SetFrameLevel(NP_FRAME_LEVEL)
     ApplyBackdrop(frame, bgC[1], bgC[2], bgC[3], bgC[4], bdC[1], bdC[2], bdC[3], bdC[4])
 
@@ -686,9 +692,12 @@ function Nameplates:BuildPlateFrame(parentPlate)
 
     -- ── Health bar ────────────────────────────────────────────────────────────
     local healthBar = CreateFrame("StatusBar", nil, frame)
-    healthBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
-    healthBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
-    healthBar:SetHeight(h - 2)
+    -- Two diagonal anchors fill the frame interior (1 px inset on all sides).
+    -- Do NOT use SetHeight — with anchor-based frame sizing that call is redundant
+    -- and can produce a visible grey gap when the value differs from the frame's
+    -- actual rendered height.
+    healthBar:SetPoint("TOPLEFT",     frame, "TOPLEFT",     1, -1)
+    healthBar:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
     healthBar:SetStatusBarTexture(hpTex)
     healthBar:SetStatusBarColor(COLOR_HOSTILE[1], COLOR_HOSTILE[2], COLOR_HOSTILE[3], 1)
     healthBar:SetMinMaxValues(0, 1)
@@ -921,10 +930,11 @@ function Nameplates:AcquirePlateFrame(plate)
     local frame = tremove(self._platePool)
     if frame then
         -- Reparent to new Blizzard plate so positioning is correct.
+        -- Anchors will be set by ResizePlateFrame immediately after this returns,
+        -- so we only need to detach from the old plate here.
         frame:SetParent(plate)
         if frame.targetGlow then frame.targetGlow:SetParent(plate) end
         frame:ClearAllPoints()
-        frame:SetPoint("CENTER", plate, "CENTER", 0, 0)
         frame._isTestPreview = false
         return frame
     end
@@ -1168,7 +1178,13 @@ function Nameplates:UpdateTargetGlow(frame, unit)
             and Clamp(db.targetGrowWidth, 0.5, 2) or 1
         local growH = (db.targetGrowHeight and db.targetGrowHeight ~= 1)
             and Clamp(db.targetGrowHeight, 0.5, 2) or 1
-        frame:SetSize(baseW * growW, baseH * growH)
+        local fw = baseW * growW
+        local fh = baseH * growH
+        if frame._plate then
+            frame:ClearAllPoints()
+            frame:SetPoint("TOPLEFT",     frame._plate, "CENTER", -fw / 2,  fh / 2)
+            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER",  fw / 2, -fh / 2)
+        end
 
         if db.showTargetArrows ~= false then
             -- Use dedicated arrow color if set, otherwise fall back to the glow color.
@@ -1203,13 +1219,21 @@ function Nameplates:UpdateTargetGlow(frame, unit)
 
         if frame.arrowL then frame.arrowL:Hide() end
         if frame.arrowR then frame.arrowR:Hide() end
-        frame:SetSize(baseW, baseH)
+        if frame._plate then
+            frame:ClearAllPoints()
+            frame:SetPoint("TOPLEFT",     frame._plate, "CENTER", -baseW / 2,  baseH / 2)
+            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER",  baseW / 2, -baseH / 2)
+        end
     else
         RestoreBorder()
         frame.targetGlow:Hide()
         if frame.arrowL then frame.arrowL:Hide() end
         if frame.arrowR then frame.arrowR:Hide() end
-        frame:SetSize(baseW, baseH)
+        if frame._plate then
+            frame:ClearAllPoints()
+            frame:SetPoint("TOPLEFT",     frame._plate, "CENTER", -baseW / 2,  baseH / 2)
+            frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER",  baseW / 2, -baseH / 2)
+        end
     end
 end
 
@@ -1615,8 +1639,18 @@ function Nameplates:ResizePlateFrame(frame)
     local h     = Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60)
     local castH = Clamp(db.castHeight or NP_DEFAULT_CAST_HEIGHT, 6, 30)
 
-    frame:SetSize(w, h)
-    if frame.healthBar then frame.healthBar:SetHeight(h - 2) end
+    -- Anchor-based resize: clear old anchors and reposition the frame using
+    -- TOPLEFT+BOTTOMRIGHT offsets from the plate's CENTER.  This is immune to
+    -- the Midnight nameplate plate layout system that silently ignores SetSize
+    -- on direct children, which caused the frame to remain at the initial
+    -- (main-DB) height while the health bar was already resized to the correct
+    -- (friendly-DB) height -- producing the grey gap the user saw.
+    if frame._plate then
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT",     frame._plate, "CENTER", -w / 2,  h / 2)
+        frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER",  w / 2, -h / 2)
+    end
+    -- healthBar fills the frame via BOTTOMRIGHT anchor; no explicit SetHeight needed.
     if frame.threatBar then frame.threatBar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0) end
     if frame.castContainer then frame.castContainer:SetHeight(castH + 2) end
     if frame.castBar then frame.castBar:SetHeight(castH) end
