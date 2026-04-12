@@ -165,32 +165,70 @@ local function GetArrowTexPath(styleName)
     return ARROW_BASE .. (styleName or "ArrowUp") .. ".tga"
 end
 
+local LEGACY_NAME_ANCHORS = {
+    BOTTOMLEFT  = "ABOVE_LEFT",
+    BOTTOM      = "ABOVE_CENTER",
+    BOTTOMRIGHT = "ABOVE_RIGHT",
+    TOPLEFT     = "BELOW_LEFT",
+    TOP         = "BELOW_CENTER",
+    TOPRIGHT    = "BELOW_RIGHT",
+    LEFT        = "HEALTH_LEFT",
+    CENTER      = "HEALTH_CENTER",
+    RIGHT       = "HEALTH_RIGHT",
+}
+
+local NAME_ANCHOR_LAYOUTS = {
+    ABOVE_LEFT = { point = "BOTTOMLEFT", relativeTo = "frame", relativePoint = "TOPLEFT", x = 2, y = 0, justify = "LEFT" },
+    ABOVE_CENTER = { point = "BOTTOM", relativeTo = "frame", relativePoint = "TOP", x = 0, y = 0, justify = "CENTER" },
+    ABOVE_RIGHT = { point = "BOTTOMRIGHT", relativeTo = "frame", relativePoint = "TOPRIGHT", x = -2, y = 0, justify = "RIGHT" },
+    HEALTH_LEFT = { point = "LEFT", relativeTo = "healthBar", relativePoint = "LEFT", x = 4, y = 0, justify = "LEFT" },
+    HEALTH_CENTER = { point = "CENTER", relativeTo = "healthBar", relativePoint = "CENTER", x = 0, y = 0, justify = "CENTER" },
+    HEALTH_RIGHT = { point = "RIGHT", relativeTo = "healthBar", relativePoint = "RIGHT", x = -4, y = 0, justify = "RIGHT" },
+    BELOW_LEFT = { point = "TOPLEFT", relativeTo = "frame", relativePoint = "BOTTOMLEFT", x = 2, y = 0, justify = "LEFT" },
+    BELOW_CENTER = { point = "TOP", relativeTo = "frame", relativePoint = "BOTTOM", x = 0, y = 0, justify = "CENTER" },
+    BELOW_RIGHT = { point = "TOPRIGHT", relativeTo = "frame", relativePoint = "BOTTOMRIGHT", x = -2, y = 0, justify = "RIGHT" },
+}
+
+local function NormalizeNameAnchor(anchor)
+    local normalized = LEGACY_NAME_ANCHORS[anchor] or anchor
+    if NAME_ANCHOR_LAYOUTS[normalized] then
+        return normalized
+    end
+    return "ABOVE_LEFT"
+end
+
 local function ApplyNameTextLayout(frame, db, width)
     if not frame or not frame.nameText then return end
 
     local nameText       = frame.nameText
-    local nameAnchorPt   = db.nameAnchorPoint or "BOTTOMLEFT"
+    local nameAnchorKey  = NormalizeNameAnchor(db.nameAnchorPoint)
+    local layout         = NAME_ANCHOR_LAYOUTS[nameAnchorKey] or NAME_ANCHOR_LAYOUTS.ABOVE_LEFT
     local nameOX, nameOY = db.nameOffsetX or 0, db.nameOffsetY or 0
+    local anchorFrame    = (layout.relativeTo == "healthBar" and frame.healthBar) or frame
+    local nameParent     = anchorFrame or frame
+    local availableWidth = Clamp(width or frame:GetWidth() or db.width or NP_DEFAULT_WIDTH, 40, 600)
+    local justify        = db.nameJustify or layout.justify or "LEFT"
 
-    nameText:ClearAllPoints()
-    nameText:SetWidth(0)
-
-    -- Preserve the original semantic: the name text lives in a full-width region
-    -- above (BOTTOM*), below (TOP*), or across the middle of the plate. The
-    -- anchor point chooses the vertical band; nameJustify controls left/center/right
-    -- placement within that region.
-    if string.find(nameAnchorPt, "BOTTOM", 1, true) then
-        nameText:SetPoint("LEFT", frame, "TOPLEFT", 2 + nameOX, nameOY)
-        nameText:SetPoint("RIGHT", frame, "TOPRIGHT", -2 + nameOX, nameOY)
-    elseif string.find(nameAnchorPt, "TOP", 1, true) then
-        nameText:SetPoint("LEFT", frame, "BOTTOMLEFT", 2 + nameOX, -nameOY)
-        nameText:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -2 + nameOX, -nameOY)
+    if layout.relativeTo == "healthBar" then
+        availableWidth = Clamp((frame.healthBar and frame.healthBar:GetWidth()) or availableWidth, 40, 600)
     else
-        nameText:SetPoint("LEFT", frame, "LEFT", 2 + nameOX, nameOY)
-        nameText:SetPoint("RIGHT", frame, "RIGHT", -2 + nameOX, nameOY)
+        availableWidth = Clamp(availableWidth - 4, 40, 600)
+    end
+    if db.nameWidth and tonumber(db.nameWidth) and tonumber(db.nameWidth) > 0 then
+        availableWidth = Clamp(tonumber(db.nameWidth), 40, 600)
     end
 
-    nameText:SetJustifyH(db.nameJustify or "LEFT")
+    if nameText:GetParent() ~= nameParent then
+        nameText:SetParent(nameParent)
+    end
+    nameText:ClearAllPoints()
+    nameText:SetWidth(availableWidth)
+    nameText:SetWordWrap(false)
+    if nameText.SetNonSpaceWrap then nameText:SetNonSpaceWrap(false) end
+    if nameText.SetMaxLines then pcall(nameText.SetMaxLines, nameText, 1) end
+    nameText:SetSpacing(0)
+    nameText:SetPoint(layout.point, anchorFrame, layout.relativePoint, (layout.x or 0) + nameOX, (layout.y or 0) + nameOY)
+    nameText:SetJustifyH(justify)
 end
 
 -- CVars we take control of while the module is active
@@ -830,6 +868,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     local nameOX, nameOY = db.nameOffsetX or 2, db.nameOffsetY or 3
     local nameText       = frame:CreateFontString(nil, "OVERLAY")
     nameText:SetFont(nf, ns, nfl)
+    nameText:SetDrawLayer("OVERLAY", 7)
     if db.nameFontShadow then nameText:SetShadowOffset(1, -1) else nameText:SetShadowOffset(0, 0) end
     nameText:SetTextColor(1, 1, 1, 1)
     nameText:SetWordWrap(false)
@@ -2760,7 +2799,7 @@ function Nameplates:BuildDebugReport()
         "healthColorMode", "healthFont", "healthFontSize", "healthFontFlags",
         "healthFormat", "healthTextAnchor", "showAbsorb",
         "castFont", "castFontSize", "castHeight", "showCastBar", "showPowerBar",
-        "nameFont", "nameFontSize", "nameFontFlags", "nameAnchorPoint", "nameJustify",
+        "nameFont", "nameFontSize", "nameFontFlags", "nameAnchorPoint", "nameJustify", "nameWidth",
         "nameOffsetX", "nameOffsetY",
         "showLevel", "showEliteIcon", "showTargetGlow", "showTargetArrow",
         "showThreat", "showAuras", "auraSize", "auraMax", "auraOnlyMine",

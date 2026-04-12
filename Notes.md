@@ -11,6 +11,7 @@
 
 - Our notifications background and borders should use the same colors from the global appearance section in our configuration interface
 - Our data text menus should use the background and border settings from the global appearance section in our configuration interface
+- Need raid markers on unit frames and name plates
 
 # Tweaks
 

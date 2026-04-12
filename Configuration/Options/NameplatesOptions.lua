@@ -107,10 +107,32 @@ local ANCHOR_TEXTS = {
     RIGHT  = "Bar Right",
 }
 
+local LEGACY_NAME_ANCHORS = {
+    BOTTOMLEFT  = "ABOVE_LEFT",
+    BOTTOM      = "ABOVE_CENTER",
+    BOTTOMRIGHT = "ABOVE_RIGHT",
+    TOPLEFT     = "BELOW_LEFT",
+    TOP         = "BELOW_CENTER",
+    TOPRIGHT    = "BELOW_RIGHT",
+    LEFT        = "HEALTH_LEFT",
+    CENTER      = "HEALTH_CENTER",
+    RIGHT       = "HEALTH_RIGHT",
+}
+
+local function NormalizeNameAnchor(anchor)
+    return LEGACY_NAME_ANCHORS[anchor] or anchor or "ABOVE_LEFT"
+end
+
 local NAME_ANCHOR_POINTS = {
-    BOTTOMLEFT  = "Bottom Left",
-    BOTTOM      = "Bottom Center",
-    BOTTOMRIGHT = "Bottom Right",
+    ABOVE_LEFT    = "Above Left",
+    ABOVE_CENTER  = "Above Center",
+    ABOVE_RIGHT   = "Above Right",
+    HEALTH_LEFT   = "Health Bar Left",
+    HEALTH_CENTER = "Health Bar Center",
+    HEALTH_RIGHT  = "Health Bar Right",
+    BELOW_LEFT    = "Below Left",
+    BELOW_CENTER  = "Below Center",
+    BELOW_RIGHT   = "Below Right",
 }
 
 -- ── Individual getters / setters ──────────────────────────────────────────────
@@ -1251,7 +1273,7 @@ function Options:BuildConfiguration()
                                 name   = "Text Anchor",
                                 order  = 21,
                                 values = NAME_ANCHOR_POINTS,
-                                get    = function() return Options:GetDB().nameAnchorPoint or "BOTTOMLEFT" end,
+                                get    = function() return NormalizeNameAnchor(Options:GetDB().nameAnchorPoint) end,
                                 set    = function(_, v)
                                     Options:GetDB().nameAnchorPoint = v; Refresh()
                                 end,
@@ -1288,6 +1310,19 @@ function Options:BuildConfiguration()
                                 get   = function() return Options:GetDB().nameOffsetY or 3 end,
                                 set   = function(_, v)
                                     Options:GetDB().nameOffsetY = v; Refresh()
+                                end,
+                            },
+                            nameWidth = {
+                                type  = "range",
+                                name  = "Text Width",
+                                desc  = "0 uses the automatic anchor width.",
+                                order = 25,
+                                min   = 0,
+                                max   = 600,
+                                step  = 1,
+                                get   = function() return Options:GetDB().nameWidth or 0 end,
+                                set   = function(_, v)
+                                    Options:GetDB().nameWidth = (v and v > 0) and math.floor(v) or nil; Refresh()
                                 end,
                             },
                         },
@@ -2168,7 +2203,7 @@ function Options:BuildConfiguration()
                                 name   = "Text Anchor",
                                 order  = 21,
                                 values = NAME_ANCHOR_POINTS,
-                                get    = function() return Options:GetFriendlyDB().nameAnchorPoint or "BOTTOMLEFT" end,
+                                get    = function() return NormalizeNameAnchor(Options:GetFriendlyDB().nameAnchorPoint) end,
                                 set    = function(_, v)
                                     Options:GetFriendlyDB().nameAnchorPoint = v; Refresh()
                                 end,
@@ -2205,6 +2240,19 @@ function Options:BuildConfiguration()
                                 get = function() return Options:GetFriendlyDB().nameOffsetY or 3 end,
                                 set = function(_, v)
                                     Options:GetFriendlyDB().nameOffsetY = v; Refresh()
+                                end,
+                            },
+                            nameWidth = {
+                                type = "range",
+                                name = "Text Width",
+                                desc = "0 uses the automatic anchor width.",
+                                order = 25,
+                                min = 0,
+                                max = 600,
+                                step = 1,
+                                get = function() return Options:GetFriendlyDB().nameWidth or 0 end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().nameWidth = (v and v > 0) and math.floor(v) or nil; Refresh()
                                 end,
                             },
                         },
