@@ -1,12 +1,19 @@
 ## BUGS
 
-- One of our world and gameplay tweaks automatically released after i died in a dungeon. none of the tweaks should do that, i believe it is the resurrect in pvp tweak.
-
-I dont think the grey area has anything to do with the power. I have power disabled. When i change the height of the frame from the enemy unit frames, the friendly player frames change too, even that background. I think it has to do with something weird with we are still kind of using the enemy configuration for friendly. These two should be entirely separate configurations.
-
 ## NOTES
 
 - Please look at plater and their large selection of advanced configurations. we need some more of that. Particularly, at minimum I need to configure colors for when im tanking and have or do not have aggro, if im not tanking and have aggro, stacking settings, screen clamping, etc.
+
+- For our loot feed, we currently support a moving anchor. First, please add configuration options to the interface designer for this. Second, I would like to add alternative methods for positioning of the loot feed. These will operate almost exactly like the notification anchor options, where they can be docked to the top or lower right of the chat frame, in addition to keeping the current option of a custom placed mover.
+
+- Our automatic remove transform isnt functioning, at least for crafting profession transforms. please look at leatrix plus and determine what we are doing wrong and fix.
+
+- In our nameplates configuration, we provide an arrow selector frame. that frame either needs to set its height to fit all options, or be scrollable. it also should not have a transparent background. preferably, it would appear on a frame anchored to the right of the configuration UI like we have in other places.
+
+- Our notifications background and borders should use the same colors from the global appearance section in our configuration interface
+- Our data text menus should use the background and border settings from the global appearance section in our configuration interface
+
+for our loot feed, please use the background and border settings from the global appearance section in our configuration interface. Additionally, can we fade the rows out, with the strongest opacity on the left and transparent on the right?
 
 # Tweaks
 

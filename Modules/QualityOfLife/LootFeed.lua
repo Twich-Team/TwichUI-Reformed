@@ -51,12 +51,12 @@ local unpack             = table.unpack or _G.unpack
 -- Constants
 -- ---------------------------------------------------------------------------
 local ADDON_NAME         = "TwichUI_Reformed"
-local MAX_POOL           = 20 -- hard cap on live rows
-local PADDING            = 3 -- vertical gap between rows (px)
+local MAX_POOL           = 20   -- hard cap on live rows
+local PADDING            = 3    -- vertical gap between rows (px)
 local ENTER_DURATION     = 0.24 -- slide+fade in
 local SHIFT_DURATION     = 0.18 -- row shift translate
 local EXIT_DURATION      = 0.35 -- fade out
-local ENTER_OFFSET_X     = -14 -- softer lateral travel for new rows
+local ENTER_OFFSET_X     = -14  -- softer lateral travel for new rows
 local SHIFT_FADE_FROM    = 0.82 -- subtle fade while rows reposition
 
 -- Item quality names / display ordering (mirrors Enum.ItemQuality)
@@ -104,6 +104,7 @@ local function GetSettings()
     return {
         enabled         = true,
         locked          = false,
+        chatDockMode    = "none",
         x               = 100,
         y               = 200,
         growUp          = true,
@@ -131,6 +132,42 @@ local function GetSettings()
         showEpic        = true,
         showLegendary   = true,
     }
+end
+
+local function GetOptions()
+    local cfg = T:GetModule("Configuration")
+    return cfg and cfg.Options and cfg.Options.LootFeed or nil
+end
+
+local function IsChatDocked(settings)
+    return settings and settings.chatDockMode ~= nil and settings.chatDockMode ~= "none"
+end
+
+local function GetEffectiveGrowUp(settings)
+    if IsChatDocked(settings) then
+        return true
+    end
+
+    return settings.growUp ~= false
+end
+
+local function GetTopDockAnchorFrame()
+    local chatFrame = _G.ChatFrame1
+    local chrome = chatFrame and chatFrame.TwichUIChrome
+    return chrome or chatFrame
+end
+
+local function GetEffectiveFeedWidth(settings)
+    local dockMode = settings and settings.chatDockMode or "none"
+    if dockMode == "top" then
+        local anchor = GetTopDockAnchorFrame()
+        local width = anchor and anchor.GetWidth and anchor:GetWidth() or nil
+        if width and width > 0 then
+            return width
+        end
+    end
+
+    return settings.feedWidth or 270
 end
 
 -- ---------------------------------------------------------------------------
@@ -172,7 +209,7 @@ local activeRows = {} -- { {row, key, exitTimer, quantity, ...}, ... } FIFO newe
 -- NOTE: `container` must be non-nil before calling this function.
 local function CreateRowFrame(settings)
     local rh   = settings.rowHeight or 26
-    local fw   = settings.feedWidth or 270
+    local fw   = GetEffectiveFeedWidth(settings)
     local isz  = settings.iconSize or 22
     local fs   = settings.fontSize or 12
     local fout = settings.fontOutline or "OUTLINE"
@@ -362,6 +399,190 @@ local function ReleaseRow(row)
     pool[#pool + 1] = row
 end
 
+local function ApplyContainerPosition(settings)
+    if not container then
+        return
+    end
+
+    local dockMode = settings.chatDockMode or "none"
+    container:ClearAllPoints()
+
+    if dockMode == "top" then
+        local chatFrame = _G.ChatFrame1
+        local chrome = chatFrame and chatFrame.TwichUIChrome
+        if chrome then
+            container:SetPoint("BOTTOMLEFT", chrome, "TOPLEFT", 0, 0)
+            container:SetPoint("BOTTOMRIGHT", chrome, "TOPRIGHT", 0, 0)
+        elseif chatFrame then
+            container:SetPoint("BOTTOMLEFT", chatFrame, "TOPLEFT", -8, 8)
+            container:SetPoint("BOTTOMRIGHT", chatFrame, "TOPRIGHT", 8, 8)
+        else
+            container:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", settings.x or 100, settings.y or 200)
+        end
+    elseif dockMode == "right" then
+        local chatFrame = _G.ChatFrame1
+        if chatFrame then
+            container:SetPoint("BOTTOMLEFT", chatFrame, "BOTTOMRIGHT", 8, -8)
+        else
+            container:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", settings.x or 100, settings.y or 200)
+        end
+    else
+        container:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", settings.x or 100, settings.y or 200)
+    end
+end
+
+local function ApplyContainerInteractivity(settings)
+    if not container then
+        return
+    end
+
+    local locked = settings.locked == true or IsChatDocked(settings)
+    container:EnableMouse(not locked)
+end
+
+local function BuildDesignerExtras()
+    return {
+        {
+            label = "Position Mode",
+            type = "select",
+            tab = "layout",
+            tabLabel = "Layout",
+            values = {
+                none = "Custom mover",
+                top = "Top of chat frame",
+                right = "Right of chat frame",
+            },
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetChatDockMode() or "none"
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetChatDockMode(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Lock Custom Position",
+            type = "toggle",
+            tab = "layout",
+            tabLabel = "Layout",
+            desc = "Only applies while using the custom mover position.",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetLocked() or false
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetLocked(nil, value)
+                end
+            end,
+            disabled = function()
+                local opts = GetOptions()
+                return not opts or opts:GetChatDockMode() ~= "none"
+            end,
+        },
+        {
+            label = "Grow Upward",
+            type = "toggle",
+            tab = "layout",
+            tabLabel = "Layout",
+            desc = "Docked modes always grow upward.",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetGrowUp() or true
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetGrowUp(nil, value)
+                end
+            end,
+            disabled = function()
+                local opts = GetOptions()
+                return not opts or opts:GetChatDockMode() ~= "none"
+            end,
+        },
+        {
+            label = "Feed Width",
+            type = "range",
+            tab = "layout",
+            tabLabel = "Layout",
+            min = 150,
+            max = 500,
+            step = 5,
+            desc = "Ignored when docked above the chat frame.",
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetFeedWidth() or 270
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetFeedWidth(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Row Height",
+            type = "range",
+            tab = "layout",
+            tabLabel = "Layout",
+            min = 18,
+            max = 48,
+            step = 1,
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetRowHeight() or 26
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetRowHeight(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Scale",
+            type = "range",
+            tab = "appearance",
+            tabLabel = "Appearance",
+            min = 0.5,
+            max = 2.0,
+            step = 0.05,
+            get = function()
+                local opts = GetOptions()
+                return opts and opts:GetScale() or 1
+            end,
+            set = function(value)
+                local opts = GetOptions()
+                if opts then
+                    opts:SetScale(nil, value)
+                end
+            end,
+        },
+        {
+            label = "Reset Custom Position",
+            type = "execute",
+            tab = "layout",
+            tabLabel = "Layout",
+            desc = "Return the loot feed to its default custom mover location.",
+            func = function()
+                local opts = GetOptions()
+                if opts then
+                    opts:ResetPosition()
+                end
+            end,
+            disabled = function()
+                local opts = GetOptions()
+                return not opts or opts:GetChatDockMode() ~= "none"
+            end,
+        },
+    }
+end
+
 -- ---------------------------------------------------------------------------
 -- Active row registry
 -- ---------------------------------------------------------------------------
@@ -385,8 +606,9 @@ end
 -- the old position to the new one.  Because SetPoint is already correct when
 -- Stop() fires (or animation finishes), there is no race condition.
 local function ShiftRows(settings)
-    local dir    = settings.growUp and 1 or -1
-    local amount = (settings.rowHeight or 26) + PADDING
+    local dir      = GetEffectiveGrowUp(settings) and 1 or -1
+    local amount   = (settings.rowHeight or 26) + PADDING
+    local dockMode = settings.chatDockMode or "none"
 
     for _, entry in ipairs(activeRows) do
         local row       = entry.row
@@ -398,10 +620,18 @@ local function ShiftRows(settings)
         -- 1. Apply the final target position NOW. The frame is correct even if
         --    the animation is interrupted mid-play.
         row:ClearAllPoints()
-        if settings.growUp then
-            row:SetPoint("BOTTOM", container, "BOTTOM", 0, newOffset)
+        if GetEffectiveGrowUp(settings) then
+            if dockMode == "top" then
+                row:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", 0, newOffset)
+            else
+                row:SetPoint("BOTTOM", container, "BOTTOM", 0, newOffset)
+            end
         else
-            row:SetPoint("TOP", container, "TOP", 0, -newOffset)
+            if dockMode == "top" then
+                row:SetPoint("TOPLEFT", container, "TOPLEFT", 0, -newOffset)
+            else
+                row:SetPoint("TOP", container, "TOP", 0, -newOffset)
+            end
         end
 
         -- 2. Animate from WHERE the frame visually was (old position) toward the
@@ -421,11 +651,20 @@ end
 
 -- Anchor a fresh row to the feed container base point (yOffset 0).
 local function AnchorRow(row, container, settings)
+    local dockMode = settings.chatDockMode or "none"
     row:ClearAllPoints()
-    if settings.growUp then
-        row:SetPoint("BOTTOM", container, "BOTTOM", 0, 0)
+    if GetEffectiveGrowUp(settings) then
+        if dockMode == "top" then
+            row:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", 0, 0)
+        else
+            row:SetPoint("BOTTOM", container, "BOTTOM", 0, 0)
+        end
     else
-        row:SetPoint("TOP", container, "TOP", 0, 0)
+        if dockMode == "top" then
+            row:SetPoint("TOPLEFT", container, "TOPLEFT", 0, 0)
+        else
+            row:SetPoint("TOP", container, "TOP", 0, 0)
+        end
     end
 end
 
@@ -436,25 +675,20 @@ local function EnsureContainer(settings)
     if container then return end
 
     container = CreateFrame("Frame", "TwichUI_LootFeedContainer", UIParent)
-    container:SetSize(settings.feedWidth or 270, settings.rowHeight or 26)
+    container:SetSize(GetEffectiveFeedWidth(settings), settings.rowHeight or 26)
     container:SetFrameStrata("HIGH")
     container:SetClampedToScreen(true)
     container:SetScale(settings.scale or 1.0)
 
-    -- Always anchor from absolute BOTTOMLEFT so position math is unambiguous.
-    container:ClearAllPoints()
-    container:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT",
-        settings.x or 100,
-        settings.y or 200
-    )
+    ApplyContainerPosition(settings)
 
     -- Drag support
-    container:EnableMouse(not (settings.locked))
+    ApplyContainerInteractivity(settings)
     container:SetMovable(true)
     container:RegisterForDrag("LeftButton")
     container:SetScript("OnDragStart", function(self)
         local s = GetSettings()
-        if not s.locked then
+        if not s.locked and not IsChatDocked(s) then
             self:StartMoving()
         end
     end)
@@ -464,7 +698,7 @@ local function EnsureContainer(settings)
         -- anchor used by the drag system).
         local opts = T:GetModule("Configuration") and
             T:GetModule("Configuration").Options.LootFeed
-        if opts then
+        if opts and opts:GetChatDockMode() == "none" then
             local left   = math.floor((self:GetLeft() or 0) + 0.5)
             local bottom = math.floor((self:GetBottom() or 0) + 0.5)
             opts:SetPosition(left, bottom)
@@ -486,7 +720,7 @@ end
 local function PopulateRow(entry, icon, text, link, quality, settings)
     local row  = entry.row
     local rh   = settings.rowHeight or 26
-    local fw   = settings.feedWidth or 270
+    local fw   = GetEffectiveFeedWidth(settings)
     local isz  = settings.iconSize or 22
     local fs   = settings.fontSize or 12
     local fout = settings.fontOutline or "OUTLINE"
@@ -933,15 +1167,20 @@ function LF:RefreshLayout()
 
     if container then
         local settings = GetSettings()
-        container:SetSize(settings.feedWidth or 270, settings.rowHeight or 26)
+        container:SetSize(GetEffectiveFeedWidth(settings), settings.rowHeight or 26)
         container:SetScale(settings.scale or 1.0)
-        container:ClearAllPoints()
-        container:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT",
-            settings.x or 100,
-            settings.y or 200
-        )
-        container:EnableMouse(not settings.locked)
+        ApplyContainerPosition(settings)
+        ApplyContainerInteractivity(settings)
     end
+end
+
+function LF:OnEnteringWorld()
+    self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+    C_Timer.After(0.5, function()
+        if LF:IsEnabled() then
+            LF:RefreshLayout()
+        end
+    end)
 end
 
 -- ---------------------------------------------------------------------------
@@ -962,53 +1201,70 @@ function LF:OnEnable()
     self:RegisterEvent("GET_ITEM_INFO_RECEIVED", "GET_ITEM_INFO_RECEIVED")
     self:RegisterEvent("CHAT_MSG_MONEY", "CHAT_MSG_MONEY")
     self:RegisterEvent("CHAT_MSG_CURRENCY", "CHAT_MSG_CURRENCY")
+    self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnEnteringWorld")
 
     -- Register with the Interface Designer (Mover module)
     local moversModule = _G.TwichMoverModule
     if moversModule and type(moversModule.RegisterMover) == "function" then
         moversModule:RegisterMover("LF_feed", {
-            label     = "Loot Feed",
-            category  = "Quality of Life",
-            getFrame  = function() return container end,
-            getX      = function()
+            label        = "Loot Feed",
+            category     = "Quality of Life",
+            headerToggle = {
+                label = "Enabled",
+                get = function()
+                    local opts = GetOptions()
+                    return opts and opts:GetEnabled() or LF:IsEnabled()
+                end,
+                set = function(value)
+                    local opts = GetOptions()
+                    if opts then
+                        opts:SetEnabled(nil, value)
+                    end
+                end,
+            },
+            getFrame     = function()
+                return GetSettings().chatDockMode == "none" and container or nil
+            end,
+            getX         = function()
                 if container then
                     return math.floor((container:GetLeft() or 0) + 0.5)
                 end
                 return GetSettings().x or 100
             end,
-            getY      = function()
+            getY         = function()
                 if container then
                     return math.floor((container:GetBottom() or 0) + 0.5)
                 end
                 return GetSettings().y or 200
             end,
-            getW      = function()
-                return GetSettings().feedWidth or 270
+            getW         = function()
+                return GetEffectiveFeedWidth(GetSettings())
             end,
-            getH      = function()
+            getH         = function()
                 return GetSettings().rowHeight or 26
             end,
-            setPos    = function(x, y)
+            setPos       = function(x, y)
                 local opts = T:GetModule("Configuration") and
                     T:GetModule("Configuration").Options.LootFeed
                 local rx = math.floor(x + 0.5)
                 local ry = math.floor(y + 0.5)
                 if opts then opts:SetPosition(rx, ry) end
-                if container then
+                if container and GetSettings().chatDockMode == "none" then
                     container:ClearAllPoints()
                     container:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", rx, ry)
                 end
             end,
-            setSize   = function(w, _h)
+            setSize      = function(w, _h)
                 local opts = T:GetModule("Configuration") and
                     T:GetModule("Configuration").Options.LootFeed
                 if opts then
                     opts:SetFeedWidth(nil, math.max(150, math.floor(w + 0.5)))
                 end
             end,
-            isEnabled = function()
+            isEnabled    = function()
                 return LF:IsEnabled()
             end,
+            extras       = BuildDesignerExtras(),
         })
     end
 end

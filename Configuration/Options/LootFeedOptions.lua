@@ -27,6 +27,14 @@ local function GetModule()
     return T:GetModule("QualityOfLife"):GetModule("LootFeed")
 end
 
+local function RefreshLayout()
+    local m = GetModule()
+    local refresh = m and m["RefreshLayout"] or nil
+    if m and type(refresh) == "function" and m:IsEnabled() then
+        refresh(m)
+    end
+end
+
 -- ---------------------------------------------------------------------------
 -- GetAll — used by the module for a snapshot of all settings
 -- ---------------------------------------------------------------------------
@@ -35,6 +43,7 @@ function Options:GetAll()
     return {
         enabled         = db.enabled ~= false,
         locked          = db.locked == true,
+        chatDockMode    = db.chatDockMode or "none",
         x               = db.x or 100,
         y               = db.y or 200,
         growUp          = db.growUp ~= false,
@@ -90,10 +99,23 @@ end
 
 function Options:SetLocked(_, value)
     GetDB().locked = value == true
-    local m = GetModule()
-    if m:IsEnabled() then
-        m:RefreshLayout()
+    RefreshLayout()
+end
+
+-- ---------------------------------------------------------------------------
+-- Chat dock mode
+-- ---------------------------------------------------------------------------
+function Options:GetChatDockMode()
+    return GetDB().chatDockMode or "none"
+end
+
+function Options:SetChatDockMode(_, value)
+    if value ~= "top" and value ~= "right" then
+        value = "none"
     end
+
+    GetDB().chatDockMode = value
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -109,8 +131,7 @@ function Options:ResetPosition()
     local db = GetDB()
     db.x = 100
     db.y = 200
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -122,8 +143,7 @@ end
 
 function Options:SetGrowUp(_, value)
     GetDB().growUp = value ~= false
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -135,8 +155,7 @@ end
 
 function Options:SetMaxRows(_, value)
     GetDB().maxRows = value
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -148,8 +167,7 @@ end
 
 function Options:SetRowHeight(_, value)
     GetDB().rowHeight = value
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -161,8 +179,7 @@ end
 
 function Options:SetFeedWidth(_, value)
     GetDB().feedWidth = value
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -174,8 +191,7 @@ end
 
 function Options:SetIconSize(_, value)
     GetDB().iconSize = value
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -198,8 +214,7 @@ end
 
 function Options:SetFontSize(_, value)
     GetDB().fontSize = value
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -211,8 +226,7 @@ end
 
 function Options:SetFontOutline(_, value)
     GetDB().fontOutline = value or "OUTLINE"
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -225,8 +239,7 @@ end
 
 function Options:SetBgAlpha(_, value)
     GetDB().bgAlpha = value
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -284,8 +297,7 @@ end
 
 function Options:SetFont(_, value)
     GetDB().font = value
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -304,8 +316,7 @@ function Options:SetBgColor(_, r, g, b)
     db.bgColorR = r
     db.bgColorG = g
     db.bgColorB = b
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end
 
 -- ---------------------------------------------------------------------------
@@ -317,6 +328,5 @@ end
 
 function Options:SetScale(_, value)
     GetDB().scale = value
-    local m = GetModule()
-    if m:IsEnabled() then m:RefreshLayout() end
+    RefreshLayout()
 end

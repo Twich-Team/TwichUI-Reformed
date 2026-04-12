@@ -2428,6 +2428,9 @@ local function BuildLootFeedTab()
     local W = ConfigurationModule.Widgets
     local function IsDisabled() return not LFOptions:GetEnabled() end
     local function IsItemsDisabled() return not LFOptions:GetEnabled() or not LFOptions:GetShowItems() end
+    local function IsManualPositionDisabled()
+        return not LFOptions:GetEnabled() or LFOptions:GetChatDockMode() ~= "none"
+    end
 
     return {
         type = "group",
@@ -2450,13 +2453,30 @@ local function BuildLootFeedTab()
                 set = "SetEnabled",
             },
             frameGroup = W.IGroup(10, "Frame", {
+                chatDockMode = {
+                    type = "select",
+                    name = "Chat Frame Dock",
+                    desc =
+                    "Attach the loot feed to the chat frame.\n\n|cffffcc00None|r keeps the current custom mover position.\n\n|cffffcc00Top|r docks the feed above the chat frame and matches its width.\n\n|cffffcc00Right|r docks the feed to the lower-right edge of the chat frame.",
+                    order = 1,
+                    values = {
+                        none = "None (custom mover)",
+                        top = "Top of chat frame",
+                        right = "Right of chat frame",
+                    },
+                    disabled = IsDisabled,
+                    handler = LFOptions,
+                    get = "GetChatDockMode",
+                    set = "SetChatDockMode",
+                },
                 locked = {
                     type = "toggle",
-                    name = "Lock Position",
-                    desc = "Lock the loot feed in place. Disable to drag it.",
-                    order = 1,
+                    name = "Lock Custom Position",
+                    desc =
+                    "Lock the loot feed in place when using the custom mover position. Docked modes ignore manual dragging.",
+                    order = 2,
                     width = 1.5,
-                    disabled = IsDisabled,
+                    disabled = IsManualPositionDisabled,
                     handler = LFOptions,
                     get = "GetLocked",
                     set = "SetLocked",
@@ -2464,10 +2484,11 @@ local function BuildLootFeedTab()
                 growUp = {
                     type = "toggle",
                     name = "Grow Upward",
-                    desc = "New entries push existing rows upward. Disable to grow downward.",
-                    order = 2,
+                    desc =
+                    "New entries push existing rows upward. Docked modes always grow upward to match the notification docking behavior.",
+                    order = 3,
                     width = 1.5,
-                    disabled = IsDisabled,
+                    disabled = IsManualPositionDisabled,
                     handler = LFOptions,
                     get = "GetGrowUp",
                     set = "SetGrowUp",
@@ -2476,7 +2497,7 @@ local function BuildLootFeedTab()
                     type = "range",
                     name = "Max Rows",
                     desc = "Maximum number of entries visible at once.",
-                    order = 3,
+                    order = 4,
                     min = 1,
                     max = 15,
                     step = 1,
@@ -2488,8 +2509,9 @@ local function BuildLootFeedTab()
                 feedWidth = {
                     type = "range",
                     name = "Feed Width",
-                    desc = "Width of the loot feed in pixels.",
-                    order = 4,
+                    desc =
+                    "Width of the loot feed in pixels. Ignored when docked to the top of the chat frame, where the feed matches the chat width.",
+                    order = 5,
                     min = 150,
                     max = 500,
                     step = 5,
@@ -2502,7 +2524,7 @@ local function BuildLootFeedTab()
                     type = "range",
                     name = "Row Height",
                     desc = "Height of each feed row in pixels.",
-                    order = 5,
+                    order = 6,
                     min = 18,
                     max = 48,
                     step = 1,
@@ -2515,7 +2537,7 @@ local function BuildLootFeedTab()
                     type = "range",
                     name = "Icon Size",
                     desc = "Size of the item icon.",
-                    order = 6,
+                    order = 7,
                     min = 14,
                     max = 40,
                     step = 1,
@@ -2528,7 +2550,7 @@ local function BuildLootFeedTab()
                     type = "range",
                     name = "Display Time",
                     desc = "Seconds each entry lingers before fading out.",
-                    order = 7,
+                    order = 8,
                     min = 1,
                     max = 30,
                     step = 0.5,
@@ -2541,7 +2563,7 @@ local function BuildLootFeedTab()
                     type = "range",
                     name = "Background Opacity",
                     desc = "Opacity of the row background.",
-                    order = 8,
+                    order = 9,
                     min = 0,
                     max = 1,
                     step = 0.05,
@@ -2555,7 +2577,7 @@ local function BuildLootFeedTab()
                     type = "color",
                     name = "Background Color",
                     desc = "RGB color tint of the row background.",
-                    order = 9,
+                    order = 10,
                     hasAlpha = false,
                     disabled = IsDisabled,
                     get = function()
@@ -2569,7 +2591,7 @@ local function BuildLootFeedTab()
                     type = "range",
                     name = "Scale",
                     desc = "Overall scale of the loot feed frame.",
-                    order = 10,
+                    order = 11,
                     min = 0.5,
                     max = 2.0,
                     step = 0.05,
@@ -2582,9 +2604,9 @@ local function BuildLootFeedTab()
                 resetPos = {
                     type = "execute",
                     name = "Reset Position",
-                    desc = "Move the loot feed back to its default position.",
-                    order = 11,
-                    disabled = IsDisabled,
+                    desc = "Move the loot feed back to its default custom mover position.",
+                    order = 12,
+                    disabled = IsManualPositionDisabled,
                     handler = LFOptions,
                     func = "ResetPosition",
                 },
