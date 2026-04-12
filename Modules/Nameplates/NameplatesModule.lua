@@ -1428,14 +1428,10 @@ function Nameplates:UpdatePower(frame, unit)
         return
     end
 
-    -- Hide the power bar for units that have no power resource (e.g. many NPCs).
-    -- UnitPowerMax returns a secret number in Midnight so comparison is pcall-guarded;
-    -- on error we assume the unit does have power (safe default — shows the bar).
-    local hasPower = true
-    pcall(function()
-        if UnitPowerMax(unit) == 0 then hasPower = false end
-    end)
-    if not hasPower then
+    -- _showPower is seeded in OnNamePlateAdded (true for players, false for NPC
+    -- nameplates) and toggled by UNIT_POWER_BAR_SHOW / UNIT_POWER_BAR_HIDE events.
+    -- This avoids any comparison against UnitPowerMax (a secret number in Midnight).
+    if not frame._showPower then
         frame.powerContainer:Hide()
         return
     end
@@ -1731,6 +1727,13 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     -- BuildPlateFrame always uses the main DB (no unit yet); ResizePlateFrame
     -- re-reads GetEffectiveDB(unit) and corrects width/height for friendly plates.
     self:ResizePlateFrame(frame)
+
+    -- Power bar visibility seed.
+    -- UnitPowerMax returns a secret in Midnight and cannot be compared even inside
+    -- pcall (upvalue taint propagates across pcall boundaries).  Instead we default
+    -- based on unit type: players always have a meaningful power resource; NPCs
+    -- default to hidden and are shown only when UNIT_POWER_BAR_SHOW fires.
+    frame._showPower = (UnitIsPlayer(unitID) == true)
 
     local db             = self:GetEffectiveDB(unitID)
     local alpha          = Clamp(db.alpha or 1, 0.1, 1)
@@ -2093,6 +2096,12 @@ function Nameplates:OnEnable()
     self:RegisterEvent("UNIT_POWER_UPDATE", "OnUnitPower")
     self:RegisterEvent("UNIT_MAXPOWER", "OnUnitPower")
     self:RegisterEvent("UNIT_DISPLAYPOWER", "OnUnitDisplayPower")
+    -- UNIT_POWER_BAR_SHOW/HIDE fire when a nameplate unit gains or loses a visible
+    -- power resource (e.g. a boss mechanic starts draining energy, or an NPC's
+    -- energy pool empties). We use these instead of comparing UnitPowerMax (a secret
+    -- number in Midnight that cannot be compared in Lua).
+    self:RegisterEvent("UNIT_POWER_BAR_SHOW", "OnUnitPowerBarShow")
+    self:RegisterEvent("UNIT_POWER_BAR_HIDE", "OnUnitPowerBarHide")
     self:RegisterEvent("UNIT_SPELLCAST_START", "OnCastEvent")
     self:RegisterEvent("UNIT_SPELLCAST_STOP", "OnCastEvent")
     self:RegisterEvent("UNIT_SPELLCAST_FAILED", "OnCastEvent")
@@ -2196,6 +2205,24 @@ function Nameplates:OnUnitDisplayPower(_, unit)
     local frame = unit and self._plates[unit]
     if frame and UnitExists(unit) then
         self:UpdatePower(frame, unit)
+    end
+end
+
+function Nameplates:OnUnitPowerBarShow(_, unit)
+    -- An NPC's power bar has become visible (mechanic-driven or boss energy pool).
+    local frame = unit and self._plates[unit]
+    if frame then
+        frame._showPower = true
+        if UnitExists(unit) then self:UpdatePower(frame, unit) end
+    end
+end
+
+function Nameplates:OnUnitPowerBarHide(_, unit)
+    -- The unit's power bar has been hidden by the server (mechanic ended, etc.).
+    local frame = unit and self._plates[unit]
+    if frame then
+        frame._showPower = false
+        if frame.powerContainer then frame.powerContainer:Hide() end
     end
 end
 
