@@ -1,5 +1,9 @@
 ## BUGS
 
+- One of our world and gameplay tweaks automatically released after i died in a dungeon. none of the tweaks should do that, i believe it is the resurrect in pvp tweak.
+
+I dont think the grey area has anything to do with the power. I have power disabled. When i change the height of the frame from the enemy unit frames, the friendly player frames change too, even that background. I think it has to do with something weird with we are still kind of using the enemy configuration for friendly. These two should be entirely separate configurations.
+
 ## NOTES
 
 - Please look at plater and their large selection of advanced configurations. we need some more of that. Particularly, at minimum I need to configure colors for when im tanking and have or do not have aggro, if im not tanking and have aggro, stacking settings, screen clamping, etc.

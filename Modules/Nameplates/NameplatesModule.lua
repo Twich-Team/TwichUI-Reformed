@@ -369,8 +369,19 @@ end
 -- the player's own nameplate do not.
 function Nameplates:IsFriendlyUnit(unit)
     if not unit then return false end
-    local reaction = UnitReaction and UnitReaction(unit, "player")
-    return reaction ~= nil and reaction >= 5
+    -- UnitReaction returns a SECRET NUMBER in Midnight; ANY comparison on it
+    -- (>= 5, == 4, etc.) propagates taint and silently throws even inside pcall.
+    -- UnitIsFriend and UnitCanAttack return TRUE BOOLEANS and are safe to compare.
+    if UnitIsFriend then
+        local f = UnitIsFriend(unit, "player")
+        if f == true  then return true  end
+        if f == false then return false end -- explicit false = enemy/neutral
+    end
+    -- Fallback: if the player cannot attack the unit it is effectively friendly.
+    if UnitCanAttack then
+        return not UnitCanAttack("player", unit)
+    end
+    return false
 end
 
 -- Returns db.friendly with an __index fallback to the main DB so any key not
@@ -386,9 +397,18 @@ function Nameplates:GetFriendlyDB()
 end
 
 -- Returns the appropriate DB for a unit: friendly merged-DB or main DB.
+-- If the frame's _isFriendly flag has been seeded (OnNamePlateAdded), use that
+-- directly to avoid the per-call API overhead on every update event.
 function Nameplates:GetEffectiveDB(unit)
-    if unit and self:IsFriendlyUnit(unit) then
-        return self:GetFriendlyDB()
+    if unit then
+        -- Prefer the cached per-frame flag when the unit is a tracked plate token.
+        local frame = self._plates and self._plates[unit]
+        if frame then
+            if frame._isFriendly then return self:GetFriendlyDB() end
+            return self:GetDB()
+        end
+        -- Fallback for unit tokens not yet in _plates (e.g. called before assignment).
+        if self:IsFriendlyUnit(unit) then return self:GetFriendlyDB() end
     end
     return self:GetDB()
 end
@@ -1722,6 +1742,9 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     local frame          = self:AcquirePlateFrame(plate)
     frame._unit          = unitID
     frame._plate         = plate -- store direct ref to avoid GetNamePlateForUnit on any unit token
+    -- Seed the friendly flag BEFORE inserting into _plates so GetEffectiveDB can
+    -- read it the moment any code looks up this unit via self._plates[unitID].
+    frame._isFriendly    = self:IsFriendlyUnit(unitID)
     self._plates[unitID] = frame
     -- Apply friendly-specific sizing now that we know the unit reaction.
     -- BuildPlateFrame always uses the main DB (no unit yet); ResizePlateFrame
