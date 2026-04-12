@@ -6,12 +6,11 @@
 
 - Our automatic remove transform isnt functioning, at least for crafting profession transforms. please look at leatrix plus and determine what we are doing wrong and fix.
 
-- In our nameplates configuration, we provide an arrow selector frame. that frame either needs to set its height to fit all options, or be scrollable. it also should not have a transparent background. preferably, it would appear on a frame anchored to the right of the configuration UI like we have in other places.
-- For nameplates that appear and disappear on screen due to range, can we add a nice fade in/fade out to that so its not so abrupt?
-
 - Our notifications background and borders should use the same colors from the global appearance section in our configuration interface
 - Our data text menus should use the background and border settings from the global appearance section in our configuration interface
 - Need raid markers on unit frames and name plates
+
+- Our error handler has an option to make a sound on error. Can we add a throttle to that? for example, if its getting many errors rapidly, we only play the sound every so often
 
 # Tweaks
 

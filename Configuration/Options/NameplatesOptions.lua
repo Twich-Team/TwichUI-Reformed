@@ -628,65 +628,313 @@ local function GetAllArrowStyles()
 end
 
 -- ── Arrow picker popup ────────────────────────────────────────────────────────
--- A floating AceGUI window showing all arrow styles as clickable icon buttons.
+-- A TwichUI-styled gallery anchored beside the configuration UI.
 local _arrowPickerFrame = nil
+local _arrowPickerButtons = {}
 
-local function OpenArrowPicker()
-    local AceGUI = LibStub and LibStub("AceGUI-3.0", true)
-    if not AceGUI then return end
+local function CreateArrowPickerPanel(parent, r, g, b, a, borderA)
+    local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    frame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    frame:SetBackdropColor(r or 0.04, g or 0.04, b or 0.06, a or 0.985)
+    frame:SetBackdropBorderColor(0.94, 0.77, 0.28, borderA or 0.24)
+    return frame
+end
 
-    -- If already open, close (toggle behaviour)
+local function SkinArrowPickerActionButton(button, color)
+    local accent = color or { 0.96, 0.76, 0.24 }
+    local r, g, b = accent[1], accent[2], accent[3]
+    button:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+    button:SetBackdropColor(r * 0.20, g * 0.20, b * 0.20, 0.98)
+    button:SetBackdropBorderColor(r, g, b, 0.42)
+    button:SetNormalTexture("")
+    button:SetPushedTexture("")
+    button:SetHighlightTexture("")
+    button:SetScript("OnMouseDown", function(self)
+        self:SetBackdropColor(r * 0.30, g * 0.30, b * 0.30, 1)
+    end)
+    button:SetScript("OnMouseUp", function(self)
+        if self:IsMouseOver() then
+            self:SetBackdropColor(r * 0.28, g * 0.28, b * 0.28, 0.98)
+        else
+            self:SetBackdropColor(r * 0.20, g * 0.20, b * 0.20, 0.98)
+        end
+    end)
+    button:SetScript("OnEnter", function(self)
+        self:SetBackdropColor(r * 0.28, g * 0.28, b * 0.28, 0.98)
+        self:SetBackdropBorderColor(r, g, b, 0.78)
+    end)
+    button:SetScript("OnLeave", function(self)
+        if self._isSelected then
+            self:SetBackdropColor(0.08, 0.16, 0.22, 0.98)
+            self:SetBackdropBorderColor(0.42, 0.82, 0.98, 0.88)
+        else
+            self:SetBackdropColor(r * 0.20, g * 0.20, b * 0.20, 0.98)
+            self:SetBackdropBorderColor(r, g, b, 0.42)
+        end
+    end)
+end
+
+local function SkinArrowPickerScrollBar(scrollFrame)
+    if not scrollFrame or not scrollFrame.ScrollBar then return end
+
+    local scrollBar = scrollFrame.ScrollBar
+    scrollBar:SetWidth(16)
+    if scrollBar.SetBackdrop then
+        scrollBar:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        scrollBar:SetBackdropColor(0.05, 0.05, 0.07, 0.9)
+        scrollBar:SetBackdropBorderColor(0.96, 0.76, 0.24, 0.2)
+    end
+
+    local thumb = scrollBar.ThumbTexture or scrollBar:GetThumbTexture()
+    if thumb then
+        scrollBar.ThumbTexture = thumb
+        thumb:SetTexture("Interface\\Buttons\\WHITE8X8")
+        thumb:SetSize(10, 26)
+        thumb:SetVertexColor(0.96, 0.76, 0.24, 0.95)
+    end
+
+    if scrollBar.ScrollUpButton then
+        scrollBar.ScrollUpButton:Hide()
+        scrollBar.ScrollUpButton:EnableMouse(false)
+    end
+    if scrollBar.ScrollDownButton then
+        scrollBar.ScrollDownButton:Hide()
+        scrollBar.ScrollDownButton:EnableMouse(false)
+    end
+end
+
+local function GetArrowPickerHostFrame()
+    local ui = ConfigurationModule and ConfigurationModule.StandaloneUI
+    if ui and type(ui.GetFrame) == "function" then
+        local frame = ui:GetFrame()
+        if frame and frame.IsShown and frame:IsShown() then
+            return frame
+        end
+    end
+    return nil
+end
+
+local function LayoutArrowPickerButtons(frame)
+    if not frame or not frame.ScrollFrame or not frame.ScrollChild then return end
+
+    local buttons = _arrowPickerButtons
+    local tileWidth = 74
+    local tileHeight = 82
+    local gap = 10
+    local availableWidth = math.max(1, (frame.ScrollFrame:GetWidth() or 1) - 8)
+    local columns = math.max(1, math.floor((availableWidth + gap) / (tileWidth + gap)))
+    local contentWidth = math.max(availableWidth, columns * tileWidth + math.max(0, columns - 1) * gap)
+
+    frame.ScrollChild:SetWidth(contentWidth)
+
+    for index, button in ipairs(buttons) do
+        local column = (index - 1) % columns
+        local row = math.floor((index - 1) / columns)
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", frame.ScrollChild, "TOPLEFT", column * (tileWidth + gap), -(row * (tileHeight + gap)))
+    end
+
+    local rows = math.max(1, math.ceil(#buttons / columns))
+    frame.ScrollChild:SetHeight(rows * tileHeight + math.max(0, rows - 1) * gap)
+end
+
+local function RefreshArrowPickerSelection(frame)
+    local current = Options:GetTargetArrowStyle()
+    if frame and frame.Status then
+        frame.Status:SetText("Current: " .. current)
+    end
+
+    for _, button in ipairs(_arrowPickerButtons) do
+        local isSelected = button._style == current
+        button._isSelected = isSelected
+        if isSelected then
+            button:SetBackdropColor(0.08, 0.16, 0.22, 0.98)
+            button:SetBackdropBorderColor(0.42, 0.82, 0.98, 0.88)
+            if button.Label then
+                button.Label:SetTextColor(0.84, 0.96, 1.0)
+            end
+            if button.Image then
+                button.Image:SetVertexColor(0.84, 0.96, 1.0, 1)
+            end
+        else
+            button:SetBackdropColor(0.19, 0.15, 0.05, 0.98)
+            button:SetBackdropBorderColor(0.96, 0.76, 0.24, 0.42)
+            if button.Label then
+                button.Label:SetTextColor(1, 0.95, 0.82)
+            end
+            if button.Image then
+                button.Image:SetVertexColor(1, 1, 1, 1)
+            end
+        end
+    end
+end
+
+local function EnsureArrowPickerFrame()
     if _arrowPickerFrame then
-        _arrowPickerFrame:Hide()
-        _arrowPickerFrame = nil
+        return _arrowPickerFrame
+    end
+
+    local frame = CreateArrowPickerPanel(UIParent, 0.03, 0.03, 0.05, 0.985, 0.28)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetClampedToScreen(true)
+    frame:SetSize(368, 540)
+    frame:Hide()
+
+    frame.TitleBar = CreateArrowPickerPanel(frame, 0.07, 0.07, 0.10, 0.98, 0.18)
+    frame.TitleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+    frame.TitleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
+    frame.TitleBar:SetHeight(38)
+
+    frame.Accent = frame.TitleBar:CreateTexture(nil, "ARTWORK")
+    frame.Accent:SetPoint("TOPLEFT", frame.TitleBar, "TOPLEFT", 0, 0)
+    frame.Accent:SetPoint("TOPRIGHT", frame.TitleBar, "TOPRIGHT", 0, 0)
+    frame.Accent:SetHeight(3)
+    frame.Accent:SetColorTexture(0.96, 0.76, 0.24, 0.95)
+
+    frame.Title = frame.TitleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.Title:SetPoint("TOPLEFT", frame.TitleBar, "TOPLEFT", 12, -9)
+    frame.Title:SetPoint("RIGHT", frame.TitleBar, "RIGHT", -44, 0)
+    frame.Title:SetJustifyH("LEFT")
+    frame.Title:SetTextColor(1, 0.95, 0.82)
+    frame.Title:SetText("Target Arrow Browser")
+
+    frame.Status = frame.TitleBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.Status:SetPoint("TOPLEFT", frame.Title, "BOTTOMLEFT", 0, -3)
+    frame.Status:SetPoint("RIGHT", frame.TitleBar, "RIGHT", -44, 0)
+    frame.Status:SetJustifyH("LEFT")
+    frame.Status:SetTextColor(0.73, 0.76, 0.82)
+
+    frame.CloseButton = CreateFrame("Button", nil, frame.TitleBar, "BackdropTemplate")
+    frame.CloseButton:SetSize(22, 22)
+    frame.CloseButton:SetPoint("TOPRIGHT", frame.TitleBar, "TOPRIGHT", -8, -8)
+    SkinArrowPickerActionButton(frame.CloseButton, { 0.92, 0.45, 0.38 })
+    frame.CloseButton.Text = frame.CloseButton:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.CloseButton.Text:SetPoint("CENTER", frame.CloseButton, "CENTER", 0, 0)
+    frame.CloseButton.Text:SetText("x")
+    frame.CloseButton:SetScript("OnClick", function()
+        frame:Hide()
+    end)
+
+    frame.ContentInset = CreateArrowPickerPanel(frame, 0.02, 0.02, 0.03, 0.98, 0.36)
+    frame.ContentInset:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -48)
+    frame.ContentInset:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -8, 8)
+
+    frame.ScrollFrame = CreateFrame("ScrollFrame", nil, frame.ContentInset, "UIPanelScrollFrameTemplate")
+    frame.ScrollFrame:SetPoint("TOPLEFT", frame.ContentInset, "TOPLEFT", 8, -8)
+    frame.ScrollFrame:SetPoint("BOTTOMRIGHT", frame.ContentInset, "BOTTOMRIGHT", -20, 8)
+    SkinArrowPickerScrollBar(frame.ScrollFrame)
+
+    frame.ScrollChild = CreateFrame("Frame", nil, frame.ScrollFrame)
+    frame.ScrollChild:SetSize(1, 1)
+    frame.ScrollFrame:SetScrollChild(frame.ScrollChild)
+    frame.ScrollFrame:HookScript("OnSizeChanged", function()
+        if frame:IsShown() then
+            LayoutArrowPickerButtons(frame)
+        end
+    end)
+
+    _arrowPickerFrame = frame
+    return frame
+end
+
+local function UpdateArrowPickerAnchor(frame)
+    if not frame then return end
+
+    local hostFrame = GetArrowPickerHostFrame()
+    frame:ClearAllPoints()
+
+    if hostFrame then
+        if frame._hostHideHook ~= hostFrame then
+            hostFrame:HookScript("OnHide", function()
+                if _arrowPickerFrame then
+                    _arrowPickerFrame:Hide()
+                end
+            end)
+            frame._hostHideHook = hostFrame
+        end
+
+        local anchor = (hostFrame.PreviewHost and hostFrame.PreviewHost:IsShown()) and hostFrame.PreviewHost or hostFrame
+        frame:SetHeight(math.max(420, (anchor:GetHeight() or 540) - 12))
+        frame:SetPoint("TOPLEFT", anchor, "TOPRIGHT", 8, -6)
+        frame:SetPoint("BOTTOMLEFT", anchor, "BOTTOMRIGHT", 8, 6)
+    else
+        frame:SetSize(368, 540)
+        frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    end
+end
+
+local function PopulateArrowPicker(frame)
+    if not frame or frame._isPopulated then
         return
     end
 
-    local frame = AceGUI:Create("Frame")
-    frame:SetTitle("Select Arrow Style")
-    frame:SetStatusText("Click an arrow to select  |  " .. Options:GetTargetArrowStyle() .. " is current")
-    frame:SetLayout("Flow")
-    frame:SetWidth(560)
-    frame:SetHeight(420)
-    frame:SetCallback("OnClose", function(widget)
-        AceGUI:Release(widget)
-        _arrowPickerFrame = nil
-    end)
-    _arrowPickerFrame = frame
-
-    local current = Options:GetTargetArrowStyle()
-
+    local accent = { 0.96, 0.76, 0.24 }
     for _, style in ipairs(GetAllArrowStyles()) do
-        local s       = style
-        -- Short display label: "ArrowUp" → "Up", "Arrow0" → "0"
-        local label   = s:match("^Arrow(.+)$") or s
-        local texPath = ARROW_BASE .. s .. ".tga"
+        local button = CreateFrame("Button", nil, frame.ScrollChild, "BackdropTemplate")
+        button:SetSize(74, 82)
+        button._style = style
+        SkinArrowPickerActionButton(button, accent)
 
-        local icon    = AceGUI:Create("Icon")
-        icon:SetImage(texPath)
-        icon:SetImageSize(40, 40)
-        icon:SetLabel(label)
-        icon:SetWidth(68)
-        if s == current then
-            icon.label:SetTextColor(0.2, 1, 0.3)
-            icon.image:SetVertexColor(0.2, 1, 0.3, 1)
-        end
-        icon:SetCallback("OnClick", function()
-            Options:SetTargetArrowStyle(nil, s)
-            -- Close the picker; the config panel refreshes automatically via Refresh()
-            if _arrowPickerFrame then
-                _arrowPickerFrame:Hide()
-                _arrowPickerFrame = nil
-            end
+        button.Image = button:CreateTexture(nil, "ARTWORK")
+        button.Image:SetPoint("TOP", button, "TOP", 0, -10)
+        button.Image:SetSize(42, 42)
+        button.Image:SetTexture(ARROW_BASE .. style .. ".tga")
+
+        button.Label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        button.Label:SetPoint("TOPLEFT", button.Image, "BOTTOMLEFT", -8, -8)
+        button.Label:SetPoint("TOPRIGHT", button.Image, "BOTTOMRIGHT", 8, -8)
+        button.Label:SetJustifyH("CENTER")
+        button.Label:SetText((style:match("^Arrow(.+)$") or style))
+
+        button:SetScript("OnClick", function(self)
+            Options:SetTargetArrowStyle(nil, self._style)
+            RefreshArrowPickerSelection(frame)
         end)
-        frame:AddChild(icon)
+
+        _arrowPickerButtons[#_arrowPickerButtons + 1] = button
     end
+
+    frame._isPopulated = true
+    LayoutArrowPickerButtons(frame)
+end
+
+local function OpenArrowPicker()
+    local frame = EnsureArrowPickerFrame()
+    if frame:IsShown() then
+        frame:Hide()
+        return
+    end
+
+    PopulateArrowPicker(frame)
+    UpdateArrowPickerAnchor(frame)
+    LayoutArrowPickerButtons(frame)
+    RefreshArrowPickerSelection(frame)
+    frame.ScrollFrame:SetVerticalScroll(0)
+    frame:Show()
 end
 
 function Options:GetTargetArrowStyle() return self:GetDB().targetArrowStyle or "ArrowUp" end
 
 function Options:SetTargetArrowStyle(_, v)
     self:GetDB().targetArrowStyle = v; Refresh()
+    if _arrowPickerFrame and _arrowPickerFrame:IsShown() then
+        RefreshArrowPickerSelection(_arrowPickerFrame)
+    end
 end
 
 function Options:GetTargetArrowPreviewTex()
