@@ -4,8 +4,6 @@
 
 - Please look at plater and their large selection of advanced configurations. we need some more of that. Particularly, at minimum I need to configure colors for when im tanking and have or do not have aggro, if im not tanking and have aggro, stacking settings, screen clamping, etc.
 
-- so i have an addon WoWUnit (https://github.com/Jaliborc/WoWUnit). Can we write some unit tests for the nameplates so we can ensure this works well and find issues faster? make sure we can disable this for production use.
-
 # Tweaks
 
 ## IDEAS/FUTURE

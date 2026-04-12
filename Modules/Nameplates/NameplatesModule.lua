@@ -1026,6 +1026,25 @@ function Nameplates:UpdateName(frame, unit)
         if ok and short then name = short end
     end
     frame.nameText:SetText(name or "")
+
+    -- Name color: class color (players only) > custom override > default white.
+    if db.nameColorClass and UnitIsPlayer(unit) then
+        local _, classToken = UnitClass(unit)
+        if classToken then
+            local cc = (C_ClassColor and C_ClassColor.GetClassColor and C_ClassColor.GetClassColor(classToken))
+                or (RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken])
+            if cc and type(cc.r) == "number" then
+                frame.nameText:SetTextColor(cc.r, cc.g, cc.b, 1)
+                return
+            end
+        end
+    end
+    local nc = type(db.nameFontColor) == "table" and db.nameFontColor or nil
+    if nc then
+        frame.nameText:SetTextColor(nc[1], nc[2], nc[3], nc[4] or 1)
+    else
+        frame.nameText:SetTextColor(1, 1, 1, 1)
+    end
 end
 
 function Nameplates:UpdateLevel(frame, unit)
@@ -1408,6 +1427,19 @@ function Nameplates:UpdatePower(frame, unit)
         frame.powerContainer:Hide()
         return
     end
+
+    -- Hide the power bar for units that have no power resource (e.g. many NPCs).
+    -- UnitPowerMax returns a secret number in Midnight so comparison is pcall-guarded;
+    -- on error we assume the unit does have power (safe default — shows the bar).
+    local hasPower = true
+    pcall(function()
+        if UnitPowerMax(unit) == 0 then hasPower = false end
+    end)
+    if not hasPower then
+        frame.powerContainer:Hide()
+        return
+    end
+
     frame.powerContainer:Show()
 
     local pb = frame.powerBar
@@ -1515,8 +1547,14 @@ function Nameplates:ApplyThemeToFrame(frame)
     if frame.nameText then
         frame.nameText:SetFont(nf, ns, nfl)
         if db.nameFontShadow then frame.nameText:SetShadowOffset(1, -1) else frame.nameText:SetShadowOffset(0, 0) end
-        local nc = type(db.nameFontColor) == "table" and db.nameFontColor or nil
-        if nc then frame.nameText:SetTextColor(nc[1], nc[2], nc[3], nc[4] or 1) end
+        -- Re-apply anchor point and horizontal justify whenever theme/settings change.
+        local nameAnchorPt   = db.nameAnchorPoint or "BOTTOMLEFT"
+        local nameOX, nameOY = db.nameOffsetX or 2, db.nameOffsetY or 3
+        frame.nameText:ClearAllPoints()
+        frame.nameText:SetPoint(nameAnchorPt, frame, "TOPLEFT", nameOX, nameOY)
+        frame.nameText:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -nameOX, nameOY)
+        frame.nameText:SetJustifyH(db.nameJustify or "LEFT")
+        -- Color is handled by UpdateName (class color, custom, or default white).
     end
     if frame.healthText then
         frame.healthText:SetFont(hf, hs, hfl)
@@ -1689,6 +1727,10 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     frame._unit          = unitID
     frame._plate         = plate -- store direct ref to avoid GetNamePlateForUnit on any unit token
     self._plates[unitID] = frame
+    -- Apply friendly-specific sizing now that we know the unit reaction.
+    -- BuildPlateFrame always uses the main DB (no unit yet); ResizePlateFrame
+    -- re-reads GetEffectiveDB(unit) and corrects width/height for friendly plates.
+    self:ResizePlateFrame(frame)
 
     local db             = self:GetEffectiveDB(unitID)
     local alpha          = Clamp(db.alpha or 1, 0.1, 1)

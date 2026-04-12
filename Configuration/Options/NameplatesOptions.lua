@@ -1025,6 +1025,14 @@ function Options:BuildConfiguration()
                         get   = function() return Options:GetShowEliteIcon() end,
                         set   = function(_, v) Options:SetShowEliteIcon(_, v) end,
                     },
+                    nameColorClass = {
+                        type  = "toggle",
+                        name  = "Color Name by Class",
+                        order = 5,
+                        desc  = "Color the name text with the unit's class color (players only).",
+                        get   = function() return Options:GetDB().nameColorClass == true end,
+                        set   = function(_, v) Options:GetDB().nameColorClass = v == true; Refresh() end,
+                    },
                     sep_font = { type = "header", name = "Name Text Font", order = 10 },
                     nameFontFace = {
                         type   = "select",
@@ -1825,6 +1833,18 @@ function Options:BuildConfiguration()
                                     return Options:GetShowEliteIcon()
                                 end,
                                 set   = function(_, v) Options:GetFriendlyDB().showEliteIcon = v == true; Refresh() end,
+                            },
+                            nameColorClass = {
+                                type  = "toggle",
+                                name  = "Color Name by Class",
+                                order = 5,
+                                desc  = "Color the name text with the unit's class color (players only).",
+                                get   = function()
+                                    local v = Options:GetFriendlyDB().nameColorClass
+                                    if v ~= nil then return v end
+                                    return Options:GetDB().nameColorClass == true
+                                end,
+                                set   = function(_, v) Options:GetFriendlyDB().nameColorClass = v == true; Refresh() end,
                             },
                             sep_font = { type = "header", name = "Name Text Font", order = 10 },
                             nameFontFace = {
