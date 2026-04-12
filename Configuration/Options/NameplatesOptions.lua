@@ -415,6 +415,61 @@ function Options:SetCastColor(_, r, g, b, a)
     Refresh()
 end
 
+function Options:GetCastEmphasisEnabled() return self:GetDB().castEmphasisEnabled == true end
+
+function Options:SetCastEmphasisEnabled(_, v)
+    self:GetDB().castEmphasisEnabled = v == true; Refresh()
+end
+
+function Options:GetCastEmphasisGlow() return self:GetDB().castEmphasisGlow ~= false end
+
+function Options:SetCastEmphasisGlow(_, v)
+    self:GetDB().castEmphasisGlow = v == true; Refresh()
+end
+
+function Options:GetCastEmphasisArrows() return self:GetDB().castEmphasisArrows == true end
+
+function Options:SetCastEmphasisArrows(_, v)
+    self:GetDB().castEmphasisArrows = v == true; Refresh()
+end
+
+function Options:GetCastEmphasisScale() return tonumber(self:GetDB().castEmphasisScale) or 1.08 end
+
+function Options:SetCastEmphasisScale(_, v)
+    self:GetDB().castEmphasisScale = math.max(1, math.min(1.5, tonumber(v) or 1.08)); Refresh()
+end
+
+function Options:GetCastEmphasisBorderColor()
+    local c = self:GetDB().castEmphasisBorderColor
+    if type(c) == "table" then return c[1], c[2], c[3], c[4] or 1 end
+    return Options:GetCastColor()
+end
+
+function Options:SetCastEmphasisBorderColor(_, r, g, b, a)
+    self:GetDB().castEmphasisBorderColor = { r, g, b, a or 1 }; Refresh()
+end
+
+function Options:GetCastEmphasisGlowColor()
+    local c = self:GetDB().castEmphasisGlowColor
+    if type(c) == "table" then return c[1], c[2], c[3], c[4] or 0.8 end
+    local r, g, b = Options:GetCastEmphasisBorderColor()
+    return r, g, b, 0.8
+end
+
+function Options:SetCastEmphasisGlowColor(_, r, g, b, a)
+    self:GetDB().castEmphasisGlowColor = { r, g, b, a or 0.8 }; Refresh()
+end
+
+function Options:GetCastEmphasisArrowColor()
+    local c = self:GetDB().castEmphasisArrowColor
+    if type(c) == "table" then return c[1], c[2], c[3], c[4] or 1 end
+    return Options:GetCastEmphasisGlowColor()
+end
+
+function Options:SetCastEmphasisArrowColor(_, r, g, b, a)
+    self:GetDB().castEmphasisArrowColor = { r, g, b, a or 1 }; Refresh()
+end
+
 -- Auras
 function Options:GetShowAuras() return self:GetDB().showAuras ~= false end
 
@@ -1756,11 +1811,77 @@ function Options:BuildConfiguration()
                                 get      = function() return Options:GetCastColor() end,
                                 set      = function(_, r, g, b, a) Options:SetCastColor(_, r, g, b, a) end,
                             },
-                            sep_tex = { type = "header", name = "Cast Bar Appearance", order = 10 },
+                            sep_emphasis = { type = "header", name = "Casting Emphasis", order = 5 },
+                            castEmphasisEnabled = {
+                                type  = "toggle",
+                                name  = "Emphasize Active Casts",
+                                order = 6,
+                                width = "full",
+                                desc  = "Highlight the entire nameplate while the unit is actively casting or channeling.",
+                                get   = function() return Options:GetCastEmphasisEnabled() end,
+                                set   = function(_, v) Options:SetCastEmphasisEnabled(_, v) end,
+                            },
+                            castEmphasisScale = {
+                                type   = "range",
+                                name   = "Casting Scale",
+                                order  = 7,
+                                min    = 1,
+                                max    = 1.5,
+                                step   = 0.01,
+                                hidden = function() return not Options:GetCastEmphasisEnabled() end,
+                                get    = function() return Options:GetCastEmphasisScale() end,
+                                set    = function(_, v) Options:SetCastEmphasisScale(_, v) end,
+                            },
+                            castEmphasisBorderColor = {
+                                type     = "color",
+                                name     = "Outline Color",
+                                order    = 8,
+                                hasAlpha = true,
+                                hidden   = function() return not Options:GetCastEmphasisEnabled() end,
+                                get      = function() return Options:GetCastEmphasisBorderColor() end,
+                                set      = function(_, r, g, b, a) Options:SetCastEmphasisBorderColor(_, r, g, b, a) end,
+                            },
+                            castEmphasisGlow = {
+                                type   = "toggle",
+                                name   = "Show Glow",
+                                order  = 9,
+                                hidden = function() return not Options:GetCastEmphasisEnabled() end,
+                                get    = function() return Options:GetCastEmphasisGlow() end,
+                                set    = function(_, v) Options:SetCastEmphasisGlow(_, v) end,
+                            },
+                            castEmphasisGlowColor = {
+                                type     = "color",
+                                name     = "Glow Color",
+                                order    = 10,
+                                hasAlpha = true,
+                                hidden   = function() return not Options:GetCastEmphasisEnabled() or
+                                    not Options:GetCastEmphasisGlow() end,
+                                get      = function() return Options:GetCastEmphasisGlowColor() end,
+                                set      = function(_, r, g, b, a) Options:SetCastEmphasisGlowColor(_, r, g, b, a) end,
+                            },
+                            castEmphasisArrows = {
+                                type   = "toggle",
+                                name   = "Show Arrows",
+                                order  = 11,
+                                hidden = function() return not Options:GetCastEmphasisEnabled() end,
+                                get    = function() return Options:GetCastEmphasisArrows() end,
+                                set    = function(_, v) Options:SetCastEmphasisArrows(_, v) end,
+                            },
+                            castEmphasisArrowColor = {
+                                type     = "color",
+                                name     = "Arrow Color",
+                                order    = 12,
+                                hasAlpha = true,
+                                hidden   = function() return not Options:GetCastEmphasisEnabled() or
+                                    not Options:GetCastEmphasisArrows() end,
+                                get      = function() return Options:GetCastEmphasisArrowColor() end,
+                                set      = function(_, r, g, b, a) Options:SetCastEmphasisArrowColor(_, r, g, b, a) end,
+                            },
+                            sep_tex = { type = "header", name = "Cast Bar Appearance", order = 20 },
                             castBarTexture = {
                                 type   = "select",
                                 name   = "Bar Texture",
-                                order  = 11,
+                                order  = 21,
                                 values = TextureList,
                                 get    = function() return GetBarTexture("castBarTexture") end,
                                 set    = function(_, v) SetBarTexture("castBarTexture", v) end,
@@ -1768,7 +1889,7 @@ function Options:BuildConfiguration()
                             castBgColor = {
                                 type     = "color",
                                 name     = "Background Color",
-                                order    = 12,
+                                order    = 22,
                                 hasAlpha = true,
                                 get      = function() return GetBarBgColor("castBgColor") end,
                                 set      = function(_, r, g, b, a) SetBarBgColor("castBgColor", r, g, b, a) end,
@@ -1776,16 +1897,16 @@ function Options:BuildConfiguration()
                             castBorderColor = {
                                 type     = "color",
                                 name     = "Border Color",
-                                order    = 13,
+                                order    = 23,
                                 hasAlpha = true,
                                 get      = function() return GetBarBorderColor("castBorderColor") end,
                                 set      = function(_, r, g, b, a) SetBarBorderColor("castBorderColor", r, g, b, a) end,
                             },
-                            sep_font = { type = "header", name = "Cast Bar Font", order = 20 },
+                            sep_font = { type = "header", name = "Cast Bar Font", order = 30 },
                             castFontFace = {
                                 type   = "select",
                                 name   = "Font Face",
-                                order  = 21,
+                                order  = 31,
                                 values = FontList,
                                 get    = function() return GetFontFace("cast") end,
                                 set    = function(_, v) SetFontFace("cast", v) end,
@@ -1793,7 +1914,7 @@ function Options:BuildConfiguration()
                             castFontSize = {
                                 type  = "range",
                                 name  = "Font Size",
-                                order = 22,
+                                order = 32,
                                 min   = 6,
                                 max   = 16,
                                 step  = 1,
@@ -1803,7 +1924,7 @@ function Options:BuildConfiguration()
                             castFontOutline = {
                                 type   = "select",
                                 name   = "Outline",
-                                order  = 23,
+                                order  = 33,
                                 values = OUTLINE_VALUES,
                                 get    = function() return GetFontOutline("cast") end,
                                 set    = function(_, v) SetFontOutline("cast", v) end,
@@ -1811,14 +1932,14 @@ function Options:BuildConfiguration()
                             castFontShadow = {
                                 type  = "toggle",
                                 name  = "Drop Shadow",
-                                order = 24,
+                                order = 34,
                                 get   = function() return GetFontShadow("cast") end,
                                 set   = function(_, v) SetFontShadow("cast", v) end,
                             },
-                            sep_test = { type = "header", name = "Testing", order = 30 },
+                            sep_test = { type = "header", name = "Testing", order = 40 },
                             castTestMode = {
                                 type  = "execute",
-                                order = 31,
+                                order = 41,
                                 name  = function()
                                     return Options:IsInCastTestMode() and "Stop Cast Preview" or "Cast Bar Preview"
                                 end,
@@ -2781,11 +2902,143 @@ function Options:BuildConfiguration()
                                     Options:GetFriendlyDB().castColor = { r, g, b, a or 1 }; Refresh()
                                 end,
                             },
-                            sep_tex = { type = "header", name = "Cast Bar Appearance", order = 10 },
+                            sep_emphasis = { type = "header", name = "Casting Emphasis", order = 5 },
+                            castEmphasisEnabled = {
+                                type  = "toggle",
+                                name  = "Emphasize Active Casts",
+                                order = 6,
+                                width = "full",
+                                desc  = "Highlight friendly nameplates while the unit is actively casting or channeling.",
+                                get   = function()
+                                    local v = Options:GetFriendlyDB().castEmphasisEnabled
+                                    if v ~= nil then return v end
+                                    return Options:GetCastEmphasisEnabled()
+                                end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().castEmphasisEnabled = v == true; Refresh()
+                                end,
+                            },
+                            castEmphasisScale = {
+                                type   = "range",
+                                name   = "Casting Scale",
+                                order  = 7,
+                                min    = 1,
+                                max    = 1.5,
+                                step   = 0.01,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().castEmphasisEnabled
+                                    if v ~= nil then return not v end
+                                    return not Options:GetCastEmphasisEnabled()
+                                end,
+                                get    = function() return tonumber(Options:GetFriendlyDB().castEmphasisScale) or
+                                    Options:GetCastEmphasisScale() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().castEmphasisScale = math.max(1,
+                                        math.min(1.5, tonumber(v) or 1.08)); Refresh()
+                                end,
+                            },
+                            castEmphasisBorderColor = {
+                                type     = "color",
+                                name     = "Outline Color",
+                                order    = 8,
+                                hasAlpha = true,
+                                hidden   = function()
+                                    local v = Options:GetFriendlyDB().castEmphasisEnabled
+                                    if v ~= nil then return not v end
+                                    return not Options:GetCastEmphasisEnabled()
+                                end,
+                                get      = function()
+                                    local c = Options:GetFriendlyDB().castEmphasisBorderColor
+                                    if type(c) == "table" then return c[1], c[2], c[3], c[4] or 1 end
+                                    return Options:GetCastEmphasisBorderColor()
+                                end,
+                                set      = function(_, r, g, b, a)
+                                    Options:GetFriendlyDB().castEmphasisBorderColor = { r, g, b, a or 1 }; Refresh()
+                                end,
+                            },
+                            castEmphasisGlow = {
+                                type   = "toggle",
+                                name   = "Show Glow",
+                                order  = 9,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().castEmphasisEnabled
+                                    if v ~= nil then return not v end
+                                    return not Options:GetCastEmphasisEnabled()
+                                end,
+                                get    = function()
+                                    local v = Options:GetFriendlyDB().castEmphasisGlow
+                                    if v ~= nil then return v end
+                                    return Options:GetCastEmphasisGlow()
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().castEmphasisGlow = v == true; Refresh()
+                                end,
+                            },
+                            castEmphasisGlowColor = {
+                                type     = "color",
+                                name     = "Glow Color",
+                                order    = 10,
+                                hasAlpha = true,
+                                hidden   = function()
+                                    local enabled = Options:GetFriendlyDB().castEmphasisEnabled
+                                    if enabled == nil then enabled = Options:GetCastEmphasisEnabled() end
+                                    local glow = Options:GetFriendlyDB().castEmphasisGlow
+                                    if glow == nil then glow = Options:GetCastEmphasisGlow() end
+                                    return not enabled or not glow
+                                end,
+                                get      = function()
+                                    local c = Options:GetFriendlyDB().castEmphasisGlowColor
+                                    if type(c) == "table" then return c[1], c[2], c[3], c[4] or 0.8 end
+                                    return Options:GetCastEmphasisGlowColor()
+                                end,
+                                set      = function(_, r, g, b, a)
+                                    Options:GetFriendlyDB().castEmphasisGlowColor = { r, g, b, a or 0.8 }; Refresh()
+                                end,
+                            },
+                            castEmphasisArrows = {
+                                type   = "toggle",
+                                name   = "Show Arrows",
+                                order  = 11,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().castEmphasisEnabled
+                                    if v ~= nil then return not v end
+                                    return not Options:GetCastEmphasisEnabled()
+                                end,
+                                get    = function()
+                                    local v = Options:GetFriendlyDB().castEmphasisArrows
+                                    if v ~= nil then return v end
+                                    return Options:GetCastEmphasisArrows()
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().castEmphasisArrows = v == true; Refresh()
+                                end,
+                            },
+                            castEmphasisArrowColor = {
+                                type     = "color",
+                                name     = "Arrow Color",
+                                order    = 12,
+                                hasAlpha = true,
+                                hidden   = function()
+                                    local enabled = Options:GetFriendlyDB().castEmphasisEnabled
+                                    if enabled == nil then enabled = Options:GetCastEmphasisEnabled() end
+                                    local arrows = Options:GetFriendlyDB().castEmphasisArrows
+                                    if arrows == nil then arrows = Options:GetCastEmphasisArrows() end
+                                    return not enabled or not arrows
+                                end,
+                                get      = function()
+                                    local c = Options:GetFriendlyDB().castEmphasisArrowColor
+                                    if type(c) == "table" then return c[1], c[2], c[3], c[4] or 1 end
+                                    return Options:GetCastEmphasisArrowColor()
+                                end,
+                                set      = function(_, r, g, b, a)
+                                    Options:GetFriendlyDB().castEmphasisArrowColor = { r, g, b, a or 1 }; Refresh()
+                                end,
+                            },
+                            sep_tex = { type = "header", name = "Cast Bar Appearance", order = 20 },
                             castBarTexture = {
                                 type   = "select",
                                 name   = "Bar Texture",
-                                order  = 11,
+                                order  = 21,
                                 values = TextureList,
                                 get    = function() return Options:GetFriendlyDB().castBarTexture or "__default" end,
                                 set    = function(_, v)
@@ -2795,7 +3048,7 @@ function Options:BuildConfiguration()
                             castBgColor = {
                                 type     = "color",
                                 name     = "Background Color",
-                                order    = 12,
+                                order    = 22,
                                 hasAlpha = true,
                                 get      = function()
                                     local c = Options:GetFriendlyDB().castBgColor or { 0.05, 0.06, 0.08, 0.92 }
@@ -2808,7 +3061,7 @@ function Options:BuildConfiguration()
                             castBorderColor = {
                                 type     = "color",
                                 name     = "Border Color",
-                                order    = 13,
+                                order    = 23,
                                 hasAlpha = true,
                                 get      = function()
                                     local c = Options:GetFriendlyDB().castBorderColor or { 0.14, 0.15, 0.20, 0.90 }
@@ -3088,8 +3341,10 @@ function Options:BuildConfiguration()
                                     if v ~= nil then return not v end
                                     return not Options:GetShowAuras()
                                 end,
-                                get    = function() return tonumber(Options:GetFriendlyDB().auraOffsetX) or
-                                    Options:GetAuraOffsetX() end,
+                                get    = function()
+                                    return tonumber(Options:GetFriendlyDB().auraOffsetX) or
+                                        Options:GetAuraOffsetX()
+                                end,
                                 set    = function(_, v)
                                     Options:GetFriendlyDB().auraOffsetX = math.max(-200,
                                         math.min(200, math.floor(tonumber(v) or 0)))
@@ -3108,8 +3363,10 @@ function Options:BuildConfiguration()
                                     if v ~= nil then return not v end
                                     return not Options:GetShowAuras()
                                 end,
-                                get    = function() return tonumber(Options:GetFriendlyDB().auraOffsetY) or
-                                    Options:GetAuraOffsetY() end,
+                                get    = function()
+                                    return tonumber(Options:GetFriendlyDB().auraOffsetY) or
+                                        Options:GetAuraOffsetY()
+                                end,
                                 set    = function(_, v)
                                     Options:GetFriendlyDB().auraOffsetY = math.max(-200,
                                         math.min(200, math.floor(tonumber(v) or 0)))

@@ -1649,7 +1649,9 @@ function Nameplates:UpdateTargetGlow(frame, unit)
         frame:SetBackdropBorderColor(bc[1], bc[2], bc[3], bc[4] or 0.9)
     end
 
-    if db.showTargetGlow == false then
+    local isCasting = frame._casting == true and db.castEmphasisEnabled == true
+
+    if db.showTargetGlow == false and not isCasting then
         RestoreBorder()
         frame.targetGlow:Hide()
         if frame.arrowL then frame.arrowL:Hide() end
@@ -1666,7 +1668,7 @@ function Nameplates:UpdateTargetGlow(frame, unit)
     local targetW  = baseW
     local targetH  = baseH
 
-    if isTarget then
+    if db.showTargetGlow ~= false and isTarget then
         -- Resolve target glow colour (custom DB override or theme accent).
         local gc = type(db.targetGlowColor) == "table" and db.targetGlowColor or nil
         local gr, gg, gb, ga
@@ -1711,7 +1713,7 @@ function Nameplates:UpdateTargetGlow(frame, unit)
             if frame.arrowL then frame.arrowL:Hide() end
             if frame.arrowR then frame.arrowR:Hide() end
         end
-    elseif isFocus then
+    elseif db.showTargetGlow ~= false and isFocus then
         local fc = type(db.focusGlowColor) == "table" and db.focusGlowColor or nil
         local fr, fg, fb, fa
         if fc then
@@ -1726,6 +1728,51 @@ function Nameplates:UpdateTargetGlow(frame, unit)
 
         if frame.arrowL then frame.arrowL:Hide() end
         if frame.arrowR then frame.arrowR:Hide() end
+    elseif isCasting then
+        local bc = type(db.castEmphasisBorderColor) == "table" and db.castEmphasisBorderColor or nil
+        local br, bg, bb, ba
+        if bc then
+            br, bg, bb, ba = bc[1], bc[2], bc[3], bc[4] or 1
+        else
+            local cc = type(db.castColor) == "table" and db.castColor or COLOR_CAST
+            br, bg, bb, ba = cc[1], cc[2], cc[3], cc[4] or 1
+        end
+
+        frame:SetBackdropBorderColor(br, bg, bb, ba)
+
+        if db.castEmphasisGlow ~= false then
+            local gc = type(db.castEmphasisGlowColor) == "table" and db.castEmphasisGlowColor or nil
+            local gr = gc and gc[1] or br
+            local gg = gc and gc[2] or bg
+            local gb = gc and gc[3] or bb
+            local ga = gc and (gc[4] or 0.8) or 0.8
+            frame.targetGlow:SetBackdropBorderColor(gr, gg, gb, ga * 0.6)
+            frame.targetGlow:Show()
+        else
+            frame.targetGlow:Hide()
+        end
+
+        local castScale = Clamp(tonumber(db.castEmphasisScale) or 1.08, 1, 1.5)
+        targetW = baseW * castScale
+        targetH = baseH * castScale
+
+        if db.castEmphasisArrows == true then
+            local ac = type(db.castEmphasisArrowColor) == "table" and db.castEmphasisArrowColor or nil
+            local ar = ac and ac[1] or br
+            local ag = ac and ac[2] or bg
+            local ab = ac and ac[3] or bb
+            if frame.arrowL then
+                frame.arrowL:SetVertexColor(ar, ag, ab, 1)
+                frame.arrowL:Show()
+            end
+            if frame.arrowR then
+                frame.arrowR:SetVertexColor(ar, ag, ab, 1)
+                frame.arrowR:Show()
+            end
+        else
+            if frame.arrowL then frame.arrowL:Hide() end
+            if frame.arrowR then frame.arrowR:Hide() end
+        end
     else
         RestoreBorder()
         frame.targetGlow:Hide()
@@ -1881,6 +1928,7 @@ function Nameplates:UpdateCastBar(frame, unit)
     if db.showCastBar == false then
         frame._casting = false
         frame.castContainer:Hide()
+        self:UpdateTargetGlow(frame, unit)
         return
     end
 
@@ -1905,6 +1953,7 @@ function Nameplates:UpdateCastBar(frame, unit)
         frame._casting = false
         frame.castContainer:Hide()
         _stopCastTicker(frame)
+        self:UpdateTargetGlow(frame, unit)
         return
     end
 
@@ -1962,6 +2011,7 @@ function Nameplates:UpdateCastBar(frame, unit)
     frame.castContainer:Show()
     -- Register with the shared single-ticker instead of spawning a new OnUpdate per plate.
     _startCastTicker(frame)
+    self:UpdateTargetGlow(frame, unit)
 end
 
 function Nameplates:UpdatePower(frame, unit)
@@ -2026,9 +2076,9 @@ function Nameplates:UpdateAllElements(frame, unit)
     self:UpdateLevel(frame, unit)
     self:UpdateEliteIcon(frame, unit)
     self:UpdateRaidMarker(frame, unit)
-    self:UpdateTargetGlow(frame, unit)
     self:UpdateThreat(frame, unit)
     self:UpdateCastBar(frame, unit)
+    self:UpdateTargetGlow(frame, unit)
     self:UpdateAuras(frame, unit)
     self:UpdatePower(frame, unit)
 end
@@ -2664,7 +2714,9 @@ function Nameplates:EnterTestMode()
         end
 
         -- Cast bar
+        frame._casting = false
         if mock.casting and frame.castContainer then
+            frame._casting = true
             frame.castText:SetText(mock.casting)
             frame.castBar:SetMinMaxValues(0, 1)
             frame.castBar:SetValue(mock.castProgress or 0.5)
@@ -2677,6 +2729,10 @@ function Nameplates:EnterTestMode()
                 frame.castShield:Hide()
             end
             frame.castContainer:Show()
+        end
+
+        if frame._casting and i ~= 1 then
+            self:UpdateTargetGlow(frame, frame._unit)
         end
 
         -- Threat on first hostile plate
