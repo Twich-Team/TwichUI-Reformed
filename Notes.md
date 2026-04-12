@@ -2,9 +2,9 @@
 
 ## NOTES
 
-- Please look at plater and their large selection of advanced configurations. we need some more of that. Particularly, at minimum I need to configure colors for when im tanking and have or do not have aggro, if im not tanking and have aggro, stacking settings, screen clamping, etc.
-
 - Can we investigate nameplate stacking options? I beleive plater and elvui have these options. I would like to be able to customize how they stack or clamp to the screen. for example if i have pulled a lot of enemies, i may not want some overlapping over each other so i can always ensure i see cast bars. Please look at plater and elvui for their stacking/positioning options for nameplates and see if we can implement any of these options.
+
+- In our nameplate configuration, lets make it more logical for players. Separate into two sub-tabs: Enemy and Friendly. Then each of those have their relevant configuration tabs within them
 
 - Our automatic remove transform isnt functioning, at least for crafting profession transforms. please look at leatrix plus and determine what we are doing wrong and fix.
 
@@ -14,7 +14,7 @@
 - Our notifications background and borders should use the same colors from the global appearance section in our configuration interface
 - Our data text menus should use the background and border settings from the global appearance section in our configuration interface
 
-- Our action bars do show the vehicle exit button frame and clicking the button works, however there is no button artwork in the frame. its just an empty square. Can we add the standard vehicle exit icon? Ui-vehicles-button-exit-down-icon
+- In the interface designer, the loot feed preview button overlaps the enable button
 
 # Tweaks
 

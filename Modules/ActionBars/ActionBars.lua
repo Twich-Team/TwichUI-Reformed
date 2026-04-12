@@ -426,6 +426,38 @@ local function EnsureVehicleExitButtonAnchored(button, holder)
         return
     end
 
+    if not button.__twichuiVehicleExitIcon then
+        local icon = button:CreateTexture(nil, "ARTWORK")
+        icon:SetPoint("TOPLEFT", button, "TOPLEFT", 4, -4)
+        icon:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", -4, 4)
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        button.__twichuiVehicleExitIcon = icon
+    end
+
+    local vehicleIcon = button.__twichuiVehicleExitIcon
+    if vehicleIcon then
+        if vehicleIcon.SetAtlas then
+            vehicleIcon:SetAtlas("UI-Vehicles-Button-Exit-Down", true)
+        else
+            vehicleIcon:SetTexture("Interface\\Vehicles\\UI-Vehicles-Button-Exit-Up")
+        end
+        vehicleIcon:SetAlpha(1)
+        vehicleIcon:Show()
+    end
+
+    if button.SetNormalTexture then
+        button:SetNormalTexture(nil)
+    end
+    if button.SetPushedTexture then
+        button:SetPushedTexture(nil)
+    end
+    if button.SetHighlightTexture then
+        button:SetHighlightTexture(nil)
+    end
+    if button.SetDisabledTexture then
+        button:SetDisabledTexture(nil)
+    end
+
     local function SyncVehicleExitVisibility()
         local holderShown = holder and holder.IsShown and holder:IsShown() or false
         local canExit = (type(CanExitVehicle) == "function" and CanExitVehicle() == true)
@@ -4601,6 +4633,10 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
     if barKey == "vehicleExit" then
         if button.__twichuiABChrome then
             button.__twichuiABChrome:Hide()
+        end
+        if button.__twichuiVehicleExitIcon then
+            button.__twichuiVehicleExitIcon:Show()
+            button.__twichuiVehicleExitIcon:SetAlpha(1)
         end
         self:HideButtonHoverEffect(button)
         self:HideFailedActionFeedback(button)

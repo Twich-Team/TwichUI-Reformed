@@ -1548,6 +1548,8 @@ function MoverModule:_GetInspector()
                     end
                 end)
             end)
+            headerToggle:ClearAllPoints()
+            headerToggle:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 18, -56)
             headerToggle:Show()
         end
 
@@ -1573,6 +1575,12 @@ function MoverModule:_GetInspector()
             if isDisabled then
                 headerAction._fs:SetTextColor(0.46, 0.48, 0.56)
                 headerAction:SetBackdropBorderColor(0.12, 0.13, 0.18, 0.9)
+            end
+            headerAction:ClearAllPoints()
+            if headerToggle and headerToggle:IsShown() then
+                headerAction:SetPoint("LEFT", headerToggle, "RIGHT", 8, 0)
+            else
+                headerAction:SetPoint("TOPLEFT", dockHeaderContent, "TOPLEFT", 18, -56)
             end
             headerAction:Show()
         end
