@@ -2397,6 +2397,11 @@ end
 -- Called from Options when any setting changes
 function Nameplates:Refresh()
     self:InvalidateCache()
+    -- Friendly/enemy footprint changes must be pushed into Blizzard's native
+    -- nameplate system immediately. If we only apply these on enable/zone load,
+    -- the friendly DB can say height=10 while the live Blizzard friendly plate
+    -- still remains at the previous 26px size until reload.
+    self:ApplyCVars()
     -- Update cooldown timer font on all existing icon pools when settings change.
     local function updatePoolFont(frame)
         if frame and frame.auraFrame and frame.auraFrame.icons then
@@ -2639,6 +2644,13 @@ function Nameplates:BuildDebugReport()
             safeGet("  frame size", function()
                 return string.format("  frame size  : %.0f x %.0f", frame:GetWidth(), frame:GetHeight())
             end)
+            if frame._plate then
+                safeGet("  native plate", function()
+                    local plate = frame._plate
+                    return string.format("  nativePlate : %.0f x %.0f",
+                        plate:GetWidth(), plate:GetHeight())
+                end)
+            end
             safeGet("  frame point", function()
                 local p1, relTo, p2, x, y = frame:GetPoint(1)
                 local relName = relTo and relTo.GetName and relTo:GetName() or tostring(relTo)
