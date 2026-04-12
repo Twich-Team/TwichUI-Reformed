@@ -56,6 +56,8 @@ local UnitCanAttack                        = _G.UnitCanAttack
 local UnitLevel                            = _G.UnitLevel
 local UnitIsUnit                           = _G.UnitIsUnit
 local UnitClass                            = _G.UnitClass
+local GetRaidTargetIndex                   = _G.GetRaidTargetIndex
+local SetRaidTargetIconTexture             = _G.SetRaidTargetIconTexture
 local UnitAffectingCombat                  = _G.UnitAffectingCombat
 local UnitThreatSituation                  = _G.UnitThreatSituation
 local UnitIsTapDenied                      = _G.UnitIsTapDenied
@@ -193,6 +195,18 @@ local NAME_ANCHOR_LAYOUTS = {
     BELOW_RIGHT = { point = "TOPRIGHT", relativeTo = "frame", relativePoint = "BOTTOMRIGHT", x = -2, y = 0, justify = "RIGHT" },
 }
 
+local RAID_MARKER_POINTS = {
+    TOP = true,
+    BOTTOM = true,
+    LEFT = true,
+    RIGHT = true,
+    CENTER = true,
+    TOPLEFT = true,
+    TOPRIGHT = true,
+    BOTTOMLEFT = true,
+    BOTTOMRIGHT = true,
+}
+
 local function NormalizeNameAnchor(anchor)
     local normalized = LEGACY_NAME_ANCHORS[anchor] or anchor
     if NAME_ANCHOR_LAYOUTS[normalized] then
@@ -233,6 +247,28 @@ local function ApplyNameTextLayout(frame, db, width)
     nameText:SetSpacing(0)
     nameText:SetPoint(layout.point, anchorFrame, layout.relativePoint, (layout.x or 0) + nameOX, (layout.y or 0) + nameOY)
     nameText:SetJustifyH(justify)
+end
+
+local function NormalizeRaidMarkerPoint(point)
+    if RAID_MARKER_POINTS[point] then
+        return point
+    end
+    return "TOP"
+end
+
+local function ApplyRaidMarkerLayout(frame, db)
+    if not frame or not frame.raidMarkerIcon then return end
+
+    local marker = frame.raidMarkerIcon
+    local point = NormalizeRaidMarkerPoint(db.raidMarkerPoint)
+    local scale = Clamp(tonumber(db.raidMarkerScale) or 1, 0.5, 3)
+    local size = Clamp(18 * scale, 8, 64)
+    local offsetX = tonumber(db.raidMarkerOffsetX) or 0
+    local offsetY = tonumber(db.raidMarkerOffsetY) or 0
+
+    marker:ClearAllPoints()
+    marker:SetSize(size, size)
+    marker:SetPoint(point, frame, point, offsetX, offsetY)
 end
 
 local function EaseOutCubic(progress)
@@ -938,7 +974,21 @@ function Nameplates:BuildPlateFrame(parentPlate)
     eliteIcon:SetSize(14, 14)
     eliteIcon:SetPoint("LEFT", frame, "RIGHT", 4, 0)
     eliteIcon:Hide()
-    frame.eliteIcon      = eliteIcon
+    frame.eliteIcon         = eliteIcon
+
+    -- ── Raid target marker ───────────────────────────────────────────────────
+    local raidMarkerOverlay = CreateFrame("Frame", nil, frame)
+    raidMarkerOverlay:SetAllPoints()
+    raidMarkerOverlay:SetFrameLevel(NP_FRAME_LEVEL + 10)
+    raidMarkerOverlay:EnableMouse(false)
+    frame.raidMarkerOverlay = raidMarkerOverlay
+
+    local raidMarkerIcon = raidMarkerOverlay:CreateTexture(nil, "OVERLAY", nil, 7)
+    raidMarkerIcon:SetTexture([[Interface\TargetingFrame\UI-RaidTargetingIcons]])
+    raidMarkerIcon:SetDrawLayer("OVERLAY", 7)
+    raidMarkerIcon:Hide()
+    frame.raidMarkerIcon = raidMarkerIcon
+    ApplyRaidMarkerLayout(frame, db)
 
     -- ── Power bar ─────────────────────────────────────────────────────────────
     -- Always created so toggling Show/Hide live works without a frame rebuild.
@@ -1497,6 +1547,45 @@ function Nameplates:UpdateEliteIcon(frame, unit)
     end
 end
 
+function Nameplates:UpdateRaidMarker(frame, unit)
+    if not frame or not frame.raidMarkerIcon then return end
+
+    local db = self:GetEffectiveDB(unit)
+    if db.showRaidMarker == false then
+        frame.raidMarkerIcon:Hide()
+        return
+    end
+
+    ApplyRaidMarkerLayout(frame, db)
+
+    local index = nil
+    if GetRaidTargetIndex then
+        pcall(function()
+            index = GetRaidTargetIndex(unit)
+        end)
+    end
+
+    frame.raidMarkerIcon:SetTexture([[Interface\TargetingFrame\UI-RaidTargetingIcons]])
+
+    if _G.issecretvalue and _G.issecretvalue(index) then
+        if frame.raidMarkerIcon.SetSpriteSheetCell then
+            local ok = pcall(function()
+                frame.raidMarkerIcon:SetSpriteSheetCell(index, 4, 4, 64, 64)
+            end)
+            if ok then
+                frame.raidMarkerIcon:Show()
+                return
+            end
+        end
+    elseif (_G.canaccessvalue == nil or _G.canaccessvalue(index)) and index and SetRaidTargetIconTexture then
+        SetRaidTargetIconTexture(frame.raidMarkerIcon, index)
+        frame.raidMarkerIcon:Show()
+        return
+    end
+
+    frame.raidMarkerIcon:Hide()
+end
+
 function Nameplates:UpdateTargetGlow(frame, unit)
     if not frame or not frame.targetGlow then return end
     local db = self:GetEffectiveDB(unit)
@@ -1883,6 +1972,7 @@ function Nameplates:UpdateAllElements(frame, unit)
     self:UpdateName(frame, unit)
     self:UpdateLevel(frame, unit)
     self:UpdateEliteIcon(frame, unit)
+    self:UpdateRaidMarker(frame, unit)
     self:UpdateTargetGlow(frame, unit)
     self:UpdateThreat(frame, unit)
     self:UpdateCastBar(frame, unit)
@@ -2666,6 +2756,7 @@ function Nameplates:OnEnable()
     self:RegisterEvent("UNIT_THREAT_SITUATION_UPDATE", "OnThreatUpdate")
     self:RegisterEvent("PLAYER_TARGET_CHANGED", "OnTargetFocusChanged")
     self:RegisterEvent("PLAYER_FOCUS_CHANGED", "OnTargetFocusChanged")
+    self:RegisterEvent("RAID_TARGET_UPDATE", "OnRaidTargetUpdate")
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "OnPlayerEnteringWorld")
     -- Re-suppress Blizzard plate art when entering combat (Blizzard re-shows
     -- threat rings / selection art on PLAYER_REGEN_DISABLED and UNIT_THREAT_*).
@@ -2813,6 +2904,14 @@ end
 function Nameplates:OnTargetFocusChanged()
     for unitID, frame in pairs(self._plates) do
         self:UpdateTargetGlow(frame, unitID)
+    end
+end
+
+function Nameplates:OnRaidTargetUpdate()
+    for unitID, frame in pairs(self._plates) do
+        if frame and UnitExists(unitID) then
+            self:UpdateRaidMarker(frame, unitID)
+        end
     end
 end
 
@@ -3042,7 +3141,8 @@ function Nameplates:BuildDebugReport()
         "castFont", "castFontSize", "castHeight", "showCastBar", "showPowerBar",
         "nameFont", "nameFontSize", "nameFontFlags", "nameAnchorPoint", "nameJustify", "nameWidth",
         "nameOffsetX", "nameOffsetY",
-        "showLevel", "showEliteIcon", "showTargetGlow", "showTargetArrow",
+        "showLevel", "showEliteIcon", "showRaidMarker", "raidMarkerPoint", "raidMarkerOffsetX", "raidMarkerOffsetY",
+        "raidMarkerScale", "showTargetGlow", "showTargetArrow",
         "showThreat", "showAuras", "auraSize", "auraMax", "auraOnlyMine",
     }
     addDBSection("--- Main DB ---", self:GetDB(), dbKeys)
@@ -3188,6 +3288,17 @@ function Nameplates:BuildDebugReport()
                 safeGet("  castBar", function()
                     local cb = frame.castBar
                     return string.format("  castBar     : IsShown=%s", tostring(cb:IsShown()))
+                end)
+            end
+            if frame.raidMarkerIcon then
+                safeGet("  raidMarker", function()
+                    local marker = frame.raidMarkerIcon
+                    local index = nil
+                    if GetRaidTargetIndex then
+                        pcall(function() index = GetRaidTargetIndex(unit) end)
+                    end
+                    return string.format("  raidMarker  : shown=%s  enabled=%s  index=%s",
+                        tostring(marker:IsShown()), tostring(effDB.showRaidMarker ~= false), fmtValue(index))
                 end)
             end
             if frame.powerBar and frame.powerContainer then

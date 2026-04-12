@@ -135,6 +135,18 @@ local NAME_ANCHOR_POINTS = {
     BELOW_RIGHT   = "Below Right",
 }
 
+local RAID_MARKER_POINTS = {
+    TOP = "Top",
+    BOTTOM = "Bottom",
+    LEFT = "Left",
+    RIGHT = "Right",
+    CENTER = "Center",
+    TOPLEFT = "Top Left",
+    TOPRIGHT = "Top Right",
+    BOTTOMLEFT = "Bottom Left",
+    BOTTOMRIGHT = "Bottom Right",
+}
+
 -- ── Individual getters / setters ──────────────────────────────────────────────
 
 -- Width / height
@@ -229,6 +241,36 @@ function Options:GetShowThreat() return self:GetDB().showThreat ~= false end
 
 function Options:SetShowThreat(_, v)
     self:GetDB().showThreat = v == true; Refresh()
+end
+
+function Options:GetShowRaidMarker() return self:GetDB().showRaidMarker ~= false end
+
+function Options:SetShowRaidMarker(_, v)
+    self:GetDB().showRaidMarker = v == true; Refresh()
+end
+
+function Options:GetRaidMarkerPoint() return self:GetDB().raidMarkerPoint or "TOP" end
+
+function Options:SetRaidMarkerPoint(_, v)
+    self:GetDB().raidMarkerPoint = v or "TOP"; Refresh()
+end
+
+function Options:GetRaidMarkerOffsetX() return tonumber(self:GetDB().raidMarkerOffsetX) or 0 end
+
+function Options:SetRaidMarkerOffsetX(_, v)
+    self:GetDB().raidMarkerOffsetX = math.max(-80, math.min(80, tonumber(v) or 0)); Refresh()
+end
+
+function Options:GetRaidMarkerOffsetY() return tonumber(self:GetDB().raidMarkerOffsetY) or 0 end
+
+function Options:SetRaidMarkerOffsetY(_, v)
+    self:GetDB().raidMarkerOffsetY = math.max(-80, math.min(80, tonumber(v) or 0)); Refresh()
+end
+
+function Options:GetRaidMarkerScale() return tonumber(self:GetDB().raidMarkerScale) or 1 end
+
+function Options:SetRaidMarkerScale(_, v)
+    self:GetDB().raidMarkerScale = math.max(0.5, math.min(3, tonumber(v) or 1)); Refresh()
 end
 
 -- Aggro color override
@@ -1703,11 +1745,63 @@ function Options:BuildConfiguration()
                                 get   = function() return Options:GetShowThreat() end,
                                 set   = function(_, v) Options:SetShowThreat(_, v) end,
                             },
-                            sepAggro = { type = "header", name = "Aggro Bar Color", order = 10 },
+                            sepRaidMarker = { type = "header", name = "Raid Marker", order = 5 },
+                            showRaidMarker = {
+                                type  = "toggle",
+                                name  = "Show Raid Marker",
+                                order = 6,
+                                width = "full",
+                                desc  = "Display the unit's raid target icon on the nameplate.",
+                                get   = function() return Options:GetShowRaidMarker() end,
+                                set   = function(_, v) Options:SetShowRaidMarker(_, v) end,
+                            },
+                            raidMarkerPoint = {
+                                type   = "select",
+                                name   = "Anchor Point",
+                                order  = 7,
+                                values = RAID_MARKER_POINTS,
+                                hidden = function() return not Options:GetShowRaidMarker() end,
+                                get    = function() return Options:GetRaidMarkerPoint() end,
+                                set    = function(_, v) Options:SetRaidMarkerPoint(_, v) end,
+                            },
+                            raidMarkerOffsetX = {
+                                type   = "range",
+                                name   = "Offset X",
+                                order  = 8,
+                                min    = -80,
+                                max    = 80,
+                                step   = 1,
+                                hidden = function() return not Options:GetShowRaidMarker() end,
+                                get    = function() return Options:GetRaidMarkerOffsetX() end,
+                                set    = function(_, v) Options:SetRaidMarkerOffsetX(_, v) end,
+                            },
+                            raidMarkerOffsetY = {
+                                type   = "range",
+                                name   = "Offset Y",
+                                order  = 9,
+                                min    = -80,
+                                max    = 80,
+                                step   = 1,
+                                hidden = function() return not Options:GetShowRaidMarker() end,
+                                get    = function() return Options:GetRaidMarkerOffsetY() end,
+                                set    = function(_, v) Options:SetRaidMarkerOffsetY(_, v) end,
+                            },
+                            raidMarkerScale = {
+                                type   = "range",
+                                name   = "Scale",
+                                order  = 10,
+                                min    = 0.5,
+                                max    = 3,
+                                step   = 0.05,
+                                hidden = function() return not Options:GetShowRaidMarker() end,
+                                get    = function() return Options:GetRaidMarkerScale() end,
+                                set    = function(_, v) Options:SetRaidMarkerScale(_, v) end,
+                            },
+                            sepAggro = { type = "header", name = "Aggro Bar Color", order = 20 },
                             showAggroColor = {
                                 type  = "toggle",
                                 name  = "Enable Aggro Color",
-                                order = 11,
+                                order = 21,
                                 width = "full",
                                 desc  =
                                 "Override the health bar color when you have aggro on an enemy. Uses a different color depending on whether you are tanking or not.",
@@ -1717,7 +1811,7 @@ function Options:BuildConfiguration()
                             aggroColorTank = {
                                 type     = "color",
                                 name     = "Tank Aggro Color",
-                                order    = 12,
+                                order    = 22,
                                 hasAlpha = false,
                                 desc     =
                                 "Health bar color when you have aggro and your role is Tank. Aggro is good — default green.",
@@ -1728,7 +1822,7 @@ function Options:BuildConfiguration()
                             aggroColorDps = {
                                 type     = "color",
                                 name     = "DPS / Healer Aggro Color",
-                                order    = 13,
+                                order    = 23,
                                 hasAlpha = false,
                                 desc     =
                                 "Health bar color when you have aggro and your role is DPS or Healer. Aggro is bad — default orange.",
@@ -2586,6 +2680,109 @@ function Options:BuildConfiguration()
                                 end,
                                 set    = function(_, v)
                                     Options:GetFriendlyDB().auraShowTimer = v == true; Refresh()
+                                end,
+                            },
+                        },
+                    },
+
+                    indicators = {
+                        type  = "group",
+                        name  = "Indicators",
+                        order = 8,
+                        args  = {
+                            showRaidMarker = {
+                                type  = "toggle",
+                                name  = "Show Raid Marker",
+                                order = 1,
+                                width = "full",
+                                desc  = "Display raid target markers on friendly nameplates.",
+                                get   = function()
+                                    local v = Options:GetFriendlyDB().showRaidMarker
+                                    if v ~= nil then return v end
+                                    return Options:GetShowRaidMarker()
+                                end,
+                                set   = function(_, v)
+                                    Options:GetFriendlyDB().showRaidMarker = v == true; Refresh()
+                                end,
+                            },
+                            raidMarkerPoint = {
+                                type   = "select",
+                                name   = "Anchor Point",
+                                order  = 2,
+                                values = RAID_MARKER_POINTS,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showRaidMarker
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowRaidMarker()
+                                end,
+                                get    = function()
+                                    return Options:GetFriendlyDB().raidMarkerPoint or Options:GetRaidMarkerPoint()
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().raidMarkerPoint = v; Refresh()
+                                end,
+                            },
+                            raidMarkerOffsetX = {
+                                type   = "range",
+                                name   = "Offset X",
+                                order  = 3,
+                                min    = -80,
+                                max    = 80,
+                                step   = 1,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showRaidMarker
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowRaidMarker()
+                                end,
+                                get    = function()
+                                    local v = Options:GetFriendlyDB().raidMarkerOffsetX
+                                    if v ~= nil then return v end
+                                    return Options:GetRaidMarkerOffsetX()
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().raidMarkerOffsetX = v; Refresh()
+                                end,
+                            },
+                            raidMarkerOffsetY = {
+                                type   = "range",
+                                name   = "Offset Y",
+                                order  = 4,
+                                min    = -80,
+                                max    = 80,
+                                step   = 1,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showRaidMarker
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowRaidMarker()
+                                end,
+                                get    = function()
+                                    local v = Options:GetFriendlyDB().raidMarkerOffsetY
+                                    if v ~= nil then return v end
+                                    return Options:GetRaidMarkerOffsetY()
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().raidMarkerOffsetY = v; Refresh()
+                                end,
+                            },
+                            raidMarkerScale = {
+                                type   = "range",
+                                name   = "Scale",
+                                order  = 5,
+                                min    = 0.5,
+                                max    = 3,
+                                step   = 0.05,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showRaidMarker
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowRaidMarker()
+                                end,
+                                get    = function()
+                                    local v = Options:GetFriendlyDB().raidMarkerScale
+                                    if v ~= nil then return v end
+                                    return Options:GetRaidMarkerScale()
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().raidMarkerScale = v; Refresh()
                                 end,
                             },
                         },
