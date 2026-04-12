@@ -1696,16 +1696,24 @@ function Nameplates:UpdateTargetGlow(frame, unit)
         targetH = baseH * growH
 
         if db.showTargetArrows ~= false then
+            local arrowTex = GetArrowTexPath(db.targetArrowStyle)
+            local arrowSz = Clamp(db.targetArrowSize or 18, 8, 32)
             -- Use dedicated arrow color if set, otherwise fall back to the glow color.
             local ac = type(db.targetArrowColor) == "table" and db.targetArrowColor or nil
             local ar = ac and ac[1] or gr
             local ag = ac and ac[2] or gg
             local ab = ac and ac[3] or gb
             if frame.arrowL then
+                frame.arrowL:SetTexture(arrowTex)
+                frame.arrowL:SetTexCoord(unpack(ARROW_TC_RIGHT))
+                frame.arrowL:SetSize(arrowSz, arrowSz)
                 frame.arrowL:SetVertexColor(ar, ag, ab, 1)
                 frame.arrowL:Show()
             end
             if frame.arrowR then
+                frame.arrowR:SetTexture(arrowTex)
+                frame.arrowR:SetTexCoord(unpack(ARROW_TC_LEFT))
+                frame.arrowR:SetSize(arrowSz, arrowSz)
                 frame.arrowR:SetVertexColor(ar, ag, ab, 1)
                 frame.arrowR:Show()
             end
@@ -1757,15 +1765,24 @@ function Nameplates:UpdateTargetGlow(frame, unit)
         targetH = baseH * castScale
 
         if db.castEmphasisArrows == true then
+            local arrowStyle = db.castEmphasisArrowStyle or db.targetArrowStyle
+            local arrowTex = GetArrowTexPath(arrowStyle)
+            local arrowSz = Clamp(db.targetArrowSize or 18, 8, 32)
             local ac = type(db.castEmphasisArrowColor) == "table" and db.castEmphasisArrowColor or nil
             local ar = ac and ac[1] or br
             local ag = ac and ac[2] or bg
             local ab = ac and ac[3] or bb
             if frame.arrowL then
+                frame.arrowL:SetTexture(arrowTex)
+                frame.arrowL:SetTexCoord(unpack(ARROW_TC_RIGHT))
+                frame.arrowL:SetSize(arrowSz, arrowSz)
                 frame.arrowL:SetVertexColor(ar, ag, ab, 1)
                 frame.arrowL:Show()
             end
             if frame.arrowR then
+                frame.arrowR:SetTexture(arrowTex)
+                frame.arrowR:SetTexCoord(unpack(ARROW_TC_LEFT))
+                frame.arrowR:SetSize(arrowSz, arrowSz)
                 frame.arrowR:SetVertexColor(ar, ag, ab, 1)
                 frame.arrowR:Show()
             end

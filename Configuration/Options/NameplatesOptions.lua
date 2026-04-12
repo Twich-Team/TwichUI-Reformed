@@ -470,6 +470,18 @@ function Options:SetCastEmphasisArrowColor(_, r, g, b, a)
     self:GetDB().castEmphasisArrowColor = { r, g, b, a or 1 }; Refresh()
 end
 
+function Options:GetCastEmphasisArrowStyle()
+    return self:GetDB().castEmphasisArrowStyle or self:GetTargetArrowStyle()
+end
+
+function Options:SetCastEmphasisArrowStyle(_, v)
+    self:GetDB().castEmphasisArrowStyle = v or "ArrowUp"; Refresh()
+end
+
+function Options:GetCastEmphasisArrowPreviewTex()
+    return "Interface\\AddOns\\TwichUI_Reformed\\Media\\Textures\\Arrows\\" .. self:GetCastEmphasisArrowStyle() .. ".tga"
+end
+
 -- Auras
 function Options:GetShowAuras() return self:GetDB().showAuras ~= false end
 
@@ -924,9 +936,12 @@ local function LayoutArrowPickerButtons(frame)
 end
 
 local function RefreshArrowPickerSelection(frame)
-    local current = Options:GetTargetArrowStyle()
+    local current = (frame and frame._selectionGetter and frame._selectionGetter()) or Options:GetTargetArrowStyle()
     if frame and frame.Status then
         frame.Status:SetText("Current: " .. current)
+    end
+    if frame and frame.Title and frame._pickerTitle then
+        frame.Title:SetText(frame._pickerTitle)
     end
 
     for _, button in ipairs(_arrowPickerButtons) do
@@ -1072,7 +1087,11 @@ local function PopulateArrowPicker(frame)
         button.Label:SetText((style:match("^Arrow(.+)$") or style))
 
         button:SetScript("OnClick", function(self)
-            Options:SetTargetArrowStyle(nil, self._style)
+            if frame and frame._selectionSetter then
+                frame._selectionSetter(self._style)
+            else
+                Options:SetTargetArrowStyle(nil, self._style)
+            end
             RefreshArrowPickerSelection(frame)
         end)
 
@@ -1083,11 +1102,21 @@ local function PopulateArrowPicker(frame)
     LayoutArrowPickerButtons(frame)
 end
 
-local function OpenArrowPicker()
+local function OpenArrowPicker(config)
     local frame = EnsureArrowPickerFrame()
-    if frame:IsShown() then
+    local pickerKey = type(config) == "table" and config.key or "target-arrows"
+    if frame:IsShown() and frame._pickerKey == pickerKey then
         frame:Hide()
         return
+    end
+
+    frame._pickerKey = pickerKey
+    frame._pickerTitle = (type(config) == "table" and config.title) or "Target Arrow Browser"
+    frame._selectionGetter = (type(config) == "table" and config.get) or function()
+        return Options:GetTargetArrowStyle()
+    end
+    frame._selectionSetter = (type(config) == "table" and config.set) or function(style)
+        Options:SetTargetArrowStyle(nil, style)
     end
 
     PopulateArrowPicker(frame)
@@ -1854,8 +1883,10 @@ function Options:BuildConfiguration()
                                 name     = "Glow Color",
                                 order    = 10,
                                 hasAlpha = true,
-                                hidden   = function() return not Options:GetCastEmphasisEnabled() or
-                                    not Options:GetCastEmphasisGlow() end,
+                                hidden   = function()
+                                    return not Options:GetCastEmphasisEnabled() or
+                                        not Options:GetCastEmphasisGlow()
+                                end,
                                 get      = function() return Options:GetCastEmphasisGlowColor() end,
                                 set      = function(_, r, g, b, a) Options:SetCastEmphasisGlowColor(_, r, g, b, a) end,
                             },
@@ -1867,13 +1898,45 @@ function Options:BuildConfiguration()
                                 get    = function() return Options:GetCastEmphasisArrows() end,
                                 set    = function(_, v) Options:SetCastEmphasisArrows(_, v) end,
                             },
+                            castEmphasisArrowPicker = {
+                                type   = "execute",
+                                name   = "Browse Casting Arrows...",
+                                desc   = "Choose which arrow style to show on actively casting units.",
+                                order  = 11.5,
+                                hidden = function() return not Options:GetCastEmphasisEnabled() or
+                                    not Options:GetCastEmphasisArrows() end,
+                                func   = function()
+                                    OpenArrowPicker({
+                                        key = "cast-emphasis-arrows",
+                                        title = "Casting Arrow Browser",
+                                        get = function() return Options:GetCastEmphasisArrowStyle() end,
+                                        set = function(style) Options:SetCastEmphasisArrowStyle(nil, style) end,
+                                    })
+                                end,
+                                width  = "normal",
+                            },
+                            castEmphasisArrowPreview = {
+                                type        = "description",
+                                name        = function()
+                                    return "Current: " .. Options:GetCastEmphasisArrowStyle()
+                                end,
+                                order       = 11.75,
+                                hidden      = function() return not Options:GetCastEmphasisEnabled() or
+                                    not Options:GetCastEmphasisArrows() end,
+                                image       = function() return Options:GetCastEmphasisArrowPreviewTex() end,
+                                imageWidth  = 64,
+                                imageHeight = 64,
+                                width       = "full",
+                            },
                             castEmphasisArrowColor = {
                                 type     = "color",
                                 name     = "Arrow Color",
                                 order    = 12,
                                 hasAlpha = true,
-                                hidden   = function() return not Options:GetCastEmphasisEnabled() or
-                                    not Options:GetCastEmphasisArrows() end,
+                                hidden   = function()
+                                    return not Options:GetCastEmphasisEnabled() or
+                                        not Options:GetCastEmphasisArrows()
+                                end,
                                 get      = function() return Options:GetCastEmphasisArrowColor() end,
                                 set      = function(_, r, g, b, a) Options:SetCastEmphasisArrowColor(_, r, g, b, a) end,
                             },
@@ -2930,8 +2993,10 @@ function Options:BuildConfiguration()
                                     if v ~= nil then return not v end
                                     return not Options:GetCastEmphasisEnabled()
                                 end,
-                                get    = function() return tonumber(Options:GetFriendlyDB().castEmphasisScale) or
-                                    Options:GetCastEmphasisScale() end,
+                                get    = function()
+                                    return tonumber(Options:GetFriendlyDB().castEmphasisScale) or
+                                        Options:GetCastEmphasisScale()
+                                end,
                                 set    = function(_, v)
                                     Options:GetFriendlyDB().castEmphasisScale = math.max(1,
                                         math.min(1.5, tonumber(v) or 1.08)); Refresh()
@@ -3012,6 +3077,58 @@ function Options:BuildConfiguration()
                                 set    = function(_, v)
                                     Options:GetFriendlyDB().castEmphasisArrows = v == true; Refresh()
                                 end,
+                            },
+                            castEmphasisArrowPicker = {
+                                type   = "execute",
+                                name   = "Browse Casting Arrows...",
+                                desc   = "Choose which arrow style to show on friendly casting units.",
+                                order  = 11.5,
+                                hidden = function()
+                                    local enabled = Options:GetFriendlyDB().castEmphasisEnabled
+                                    if enabled == nil then enabled = Options:GetCastEmphasisEnabled() end
+                                    local arrows = Options:GetFriendlyDB().castEmphasisArrows
+                                    if arrows == nil then arrows = Options:GetCastEmphasisArrows() end
+                                    return not enabled or not arrows
+                                end,
+                                func   = function()
+                                    OpenArrowPicker({
+                                        key = "friendly-cast-emphasis-arrows",
+                                        title = "Friendly Casting Arrow Browser",
+                                        get = function()
+                                            return Options:GetFriendlyDB().castEmphasisArrowStyle or
+                                            Options:GetCastEmphasisArrowStyle()
+                                        end,
+                                        set = function(style)
+                                            Options:GetFriendlyDB().castEmphasisArrowStyle = style
+                                            Refresh()
+                                        end,
+                                    })
+                                end,
+                                width  = "normal",
+                            },
+                            castEmphasisArrowPreview = {
+                                type        = "description",
+                                name        = function()
+                                    local style = Options:GetFriendlyDB().castEmphasisArrowStyle or
+                                    Options:GetCastEmphasisArrowStyle()
+                                    return "Current: " .. tostring(style)
+                                end,
+                                order       = 11.75,
+                                hidden      = function()
+                                    local enabled = Options:GetFriendlyDB().castEmphasisEnabled
+                                    if enabled == nil then enabled = Options:GetCastEmphasisEnabled() end
+                                    local arrows = Options:GetFriendlyDB().castEmphasisArrows
+                                    if arrows == nil then arrows = Options:GetCastEmphasisArrows() end
+                                    return not enabled or not arrows
+                                end,
+                                image       = function()
+                                    local style = Options:GetFriendlyDB().castEmphasisArrowStyle or
+                                    Options:GetCastEmphasisArrowStyle()
+                                    return ARROW_BASE .. tostring(style) .. ".tga"
+                                end,
+                                imageWidth  = 64,
+                                imageHeight = 64,
+                                width       = "full",
                             },
                             castEmphasisArrowColor = {
                                 type     = "color",
