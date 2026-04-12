@@ -14,6 +14,7 @@
     <Include file='ActionBars\!load.xml' />
     <Include file='UnitFrames\!load.xml' />
     <Include file='Nameplates\!load.xml' />
+    <Include file='Tooltip\!load.xml' />
     <Include file='ThirdPartyAPI\!load.xml' />
     <Include file='QualityOfLife\!load.xml' />
     <Include file='BestInSlot\!load.xml' />

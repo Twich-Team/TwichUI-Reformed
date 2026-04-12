@@ -85,6 +85,13 @@ local NAV_ITEMS = {
         path = { "Notification Panel" },
     },
     {
+        id = "tooltip",
+        title = "Tooltip",
+        description = "Anchor behavior, chrome polish, fonts, and unit tooltip treatment.",
+        accent = { 0.94, 0.77, 0.28 },
+        path = { "Tooltip" },
+    },
+    {
         id = "errorLog",
         title = "Error Log",
         description = "Captured TwichUI errors, notification behavior, and log retention settings.",
@@ -233,6 +240,30 @@ local FEATURE_CARDS = {
             local width = options.GetPanelWidth and options:GetPanelWidth() or 0
             local maxToasts = options.GetMaxToasts and options:GetMaxToasts() or 0
             return ("Width %d | Max %d toasts"):format(width, maxToasts)
+        end,
+    },
+    {
+        title = "Tooltip",
+        subtitle = "Tune anchor behavior, status bars, and the premium chrome used across Blizzard tooltips.",
+        accent = { 0.95, 0.77, 0.28 },
+        pageId = "tooltip",
+        path = { "Tooltip" },
+        status = function()
+            local options = ConfigurationModule.Options and ConfigurationModule.Options.Tooltip
+            if not options then
+                return "Unavailable"
+            end
+
+            local mode = options.GetAnchorMode and options:GetAnchorMode() or "default"
+            local scale = options.GetScale and options:GetScale() or 1
+            return ("%s anchor | Scale %.2f"):format(tostring(mode):gsub("^%l", string.upper), scale)
+        end,
+        actionLabel = "Preview",
+        action = function()
+            local module = T:GetModule("Tooltip", true)
+            if module and module.ShowPreview then
+                module:ShowPreview()
+            end
         end,
     },
     {
