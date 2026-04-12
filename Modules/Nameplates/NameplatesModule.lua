@@ -240,6 +240,29 @@ local function EaseOutCubic(progress)
     return 1 - (inv * inv * inv)
 end
 
+local function SanitizeDebugLine(value, fallback)
+    local placeholder = fallback or "<secret>"
+    if value == nil then return placeholder end
+
+    local text = value
+    if type(text) ~= "string" then
+        local ok, converted = pcall(tostring, value)
+        if not ok or type(converted) ~= "string" then
+            return placeholder
+        end
+        text = converted
+    end
+
+    local ok, concatenated = pcall(function()
+        return table.concat({ text }, "")
+    end)
+    if ok and type(concatenated) == "string" then
+        return concatenated
+    end
+
+    return placeholder
+end
+
 -- CVars we take control of while the module is active
 local NAMEPLATE_CVARS    = {
     nameplateMinAlpha              = "1",
@@ -1251,6 +1274,32 @@ function Nameplates:AnimatePlateFrameAlpha(frame, alpha, duration, onFinished, i
     end
 end
 
+function Nameplates:ShouldShowPowerForUnit(unit, plate)
+    if not unit then return false end
+    if UnitIsPlayer(unit) == true then return true end
+
+    local hostile = false
+    pcall(function()
+        hostile = UnitCanAttack and UnitCanAttack("player", unit) == true
+    end)
+    if hostile then
+        return true
+    end
+
+    local nativeFrame = plate and plate.UnitFrame
+    if not nativeFrame then return false end
+
+    local visible = false
+    pcall(function()
+        local power = nativeFrame.manabar or nativeFrame.ManaBar or nativeFrame.powerBarAlt or nativeFrame.PowerBarAlt
+        if power and power.IsShown and power:IsShown() then
+            visible = true
+        end
+    end)
+
+    return visible
+end
+
 function Nameplates:AnimatePlateFrameGeometry(frame, width, height, db, instant)
     if not frame or not frame._plate then return end
 
@@ -1779,8 +1828,11 @@ function Nameplates:UpdatePower(frame, unit)
         return
     end
 
-    -- _showPower is seeded in OnNamePlateAdded (true for players, false for NPC
-    -- nameplates) and toggled by UNIT_POWER_BAR_SHOW / UNIT_POWER_BAR_HIDE events.
+    if frame._showPower == nil or frame._showPower == false then
+        frame._showPower = self:ShouldShowPowerForUnit(unit, frame._plate)
+    end
+
+    -- _showPower is seeded on add and can be promoted later by runtime events.
     -- This avoids any comparison against UnitPowerMax (a secret number in Midnight).
     if not frame._showPower then
         frame.powerContainer:Hide()
@@ -2233,11 +2285,9 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     self:ResizePlateFrame(frame)
 
     -- Power bar visibility seed.
-    -- UnitPowerMax returns a secret in Midnight and cannot be compared even inside
-    -- pcall (upvalue taint propagates across pcall boundaries).  Instead we default
-    -- based on unit type: players always have a meaningful power resource; NPCs
-    -- default to hidden and are shown only when UNIT_POWER_BAR_SHOW fires.
-    frame._showPower = (UnitIsPlayer(unitID) == true)
+    -- Midnight secrets make direct UnitPowerMax comparisons unreliable, so prefer
+    -- native frame visibility when it exists and fall back to always-on for players.
+    frame._showPower = self:ShouldShowPowerForUnit(unitID, plate)
 
     local db         = self:GetEffectiveDB(unitID)
     local alpha      = Clamp(db.alpha or 1, 0.1, 1)
@@ -2698,6 +2748,9 @@ end
 function Nameplates:OnUnitPower(_, unit)
     local frame = unit and self._plates[unit]
     if frame and UnitExists(unit) then
+        if not frame._showPower then
+            frame._showPower = true
+        end
         self:UpdatePower(frame, unit)
     end
 end
@@ -2706,6 +2759,9 @@ function Nameplates:OnUnitDisplayPower(_, unit)
     -- Power type changed (e.g. druid shifting form) — re-fetch type and re-color.
     local frame = unit and self._plates[unit]
     if frame and UnitExists(unit) then
+        if not frame._showPower then
+            frame._showPower = true
+        end
         self:UpdatePower(frame, unit)
     end
 end
@@ -2723,8 +2779,12 @@ function Nameplates:OnUnitPowerBarHide(_, unit)
     -- The unit's power bar has been hidden by the server (mechanic ended, etc.).
     local frame = unit and self._plates[unit]
     if frame then
-        frame._showPower = false
-        if frame.powerContainer then frame.powerContainer:Hide() end
+        frame._showPower = self:ShouldShowPowerForUnit(unit, frame._plate)
+        if frame._showPower then
+            if UnitExists(unit) then self:UpdatePower(frame, unit) end
+        elseif frame.powerContainer then
+            frame.powerContainer:Hide()
+        end
     end
 end
 
@@ -2949,7 +3009,7 @@ end
 -- ── Debug report ─────────────────────────────────────────────────────────────
 function Nameplates:BuildDebugReport()
     local lines = {}
-    local function add(s) lines[#lines + 1] = s end
+    local function add(s) lines[#lines + 1] = SanitizeDebugLine(s) end
     local function fmtValue(v)
         local ok, ts = pcall(tostring, v)
         return (ok and type(ts) == "string") and ts or "<secret>"
@@ -3127,6 +3187,14 @@ function Nameplates:BuildDebugReport()
                     return string.format("  castBar     : IsShown=%s", tostring(cb:IsShown()))
                 end)
             end
+            if frame.powerBar and frame.powerContainer then
+                safeGet("  powerBar", function()
+                    local pb = frame.powerBar
+                    local pc = frame.powerContainer
+                    return string.format("  powerBar    : container=%s  bar=%s  seeded=%s",
+                        tostring(pc:IsShown()), tostring(pb:IsShown()), tostring(frame._showPower))
+                end)
+            end
             add("")
         end
     end
@@ -3149,28 +3217,12 @@ function Nameplates:BuildDebugReport()
             add("--- Diagnostic log (last " .. math.min(#logLines, 20) .. ") ---")
             local start = math.max(1, #logLines - 19)
             for i = start, #logLines do
-                local v = logLines[i]
-                if type(v) == "string" then
-                    add(v)
-                else
-                    local ok, s = pcall(tostring, v)
-                    add((ok and type(s) == "string") and s or "<secret>")
-                end
+                add(logLines[i])
             end
         end
     end
 
-    -- Safe concat: guard against any secrets that slipped into the lines table.
-    local out = {}
-    for i, v in ipairs(lines) do
-        if type(v) == "string" then
-            out[i] = v
-        else
-            local ok, s = pcall(tostring, v)
-            out[i] = (ok and type(s) == "string") and s or "<secret@" .. tostring(i) .. ">"
-        end
-    end
-    return table.concat(out, "\n")
+    return table.concat(lines, "\n")
 end
 
 -- ── DebugConsole source registration ────────────────────────────────────────
