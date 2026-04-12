@@ -1138,14 +1138,14 @@ function Nameplates:UpdateHealth(frame, unit)
         if fmt == "none" then
             frame.healthText:SetText("")
         elseif fmt == "percent" then
-            -- UnitHealthPercent returns a secret number in Midnight — comparison (pct > 1) is
-            -- blocked, but string.format with %d accepts secret numbers directly (Plater verified).
-            -- UnitHealthPercent(unit, true) returns 0-100 scale without CurveConstants.ScaleTo100.
-            -- Wrapped in pcall in case the API doesn't exist on this build.
+            -- Midnight exposes UnitHealthPercent, but the raw return can be normalized unless
+            -- CurveConstants.ScaleTo100 is provided. oUF's tag path uses the scaled form.
+            -- Keep this wrapped in pcall because API availability/signature can vary by build.
             local ok, result = pcall(function()
                 local fn = _G.UnitHealthPercent
                 if fn then
-                    local pct = fn(unit, true)
+                    local curve = _G.CurveConstants and _G.CurveConstants.ScaleTo100
+                    local pct = curve and fn(unit, true, curve) or fn(unit, true)
                     return string.format("%d%%", pct)
                 end
             end)
