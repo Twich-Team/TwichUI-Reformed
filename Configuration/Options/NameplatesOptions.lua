@@ -1689,7 +1689,8 @@ function Options:BuildConfiguration()
                                 order = 3,
                                 get   = function()
                                     local v = Options:GetFriendlyDB().showAbsorb
-                                    return v ~= nil and v or Options:GetShowAbsorb()
+                                    if v ~= nil then return v end
+                                    return Options:GetShowAbsorb()
                                 end,
                                 set   = function(_, v) Options:GetFriendlyDB().showAbsorb = v == true; Refresh() end,
                             },
@@ -1790,7 +1791,8 @@ function Options:BuildConfiguration()
                                 order = 1,
                                 get   = function()
                                     local v = Options:GetFriendlyDB().showName
-                                    return v ~= nil and v or Options:GetShowName()
+                                    if v ~= nil then return v end
+                                    return Options:GetShowName()
                                 end,
                                 set   = function(_, v) Options:GetFriendlyDB().showName = v == true; Refresh() end,
                             },
@@ -1808,7 +1810,8 @@ function Options:BuildConfiguration()
                                 order = 3,
                                 get   = function()
                                     local v = Options:GetFriendlyDB().showLevel
-                                    return v ~= nil and v or Options:GetShowLevel()
+                                    if v ~= nil then return v end
+                                    return Options:GetShowLevel()
                                 end,
                                 set   = function(_, v) Options:GetFriendlyDB().showLevel = v == true; Refresh() end,
                             },
@@ -1818,7 +1821,8 @@ function Options:BuildConfiguration()
                                 order = 4,
                                 get   = function()
                                     local v = Options:GetFriendlyDB().showEliteIcon
-                                    return v ~= nil and v or Options:GetShowEliteIcon()
+                                    if v ~= nil then return v end
+                                    return Options:GetShowEliteIcon()
                                 end,
                                 set   = function(_, v) Options:GetFriendlyDB().showEliteIcon = v == true; Refresh() end,
                             },
@@ -1909,7 +1913,8 @@ function Options:BuildConfiguration()
                                 desc  = "Show cast bars on friendly nameplates. Disable to hide cast bars only on friendlies.",
                                 get   = function()
                                     local v = Options:GetFriendlyDB().showCastBar
-                                    return v ~= nil and v or Options:GetShowCastBar()
+                                    if v ~= nil then return v end
+                                    return Options:GetShowCastBar()
                                 end,
                                 set   = function(_, v) Options:GetFriendlyDB().showCastBar = v == true; Refresh() end,
                             },
@@ -2017,7 +2022,8 @@ function Options:BuildConfiguration()
                                 desc  = "Show power bars on friendly nameplates. Disable to hide power bars only on friendlies.",
                                 get   = function()
                                     local v = Options:GetFriendlyDB().showPowerBar
-                                    return v ~= nil and v or Options:GetShowPowerBar()
+                                    if v ~= nil then return v end
+                                    return Options:GetShowPowerBar()
                                 end,
                                 set   = function(_, v) Options:GetFriendlyDB().showPowerBar = v == true; Refresh() end,
                             },
@@ -2028,7 +2034,8 @@ function Options:BuildConfiguration()
                                 min    = 2, max = 14, step = 1,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showPowerBar
-                                    return not (v ~= nil and v or Options:GetShowPowerBar())
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowPowerBar()
                                 end,
                                 get    = function() return Options:GetFriendlyDB().powerBarHeight or Options:GetPowerBarHeight() end,
                                 set    = function(_, v)
@@ -2043,7 +2050,8 @@ function Options:BuildConfiguration()
                                 min    = 0, max = 12, step = 1,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showPowerBar
-                                    return not (v ~= nil and v or Options:GetShowPowerBar())
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowPowerBar()
                                 end,
                                 get    = function() return Options:GetFriendlyDB().powerBarGap or Options:GetPowerBarGap() end,
                                 set    = function(_, v)
@@ -2058,7 +2066,8 @@ function Options:BuildConfiguration()
                                 hasAlpha = true,
                                 hidden   = function()
                                     local v = Options:GetFriendlyDB().showPowerBar
-                                    return not (v ~= nil and v or Options:GetShowPowerBar())
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowPowerBar()
                                 end,
                                 get      = function()
                                     local c = Options:GetFriendlyDB().powerBgColor or { 0.05, 0.06, 0.08, 0.92 }
@@ -2075,7 +2084,8 @@ function Options:BuildConfiguration()
                                 hasAlpha = true,
                                 hidden   = function()
                                     local v = Options:GetFriendlyDB().showPowerBar
-                                    return not (v ~= nil and v or Options:GetShowPowerBar())
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowPowerBar()
                                 end,
                                 get      = function()
                                     local c = Options:GetFriendlyDB().powerBorderColor or { 0.14, 0.15, 0.20, 0.90 }
@@ -2101,7 +2111,8 @@ function Options:BuildConfiguration()
                                 width = "full",
                                 get   = function()
                                     local v = Options:GetFriendlyDB().showAuras
-                                    return v ~= nil and v or Options:GetShowAuras()
+                                    if v ~= nil then return v end
+                                    return Options:GetShowAuras()
                                 end,
                                 set   = function(_, v) Options:GetFriendlyDB().showAuras = v == true; Refresh() end,
                             },
@@ -2112,7 +2123,8 @@ function Options:BuildConfiguration()
                                 values = AURA_FILTER_VALUES,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showAuras
-                                    return not (v ~= nil and v or Options:GetShowAuras())
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowAuras()
                                 end,
                                 get    = function() return Options:GetFriendlyDB().auraFilter or Options:GetAuraFilter() end,
                                 set    = function(_, v) Options:GetFriendlyDB().auraFilter = v; Refresh() end,
@@ -2124,7 +2136,8 @@ function Options:BuildConfiguration()
                                 desc   = "Only display auras applied by you.",
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showAuras
-                                    return not (v ~= nil and v or Options:GetShowAuras())
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowAuras()
                                 end,
                                 get    = function() return Options:GetFriendlyDB().auraOnlyMine == true end,
                                 set    = function(_, v) Options:GetFriendlyDB().auraOnlyMine = v == true; Refresh() end,
@@ -2136,7 +2149,8 @@ function Options:BuildConfiguration()
                                 min    = 1, max = 10, step = 1,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showAuras
-                                    return not (v ~= nil and v or Options:GetShowAuras())
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowAuras()
                                 end,
                                 get    = function() return Options:GetFriendlyDB().auraMax or Options:GetAuraMax() end,
                                 set    = function(_, v)
@@ -2151,7 +2165,8 @@ function Options:BuildConfiguration()
                                 min    = 12, max = 40, step = 1,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showAuras
-                                    return not (v ~= nil and v or Options:GetShowAuras())
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowAuras()
                                 end,
                                 get    = function() return Options:GetFriendlyDB().auraSize or Options:GetAuraSize() end,
                                 set    = function(_, v)
@@ -2165,11 +2180,13 @@ function Options:BuildConfiguration()
                                 order  = 6,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showAuras
-                                    return not (v ~= nil and v or Options:GetShowAuras())
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowAuras()
                                 end,
                                 get    = function()
                                     local v = Options:GetFriendlyDB().auraShowTimer
-                                    return v ~= nil and v or Options:GetAuraShowTimer()
+                                    if v ~= nil then return v end
+                                    return Options:GetAuraShowTimer()
                                 end,
                                 set    = function(_, v) Options:GetFriendlyDB().auraShowTimer = v == true; Refresh() end,
                             },
