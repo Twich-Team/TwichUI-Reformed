@@ -273,6 +273,15 @@ function Options:SetAlpha(_, v)
     Refresh()
 end
 
+function Options:GetInactiveAlpha()
+    return math.max(0.05, math.min(1, tonumber(self:GetDB().inactiveAlpha) or self:GetAlpha()))
+end
+
+function Options:SetInactiveAlpha(_, v)
+    self:GetDB().inactiveAlpha = math.max(0.05, math.min(1, tonumber(v) or self:GetAlpha()))
+    Refresh()
+end
+
 function Options:GetScale() return self:GetDB().scale or 1 end
 
 function Options:SetScale(_, v)
@@ -1376,10 +1385,21 @@ function Options:BuildConfiguration()
                                 get = function() return Options:GetAlpha() end,
                                 set = function(_, v) Options:SetAlpha(_, v) end,
                             },
+                            inactiveAlpha = {
+                                type = "range",
+                                name = "Inactive Alpha",
+                                desc = "Fade non-target nameplates that are not actively casting to this alpha.",
+                                order = 22,
+                                min = 0.05,
+                                max = 1.0,
+                                step = 0.05,
+                                get = function() return Options:GetInactiveAlpha() end,
+                                set = function(_, v) Options:SetInactiveAlpha(_, v) end,
+                            },
                             scale = {
                                 type = "range",
                                 name = "Scale",
-                                order = 22,
+                                order = 23,
                                 min = 0.5,
                                 max = 2.0,
                                 step = 0.05,
@@ -1390,7 +1410,7 @@ function Options:BuildConfiguration()
                                 type = "range",
                                 name = "Visibility Distance",
                                 desc = "Maximum range at which nameplates appear (yards).",
-                                order = 23,
+                                order = 24,
                                 min = 20,
                                 max = 100,
                                 step = 5,
@@ -1903,8 +1923,10 @@ function Options:BuildConfiguration()
                                 name   = "Browse Casting Arrows...",
                                 desc   = "Choose which arrow style to show on actively casting units.",
                                 order  = 11.5,
-                                hidden = function() return not Options:GetCastEmphasisEnabled() or
-                                    not Options:GetCastEmphasisArrows() end,
+                                hidden = function()
+                                    return not Options:GetCastEmphasisEnabled() or
+                                        not Options:GetCastEmphasisArrows()
+                                end,
                                 func   = function()
                                     OpenArrowPicker({
                                         key = "cast-emphasis-arrows",
@@ -1921,8 +1943,10 @@ function Options:BuildConfiguration()
                                     return "Current: " .. Options:GetCastEmphasisArrowStyle()
                                 end,
                                 order       = 11.75,
-                                hidden      = function() return not Options:GetCastEmphasisEnabled() or
-                                    not Options:GetCastEmphasisArrows() end,
+                                hidden      = function()
+                                    return not Options:GetCastEmphasisEnabled() or
+                                        not Options:GetCastEmphasisArrows()
+                                end,
                                 image       = function() return Options:GetCastEmphasisArrowPreviewTex() end,
                                 imageWidth  = 64,
                                 imageHeight = 64,
@@ -2495,10 +2519,30 @@ function Options:BuildConfiguration()
                                     Refresh()
                                 end,
                             },
+                            inactiveAlpha = {
+                                type = "range",
+                                name = "Inactive Alpha",
+                                desc = "Fade non-target friendly nameplates that are not actively casting to this alpha.",
+                                order = 17,
+                                min = 0.05,
+                                max = 1.0,
+                                step = 0.05,
+                                get = function()
+                                    return math.max(0.05,
+                                        math.min(1,
+                                            tonumber(Options:GetFriendlyDB().inactiveAlpha) or
+                                            Options:GetInactiveAlpha()))
+                                end,
+                                set = function(_, v)
+                                    Options:GetFriendlyDB().inactiveAlpha = math.max(0.05,
+                                        math.min(1, tonumber(v) or (Options:GetFriendlyDB().alpha or Options:GetAlpha())))
+                                    Refresh()
+                                end,
+                            },
                             scale = {
                                 type = "range",
                                 name = "Scale",
-                                order = 17,
+                                order = 18,
                                 min = 0.5,
                                 max = 2.0,
                                 step = 0.05,
@@ -2512,7 +2556,7 @@ function Options:BuildConfiguration()
                                 type = "range",
                                 name = "Visibility Distance",
                                 desc = "Maximum range at which friendly nameplates appear (yards).",
-                                order = 18,
+                                order = 19,
                                 min = 20,
                                 max = 100,
                                 step = 5,
@@ -3096,7 +3140,7 @@ function Options:BuildConfiguration()
                                         title = "Friendly Casting Arrow Browser",
                                         get = function()
                                             return Options:GetFriendlyDB().castEmphasisArrowStyle or
-                                            Options:GetCastEmphasisArrowStyle()
+                                                Options:GetCastEmphasisArrowStyle()
                                         end,
                                         set = function(style)
                                             Options:GetFriendlyDB().castEmphasisArrowStyle = style
@@ -3110,7 +3154,7 @@ function Options:BuildConfiguration()
                                 type        = "description",
                                 name        = function()
                                     local style = Options:GetFriendlyDB().castEmphasisArrowStyle or
-                                    Options:GetCastEmphasisArrowStyle()
+                                        Options:GetCastEmphasisArrowStyle()
                                     return "Current: " .. tostring(style)
                                 end,
                                 order       = 11.75,
@@ -3123,7 +3167,7 @@ function Options:BuildConfiguration()
                                 end,
                                 image       = function()
                                     local style = Options:GetFriendlyDB().castEmphasisArrowStyle or
-                                    Options:GetCastEmphasisArrowStyle()
+                                        Options:GetCastEmphasisArrowStyle()
                                     return ARROW_BASE .. tostring(style) .. ".tga"
                                 end,
                                 imageWidth  = 64,

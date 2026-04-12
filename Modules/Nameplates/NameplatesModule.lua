@@ -123,6 +123,7 @@ local NP_DEFAULT_AURA_MAX    = 5
 local NP_MAX_AURA_POOL       = 10 -- pre-allocated icons per plate
 local TARGET_GROW_ANIM_SEC   = 0.14
 local RANGE_FADE_ANIM_SEC    = 0.16
+local STATE_FADE_ANIM_SEC    = 0.18
 
 -- Default reaction colours used when healthColorMode = "reaction"
 -- These are the built-in fallbacks; users can override each via DB.
@@ -1376,6 +1377,30 @@ function Nameplates:AnimatePlateFrameAlpha(frame, alpha, duration, onFinished, i
     end
 end
 
+function Nameplates:GetDesiredPlateAlpha(frame, unit, db)
+    local effectiveDB = db or self:GetEffectiveDB(unit)
+    local baseAlpha = Clamp(effectiveDB.alpha or 1, 0.1, 1)
+    local inactiveAlpha = Clamp(effectiveDB.inactiveAlpha or baseAlpha, 0.05, 1)
+
+    if inactiveAlpha >= (baseAlpha - 0.01) then
+        return baseAlpha
+    end
+
+    local isTarget = unit and UnitIsUnit and UnitIsUnit(unit, "target")
+    local isCasting = frame and frame._casting == true
+
+    if isTarget or isCasting then
+        return baseAlpha
+    end
+
+    return inactiveAlpha
+end
+
+function Nameplates:UpdatePlateAlpha(frame, unit, instant)
+    if not frame then return end
+    self:AnimatePlateFrameAlpha(frame, self:GetDesiredPlateAlpha(frame, unit), STATE_FADE_ANIM_SEC, nil, instant)
+end
+
 function Nameplates:ShouldShowPowerForUnit(unit, plate)
     if not unit then return false end
     if UnitIsPlayer(unit) == true then return true end
@@ -2098,6 +2123,8 @@ function Nameplates:UpdateAllElements(frame, unit)
     self:UpdateTargetGlow(frame, unit)
     self:UpdateAuras(frame, unit)
     self:UpdatePower(frame, unit)
+    local currentAlpha = Clamp(frame._currentAlpha or frame:GetAlpha() or 1, 0, 1)
+    self:UpdatePlateAlpha(frame, unit, currentAlpha > 0.01)
 end
 
 -- ── Refresh / resize helpers ──────────────────────────────────────────────────
@@ -2506,14 +2533,13 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     frame._showPower = self:ShouldShowPowerForUnit(unitID, plate)
 
     local db         = self:GetEffectiveDB(unitID)
-    local alpha      = Clamp(db.alpha or 1, 0.1, 1)
     local scale      = Clamp(db.scale or 1, 0.5, 2)
     frame:SetScale(scale)
     self:SetPlateFrameAlpha(frame, 0)
     frame:Show()
 
     self:UpdateAllElements(frame, unitID)
-    self:AnimatePlateFrameAlpha(frame, alpha, RANGE_FADE_ANIM_SEC)
+    self:AnimatePlateFrameAlpha(frame, self:GetDesiredPlateAlpha(frame, unitID, db), RANGE_FADE_ANIM_SEC)
 
     -- If cast test mode is running, start a fake cast on this new plate
     if self._castTestMode then
@@ -3087,6 +3113,7 @@ function Nameplates:OnCastEvent(_, unit)
     local frame = unit and self._plates[unit]
     if frame then
         self:UpdateCastBar(frame, unit)
+        self:UpdatePlateAlpha(frame, unit)
     end
 end
 
@@ -3105,6 +3132,7 @@ end
 function Nameplates:OnTargetFocusChanged()
     for unitID, frame in pairs(self._plates) do
         self:UpdateTargetGlow(frame, unitID)
+        self:UpdatePlateAlpha(frame, unitID)
     end
 end
 
@@ -3148,7 +3176,7 @@ function Nameplates:OnCombatStateChange()
     for unitID, frame in pairs(self._plates) do
         if frame then
             local edb = self:GetEffectiveDB(unitID)
-            self:SetPlateFrameAlpha(frame, Clamp(edb.alpha or 1, 0.1, 1))
+            self:SetPlateFrameAlpha(frame, self:GetDesiredPlateAlpha(frame, unitID, edb))
             frame:SetScale(Clamp(edb.scale or 1, 0.5, 2))
         end
     end
