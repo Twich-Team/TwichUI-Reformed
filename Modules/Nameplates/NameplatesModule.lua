@@ -158,6 +158,35 @@ local function GetArrowTexPath(styleName)
     return ARROW_BASE .. (styleName or "ArrowUp") .. ".tga"
 end
 
+local function ApplyNameTextLayout(frame, db, width)
+    if not frame or not frame.nameText then return end
+
+    local nameText       = frame.nameText
+    local nameAnchorPt   = db.nameAnchorPoint or "BOTTOMLEFT"
+    local nameOX, nameOY = db.nameOffsetX or 0, db.nameOffsetY or 0
+    local usableWidth    = math_max((width or frame:GetWidth() or NP_DEFAULT_WIDTH) - 4, 1)
+
+    nameText:ClearAllPoints()
+    nameText:SetWidth(usableWidth)
+
+    -- Preserve the original semantic: the name text lives in a full-width region
+    -- above (BOTTOM*), below (TOP*), or across the middle of the plate. The
+    -- anchor point chooses the vertical band; nameJustify controls left/center/right
+    -- placement within that region.
+    if string.find(nameAnchorPt, "BOTTOM", 1, true) then
+        nameText:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 2 + nameOX, nameOY)
+        nameText:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -2 + nameOX, nameOY)
+    elseif string.find(nameAnchorPt, "TOP", 1, true) then
+        nameText:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 2 + nameOX, -nameOY)
+        nameText:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", -2 + nameOX, -nameOY)
+    else
+        nameText:SetPoint("LEFT", frame, "LEFT", 2 + nameOX, nameOY)
+        nameText:SetPoint("RIGHT", frame, "RIGHT", -2 + nameOX, nameOY)
+    end
+
+    nameText:SetJustifyH(db.nameJustify or "LEFT")
+end
+
 -- CVars we take control of while the module is active
 local NAMEPLATE_CVARS    = {
     nameplateMinAlpha              = "1",
@@ -640,13 +669,11 @@ function Nameplates:BuildPlateFrame(parentPlate)
     -- Fix: use fixed frame levels.  Our frame at 140 sits above Blizzard's UnitFrame.
     local NP_FRAME_LEVEL      = 140
     local NP_GLOW_FRAME_LEVEL = 138
-    local frame               = CreateFrame("Frame", nil, parentPlate or UIParent, "BackdropTemplate")
+    local frame               = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     frame._isTwichFrame       = true -- used by suppression loops to skip our own frame
-    -- MIDNIGHT LAYOUT NOTE: frame:SetSize on a child of a nameplate plate is silently
-    -- overridden by Blizzard's C-side nameplate layout (plate forces its own height on
-    -- direct children).  Use two diagonal WoW anchor points instead — the layout engine
-    -- derives width and height from the anchor offsets, which are pure Lua numbers that
-    -- the plate system cannot override.
+    -- MIDNIGHT LAYOUT NOTE: any direct child of the Blizzard nameplate plate can have its
+    -- dimensions coerced by the plate's C-side layout. Keep the TwichUI plate root on
+    -- UIParent and anchor it to the Blizzard plate instead so the size is entirely ours.
     local plate = parentPlate or UIParent
     frame:SetPoint("TOPLEFT",     plate, "CENTER", -w / 2,  h / 2)
     frame:SetPoint("BOTTOMRIGHT", plate, "CENTER",  w / 2, -h / 2)
@@ -655,7 +682,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
 
     -- ── Target / focus glow ring ──────────────────────────────────────────────
     local glowOutset = Clamp(db.targetGlowOutset or 4, 1, 12)
-    local targetGlow = CreateFrame("Frame", nil, parentPlate, "BackdropTemplate")
+    local targetGlow = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     targetGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", -glowOutset, glowOutset)
     targetGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", glowOutset, -glowOutset)
     targetGlow:SetFrameLevel(NP_GLOW_FRAME_LEVEL)
@@ -738,15 +765,10 @@ function Nameplates:BuildPlateFrame(parentPlate)
     local nameText       = frame:CreateFontString(nil, "OVERLAY")
     nameText:SetFont(nf, ns, nfl)
     if db.nameFontShadow then nameText:SetShadowOffset(1, -1) else nameText:SetShadowOffset(0, 0) end
-    -- Give the fontstring an explicit width and anchor it by the selected point.
-    -- The old mixed-anchor setup (region point = nameAnchorPoint, relative point = TOPLEFT)
-    -- skewed centered/right alignment and produced per-name inconsistencies.
-    nameText:SetWidth(math_max(w - 4, 1))
-    nameText:SetPoint(nameAnchorPt, frame, nameAnchorPt, nameOX, nameOY)
-    nameText:SetJustifyH(db.nameJustify or "LEFT")
     nameText:SetTextColor(1, 1, 1, 1)
     nameText:SetWordWrap(false)
     frame.nameText     = nameText
+    ApplyNameTextLayout(frame, db, w)
 
     -- ── Health text ───────────────────────────────────────────────────────────
     local hf, hs, hfl  = GetPlateFont("health", Clamp(db.healthFontSize or 9, 6, 18), db)
@@ -934,11 +956,10 @@ end
 function Nameplates:AcquirePlateFrame(plate)
     local frame = tremove(self._platePool)
     if frame then
-        -- Reparent to new Blizzard plate so positioning is correct.
-        -- Anchors will be set by ResizePlateFrame immediately after this returns,
-        -- so we only need to detach from the old plate here.
-        frame:SetParent(plate)
-        if frame.targetGlow then frame.targetGlow:SetParent(plate) end
+        -- The TwichUI root frame stays on UIParent so Blizzard's nameplate plate layout
+        -- cannot coerce its size. ResizePlateFrame re-anchors it to the new plate.
+        frame:SetParent(UIParent)
+        if frame.targetGlow then frame.targetGlow:SetParent(UIParent) end
         frame:ClearAllPoints()
         frame._isTestPreview = false
         return frame
@@ -1655,6 +1676,7 @@ function Nameplates:ResizePlateFrame(frame)
         frame:SetPoint("TOPLEFT",     frame._plate, "CENTER", -w / 2,  h / 2)
         frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER",  w / 2, -h / 2)
     end
+    ApplyNameTextLayout(frame, db, w)
     -- healthBar fills the frame via BOTTOMRIGHT anchor; no explicit SetHeight needed.
     if frame.threatBar then frame.threatBar:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 0, 0) end
     if frame.castContainer then frame.castContainer:SetHeight(castH + 2) end
@@ -1913,13 +1935,7 @@ function Nameplates:EnterTestMode()
         if frame.levelText then
             frame.levelText:SetText(tostring(mock.level))
             frame.levelText:SetTextColor(0.8, 0.8, 0.8, 1)
-        end
-
-        -- Health
-        if frame.healthBar then
-            frame.healthBar:SetMinMaxValues(0, mock.hpMax)
-            frame.healthBar:SetValue(mock.hp)
-
+            ApplyNameTextLayout(frame, db)
             if mock.classToken then
                 local cc = (C_ClassColor and C_ClassColor.GetClassColor and C_ClassColor.GetClassColor(mock.classToken))
                     or (RAID_CLASS_COLORS and RAID_CLASS_COLORS[mock.classToken])
@@ -2603,6 +2619,12 @@ function Nameplates:BuildDebugReport()
             end
             safeGet("  frame size", function()
                 return string.format("  frame size  : %.0f x %.0f", frame:GetWidth(), frame:GetHeight())
+            end)
+            safeGet("  frame point", function()
+                local p1, relTo, p2, x, y = frame:GetPoint(1)
+                local relName = relTo and relTo.GetName and relTo:GetName() or tostring(relTo)
+                return string.format("  frame point : p1=%s rel=%s p2=%s x=%.0f y=%.0f",
+                    tostring(p1), tostring(relName), tostring(p2), x or 0, y or 0)
             end)
             if frame.healthBar then
                 safeGet("  healthBar", function()
