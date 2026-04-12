@@ -34,6 +34,8 @@ local Nameplates             = T:NewModule("Nameplates", "AceEvent-3.0", "AceTim
 local CreateFrame            = _G.CreateFrame
 local UIParent               = _G.UIParent
 local C_NamePlate            = _G.C_NamePlate
+local C_NamePlate_SetNamePlateEnemySize = C_NamePlate and C_NamePlate.SetNamePlateEnemySize
+local C_NamePlate_SetNamePlateFriendlySize = C_NamePlate and C_NamePlate.SetNamePlateFriendlySize
 local C_UnitAuras            = _G.C_UnitAuras
 local C_Timer                = _G.C_Timer
 local C_Spell                = _G.C_Spell
@@ -164,21 +166,20 @@ local function ApplyNameTextLayout(frame, db, width)
     local nameText       = frame.nameText
     local nameAnchorPt   = db.nameAnchorPoint or "BOTTOMLEFT"
     local nameOX, nameOY = db.nameOffsetX or 0, db.nameOffsetY or 0
-    local usableWidth    = math_max((width or frame:GetWidth() or NP_DEFAULT_WIDTH) - 4, 1)
 
     nameText:ClearAllPoints()
-    nameText:SetWidth(usableWidth)
+    nameText:SetWidth(0)
 
     -- Preserve the original semantic: the name text lives in a full-width region
     -- above (BOTTOM*), below (TOP*), or across the middle of the plate. The
     -- anchor point chooses the vertical band; nameJustify controls left/center/right
     -- placement within that region.
     if string.find(nameAnchorPt, "BOTTOM", 1, true) then
-        nameText:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 2 + nameOX, nameOY)
-        nameText:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -2 + nameOX, nameOY)
+        nameText:SetPoint("LEFT", frame, "TOPLEFT", 2 + nameOX, nameOY)
+        nameText:SetPoint("RIGHT", frame, "TOPRIGHT", -2 + nameOX, nameOY)
     elseif string.find(nameAnchorPt, "TOP", 1, true) then
-        nameText:SetPoint("TOPLEFT", frame, "BOTTOMLEFT", 2 + nameOX, -nameOY)
-        nameText:SetPoint("TOPRIGHT", frame, "BOTTOMRIGHT", -2 + nameOX, -nameOY)
+        nameText:SetPoint("LEFT", frame, "BOTTOMLEFT", 2 + nameOX, -nameOY)
+        nameText:SetPoint("RIGHT", frame, "BOTTOMRIGHT", -2 + nameOX, -nameOY)
     else
         nameText:SetPoint("LEFT", frame, "LEFT", 2 + nameOX, nameOY)
         nameText:SetPoint("RIGHT", frame, "RIGHT", -2 + nameOX, nameOY)
@@ -675,6 +676,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     -- dimensions coerced by the plate's C-side layout. Keep the TwichUI plate root on
     -- UIParent and anchor it to the Blizzard plate instead so the size is entirely ours.
     local plate = parentPlate or UIParent
+    frame:SetSize(w, h)
     frame:SetPoint("TOPLEFT",     plate, "CENTER", -w / 2,  h / 2)
     frame:SetPoint("BOTTOMRIGHT", plate, "CENTER",  w / 2, -h / 2)
     frame:SetFrameLevel(NP_FRAME_LEVEL)
@@ -1673,6 +1675,7 @@ function Nameplates:ResizePlateFrame(frame)
     -- (friendly-DB) height -- producing the grey gap the user saw.
     if frame._plate then
         frame:ClearAllPoints()
+        frame:SetSize(w, h)
         frame:SetPoint("TOPLEFT",     frame._plate, "CENTER", -w / 2,  h / 2)
         frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER",  w / 2, -h / 2)
     end
@@ -1725,11 +1728,27 @@ end
 -- ── CVar management ───────────────────────────────────────────────────────────
 function Nameplates:ApplyCVars()
     local db = self:GetDB()
+    local fdb = self:GetFriendlyDB()
     for cvar, value in pairs(NAMEPLATE_CVARS) do
         SetCVarSafe(cvar, value)
     end
     local maxDist = Clamp(db.nameplateMaxDistance or 60, 20, 100)
     SetCVarSafe("nameplatePlayerMaxDistance", tostring(maxDist))
+
+    -- Match Blizzard's own friendly/enemy plate footprint to the active TwichUI
+    -- configuration. ElvUI does this too. Even though we render our own overlay,
+    -- keeping the underlying plate sizes separated avoids a whole class of Blizzard
+    -- layout and anchor behaviors still assuming the old shared dimensions.
+    if C_NamePlate_SetNamePlateEnemySize then
+        pcall(C_NamePlate_SetNamePlateEnemySize,
+            Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600),
+            Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60))
+    end
+    if C_NamePlate_SetNamePlateFriendlySize then
+        pcall(C_NamePlate_SetNamePlateFriendlySize,
+            Clamp(fdb.width or db.width or NP_DEFAULT_WIDTH, 60, 600),
+            Clamp(fdb.height or db.height or NP_DEFAULT_HEIGHT, 8, 60))
+    end
 end
 
 -- ── Plate lifecycle ───────────────────────────────────────────────────────────
