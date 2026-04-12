@@ -5360,7 +5360,7 @@ end
 function UnitFrames:GetCastbarSmoothingMethod()
     if not StatusBarInterpolation then return nil end
     if self:GetDB().smoothBars == false then return StatusBarInterpolation.Immediate end
-    return StatusBarInterpolation.Linear or StatusBarInterpolation.ExponentialEaseOut
+    return StatusBarInterpolation.ExponentialEaseOut or StatusBarInterpolation.Linear
 end
 
 local function MixTowardColor(color, target, amount)
@@ -7343,15 +7343,15 @@ function UnitFrames:OnFantasyCastbarUpdate(castbar, elapsed)
     end
 
     fx._updateAccumulator = (fx._updateAccumulator or 0) + (elapsed or 0)
-    if fx._updateAccumulator < (1 / 20) then
+    if fx._updateAccumulator < (1 / 60) then
         return
     end
 
-    elapsed = math_min(0.08, fx._updateAccumulator)
+    elapsed = math_min(0.05, fx._updateAccumulator)
     fx._updateAccumulator = 0
 
     fx._syncAccumulator = (fx._syncAccumulator or 0) + elapsed
-    if fx._syncAccumulator >= (1 / 20) then
+    if fx._syncAccumulator >= (1 / 60) then
         fx._syncAccumulator = 0
         self:SyncFantasyCastbarVisuals(castbar)
     end
@@ -15226,11 +15226,11 @@ function UnitFrames:StartStandaloneCastbarUpdates()
     castbar._twichCastbarUpdating = true
     castbar:SetScript("OnUpdate", function(_, elapsed)
         castbar._twichCastbarUpdateAccumulator = (castbar._twichCastbarUpdateAccumulator or 0) + (elapsed or 0)
-        if castbar._twichCastbarUpdateAccumulator < (1 / 40) then
+        if castbar._twichCastbarUpdateAccumulator < (1 / 60) then
             return
         end
 
-        local tickElapsed = math_min(0.08, castbar._twichCastbarUpdateAccumulator)
+        local tickElapsed = math_min(0.05, castbar._twichCastbarUpdateAccumulator)
         castbar._twichCastbarUpdateAccumulator = 0
 
         UnitFrames:UFDiagBump("castbarUpdateTicks", 1)
