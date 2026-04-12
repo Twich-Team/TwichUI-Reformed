@@ -43,6 +43,8 @@ local UnitHealth             = _G.UnitHealth
 local UnitHealthMax          = _G.UnitHealthMax
 local UnitName               = _G.UnitName
 local UnitIsPlayer           = _G.UnitIsPlayer
+local UnitIsFriend           = _G.UnitIsFriend
+local UnitCanAttack          = _G.UnitCanAttack
 local UnitLevel              = _G.UnitLevel
 local UnitIsUnit             = _G.UnitIsUnit
 local UnitClass              = _G.UnitClass
@@ -736,8 +738,11 @@ function Nameplates:BuildPlateFrame(parentPlate)
     local nameText       = frame:CreateFontString(nil, "OVERLAY")
     nameText:SetFont(nf, ns, nfl)
     if db.nameFontShadow then nameText:SetShadowOffset(1, -1) else nameText:SetShadowOffset(0, 0) end
-    nameText:SetPoint(nameAnchorPt, frame, "TOPLEFT", nameOX, nameOY)
-    nameText:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -nameOX, nameOY)
+    -- Give the fontstring an explicit width and anchor it by the selected point.
+    -- The old mixed-anchor setup (region point = nameAnchorPoint, relative point = TOPLEFT)
+    -- skewed centered/right alignment and produced per-name inconsistencies.
+    nameText:SetWidth(math_max(w - 4, 1))
+    nameText:SetPoint(nameAnchorPt, frame, nameAnchorPt, nameOX, nameOY)
     nameText:SetJustifyH(db.nameJustify or "LEFT")
     nameText:SetTextColor(1, 1, 1, 1)
     nameText:SetWordWrap(false)
@@ -1591,8 +1596,8 @@ function Nameplates:ApplyThemeToFrame(frame)
         local nameAnchorPt   = db.nameAnchorPoint or "BOTTOMLEFT"
         local nameOX, nameOY = db.nameOffsetX or 2, db.nameOffsetY or 3
         frame.nameText:ClearAllPoints()
-        frame.nameText:SetPoint(nameAnchorPt, frame, "TOPLEFT", nameOX, nameOY)
-        frame.nameText:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", -nameOX, nameOY)
+        frame.nameText:SetWidth(math_max(frame:GetWidth() - 4, 1))
+        frame.nameText:SetPoint(nameAnchorPt, frame, nameAnchorPt, nameOX, nameOY)
         frame.nameText:SetJustifyH(db.nameJustify or "LEFT")
         -- Color is handled by UpdateName (class color, custom, or default white).
     end
@@ -1684,6 +1689,9 @@ end
 function Nameplates:RefreshAllPlates()
     self:InvalidateCache()
     for unitID, frame in pairs(self._plates) do
+        if unitID and UnitExists(unitID) then
+            frame._isFriendly = self:IsFriendlyUnit(unitID)
+        end
         self:ResizePlateFrame(frame)
         self:ApplyThemeToFrame(frame)
         if unitID and UnitExists(unitID) then
@@ -2485,38 +2493,42 @@ end
 function Nameplates:BuildDebugReport()
     local lines = {}
     local function add(s) lines[#lines + 1] = s end
+    local function fmtValue(v)
+        local ok, ts = pcall(tostring, v)
+        return (ok and type(ts) == "string") and ts or "<secret>"
+    end
+    local function addDBSection(title, db, keys)
+        add(title)
+        if not db then
+            add("  DB unavailable")
+            add("")
+            return
+        end
+        for _, k in ipairs(keys) do
+            local ok, v = pcall(function() return db[k] end)
+            add(string.format("  %-28s = %s", k, ok and fmtValue(v) or "<tainted>"))
+        end
+        add("")
+    end
 
     add("=== Nameplates Debug Report ===")
     add("")
 
-    -- DB snapshot
-    add("--- DB ---")
-    local db = self:GetDB()
-    if db then
-        local keys = {
-            "enabled", "width", "height", "alpha", "scale",
-            "healthColorMode", "healthFont", "healthFontSize", "healthFontFlags",
-            "healthFormat", "healthTextAnchor", "showAbsorb",
-            "castFont", "castFontSize", "castHeight",
-            "nameFont", "nameFontSize", "nameFontFlags",
-            "showLevel", "showEliteIcon", "showTargetGlow", "showTargetArrow",
-            "showThreat", "showAuras", "auraSize", "auraMax", "auraOnlyMine",
-        }
-        for _, k in ipairs(keys) do
-            local ok, v = pcall(function() return db[k] end)
-            local vs
-            if not ok then
-                vs = "<tainted>"
-            else
-                local tok, ts = pcall(tostring, v)
-                vs = (tok and type(ts) == "string") and ts or "<secret>"
-            end
-            add(string.format("  %-28s = %s", k, vs))
-        end
-    else
-        add("  DB unavailable")
-    end
-    add("")
+    local dbKeys = {
+        "enabled", "width", "height", "alpha", "scale",
+        "healthColorMode", "healthFont", "healthFontSize", "healthFontFlags",
+        "healthFormat", "healthTextAnchor", "showAbsorb",
+        "castFont", "castFontSize", "castHeight", "showCastBar", "showPowerBar",
+        "nameFont", "nameFontSize", "nameFontFlags", "nameAnchorPoint", "nameJustify",
+        "nameOffsetX", "nameOffsetY",
+        "showLevel", "showEliteIcon", "showTargetGlow", "showTargetArrow",
+        "showThreat", "showAuras", "auraSize", "auraMax", "auraOnlyMine",
+    }
+    addDBSection("--- Main DB ---", self:GetDB(), dbKeys)
+
+    local baseDB = self:GetDB()
+    local friendlyDB = baseDB and baseDB.friendly or nil
+    addDBSection("--- Friendly Overrides ---", friendlyDB, dbKeys)
 
     -- Theme
     add("--- Theme ---")
@@ -2539,7 +2551,7 @@ function Nameplates:BuildDebugReport()
     end
     add(string.format("--- Plates: %d tracked / %d visible ---", total, visible))
 
-    -- First visible plate detail.
+    -- Visible plate details.
     -- MIDNIGHT SECRET: calling frame methods (IsShown, GetWidth, GetFont, GetText, etc.)
     -- on nameplate-parented frames returns tainted/secret values in combat.  string.format
     -- propagates taint, inserting secret strings into `lines` which then crash
@@ -2552,7 +2564,35 @@ function Nameplates:BuildDebugReport()
         pcall(function() if frame and frame:IsShown() then shown = true end end)
         if shown then
             found = true
+            local effDB = self:GetEffectiveDB(unit)
+            local rawMainDB = self:GetDB()
+            local rawFriendlyDB = rawMainDB and rawMainDB.friendly or nil
+            local unitName = "<unknown>"
+            pcall(function()
+                local n = UnitName(unit)
+                if n then unitName = tostring(n) end
+            end)
+            local isPlayer = false
+            local isFriend = false
+            local canAttack = false
+            pcall(function() isPlayer = UnitIsPlayer(unit) == true end)
+            pcall(function() isFriend = UnitIsFriend and UnitIsFriend(unit, "player") == true end)
+            pcall(function() canAttack = UnitCanAttack and UnitCanAttack("player", unit) == true end)
+
             add(string.format("  sample unit : %s", tostring(unit)))
+            add(string.format("  unit name   : %s", unitName))
+            add(string.format("  routing     : _isFriendly=%s  UnitIsFriend=%s  UnitCanAttack=%s  UnitIsPlayer=%s",
+                tostring(frame._isFriendly), tostring(isFriend), tostring(canAttack), tostring(isPlayer)))
+            add(string.format("  db source   : %s", (effDB == rawFriendlyDB or frame._isFriendly) and "friendly" or "main"))
+            add(string.format("  db heights  : main=%s  friendly=%s  effective=%s",
+                fmtValue(rawMainDB and rawMainDB.height),
+                fmtValue(rawFriendlyDB and rawFriendlyDB.height),
+                fmtValue(effDB and effDB.height)))
+            add(string.format("  db names    : anchor=%s  justify=%s  ox=%s  oy=%s",
+                fmtValue(effDB and effDB.nameAnchorPoint),
+                fmtValue(effDB and effDB.nameJustify),
+                fmtValue(effDB and effDB.nameOffsetX),
+                fmtValue(effDB and effDB.nameOffsetY)))
             -- Stored metadata (_unit, _casting, etc.) is set by us — always safe.
             add(string.format("  casting     : %s  channeling=%s",
                 tostring(frame._casting), tostring(frame._channeling)))
@@ -2580,13 +2620,23 @@ function Nameplates:BuildDebugReport()
             else
                 add("  healthText  : NOT CREATED")
             end
+            if frame.nameText then
+                safeGet("  nameText", function()
+                    local nt = frame.nameText
+                    local p1, relTo, p2, x, y = nt:GetPoint(1)
+                    local relName = relTo and relTo.GetName and relTo:GetName() or tostring(relTo)
+                    return string.format("  nameText    : IsShown=%s  w=%.0f  justify=%s  p1=%s rel=%s p2=%s x=%.0f y=%.0f",
+                        tostring(nt:IsShown()), nt:GetWidth(), tostring(nt:GetJustifyH()),
+                        tostring(p1), tostring(relName), tostring(p2), x or 0, y or 0)
+                end)
+            end
             if frame.castBar then
                 safeGet("  castBar", function()
                     local cb = frame.castBar
                     return string.format("  castBar     : IsShown=%s", tostring(cb:IsShown()))
                 end)
             end
-            break
+            add("")
         end
     end
     if not found then
