@@ -34,6 +34,7 @@ local Nameplates                           = T:NewModule("Nameplates", "AceEvent
 local CreateFrame                          = _G.CreateFrame
 local UIParent                             = _G.UIParent
 local C_NamePlate                          = _G.C_NamePlate
+local C_NamePlateManager                   = _G.C_NamePlateManager
 local C_NamePlate_SetNamePlateSize         = C_NamePlate and C_NamePlate.SetNamePlateSize
 local C_NamePlate_SetNamePlateEnemySize    = C_NamePlate and C_NamePlate.SetNamePlateEnemySize
 local C_NamePlate_SetNamePlateFriendlySize = C_NamePlate and C_NamePlate.SetNamePlateFriendlySize
@@ -41,6 +42,7 @@ local C_CVar                               = _G.C_CVar
 local C_UnitAuras                          = _G.C_UnitAuras
 local C_Timer                              = _G.C_Timer
 local C_Spell                              = _G.C_Spell
+local Enum_NamePlateType                   = _G.Enum and _G.Enum.NamePlateType
 local Enum_NamePlateStackType              = _G.Enum and _G.Enum.NamePlateStackType
 local GetCVar                              = _G.GetCVar
 local UnitReaction                         = _G.UnitReaction
@@ -1964,6 +1966,11 @@ function Nameplates:ApplyCVars()
         pcall(C_NamePlate_SetNamePlateFriendlySize,
             Clamp(fdb.width or db.width or NP_DEFAULT_WIDTH, 60, 600),
             Clamp(fdb.height or db.height or NP_DEFAULT_HEIGHT, 8, 60))
+    end
+    if SupportsStackingBitfield() and C_NamePlateManager and C_NamePlateManager.SetNamePlateHitTestInsets and Enum_NamePlateType and Enum_NamePlateType.Enemy then
+        pcall(C_NamePlateManager.SetNamePlateHitTestInsets,
+            Enum_NamePlateType.Enemy,
+            -10000, -10000, -10000, -10000)
     end
 
     NpLog(string.format(
