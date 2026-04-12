@@ -34,11 +34,15 @@ local Nameplates                           = T:NewModule("Nameplates", "AceEvent
 local CreateFrame                          = _G.CreateFrame
 local UIParent                             = _G.UIParent
 local C_NamePlate                          = _G.C_NamePlate
+local C_NamePlate_SetNamePlateSize         = C_NamePlate and C_NamePlate.SetNamePlateSize
 local C_NamePlate_SetNamePlateEnemySize    = C_NamePlate and C_NamePlate.SetNamePlateEnemySize
 local C_NamePlate_SetNamePlateFriendlySize = C_NamePlate and C_NamePlate.SetNamePlateFriendlySize
+local C_CVar                               = _G.C_CVar
 local C_UnitAuras                          = _G.C_UnitAuras
 local C_Timer                              = _G.C_Timer
 local C_Spell                              = _G.C_Spell
+local Enum_NamePlateStackType              = _G.Enum and _G.Enum.NamePlateStackType
+local GetCVar                              = _G.GetCVar
 local UnitReaction                         = _G.UnitReaction
 local UnitExists                           = _G.UnitExists
 local UnitHealth                           = _G.UnitHealth
@@ -65,6 +69,7 @@ local UnitGroupRolesAssigned               = _G.UnitGroupRolesAssigned
 local GetSpecalization                     = _G.GetSpecialization
 local GetSpecalizationRole                 = _G.GetSpecializationRole
 local GetTime                              = _G.GetTime
+local InCombatLockdown                     = _G.InCombatLockdown
 local CooldownFrame_Set                    = _G.CooldownFrame_Set
 local RAID_CLASS_COLORS                    = _G.RAID_CLASS_COLORS
 local C_ClassColor                         = _G.C_ClassColor
@@ -292,10 +297,43 @@ local function Clamp(v, lo, hi)
 end
 
 local function SetCVarSafe(name, value)
-    local ok = pcall(_G.SetCVar, name, tostring(value))
-    if not ok and _G.C_CVar and _G.C_CVar.SetCVar then
-        pcall(_G.C_CVar.SetCVar, name, tostring(value))
+    local valueStr = tostring(value)
+    local ok = pcall(_G.SetCVar, name, valueStr)
+    local current = GetCVar and GetCVar(name)
+    if ((not ok) or (current ~= nil and tostring(current) ~= valueStr)) and _G.C_CVar and _G.C_CVar.SetCVar then
+        pcall(_G.C_CVar.SetCVar, name, valueStr)
     end
+end
+
+local function GetCVarBoolSafe(name, fallback)
+    if not GetCVar then return fallback end
+    local value = GetCVar(name)
+    if value == nil then return fallback end
+    return value == "1"
+end
+
+local function SupportsStackingBitfield()
+    return C_CVar and C_CVar.GetCVarBitfield and C_CVar.SetCVarBitfield and Enum_NamePlateStackType
+end
+
+local function GetStackingBitfieldState(kind, fallback)
+    if not SupportsStackingBitfield() then return fallback end
+    local stackType = Enum_NamePlateStackType[kind]
+    if not stackType then return fallback end
+
+    local ok, value = pcall(C_CVar.GetCVarBitfield, "nameplateStackingTypes", stackType)
+    if ok and type(value) == "boolean" then
+        return value
+    end
+
+    return fallback
+end
+
+local function SetStackingBitfieldState(kind, enabled)
+    if not SupportsStackingBitfield() then return end
+    local stackType = Enum_NamePlateStackType[kind]
+    if not stackType then return end
+    pcall(C_CVar.SetCVarBitfield, "nameplateStackingTypes", stackType, enabled == true)
 end
 
 -- ── Theme helpers ─────────────────────────────────────────────────────────────
@@ -443,6 +481,32 @@ function Nameplates:GetEffectiveDB(unit)
         if self:IsFriendlyUnit(unit) then return self:GetFriendlyDB() end
     end
     return self:GetDB()
+end
+
+function Nameplates:IsStackingEnabledForUnit(unit, isFriendly)
+    local db = self:GetDB()
+    local friendly = isFriendly
+    if friendly == nil and unit then
+        local frame = self._plates and self._plates[unit]
+        if frame then
+            friendly = frame._isFriendly == true
+        else
+            friendly = self:IsFriendlyUnit(unit)
+        end
+    end
+
+    if SupportsStackingBitfield() then
+        if friendly then
+            local fdb = self:GetFriendlyDB()
+            if fdb.stackNameplates ~= nil then return fdb.stackNameplates == true end
+            return GetStackingBitfieldState("Friendly", false)
+        end
+        if db.stackNameplates ~= nil then return db.stackNameplates == true end
+        return GetStackingBitfieldState("Enemy", false)
+    end
+
+    if db.stackNameplates ~= nil then return db.stackNameplates == true end
+    return GetCVarBoolSafe("nameplateMotion", false)
 end
 
 function Nameplates:InvalidateCache()
@@ -982,6 +1046,7 @@ function Nameplates:ReleasePlateFrame(frame)
     frame._onCastEnd       = nil
     -- Hide all sub-elements so recycled frames start invisible.
     frame:Hide()
+    if frame.stackBoundsFrame then frame.stackBoundsFrame:Hide() end
     if frame.castContainer then frame.castContainer:Hide() end
     if frame.targetGlow then frame.targetGlow:Hide() end
     if frame.auraFrame then frame.auraFrame:Hide() end
@@ -1703,6 +1768,73 @@ function Nameplates:ResizePlateFrame(frame)
 
     -- Resize aura frame width
     if frame.auraFrame then frame.auraFrame:SetWidth(w) end
+
+    self:UpdatePlateStackingBounds(frame)
+end
+
+function Nameplates:UpdatePlateStackingBounds(frame)
+    if not frame or not frame._plate or not frame._plate.SetStackingBoundsFrame then return end
+
+    local db = self:GetEffectiveDB(frame._unit)
+    local enabled = self:IsStackingEnabledForUnit(frame._unit, frame._isFriendly)
+    local widthScale = Clamp(db.stackingWidthScale or 1, 0.75, 3)
+    local heightScale = Clamp(db.stackingHeightScale or 1, 0.75, 4)
+    local baseW = Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600)
+    local baseH = Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60)
+    local powerGap = Clamp(db.powerBarGap or 2, 0, 12)
+    local powerH = (db.showPowerBar == false) and 0 or (Clamp(db.powerBarHeight or 4, 2, 14) + 2)
+    local castH = (db.showCastBar == false) and 0 or (Clamp(db.castHeight or NP_DEFAULT_CAST_HEIGHT, 6, 30) + 2)
+    local castSidePad = (db.showCastBar == false) and 0 or (castH + 4)
+    local nativeCarrier = frame._plate.UnitFrame or frame._plate
+    local nativeW = 0
+    local nativeH = 0
+
+    pcall(function()
+        nativeW = tonumber(nativeCarrier:GetWidth()) or 0
+        nativeH = tonumber(nativeCarrier:GetHeight()) or 0
+    end)
+
+    local visualH = baseH
+    if powerH > 0 then
+        visualH = visualH + powerGap + powerH
+    end
+    if castH > 0 then
+        visualH = visualH + powerGap + castH
+        if powerH > 0 then
+            visualH = visualH + powerGap
+        end
+    end
+
+    local boundsW = math.max(baseW + castSidePad * 2, nativeW) * widthScale
+    local boundsH = math.max(visualH, nativeH) * heightScale
+
+    local bounds = frame.stackBoundsFrame
+    if not bounds then
+        bounds = CreateFrame("Frame", nil, nativeCarrier, "BackdropTemplate")
+        bounds:EnableMouse(false)
+        bounds._fill = bounds:CreateTexture(nil, "BACKGROUND")
+        bounds._fill:SetColorTexture(1, 0, 0, 0)
+        bounds._fill:SetAllPoints(bounds)
+        bounds:Hide()
+        frame.stackBoundsFrame = bounds
+    end
+
+    bounds:SetParent(nativeCarrier)
+    bounds:ClearAllPoints()
+
+    if not enabled then
+        bounds:SetPoint("CENTER", nativeCarrier, "CENTER", 0, 0)
+        bounds:SetSize(1, 1)
+        bounds:Show()
+        pcall(frame._plate.SetStackingBoundsFrame, frame._plate, bounds)
+        return
+    end
+
+    bounds:SetPoint("CENTER", nativeCarrier, "CENTER", 0, 0)
+    bounds:SetSize(boundsW, boundsH)
+    bounds:Show()
+
+    pcall(frame._plate.SetStackingBoundsFrame, frame._plate, bounds)
 end
 
 function Nameplates:RefreshAllPlates()
@@ -1719,21 +1851,72 @@ function Nameplates:RefreshAllPlates()
     end
 end
 
+function Nameplates:QueuePlateRefresh(delay)
+    if not C_Timer or not C_Timer.After then return end
+    self._queuedPlateRefreshId = (self._queuedPlateRefreshId or 0) + 1
+    local refreshId = self._queuedPlateRefreshId
+    C_Timer.After(delay or 0, function()
+        if Nameplates._queuedPlateRefreshId ~= refreshId then return end
+        if InCombatLockdown and InCombatLockdown() then return end
+        Nameplates:RefreshAllPlates()
+    end)
+end
+
 -- ── CVar management ───────────────────────────────────────────────────────────
 function Nameplates:ApplyCVars()
     local db = self:GetDB()
     local fdb = self:GetFriendlyDB()
+
+    if InCombatLockdown and InCombatLockdown() then
+        self._pendingCVarRefresh = true
+        return
+    end
+
+    self._pendingCVarRefresh = false
+    self._pendingCVarRefreshNotified = nil
+
     for cvar, value in pairs(NAMEPLATE_CVARS) do
         SetCVarSafe(cvar, value)
     end
     local maxDist = Clamp(db.nameplateMaxDistance or 60, 20, 100)
     SetCVarSafe("nameplatePlayerMaxDistance", tostring(maxDist))
 
+    local clampTarget = db.clampTargetNameplateToScreen
+    if clampTarget == nil then
+        clampTarget = GetCVarBoolSafe("clampTargetNameplateToScreen", true)
+    end
+    SetCVarSafe("clampTargetNameplateToScreen", clampTarget and "1" or "0")
+
+    if SupportsStackingBitfield() then
+        local enemyStacking = db.stackNameplates
+        if enemyStacking == nil then
+            enemyStacking = GetStackingBitfieldState("Enemy", false)
+        end
+
+        local friendlyStacking = fdb.stackNameplates
+        if friendlyStacking == nil then
+            friendlyStacking = GetStackingBitfieldState("Friendly", false)
+        end
+
+        SetStackingBitfieldState("Enemy", enemyStacking)
+        SetStackingBitfieldState("Friendly", friendlyStacking)
+    else
+        local stacked = db.stackNameplates
+        if stacked == nil then
+            stacked = GetCVarBoolSafe("nameplateMotion", false)
+        end
+        SetCVarSafe("nameplateMotion", stacked and "1" or "0")
+    end
+
     -- Match Blizzard's own friendly/enemy plate footprint to the active TwichUI
     -- configuration. ElvUI does this too. Even though we render our own overlay,
     -- keeping the underlying plate sizes separated avoids a whole class of Blizzard
     -- layout and anchor behaviors still assuming the old shared dimensions.
-    if C_NamePlate_SetNamePlateEnemySize then
+    if SupportsStackingBitfield() and C_NamePlate_SetNamePlateSize then
+        pcall(C_NamePlate_SetNamePlateSize,
+            Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600),
+            Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60))
+    elseif C_NamePlate_SetNamePlateEnemySize then
         pcall(C_NamePlate_SetNamePlateEnemySize,
             Clamp(db.width or NP_DEFAULT_WIDTH, 60, 600),
             Clamp(db.height or NP_DEFAULT_HEIGHT, 8, 60))
@@ -1743,6 +1926,13 @@ function Nameplates:ApplyCVars()
             Clamp(fdb.width or db.width or NP_DEFAULT_WIDTH, 60, 600),
             Clamp(fdb.height or db.height or NP_DEFAULT_HEIGHT, 8, 60))
     end
+
+    NpLog(string.format(
+        "ApplyCVars enemyStack=%s friendlyStack=%s clampTarget=%s",
+        tostring(self:IsStackingEnabledForUnit(nil, false)),
+        tostring(self:IsStackingEnabledForUnit(nil, true)),
+        tostring(clampTarget == true)
+    ))
 end
 
 -- ── Plate lifecycle ───────────────────────────────────────────────────────────
@@ -1759,7 +1949,7 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     --   4. Reparent AurasFrame children to a hidden parent
     -- We MUST use hooksecurefunc, not HookScript — HookScript on protected frames
     -- is forbidden during combat lockdown.
-    local blizzUF = plate.UnitFrame
+    local blizzUF = plate.UnitFrame ---@type any
     if blizzUF and not blizzUF._twichSuppressed then
         blizzUF._twichSuppressed = true
         blizzUF:SetAlpha(0)
@@ -1808,10 +1998,11 @@ function Nameplates:OnNamePlateAdded(_, unitID)
     pcall(function()
         local children = { plate:GetChildren() }
         for _, child in ipairs(children) do
-            if child ~= blizzUF and not child._isTwichFrame and not child._twichSuppressed then
-                child._twichSuppressed = true
-                child:SetAlpha(0)
-                hooksecurefunc(child, "Show", function(f) f:SetAlpha(0) end)
+            local anyChild = child ---@type any
+            if anyChild ~= blizzUF and not anyChild._isTwichFrame and not anyChild._twichSuppressed then
+                anyChild._twichSuppressed = true
+                anyChild:SetAlpha(0)
+                hooksecurefunc(anyChild, "Show", function(f) f:SetAlpha(0) end)
             end
         end
     end)
@@ -2356,6 +2547,15 @@ end
 -- combat or when threat changes.  Individual plates already have OnShow hooks from
 -- OnNamePlateAdded that force blizzUF alpha to 0 — no child sweep needed here.
 function Nameplates:OnCombatStateChange()
+    if (not InCombatLockdown or not InCombatLockdown()) and self._pendingCVarRefresh then
+        self:ApplyCVars()
+        C_Timer.After(0, function()
+            if self:IsEnabled() then
+                self:RefreshAllPlates()
+            end
+        end)
+    end
+
     if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
     local plates = C_NamePlate.GetNamePlates()
     if not plates then return end
@@ -2395,6 +2595,10 @@ function Nameplates:Refresh()
     -- nameplate system immediately. If we only apply these on enable/zone load,
     -- the friendly DB can say height=10 while the live Blizzard friendly plate
     -- still remains at the previous 26px size until reload.
+    if InCombatLockdown and InCombatLockdown() and not self._pendingCVarRefreshNotified then
+        self._pendingCVarRefreshNotified = true
+        T:Print("[NP] Blizzard nameplate positioning changes will apply after combat.")
+    end
     self:ApplyCVars()
     -- Update cooldown timer font on all existing icon pools when settings change.
     local function updatePoolFont(frame)
@@ -2411,6 +2615,8 @@ function Nameplates:Refresh()
     for _, frame in pairs(self._plates) do updatePoolFont(frame) end
     for _, entry in ipairs(self._testPlates or {}) do updatePoolFont(entry.frame) end
     self:RefreshAllPlates()
+    self:QueuePlateRefresh(0)
+    self:QueuePlateRefresh(0.1)
     if self._testMode then
         self:ExitTestMode()
         self:EnterTestMode()
@@ -2550,6 +2756,7 @@ function Nameplates:BuildDebugReport()
 
     local dbKeys = {
         "enabled", "width", "height", "alpha", "scale",
+        "stackNameplates", "stackingWidthScale", "stackingHeightScale", "clampTargetNameplateToScreen",
         "healthColorMode", "healthFont", "healthFontSize", "healthFontFlags",
         "healthFormat", "healthTextAnchor", "showAbsorb",
         "castFont", "castFontSize", "castHeight", "showCastBar", "showPowerBar",
@@ -2574,6 +2781,17 @@ function Nameplates:BuildDebugReport()
         end
     else
         add("  Theme module unavailable")
+    end
+    add("")
+
+    add("--- Runtime Positioning ---")
+    add(string.format("  %-28s = %s", "stackingBitfieldSupported", tostring(SupportsStackingBitfield() and true or false)))
+    add(string.format("  %-28s = %s", "enemyStackingActive", tostring(self:IsStackingEnabledForUnit(nil, false))))
+    add(string.format("  %-28s = %s", "friendlyStackingActive", tostring(self:IsStackingEnabledForUnit(nil, true))))
+    add(string.format("  %-28s = %s", "clampTargetActive", tostring(self:GetDB().clampTargetNameplateToScreen ~= false)))
+    if SupportsStackingBitfield() then
+        add(string.format("  %-28s = %s", "enemyBitfield", tostring(GetStackingBitfieldState("Enemy", false))))
+        add(string.format("  %-28s = %s", "friendlyBitfield", tostring(GetStackingBitfieldState("Friendly", false))))
     end
     add("")
 
@@ -2644,6 +2862,13 @@ function Nameplates:BuildDebugReport()
                     local plate = frame._plate
                     return string.format("  nativePlate : %.0f x %.0f",
                         plate:GetWidth(), plate:GetHeight())
+                end)
+            end
+            if frame.stackBoundsFrame then
+                safeGet("  stack bounds", function()
+                    local bounds = frame.stackBoundsFrame
+                    return string.format("  stackBounds : %.0f x %.0f",
+                        bounds:GetWidth(), bounds:GetHeight())
                 end)
             end
             safeGet("  frame point", function()

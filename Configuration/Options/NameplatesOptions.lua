@@ -6,6 +6,9 @@
 local TwichRx                          = _G.TwichRx
 ---@type TwichUI
 local T                                = unpack(TwichRx)
+local C_CVar                           = _G.C_CVar
+local Enum_NamePlateStackType          = _G.Enum and _G.Enum.NamePlateStackType
+local GetCVar                          = _G.GetCVar
 
 ---@type ConfigurationModule
 local ConfigurationModule              = T:GetModule("Configuration")
@@ -315,6 +318,109 @@ function Options:GetMaxDistance() return self:GetDB().nameplateMaxDistance or 60
 
 function Options:SetMaxDistance(_, v)
     self:GetDB().nameplateMaxDistance = math.max(20, math.min(100, math.floor(tonumber(v) or 60)))
+    Refresh()
+end
+
+local function GetCVarBoolSafe(name, fallback)
+    if not GetCVar then return fallback end
+    local value = GetCVar(name)
+    if value == nil then return fallback end
+    return value == "1"
+end
+
+local function SupportsPerTypeStacking()
+    return C_CVar and C_CVar.GetCVarBitfield and C_CVar.SetCVarBitfield and Enum_NamePlateStackType
+end
+
+local function GetStackingBitfieldState(kind, fallback)
+    if not SupportsPerTypeStacking() then return fallback end
+    local stackType = Enum_NamePlateStackType[kind]
+    if not stackType then return fallback end
+
+    local ok, value = pcall(C_CVar.GetCVarBitfield, "nameplateStackingTypes", stackType)
+    if ok and type(value) == "boolean" then
+        return value
+    end
+
+    return fallback
+end
+
+function Options:SupportsPerTypeStacking()
+    return SupportsPerTypeStacking() ~= nil
+end
+
+function Options:GetEnemyStackingEnabled()
+    local value = self:GetDB().stackNameplates
+    if value ~= nil then return value == true end
+    if SupportsPerTypeStacking() then
+        return GetStackingBitfieldState("Enemy", false)
+    end
+    return GetCVarBoolSafe("nameplateMotion", false)
+end
+
+function Options:SetEnemyStackingEnabled(_, value)
+    self:GetDB().stackNameplates = value == true
+    Refresh()
+end
+
+function Options:GetFriendlyStackingEnabled()
+    local value = self:GetFriendlyDB().stackNameplates
+    if value ~= nil then return value == true end
+    if SupportsPerTypeStacking() then
+        return GetStackingBitfieldState("Friendly", false)
+    end
+    return self:GetEnemyStackingEnabled()
+end
+
+function Options:SetFriendlyStackingEnabled(_, value)
+    self:GetFriendlyDB().stackNameplates = value == true
+    Refresh()
+end
+
+function Options:GetClampTargetNameplateToScreen()
+    local value = self:GetDB().clampTargetNameplateToScreen
+    if value ~= nil then return value == true end
+    return GetCVarBoolSafe("clampTargetNameplateToScreen", true)
+end
+
+function Options:SetClampTargetNameplateToScreen(_, value)
+    self:GetDB().clampTargetNameplateToScreen = value == true
+    Refresh()
+end
+
+function Options:GetEnemyStackingWidthScale()
+    return tonumber(self:GetDB().stackingWidthScale) or 1
+end
+
+function Options:SetEnemyStackingWidthScale(_, value)
+    self:GetDB().stackingWidthScale = math.max(0.75, math.min(3, tonumber(value) or 1))
+    Refresh()
+end
+
+function Options:GetEnemyStackingHeightScale()
+    return tonumber(self:GetDB().stackingHeightScale) or 1
+end
+
+function Options:SetEnemyStackingHeightScale(_, value)
+    self:GetDB().stackingHeightScale = math.max(0.75, math.min(4, tonumber(value) or 1))
+    Refresh()
+end
+
+function Options:GetFriendlyStackingWidthScale()
+    return tonumber(self:GetFriendlyDB().stackingWidthScale) or self:GetEnemyStackingWidthScale()
+end
+
+function Options:SetFriendlyStackingWidthScale(_, value)
+    self:GetFriendlyDB().stackingWidthScale = math.max(0.75, math.min(3, tonumber(value) or 1))
+    Refresh()
+end
+
+function Options:GetFriendlyStackingHeightScale()
+    return tonumber(self:GetFriendlyDB().stackingHeightScale) or self:GetEnemyStackingHeightScale()
+end
+
+function Options:SetFriendlyStackingHeightScale(_, value)
+    self:GetFriendlyDB().stackingHeightScale = math.max(0.75, math.min(4, tonumber(value) or 1))
     Refresh()
 end
 
@@ -779,6 +885,60 @@ function Options:BuildConfiguration()
                                 step = 5,
                                 get = function() return Options:GetMaxDistance() end,
                                 set = function(_, v) Options:SetMaxDistance(_, v) end,
+                            },
+                            sep_positioning = { type = "header", name = "Positioning", order = 30 },
+                            positioningHelp = {
+                                type = "description",
+                                name =
+                                "Stacking and target clamp are driven by Blizzard on Midnight. TwichUI adds custom stacking footprint controls so dense pulls reserve enough room for cast and power bars.",
+                                order = 31,
+                                width = "full",
+                            },
+                            clampTargetNameplateToScreen = {
+                                type = "toggle",
+                                name = "Clamp Target Plate To Screen",
+                                desc =
+                                "Keep your current target nameplate pinned to the screen edge instead of letting it drift offscreen.",
+                                order = 32,
+                                width = "full",
+                                get = function() return Options:GetClampTargetNameplateToScreen() end,
+                                set = function(_, v) Options:SetClampTargetNameplateToScreen(_, v) end,
+                            },
+                            stackNameplates = {
+                                type = "toggle",
+                                name = "Stack Enemy Plates",
+                                desc =
+                                "Use stacked placement for enemy nameplates to reduce overlap in large pulls.",
+                                order = 33,
+                                width = "full",
+                                get = function() return Options:GetEnemyStackingEnabled() end,
+                                set = function(_, v) Options:SetEnemyStackingEnabled(_, v) end,
+                            },
+                            stackingWidthScale = {
+                                type = "range",
+                                name = "Enemy Stack Width",
+                                desc =
+                                "Scale the horizontal footprint Blizzard uses when spacing stacked enemy plates. Increase this if cast icons or side elements feel cramped.",
+                                order = 34,
+                                min = 0.75,
+                                max = 3,
+                                step = 0.05,
+                                bigStep = 0.1,
+                                get = function() return Options:GetEnemyStackingWidthScale() end,
+                                set = function(_, v) Options:SetEnemyStackingWidthScale(_, v) end,
+                            },
+                            stackingHeightScale = {
+                                type = "range",
+                                name = "Enemy Stack Height",
+                                desc =
+                                "Scale the downward stacking footprint for enemy plates. Increase this to reserve more room for cast and power bars.",
+                                order = 35,
+                                min = 0.75,
+                                max = 4,
+                                step = 0.05,
+                                bigStep = 0.1,
+                                get = function() return Options:GetEnemyStackingHeightScale() end,
+                                set = function(_, v) Options:SetEnemyStackingHeightScale(_, v) end,
                             },
                         },
                     },
@@ -1658,6 +1818,50 @@ function Options:BuildConfiguration()
                                         math.min(100, math.floor(tonumber(v) or 60)))
                                     Refresh()
                                 end,
+                            },
+                            sep_positioning = { type = "header", name = "Stacking", order = 30 },
+                            positioningHelp = {
+                                type = "description",
+                                name =
+                                "Friendly plates can use their own stacking toggle and stacking footprint on Midnight. Height is the main control for preventing cast bars from colliding in crowded groups.",
+                                order = 31,
+                                width = "full",
+                            },
+                            stackNameplates = {
+                                type = "toggle",
+                                name = "Stack Friendly Plates",
+                                desc = "Use stacked placement for friendly nameplates instead of allowing overlap.",
+                                order = 32,
+                                width = "full",
+                                hidden = function() return not Options:SupportsPerTypeStacking() end,
+                                get = function() return Options:GetFriendlyStackingEnabled() end,
+                                set = function(_, v) Options:SetFriendlyStackingEnabled(_, v) end,
+                            },
+                            stackingWidthScale = {
+                                type = "range",
+                                name = "Friendly Stack Width",
+                                desc =
+                                "Scale the horizontal footprint Blizzard uses when spacing stacked friendly plates.",
+                                order = 33,
+                                min = 0.75,
+                                max = 3,
+                                step = 0.05,
+                                bigStep = 0.1,
+                                get = function() return Options:GetFriendlyStackingWidthScale() end,
+                                set = function(_, v) Options:SetFriendlyStackingWidthScale(_, v) end,
+                            },
+                            stackingHeightScale = {
+                                type = "range",
+                                name = "Friendly Stack Height",
+                                desc =
+                                "Scale the downward stacking footprint for friendly plates so cast and power bars stay readable.",
+                                order = 34,
+                                min = 0.75,
+                                max = 4,
+                                step = 0.05,
+                                bigStep = 0.1,
+                                get = function() return Options:GetFriendlyStackingHeightScale() end,
+                                set = function(_, v) Options:SetFriendlyStackingHeightScale(_, v) end,
                             },
                         },
                     },
