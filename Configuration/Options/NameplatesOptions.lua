@@ -88,6 +88,91 @@ local function Refresh()
     end
 end
 
+local function GetPresetModule()
+    return T:GetModule("Nameplates", true)
+end
+
+local function GetNameplatePresetValues()
+    local mod = GetPresetModule()
+    if mod and type(mod.GetNameplatePresetValues) == "function" then
+        local values = mod:GetNameplatePresetValues()
+        if next(values) then
+            return values
+        end
+    end
+    return { __none = "No presets available" }
+end
+
+function Options:GetSelectedPresetId()
+    local mod = GetPresetModule()
+    if mod and type(mod.GetSelectedPresetId) == "function" then
+        local selected = mod:GetSelectedPresetId()
+        if selected and selected ~= "" then
+            return selected
+        end
+    end
+
+    local values = GetNameplatePresetValues()
+    if values.__none then
+        return "__none"
+    end
+    for presetId in pairs(values) do
+        return presetId
+    end
+    return "__none"
+end
+
+function Options:SetSelectedPresetId(_, value)
+    if value == "__none" then return end
+    local mod = GetPresetModule()
+    if mod and type(mod.SetSelectedPresetId) == "function" then
+        mod:SetSelectedPresetId(value)
+    end
+end
+
+function Options:ApplySelectedPreset()
+    local mod = GetPresetModule()
+    if not mod or type(mod.ApplyNameplatePresetById) ~= "function" then
+        T:Print("[TwichUI] Nameplates preset system is unavailable.")
+        return
+    end
+
+    local presetId = self:GetSelectedPresetId()
+    if not presetId or presetId == "__none" then
+        T:Print("[TwichUI] No nameplates preset is available to apply.")
+        return
+    end
+
+    local ok, result = mod:ApplyNameplatePresetById(presetId)
+    if ok then
+        local presetName = type(result) == "table" and result.name or presetId
+        T:Print("[TwichUI] Applied nameplates preset: " .. tostring(presetName))
+        return
+    end
+
+    T:Print("[TwichUI] Failed to apply nameplates preset: " .. tostring(result))
+end
+
+function Options:GetSelectedPresetDescription()
+    local mod = GetPresetModule()
+    if not mod or type(mod.GetNameplatePreset) ~= "function" then
+        return "Preset support is unavailable."
+    end
+
+    local presetId = self:GetSelectedPresetId()
+    if not presetId or presetId == "__none" then
+        return "No curated presets are available yet."
+    end
+
+    local preset = mod:GetNameplatePreset(presetId)
+    if not preset then
+        return "Select a curated preset and click Apply to replace the current nameplates configuration."
+    end
+
+    return preset.description or
+        "Select this preset, then click Apply Preset to replace the current enemy and friendly nameplates settings."
+end
+
 -- ── Value maps (extended) ────────────────────────────────────────────────────
 local OUTLINE_VALUES = {
     OUTLINE      = "Outline",
@@ -3034,6 +3119,46 @@ function Options:BuildConfiguration()
                                 end,
                             },
                         },
+                    },
+                },
+            },
+
+            presets = {
+                type  = "group",
+                name  = "Presets",
+                order = 11,
+                args  = {
+                    intro = {
+                        type  = "description",
+                        name  =
+                        "Choose from curated nameplates presets and apply them explicitly.",
+                        order = 1,
+                        width = "full",
+                    },
+                    presetSelect = {
+                        type   = "select",
+                        name   = "Preset",
+                        desc   = "Choose a curated nameplates preset to apply.",
+                        order  = 2,
+                        width  = 1.35,
+                        values = function() return GetNameplatePresetValues() end,
+                        get    = function() return Options:GetSelectedPresetId() end,
+                        set    = function(_, v) Options:SetSelectedPresetId(_, v) end,
+                    },
+                    presetApply = {
+                        type     = "execute",
+                        name     = "Apply Preset",
+                        desc     = "Replace the current nameplates configuration with the selected preset.",
+                        order    = 3,
+                        width    = 0.85,
+                        disabled = function() return Options:GetSelectedPresetId() == "__none" end,
+                        func     = function() Options:ApplySelectedPreset() end,
+                    },
+                    presetDescription = {
+                        type  = "description",
+                        name  = function() return Options:GetSelectedPresetDescription() end,
+                        order = 4,
+                        width = "full",
                     },
                 },
             },

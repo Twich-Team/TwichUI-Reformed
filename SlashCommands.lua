@@ -410,6 +410,21 @@ local function OpenConfigurationPanel(input)
             return
         end
 
+        local subCmd, subArgs = remainder:match("^(%S+)%s*(.-)%s*$")
+        subCmd = (subCmd or ""):lower()
+        subArgs = subArgs or ""
+
+        if subCmd == "export" then
+            local presetId, rawName = subArgs:match("^(%S+)%s*(.-)%s*$")
+            local presetName = rawName and rawName:match('^"(.*)"$') or rawName
+            if type(mod.ExportCurrentNameplatePreset) ~= "function" then
+                T:Print("[TwichUI] Nameplates preset export is unavailable.")
+                return
+            end
+            mod:ExportCurrentNameplatePreset(presetId, presetName)
+            return
+        end
+
         -- DB status
         local db = mod.GetDB and mod:GetDB()
         if db then

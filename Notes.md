@@ -9,7 +9,7 @@
 - Our notifications background and borders should use the same colors from the global appearance section in our configuration interface
 - Our data text menus should use the background and border settings from the global appearance section in our configuration interface
 - Need raid markers on unit frames and name plates
-
+- Lets set the default loot feed anchor to the right of chat, and enable it by default.
 - Our error handler has an option to make a sound on error. Can we add a throttle to that? for example, if its getting many errors rapidly, we only play the sound every so often
 
 # Tweaks
