@@ -834,11 +834,16 @@ local function BuildDesignerExtras()
         {
             label = "Font",
             type = "select",
-            dialogControl = "LSM30_Font",
             tab = "appearance",
             tabLabel = "Appearance",
             values = function()
-                return (LSM and LSM:HashTable("font")) or GetFontValues()
+                local list = { ["__default"] = "Default" }
+                if LSM and type(LSM.HashTable) == "function" then
+                    for name in pairs(LSM:HashTable("font") or {}) do
+                        list[name] = name
+                    end
+                end
+                return list
             end,
             get = function()
                 local opts = GetOptions()
@@ -1833,6 +1838,12 @@ function LF:OnEnable()
                     if opts then
                         opts:SetEnabled(nil, value)
                     end
+                end,
+            },
+            headerAction = {
+                label = "Show Preview",
+                func = function()
+                    LF:ShowPreview()
                 end,
             },
             getFrame     = function()
