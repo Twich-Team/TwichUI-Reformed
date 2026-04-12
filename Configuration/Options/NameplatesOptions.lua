@@ -39,6 +39,15 @@ local AURA_FILTER_VALUES               = {
     ALL     = "All",
 }
 
+local AURA_ANCHOR_POINTS               = {
+    ABOVE_LEFT = "Above Left",
+    ABOVE_CENTER = "Above Center",
+    ABOVE_RIGHT = "Above Right",
+    BELOW_LEFT = "Below Left",
+    BELOW_CENTER = "Below Center",
+    BELOW_RIGHT = "Below Right",
+}
+
 local NAME_FORMAT_VALUES               = {
     full  = "Full Name",
     short = "Short (10 chars)",
@@ -430,6 +439,27 @@ function Options:GetAuraSize() return self:GetDB().auraSize or 20 end
 
 function Options:SetAuraSize(_, v)
     self:GetDB().auraSize = math.max(12, math.min(40, math.floor(tonumber(v) or 20)))
+    Refresh()
+end
+
+function Options:GetAuraAnchorPoint() return self:GetDB().auraAnchorPoint or "ABOVE_LEFT" end
+
+function Options:SetAuraAnchorPoint(_, v)
+    self:GetDB().auraAnchorPoint = AURA_ANCHOR_POINTS[v] and v or "ABOVE_LEFT"
+    Refresh()
+end
+
+function Options:GetAuraOffsetX() return tonumber(self:GetDB().auraOffsetX) or 0 end
+
+function Options:SetAuraOffsetX(_, v)
+    self:GetDB().auraOffsetX = math.max(-200, math.min(200, math.floor(tonumber(v) or 0)))
+    Refresh()
+end
+
+function Options:GetAuraOffsetY() return tonumber(self:GetDB().auraOffsetY) or 0 end
+
+function Options:SetAuraOffsetY(_, v)
+    self:GetDB().auraOffsetY = math.max(-200, math.min(200, math.floor(tonumber(v) or 0)))
     Refresh()
 end
 
@@ -1910,10 +1940,41 @@ function Options:BuildConfiguration()
                                 get    = function() return Options:GetAuraSize() end,
                                 set    = function(_, v) Options:SetAuraSize(_, v) end,
                             },
+                            auraAnchorPoint = {
+                                type   = "select",
+                                name   = "Anchor",
+                                order  = 6,
+                                values = AURA_ANCHOR_POINTS,
+                                hidden = function() return not Options:GetShowAuras() end,
+                                get    = function() return Options:GetAuraAnchorPoint() end,
+                                set    = function(_, v) Options:SetAuraAnchorPoint(_, v) end,
+                            },
+                            auraOffsetX = {
+                                type   = "range",
+                                name   = "Offset X",
+                                order  = 7,
+                                min    = -200,
+                                max    = 200,
+                                step   = 1,
+                                hidden = function() return not Options:GetShowAuras() end,
+                                get    = function() return Options:GetAuraOffsetX() end,
+                                set    = function(_, v) Options:SetAuraOffsetX(_, v) end,
+                            },
+                            auraOffsetY = {
+                                type   = "range",
+                                name   = "Offset Y",
+                                order  = 8,
+                                min    = -200,
+                                max    = 200,
+                                step   = 1,
+                                hidden = function() return not Options:GetShowAuras() end,
+                                get    = function() return Options:GetAuraOffsetY() end,
+                                set    = function(_, v) Options:SetAuraOffsetY(_, v) end,
+                            },
                             auraShowTimer = {
                                 type   = "toggle",
                                 name   = "Show Timer Text",
-                                order  = 6,
+                                order  = 9,
                                 hidden = function() return not Options:GetShowAuras() end,
                                 get    = function() return Options:GetAuraShowTimer() end,
                                 set    = function(_, v) Options:SetAuraShowTimer(_, v) end,
@@ -1921,7 +1982,7 @@ function Options:BuildConfiguration()
                             auraTimerFontSize = {
                                 type = "range",
                                 name = "Timer Font Size",
-                                order = 7,
+                                order = 10,
                                 min = 6,
                                 max = 28,
                                 step = 1,
@@ -1934,7 +1995,7 @@ function Options:BuildConfiguration()
                             auraTestMode = {
                                 type   = "toggle",
                                 name   = "Show in Preview Mode",
-                                order  = 8,
+                                order  = 11,
                                 desc   = "Display fake aura icons when preview / test mode is active.",
                                 hidden = function() return not Options:GetShowAuras() end,
                                 get    = function() return Options:GetAuraTestMode() end,
@@ -2997,10 +3058,68 @@ function Options:BuildConfiguration()
                                     Refresh()
                                 end,
                             },
+                            auraAnchorPoint = {
+                                type   = "select",
+                                name   = "Anchor",
+                                order  = 6,
+                                values = AURA_ANCHOR_POINTS,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showAuras
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowAuras()
+                                end,
+                                get    = function()
+                                    return Options:GetFriendlyDB().auraAnchorPoint or Options:GetAuraAnchorPoint()
+                                end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().auraAnchorPoint = AURA_ANCHOR_POINTS[v] and v or "ABOVE_LEFT"
+                                    Refresh()
+                                end,
+                            },
+                            auraOffsetX = {
+                                type   = "range",
+                                name   = "Offset X",
+                                order  = 7,
+                                min    = -200,
+                                max    = 200,
+                                step   = 1,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showAuras
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowAuras()
+                                end,
+                                get    = function() return tonumber(Options:GetFriendlyDB().auraOffsetX) or
+                                    Options:GetAuraOffsetX() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().auraOffsetX = math.max(-200,
+                                        math.min(200, math.floor(tonumber(v) or 0)))
+                                    Refresh()
+                                end,
+                            },
+                            auraOffsetY = {
+                                type   = "range",
+                                name   = "Offset Y",
+                                order  = 8,
+                                min    = -200,
+                                max    = 200,
+                                step   = 1,
+                                hidden = function()
+                                    local v = Options:GetFriendlyDB().showAuras
+                                    if v ~= nil then return not v end
+                                    return not Options:GetShowAuras()
+                                end,
+                                get    = function() return tonumber(Options:GetFriendlyDB().auraOffsetY) or
+                                    Options:GetAuraOffsetY() end,
+                                set    = function(_, v)
+                                    Options:GetFriendlyDB().auraOffsetY = math.max(-200,
+                                        math.min(200, math.floor(tonumber(v) or 0)))
+                                    Refresh()
+                                end,
+                            },
                             auraShowTimer = {
                                 type   = "toggle",
                                 name   = "Show Timer Text",
-                                order  = 6,
+                                order  = 9,
                                 hidden = function()
                                     local v = Options:GetFriendlyDB().showAuras
                                     if v ~= nil then return not v end

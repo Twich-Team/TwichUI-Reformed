@@ -7786,11 +7786,11 @@ function UnitFrames:OnPowerBarFxUpdate(powerBar, elapsed)
     if fx.particleLayer and not fx.particleLayer:IsShown() then return end
 
     fx._updateAccumulator = (fx._updateAccumulator or 0) + (elapsed or 0)
-    if fx._updateAccumulator < (1 / 16) then
+    if fx._updateAccumulator < (1 / 60) then
         return
     end
 
-    elapsed = math_min(0.12, fx._updateAccumulator)
+    elapsed = math_min(0.05, fx._updateAccumulator)
     fx._updateAccumulator = 0
 
     local effectScale = fx.effectScale or 1

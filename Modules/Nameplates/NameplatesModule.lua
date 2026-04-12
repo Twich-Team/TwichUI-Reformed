@@ -195,6 +195,15 @@ local NAME_ANCHOR_LAYOUTS = {
     BELOW_RIGHT = { point = "TOPRIGHT", relativeTo = "frame", relativePoint = "BOTTOMRIGHT", x = -2, y = 0, justify = "RIGHT" },
 }
 
+local AURA_ANCHOR_LAYOUTS = {
+    ABOVE_LEFT = { point = "BOTTOMLEFT", relativePoint = "TOPLEFT", x = 0, direction = 1 },
+    ABOVE_CENTER = { point = "BOTTOM", relativePoint = "TOP", x = 0, direction = 1 },
+    ABOVE_RIGHT = { point = "BOTTOMRIGHT", relativePoint = "TOPRIGHT", x = 0, direction = 1 },
+    BELOW_LEFT = { point = "TOPLEFT", relativePoint = "BOTTOMLEFT", x = 0, direction = -1 },
+    BELOW_CENTER = { point = "TOP", relativePoint = "BOTTOM", x = 0, direction = -1 },
+    BELOW_RIGHT = { point = "TOPRIGHT", relativePoint = "BOTTOMRIGHT", x = 0, direction = -1 },
+}
+
 local RAID_MARKER_POINTS = {
     TOP = true,
     BOTTOM = true,
@@ -213,6 +222,34 @@ local function NormalizeNameAnchor(anchor)
         return normalized
     end
     return "ABOVE_LEFT"
+end
+
+local function NormalizeAuraAnchor(anchor)
+    if AURA_ANCHOR_LAYOUTS[anchor] then
+        return anchor
+    end
+    return "ABOVE_LEFT"
+end
+
+local function GetAuraRowWidth(db)
+    local auraSize = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
+    local auraMax = Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 1, NP_MAX_AURA_POOL)
+    return (auraSize * auraMax) + (math_max(0, auraMax - 1) * 2), auraSize
+end
+
+local function ApplyAuraFrameLayout(frame, db)
+    if not frame or not frame.auraFrame then return end
+
+    local layout = AURA_ANCHOR_LAYOUTS[NormalizeAuraAnchor(db.auraAnchorPoint)]
+    local rowWidth, auraSize = GetAuraRowWidth(db)
+    local castHeight = Clamp(db.castHeight or NP_DEFAULT_CAST_HEIGHT, 6, 30)
+    local baseYOffset = (castHeight + 8) * (layout.direction or 1)
+    local offsetX = Clamp(tonumber(db.auraOffsetX) or 0, -200, 200)
+    local offsetY = Clamp(tonumber(db.auraOffsetY) or 0, -200, 200)
+
+    frame.auraFrame:ClearAllPoints()
+    frame.auraFrame:SetPoint(layout.point, frame, layout.relativePoint, (layout.x or 0) + offsetX, baseYOffset + offsetY)
+    frame.auraFrame:SetSize(rowWidth, auraSize + 4)
 end
 
 local function ApplyNameTextLayout(frame, db, width)
@@ -1077,9 +1114,6 @@ function Nameplates:BuildPlateFrame(parentPlate)
 
     -- ── Aura icon pool ────────────────────────────────────────────────────────
     local auraFrame = CreateFrame("Frame", nil, frame)
-    local aurasYOffset = castH + 8
-    auraFrame:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, aurasYOffset)
-    auraFrame:SetSize(w, auraSize + 4)
     auraFrame.icons = {}
 
     local timerFSize = Clamp(db.auraTimerFontSize or 8, 6, 28)
@@ -1124,7 +1158,8 @@ function Nameplates:BuildPlateFrame(parentPlate)
     end
 
     auraFrame:Hide()
-    frame.auraFrame        = auraFrame
+    frame.auraFrame = auraFrame
+    ApplyAuraFrameLayout(frame, db)
 
     -- Cast state tracking
     frame._casting         = false
@@ -1262,7 +1297,7 @@ function Nameplates:SetPlateFrameGeometry(frame, width, height, db)
     frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", resolvedWidth / 2, -resolvedHeight / 2)
 
     ApplyNameTextLayout(frame, effectiveDB, resolvedWidth)
-    if frame.auraFrame then frame.auraFrame:SetWidth(resolvedWidth) end
+    ApplyAuraFrameLayout(frame, effectiveDB)
 end
 
 function Nameplates:StopPlateSizeAnimation(frame)
@@ -1722,6 +1757,8 @@ function Nameplates:UpdateAuras(frame, unit)
     local auraSize   = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
     local showTimer  = db.auraShowTimer ~= false
     local shown      = 0
+
+    ApplyAuraFrameLayout(frame, db)
 
     -- ── Populate aura icon ────────────────────────────────────────────────────
     -- Timer: DurationObject methods (IsZero, GetRemainingDuration) return tainted
@@ -2571,6 +2608,7 @@ function Nameplates:EnterTestMode()
             local auraSize   = Clamp(db.auraSize or NP_DEFAULT_AURA_SIZE, 12, 40)
             local fSize      = Clamp(db.auraTimerFontSize or 8, 6, 14)
             local count      = math_min(#FAKE_ICONS, Clamp(db.auraMax or NP_DEFAULT_AURA_MAX, 0, NP_MAX_AURA_POOL))
+            ApplyAuraFrameLayout(frame, db)
             for ai = 1, count do
                 local iconF = frame.auraFrame.icons[ai]
                 if iconF then
@@ -3143,7 +3181,7 @@ function Nameplates:BuildDebugReport()
         "nameOffsetX", "nameOffsetY",
         "showLevel", "showEliteIcon", "showRaidMarker", "raidMarkerPoint", "raidMarkerOffsetX", "raidMarkerOffsetY",
         "raidMarkerScale", "showTargetGlow", "showTargetArrow",
-        "showThreat", "showAuras", "auraSize", "auraMax", "auraOnlyMine",
+        "showThreat", "showAuras", "auraSize", "auraMax", "auraOnlyMine", "auraAnchorPoint", "auraOffsetX", "auraOffsetY",
     }
     addDBSection("--- Main DB ---", self:GetDB(), dbKeys)
 
