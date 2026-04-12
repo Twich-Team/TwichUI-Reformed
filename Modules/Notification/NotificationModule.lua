@@ -19,9 +19,49 @@ local PlaySoundFile = _G.PlaySoundFile
 ---@alias WrapperMessageOptions { fontSize: number|nil }
 
 local ANCHOR_HEIGHT = 28
-local ANCHOR_BORDER = { 0.10, 0.72, 0.74, 0.90 }
-local ANCHOR_BG     = { 0.04, 0.08, 0.10, 0.92 }
 local ACCENT_COLOR  = "|cff1ab8bc"
+
+function NM:GetNotificationSurface()
+    local theme = T:GetModule("Theme", true)
+    local getColor = theme and rawget(theme, "GetColor") or nil
+    local getValue = theme and rawget(theme, "Get") or nil
+    local background = type(getColor) == "function" and getColor(theme, "backgroundColor") or { 0.04, 0.08, 0.10 }
+    local border = type(getColor) == "function" and getColor(theme, "borderColor") or { 0.10, 0.72, 0.74 }
+    local backgroundAlpha = type(getValue) == "function" and tonumber(getValue(theme, "backgroundAlpha")) or 0.92
+    local borderAlpha = type(getValue) == "function" and tonumber(getValue(theme, "borderAlpha")) or 0.90
+
+    return background, border, backgroundAlpha or 0.92, borderAlpha or 0.90
+end
+
+function NM:ApplyNotificationSurface(frame, backgroundAlphaOverride, borderAlphaOverride)
+    if not (frame and frame.SetBackdropColor and frame.SetBackdropBorderColor) then
+        return
+    end
+
+    local background, border, backgroundAlpha, borderAlpha = self:GetNotificationSurface()
+    frame:SetBackdropColor(background[1], background[2], background[3], backgroundAlphaOverride or backgroundAlpha)
+    frame:SetBackdropBorderColor(border[1], border[2], border[3], borderAlphaOverride or borderAlpha)
+end
+
+function NM:ApplyAnchorAppearance()
+    if not self.anchor then
+        return
+    end
+
+    self:ApplyNotificationSurface(self.anchor)
+end
+
+function NM:OnThemeChanged(key)
+    if key ~= nil and key ~= "backgroundColor" and key ~= "backgroundAlpha" and key ~= "borderColor" and key ~= "borderAlpha" then
+        return
+    end
+
+    self:ApplyAnchorAppearance()
+
+    if self.Frame and type(self.Frame.ApplyTheme) == "function" then
+        self.Frame:ApplyTheme()
+    end
+end
 
 function NM:GetOptions()
     local cfg = T:GetModule("Configuration")
@@ -48,8 +88,7 @@ function NM:CreateAnchor()
         edgeSize = 1,
         insets   = { left = 1, right = 1, top = 1, bottom = 1 },
     })
-    anchor:SetBackdropColor(ANCHOR_BG[1], ANCHOR_BG[2], ANCHOR_BG[3], ANCHOR_BG[4])
-    anchor:SetBackdropBorderColor(ANCHOR_BORDER[1], ANCHOR_BORDER[2], ANCHOR_BORDER[3], ANCHOR_BORDER[4])
+    self:ApplyAnchorAppearance()
 
     local label = anchor:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     label:SetPoint("CENTER", anchor, "CENTER", 0, 0)
@@ -129,6 +168,7 @@ end
 
 function NM:OnEnable()
     self:RegisterMessage("TWICH_NOTIFICATION")
+    self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
     self:CreateAnchor()
     self:ApplyAnchorLockState()
     self.Frame:Create()

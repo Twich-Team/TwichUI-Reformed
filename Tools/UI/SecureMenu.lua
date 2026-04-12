@@ -90,7 +90,16 @@ local function GetBorderAndBackdrop(menu, scope)
         local prefix = scope == "row" and "row" or "frame"
         local border = type(style[prefix .. "BorderColor"]) == "table" and style[prefix .. "BorderColor"] or
             type(style.borderColor) == "table" and style.borderColor or nil
+        local borderAlpha = tonumber(style[prefix .. "BorderAlpha"])
+        if borderAlpha == nil then
+            borderAlpha = tonumber(style.borderAlpha)
+        end
+        if borderAlpha == nil then
+            borderAlpha = border and border[4] or 1
+        end
         local backdrop = type(style[prefix .. "BackdropColor"]) == "table" and style[prefix .. "BackdropColor"] or
+            type(style[prefix .. "BackgroundColor"]) == "table" and style[prefix .. "BackgroundColor"] or
+            type(style.backgroundColor) == "table" and style.backgroundColor or
             type(style.backdropColor) == "table" and style.backdropColor or nil
         local br = border and border[1] or 0
         local bg = border and border[2] or 0
@@ -104,9 +113,15 @@ local function GetBorderAndBackdrop(menu, scope)
             fa = tonumber(style.backdropAlpha)
         end
         if fa == nil then
+            fa = tonumber(style[prefix .. "BackgroundAlpha"])
+        end
+        if fa == nil then
+            fa = tonumber(style.backgroundAlpha)
+        end
+        if fa == nil then
             fa = backdrop and backdrop[4] or 0.9
         end
-        return br, bg, bb, fr, fg, fb, fa
+        return br, bg, bb, borderAlpha, fr, fg, fb, fa
     end
 
     ---@diagnostic disable-next-line: undefined-field
@@ -114,13 +129,13 @@ local function GetBorderAndBackdrop(menu, scope)
     if E and E.media and E.media.bordercolor and E.media.backdropfadecolor then
         local br, bg, bb = unpack(E.media.bordercolor)
         local fr, fg, fb, fa = unpack(E.media.backdropfadecolor)
-        return br or 0, bg or 0, bb or 0, fr or 0.06, fg or 0.06, fb or 0.06, fa or 0.9
+        return br or 0, bg or 0, bb or 0, 1, fr or 0.06, fg or 0.06, fb or 0.06, fa or 0.9
     end
-    return 0, 0, 0, 0.06, 0.06, 0.06, 0.9
+    return 0, 0, 0, 1, 0.06, 0.06, 0.06, 0.9
 end
 
 local function SkinBackdrop(frame, menu, scope)
-    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop(menu, scope)
+    local br, bg, bb, ba, fr, fg, fb, fa = GetBorderAndBackdrop(menu, scope)
     frame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8X8",
         edgeFile = "Interface\\Buttons\\WHITE8X8",
@@ -128,7 +143,7 @@ local function SkinBackdrop(frame, menu, scope)
         insets = { left = 1, right = 1, top = 1, bottom = 1 },
     })
     frame:SetBackdropColor(fr, fg, fb, fa)
-    frame:SetBackdropBorderColor(br, bg, bb, 1)
+    frame:SetBackdropBorderColor(br, bg, bb, ba)
 end
 
 local function IsUISoundsEnabled()
@@ -418,10 +433,9 @@ local function CreateRow(menu, index)
     end)
 
     button:SetScript("OnLeave", function(self)
-        local br, bg, bb = GetBorderAndBackdrop(self.__twichuiMenu, "row")
-        local _, _, _, fr, fg, fb, fa = GetBorderAndBackdrop(self.__twichuiMenu, "row")
+        local br, bg, bb, ba, fr, fg, fb, fa = GetBorderAndBackdrop(self.__twichuiMenu, "row")
         self:SetBackdropColor(fr, fg, fb, fa)
-        self:SetBackdropBorderColor(br, bg, bb, 1)
+        self:SetBackdropBorderColor(br, bg, bb, ba)
         self.__twichuiGlow:SetAlpha(0)
         self.__twichuiAccent:SetAlpha(0)
         self.__twichuiUnderline:SetAlpha(0)
@@ -478,7 +492,6 @@ function UI.CreateSecureMenu(key)
     frame:SetClampedToScreen(true)
     frame:Hide()
 
-    SkinBackdrop(frame, menu, "frame")
     EnsureFrameFadeAnimations(frame, MENU_FADE_IN_DURATION, MENU_FADE_OUT_DURATION, function(menuFrame)
         menuFrame:Hide()
     end)
@@ -488,6 +501,8 @@ function UI.CreateSecureMenu(key)
         buttons = {},
         entries = {},
     }
+
+    SkinBackdrop(frame, menu, "frame")
 
     local blocker = CreateFrame("Frame", nil, frame)
     blocker:SetAllPoints(frame)
@@ -620,9 +635,9 @@ function UI.CreateSecureMenu(key)
                     tostring(entry.disabled == true))
 
                 if entry.isTitle then
-                    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop(self, "row")
+                    local br, bg, bb, ba, fr, fg, fb, fa = GetBorderAndBackdrop(self, "row")
                     row:SetBackdropColor(fr, fg, fb, fa)
-                    row:SetBackdropBorderColor(br, bg, bb, 1)
+                    row:SetBackdropBorderColor(br, bg, bb, ba)
                     row:EnableMouse(false)
                     row:SetAlpha(0.95)
                     row.__twichuiGlow:SetAlpha(0)
@@ -630,16 +645,16 @@ function UI.CreateSecureMenu(key)
                     row.__twichuiUnderline:SetAlpha(0)
                     row.__twichuiLabel:SetTextColor(0.98, 0.82, 0.42)
                 elseif entry.disabled then
-                    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop(self, "row")
+                    local br, bg, bb, ba, fr, fg, fb, fa = GetBorderAndBackdrop(self, "row")
                     row:SetBackdropColor(fr, fg, fb, fa)
-                    row:SetBackdropBorderColor(br, bg, bb, 1)
+                    row:SetBackdropBorderColor(br, bg, bb, ba)
                     row:EnableMouse(false)
                     row:SetAlpha(0.5)
                     row.__twichuiLabel:SetTextColor(0.6, 0.64, 0.7)
                 else
-                    local br, bg, bb, fr, fg, fb, fa = GetBorderAndBackdrop(self, "row")
+                    local br, bg, bb, ba, fr, fg, fb, fa = GetBorderAndBackdrop(self, "row")
                     row:SetBackdropColor(fr, fg, fb, fa)
-                    row:SetBackdropBorderColor(br, bg, bb, 1)
+                    row:SetBackdropBorderColor(br, bg, bb, ba)
                     row:EnableMouse(true)
                     row:SetAlpha(1.0)
                     row.__twichuiLabel:SetTextColor(0.96, 0.96, 0.98)
@@ -778,6 +793,8 @@ function UI.CreateSecureMenu(key)
         if self.dismiss and self.dismiss.Show then
             self.dismiss:Show()
         end
+
+        SkinBackdrop(self.frame, self, "frame")
 
         FadeInFrame(self.frame)
 

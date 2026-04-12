@@ -945,8 +945,7 @@ function DataTextModule:ShowStandaloneMenu(panel, menuList)
 
         if self.standaloneMenu then
             self.standaloneMenu.rawMenuList = menuList
-            self.standaloneMenu.styleOverride = GetResolvedPanelStyle(panel and panel.ownerPanel and
-                panel.ownerPanel.panelID)
+            self.standaloneMenu.styleOverride = GetResolvedPanelStyle(nil)
             self.standaloneMenu:SetEntries(entries)
             self.standaloneMenu:Toggle(panel, "TOPLEFT", "BOTTOMLEFT", 0, -4)
             return

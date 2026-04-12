@@ -24,6 +24,12 @@ local BeginFadeOut
 local FADE_IN_DURATION = 0.2
 local FADE_OUT_DURATION = 0.2
 
+local function ApplyNotificationSurfaceFrame(frame)
+    if NM and NM.ApplyNotificationSurface then
+        NM:ApplyNotificationSurface(frame)
+    end
+end
+
 local function GetNotificationFontSettings()
     local options = GetOptions()
     if not options then
@@ -100,6 +106,8 @@ local function ApplyNotificationStyle(widget)
     if not widget or not widget.frame then
         return
     end
+
+    ApplyNotificationSurfaceFrame(widget.frame)
 
     local fontPath, sizeAdjustment = GetNotificationFontSettings()
     if not fontPath and sizeAdjustment == 0 then
@@ -251,6 +259,7 @@ function NotificationFrame:Create()
     end
 
     if container.frame then
+        ApplyNotificationSurfaceFrame(container.frame)
         container.frame:ClearAllPoints()
 
         if dockMode == "top" then
@@ -435,4 +444,18 @@ function NotificationFrame:Refresh()
     end
 
     self:Create()
+end
+
+function NotificationFrame:ApplyTheme()
+    if not self.frame then
+        return
+    end
+
+    if self.frame.frame then
+        ApplyNotificationSurfaceFrame(self.frame.frame)
+    end
+
+    for _, child in ipairs(self.frame.children or {}) do
+        ApplyNotificationStyle(child)
+    end
 end
