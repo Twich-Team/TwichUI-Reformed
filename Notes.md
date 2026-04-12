@@ -3,6 +3,7 @@
 ## NOTES
 
 - Need raid markers on unit frames
+- Some way to emphasize nameplates where the unit is casting
 
 # Tweaks
 

@@ -252,6 +252,19 @@ local function ApplyAuraFrameLayout(frame, db)
     frame.auraFrame:SetSize(rowWidth, auraSize + 4)
 end
 
+local function ApplyAbsorbBarLayout(frame)
+    if not frame or not frame.healthBar or not frame.absorbBar then return end
+
+    local healthTexture = frame.healthBar.GetStatusBarTexture and frame.healthBar:GetStatusBarTexture()
+    if not healthTexture then return end
+
+    local barWidth = math_max(1, frame.healthBar:GetWidth() or frame:GetWidth() or NP_DEFAULT_WIDTH)
+    frame.absorbBar:ClearAllPoints()
+    frame.absorbBar:SetPoint("TOPLEFT", healthTexture, "TOPRIGHT", 0, 0)
+    frame.absorbBar:SetPoint("BOTTOMLEFT", healthTexture, "BOTTOMRIGHT", 0, 0)
+    frame.absorbBar:SetWidth(barWidth)
+end
+
 local function ApplyNameTextLayout(frame, db, width)
     if not frame or not frame.nameText then return end
 
@@ -951,16 +964,16 @@ function Nameplates:BuildPlateFrame(parentPlate)
     frame.healthBar = healthBar
     frame.healthBg  = healthBg
 
-    -- ── Absorb overlay ────────────────────────────────────────────────────────
+    -- ── Absorb prediction ─────────────────────────────────────────────────────
     local absorbBar = CreateFrame("StatusBar", nil, healthBar)
-    absorbBar:SetAllPoints()
     absorbBar:SetStatusBarTexture(hpTex)
-    absorbBar:SetStatusBarColor(0.67, 0.85, 0.97, 0.5)
+    absorbBar:SetStatusBarColor(0.67, 0.85, 0.97, 0.72)
     absorbBar:SetMinMaxValues(0, 1)
     absorbBar:SetValue(0)
-    absorbBar:SetReverseFill(true)
+    absorbBar:SetFrameLevel(healthBar:GetFrameLevel() + 1)
     absorbBar:Hide()
     frame.absorbBar = absorbBar
+    ApplyAbsorbBarLayout(frame)
 
     -- ── Threat accent bar (left edge strip) ───────────────────────────────────
     local threatBar = frame:CreateTexture(nil, "OVERLAY", nil, 1)
@@ -1297,6 +1310,7 @@ function Nameplates:SetPlateFrameGeometry(frame, width, height, db)
     frame:SetPoint("BOTTOMRIGHT", frame._plate, "CENTER", resolvedWidth / 2, -resolvedHeight / 2)
 
     ApplyNameTextLayout(frame, effectiveDB, resolvedWidth)
+    ApplyAbsorbBarLayout(frame)
     ApplyAuraFrameLayout(frame, effectiveDB)
 end
 
@@ -1429,12 +1443,14 @@ function Nameplates:UpdateHealth(frame, unit)
     frame.healthBar:SetMinMaxValues(0, hpMax)
     frame.healthBar:SetValue(hp)
 
-    -- Absorb overlay.
-    -- In Midnight, UnitGetTotalAbsorbs returns a secret number. Comparison (absorb > 0) is blocked
-    -- by the taint system — even inside pcall it fails as an upvalue comparison error.
-    -- Solution: always set the bar and show it; zero absorb produces zero fill (visually absent).
+    -- Absorb prediction.
+    -- Like ElvUI's nameplate health prediction, anchor the absorb segment to the live
+    -- health texture so the shield extends from the current health edge rather than
+    -- washing over the entire bar. This keeps the visual readable and avoids the
+    -- all-points reverse-fill overlay that was not showing reliably in practice.
     if db.showAbsorb ~= false and UnitGetTotalAbsorbs then
         local absorb = UnitGetTotalAbsorbs(unit)
+        ApplyAbsorbBarLayout(frame)
         frame.absorbBar:SetMinMaxValues(0, hpMax)
         frame.absorbBar:SetValue(absorb)
         frame.absorbBar:Show()
@@ -2038,7 +2054,10 @@ function Nameplates:ApplyThemeToFrame(frame)
         local cbgC = type(db.castBgColor) == "table" and db.castBgColor or { 0.05, 0.06, 0.08, 0.92 }
         frame.castBg:SetVertexColor(cbgC[1], cbgC[2], cbgC[3], cbgC[4] or 0.92)
     end
-    if frame.absorbBar then frame.absorbBar:SetStatusBarTexture(hpTex) end
+    if frame.absorbBar then
+        frame.absorbBar:SetStatusBarTexture(hpTex)
+        ApplyAbsorbBarLayout(frame)
+    end
 
     -- Power bar texture
     if frame.powerBar then frame.powerBar:SetStatusBarTexture(hpTex) end
@@ -2453,7 +2472,7 @@ end
 -- ── Test mode ─────────────────────────────────────────────────────────────────
 local TEST_SCENARIOS = {
     {
-        name = "Shadowmage Selene",
+        name = "Voidguard Channeler",
         hp = 68,
         hpMax = 100,
         level = 80,
@@ -2461,7 +2480,10 @@ local TEST_SCENARIOS = {
         reaction = 3,
         casting = "Shadow Bolt",
         castProgress = 0.6,
-        notInterruptible = false
+        notInterruptible = false,
+        absorbPeak = 34,
+        absorbCycle = 7.0,
+        absorbHold = 1.35,
     },
     {
         name = "Captain Aldric",
@@ -2506,6 +2528,66 @@ local TEST_SCENARIOS = {
         casting = nil
     },
 }
+
+local function ApplyPreviewAbsorb(frame, value, maxValue)
+    if not frame or not frame.absorbBar then return end
+
+    local safeMax = math_max(1, tonumber(maxValue) or 1)
+    local safeValue = Clamp(tonumber(value) or 0, 0, safeMax)
+    ApplyAbsorbBarLayout(frame)
+    frame.absorbBar:SetMinMaxValues(0, safeMax)
+    frame.absorbBar:SetValue(safeValue)
+
+    if safeValue > 0.001 then
+        frame.absorbBar:Show()
+    else
+        frame.absorbBar:Hide()
+    end
+end
+
+local function StopPreviewAbsorbDriver(frame)
+    if not frame or not frame._previewAbsorbDriver then return end
+    frame._previewAbsorbDriver:SetScript("OnUpdate", nil)
+    frame._previewAbsorbDriver:Hide()
+    frame._previewAbsorbDriver.elapsed = 0
+end
+
+local function StartPreviewAbsorbDriver(frame, mock)
+    if not frame or not frame.absorbBar then return end
+
+    StopPreviewAbsorbDriver(frame)
+
+    local peak = tonumber(mock and mock.absorbPeak) or 0
+    local maxValue = tonumber(mock and mock.hpMax) or 100
+    if peak <= 0 then
+        ApplyPreviewAbsorb(frame, tonumber(mock and mock.absorb) or 0, maxValue)
+        return
+    end
+
+    local cycle = math_max(2.5, tonumber(mock.absorbCycle) or 7.0)
+    local hold = Clamp(tonumber(mock.absorbHold) or 1.2, 0, cycle * 0.65)
+    local ramp = math_max(0.45, (cycle - hold) * 0.35)
+    local decay = math_max(0.8, cycle - hold - ramp)
+    local driver = frame._previewAbsorbDriver or CreateFrame("Frame", nil, frame)
+    frame._previewAbsorbDriver = driver
+    driver.elapsed = 0
+    driver:SetScript("OnUpdate", function(self, elapsed)
+        self.elapsed = (self.elapsed or 0) + (elapsed or 0)
+        local t = self.elapsed % cycle
+        local current
+
+        if t < ramp then
+            current = peak * (t / ramp)
+        elseif t < (ramp + hold) then
+            current = peak
+        else
+            current = peak * (1 - ((t - ramp - hold) / decay))
+        end
+
+        ApplyPreviewAbsorb(frame, current, maxValue)
+    end)
+    driver:Show()
+end
 
 function Nameplates:EnterTestMode()
     if self._testMode then return end
@@ -2602,6 +2684,12 @@ function Nameplates:EnterTestMode()
             frame.threatBar:SetVertexColor(0.87, 0.25, 0.25, 0.9)
         end
 
+        if db.showAbsorb ~= false then
+            StartPreviewAbsorbDriver(frame, mock)
+        elseif frame.absorbBar then
+            frame.absorbBar:Hide()
+        end
+
         -- Fake aura icons (test aura mode)
         if db.showAuras ~= false and db.auraTestMode ~= false and frame.auraFrame then
             local FAKE_ICONS = { 135817, 136243, 135768, 135723 }
@@ -2651,6 +2739,7 @@ function Nameplates:ExitTestMode()
     for _, entry in ipairs(self._testPlates) do
         if entry.frame then
             _stopCastTicker(entry.frame)
+            StopPreviewAbsorbDriver(entry.frame)
             entry.frame:Hide()
         end
         if entry.anchor then entry.anchor:Hide() end
@@ -2772,6 +2861,7 @@ function Nameplates:OnEnable()
     self:RegisterEvent("NAME_PLATE_UNIT_REMOVED", "OnNamePlateRemoved")
     self:RegisterEvent("UNIT_HEALTH", "OnUnitHealth")
     self:RegisterEvent("UNIT_MAXHEALTH", "OnUnitHealth")
+    self:RegisterEvent("UNIT_ABSORB_AMOUNT_CHANGED", "OnUnitHealth")
     self:RegisterEvent("UNIT_AURA", "OnUnitAura")
     -- UNIT_POWER_FREQUENT fires every ~0.1s for every unit in combat.
     -- With 10+ mobs that is ~100 callbacks/sec. UNIT_POWER_UPDATE fires only when
