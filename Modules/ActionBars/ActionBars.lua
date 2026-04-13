@@ -32,6 +32,8 @@ local IsShiftKeyDown = _G.IsShiftKeyDown
 local IsMetaKeyDown = _G.IsMetaKeyDown
 local C_SpellActivationOverlay = _G.C_SpellActivationOverlay
 local IsSpellOverlayed = (C_SpellActivationOverlay and C_SpellActivationOverlay.IsSpellOverlayed) or _G.IsSpellOverlayed
+local AssistedCombatManager = _G.AssistedCombatManager
+local EventRegistry = _G.EventRegistry
 local NUM_PET_ACTION_SLOTS = _G.NUM_PET_ACTION_SLOTS or 10
 local NUM_STANCE_SLOTS = _G.NUM_STANCE_SLOTS or 10
 local C_Timer = _G.C_Timer
@@ -1074,6 +1076,23 @@ local function GetButtonArtTextures(button)
     return textures
 end
 
+local function GetButtonSpellHighlightTexture(button)
+    if not button then
+        return nil
+    end
+
+    local buttonName = button.GetName and button:GetName() or nil
+    return button.SpellHighlightTexture or (buttonName and _G[buttonName .. "SpellHighlightTexture"]) or nil
+end
+
+local function GetButtonAssistedCombatFrame(button)
+    if not button then
+        return nil
+    end
+
+    return button.AssistedCombatHighlightFrame or nil
+end
+
 local function CaptureButtonArtTextures(button)
     local captured = {}
     for key, texture in pairs(GetButtonArtTextures(button)) do
@@ -1094,8 +1113,10 @@ function RestoreButtonArtTextures(button, states)
 end
 
 local function SuppressButtonArtTextures(button)
+    local spellHighlight = GetButtonSpellHighlightTexture(button)
+
     for _, texture in pairs(GetButtonArtTextures(button)) do
-        if texture then
+        if texture and texture ~= spellHighlight then
             if texture.SetTexture and texture == (button.GetNormalTexture and button:GetNormalTexture() or nil) then
                 texture:SetTexture(nil)
             end
@@ -1135,8 +1156,7 @@ local function SuppressButtonAnimationEffects(button)
 
     local buttonName = button.GetName and button:GetName() or nil
     local flash = button.Flash or (buttonName and _G[buttonName .. "Flash"]) or nil
-    local spellHighlight = button.SpellHighlightTexture or (buttonName and _G[buttonName .. "SpellHighlightTexture"]) or
-        nil
+    local spellHighlight = GetButtonSpellHighlightTexture(button)
     local pushed = button.GetPushedTexture and button:GetPushedTexture() or nil
     local checked = button.GetCheckedTexture and button:GetCheckedTexture() or nil
 
@@ -1149,18 +1169,6 @@ local function SuppressButtonAnimationEffects(button)
         end
         if flash.Hide then
             flash:Hide()
-        end
-    end
-
-    if spellHighlight then
-        if spellHighlight.SetTexture then
-            spellHighlight:SetTexture(nil)
-        end
-        if spellHighlight.SetAlpha then
-            spellHighlight:SetAlpha(0)
-        end
-        if spellHighlight.Hide then
-            spellHighlight:Hide()
         end
     end
 
@@ -1500,8 +1508,99 @@ function ActionBars:OnInitialize()
     self.spellButtonIndexDirty = true
     self._defaultArtHiddenApplied = false
     self._themeStyleToken = 0
+    self.currentAssistedSpellID = nil
+    self._assistedHighlightHooksInstalled = false
+    self._assistedHighlightCallbackRegistered = false
+    self._assistedHighlightRefreshQueued = false
 
     self:CreateInfrastructure()
+
+    function ActionBars:IsAssistedRotationSpell(spellID)
+        return AssistedCombatManager
+            and type(AssistedCombatManager.IsRotationSpell) == "function"
+            and spellID
+            and AssistedCombatManager:IsRotationSpell(spellID) == true
+    end
+
+    function ActionBars:UpdateAssistedHighlightState(nextSpellID, reason)
+        local normalizedSpellID = tonumber(nextSpellID) or nil
+        if normalizedSpellID and not self:IsAssistedRotationSpell(normalizedSpellID) then
+            normalizedSpellID = nil
+        end
+
+        local previousSpellID = self.currentAssistedSpellID
+        self.currentAssistedSpellID = normalizedSpellID
+
+        if LAB and type(LAB.activeAssist) == "table" then
+            for spellID in pairs(LAB.activeAssist) do
+                LAB.activeAssist[spellID] = nil
+            end
+            if normalizedSpellID then
+                LAB.activeAssist[normalizedSpellID] = true
+            end
+        end
+
+        if previousSpellID ~= normalizedSpellID then
+            LogDebugf(false, "assisted highlight update reason=%s spellID=%s previous=%s",
+                SafeDebugString(reason or "unknown"),
+                SafeDebugString(normalizedSpellID),
+                SafeDebugString(previousSpellID))
+        end
+
+        local db = self:GetDB()
+        if not db or db.enabled == false or not (self.IsEnabled and self:IsEnabled()) then
+            return
+        end
+
+        self:UpdateAllButtonGlows()
+    end
+
+    function ActionBars:QueueAssistedHighlightRefresh(reason)
+        if not AssistedCombatManager or type(AssistedCombatManager.ForceUpdateAtEndOfFrame) ~= "function" then
+            return
+        end
+
+        if self._assistedHighlightRefreshQueued == true then
+            return
+        end
+
+        self._assistedHighlightRefreshQueued = true
+        C_Timer.After(0, function()
+            ActionBars._assistedHighlightRefreshQueued = false
+
+            local db = ActionBars:GetDB()
+            if not db or db.enabled == false or not (ActionBars.IsEnabled and ActionBars:IsEnabled()) then
+                return
+            end
+
+            LogDebugf(false, "assisted highlight refresh requested reason=%s", SafeDebugString(reason or "unknown"))
+            AssistedCombatManager:ForceUpdateAtEndOfFrame()
+        end)
+    end
+
+    function ActionBars:HandleAssistedRotationSpellsUpdated()
+        self:QueueAssistedHighlightRefresh("rotation-spells-updated")
+    end
+
+    function ActionBars:InstallAssistedHighlightHooks()
+        if not AssistedCombatManager or type(hooksecurefunc) ~= "function" then
+            return
+        end
+
+        if self._assistedHighlightHooksInstalled ~= true then
+            hooksecurefunc(AssistedCombatManager, "UpdateAllAssistedHighlightFramesForSpell", function(_, nextSpellID)
+                ActionBars:UpdateAssistedHighlightState(nextSpellID, "manager-update")
+            end)
+            self._assistedHighlightHooksInstalled = true
+        end
+
+        if EventRegistry and type(EventRegistry.RegisterCallback) == "function" and
+            self._assistedHighlightCallbackRegistered ~= true then
+            EventRegistry:RegisterCallback("AssistedCombatManager.RotationSpellsUpdated",
+                self.HandleAssistedRotationSpellsUpdated, self)
+            self._assistedHighlightCallbackRegistered = true
+        end
+    end
 
     self.blizzardHiddenRoot = CreateFrame("Frame", nil, UIParent)
     self.blizzardHiddenRoot:Hide()
@@ -1528,6 +1627,7 @@ end
 function ActionBars:OnEnable()
     LogDebug("action bars enabled", false)
     EnsureGridHooksInstalled(self)
+    self:InstallAssistedHighlightHooks()
     self:RegisterEvent("PLAYER_ENTERING_WORLD", "HandlePlayerEnteringWorld")
     self:RegisterEvent("PLAYER_GAINS_VEHICLE_DATA", "HandleVehicleDataChanged")
     self:RegisterEvent("PLAYER_LOSES_VEHICLE_DATA", "HandleVehicleDataChanged")
@@ -1631,6 +1731,13 @@ function ActionBars:OnDisable()
     self:RestoreOriginalLayout()
     RefreshBlizzardLayout()
     LogDebug("action bars disabled and original layout restored", false)
+    if EventRegistry and type(EventRegistry.UnregisterCallback) == "function" and
+        self._assistedHighlightCallbackRegistered == true then
+        EventRegistry:UnregisterCallback("AssistedCombatManager.RotationSpellsUpdated", self)
+        self._assistedHighlightCallbackRegistered = false
+    end
+
+    self:UpdateAssistedHighlightState(nil, "module-disabled")
 end
 
 function ActionBars:PLAYER_REGEN_ENABLED()
@@ -1826,6 +1933,12 @@ function ActionBars:BuildDebugReport()
         tostring(InCombatLockdown and InCombatLockdown() or false),
         tostring(self.pendingRefresh == true),
         tostring(self.pendingDisable == true))
+    lines[#lines + 1] = string.format(
+        "glowStyle=%s currentAssistedSpellID=%s hasActiveSpellAlerts=%s hasAssistedHighlights=%s",
+        SafeDebugString(self:GetGlowStyle()),
+        SafeDebugString(self.currentAssistedSpellID),
+        tostring(next(self.activeAlertSpells or {}) ~= nil),
+        tostring(self:HasActiveAssistedHighlights()))
     lines[#lines + 1] = ""
     lines[#lines + 1] = "Blizzard Frames"
 
@@ -1862,9 +1975,52 @@ function ActionBars:BuildDebugReport()
             buttonCount)
     end
 
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = "Assisted Highlight Buttons"
+
+    local foundAssistedButtonState = false
+    for _, definition in ipairs(BAR_DEFINITIONS) do
+        local holder = self.holders[definition.key]
+        if holder and holder.IsShown and holder:IsShown() then
+            local buttons = self.barButtons[definition.key] or {}
+            for index, button in ipairs(buttons) do
+                local spellID = (button.GetSpellId and button:GetSpellId()) or self:GetButtonSpellID(button)
+                local assistFrame = GetButtonAssistedCombatFrame(button)
+                local spellHighlight = GetButtonSpellHighlightTexture(button)
+                local overlay = button and (button.__LBGoverlay or button.overlay or button.SpellActivationAlert or nil) or
+                nil
+                local isTracked = spellID == self.currentAssistedSpellID
+                    or (assistFrame and assistFrame.IsShown and assistFrame:IsShown())
+                    or (spellHighlight and spellHighlight.IsShown and spellHighlight:IsShown())
+                    or (overlay and overlay.IsShown and overlay:IsShown())
+
+                if isTracked then
+                    foundAssistedButtonState = true
+                    lines[#lines + 1] = string.format(
+                        "%s[%d] action=%s spellID=%s rotationSpell=%s glowActive=%s assistFrame=%s spellHighlight=%s overlay=%s checked=%s masque=%s",
+                        definition.key,
+                        index,
+                        SafeDebugString(button.action or (button.GetAttribute and button:GetAttribute("action")) or nil),
+                        SafeDebugString(spellID),
+                        tostring(self:IsAssistedRotationSpell(spellID) == true),
+                        tostring(self:IsButtonGlowActive(button, {})),
+                        tostring(assistFrame and assistFrame.IsShown and assistFrame:IsShown() or false),
+                        tostring(spellHighlight and spellHighlight.IsShown and spellHighlight:IsShown() or false),
+                        tostring(overlay and overlay.IsShown and overlay:IsShown() or false),
+                        tostring(button.GetChecked and button:GetChecked() or false),
+                        tostring(db.useMasque == true and Masque ~= nil))
+                end
+            end
+        end
+    end
+
+    if not foundAssistedButtonState then
+        lines[#lines + 1] = "No visible buttons currently report assisted-highlight state."
+    end
+
     local vehicleHolder = self.holders.vehicleExit
     local vehicleButton = self.barButtons.vehicleExit and self.barButtons.vehicleExit[1] or
-    _G.MainMenuBarVehicleLeaveButton
+        _G.MainMenuBarVehicleLeaveButton
     local vehicleState = CaptureVehicleExitRuntimeState(vehicleButton, vehicleHolder, "debug-report")
 
     lines[#lines + 1] = ""
@@ -3414,6 +3570,29 @@ function ActionBars:UpdateButtonsForSpellID(spellID)
 end
 
 function ActionBars:IsButtonGlowActive(button, spellStateCache)
+    local assistedSpellID = button and ((button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID) or nil
+    if assistedSpellID and assistedSpellID == self.currentAssistedSpellID and self:IsAssistedRotationSpell(assistedSpellID) then
+        return true
+    end
+
+    local assistedFrame = button and button.AssistedCombatHighlightFrame or nil
+    if assistedFrame and assistedFrame.IsShown and assistedFrame:IsShown() then
+        return true
+    end
+
+    local spellHighlight = GetButtonSpellHighlightTexture(button)
+    if spellHighlight and spellHighlight.IsShown and spellHighlight:IsShown() then
+        return true
+    end
+
+    if LAB and type(LAB.activeAssist) == "table" then
+        local assistedSpellID = button and (button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID or
+        nil
+        if assistedSpellID and LAB.activeAssist[assistedSpellID] == true then
+            return true
+        end
+    end
+
     local spellID = button and button.__twichuiABSpellID or nil
     if spellID == nil then
         if button and button.__twichuiABSpellIDResolved == true then
@@ -3458,6 +3637,32 @@ function ActionBars:IsButtonGlowActive(button, spellStateCache)
     end
 
     return isActive
+end
+
+function ActionBars:HasActiveAssistedHighlights()
+    if self.currentAssistedSpellID and self:IsAssistedRotationSpell(self.currentAssistedSpellID) then
+        return true
+    end
+
+    if LAB and type(LAB.activeAssist) == "table" and next(LAB.activeAssist) ~= nil then
+        return true
+    end
+
+    for _, buttons in pairs(self.barButtons or {}) do
+        for _, button in ipairs(buttons) do
+            local assistedFrame = button and button.AssistedCombatHighlightFrame or nil
+            if assistedFrame and assistedFrame.IsShown and assistedFrame:IsShown() then
+                return true
+            end
+
+            local spellHighlight = GetButtonSpellHighlightTexture(button)
+            if spellHighlight and spellHighlight.IsShown and spellHighlight:IsShown() then
+                return true
+            end
+        end
+    end
+
+    return false
 end
 
 function ActionBars:GetGlowStyle()
@@ -5440,7 +5645,9 @@ function ActionBars:RefreshButtonStates(event)
     end
 
     local hasActiveAlertSpells = next(self.activeAlertSpells or {}) ~= nil
-    local skipGlowEvaluation = shouldRefreshGlow and glowStyle ~= "blizzard" and hasActiveAlertSpells ~= true
+    local hasActiveAssistedHighlights = shouldRefreshGlow and self:HasActiveAssistedHighlights() or false
+    local skipGlowEvaluation = shouldRefreshGlow and glowStyle ~= "blizzard" and hasActiveAlertSpells ~= true and
+        hasActiveAssistedHighlights ~= true
     local spellStateCache = (shouldRefreshGlow and not skipGlowEvaluation) and {} or nil
     for barKey, buttons in pairs(self.barButtons) do
         local settings = self:GetBarSettings(barKey)
@@ -5979,6 +6186,7 @@ function ActionBars:RefreshAll()
     self:ApplyMasqueSettings(actionBarDB)
     self:RefreshButtonStates(true)
     self:ApplyOverrideBindings()
+    self:QueueAssistedHighlightRefresh("refresh-all")
     local glowStyle = self:GetGlowStyle()
     if glowStyle == "button" or glowStyle == "blizzard" then
         self:ScheduleGlowSync(0.15)
