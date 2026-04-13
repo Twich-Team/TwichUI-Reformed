@@ -40,6 +40,8 @@ local ROOT_DEFAULTS = {
     procGlowStyle = "pixel",
     procGlowUseThemeColor = true,
     procGlowColor = { 0.96, 0.76, 0.24 },
+    assistedGlowUseSeparateColor = false,
+    assistedGlowColor = { 0.30, 0.78, 0.98 },
 }
 
 local SIMPLE_VISIBILITY_RULES = {
@@ -1092,11 +1094,53 @@ function Options:BuildConfiguration()
                     RequestGlowRefresh(false)
                 end,
             },
+            assistedGlowSeparate = {
+                type = "toggle",
+                name = "Separate Assisted Color",
+                desc = "Use a different color for Blizzard assisted-combat recommendations than for normal proc glows.",
+                order = 6,
+                width = "half",
+                disabled = function()
+                    local style = db.procGlowStyle or "pixel"
+                    return style == "none" or style == "blizzard"
+                end,
+                get = function()
+                    return db.assistedGlowUseSeparateColor == true
+                end,
+                set = function(_, value)
+                    db.assistedGlowUseSeparateColor = value == true
+                    RequestGlowRefresh(false)
+                end,
+            },
+            assistedGlowColor = {
+                type = "color",
+                name = "Assisted Glow Color",
+                desc =
+                "Color used for assisted-combat recommendation glows when the separate assisted color override is enabled.",
+                order = 7,
+                width = "half",
+                disabled = function()
+                    local style = db.procGlowStyle or "pixel"
+                    return style == "none" or style == "blizzard" or db.assistedGlowUseSeparateColor ~= true
+                end,
+                get = function()
+                    local color = db.assistedGlowColor
+                    if type(color) == "table" then
+                        return color[1] or 0.30, color[2] or 0.78, color[3] or 0.98
+                    end
+
+                    return 0.30, 0.78, 0.98
+                end,
+                set = function(_, red, green, blue)
+                    db.assistedGlowColor = { red, green, blue }
+                    RequestGlowRefresh(false)
+                end,
+            },
             failedFeedback = {
                 type = "toggle",
                 name = "Failed Cast Feedback",
                 desc = "Flash the last attempted action button red when the spell or action fails to fire.",
-                order = 6,
+                order = 8,
                 width = "half",
                 get = function()
                     return db.failedActionFeedback ~= false
@@ -1110,7 +1154,7 @@ function Options:BuildConfiguration()
                 type = "range",
                 name = "Feedback Duration",
                 desc = "How long the failed-action flash remains visible.",
-                order = 7,
+                order = 9,
                 min = 0.15,
                 max = 1.2,
                 step = 0.05,
@@ -1129,7 +1173,7 @@ function Options:BuildConfiguration()
                 type = "color",
                 name = "Feedback Color",
                 desc = "Color used for the failed-action flash.",
-                order = 8,
+                order = 10,
                 width = "half",
                 disabled = function()
                     return db.failedActionFeedback == false

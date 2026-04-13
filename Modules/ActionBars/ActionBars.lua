@@ -1988,7 +1988,7 @@ function ActionBars:BuildDebugReport()
                 local assistFrame = GetButtonAssistedCombatFrame(button)
                 local spellHighlight = GetButtonSpellHighlightTexture(button)
                 local overlay = button and (button.__LBGoverlay or button.overlay or button.SpellActivationAlert or nil) or
-                nil
+                    nil
                 local isTracked = spellID == self.currentAssistedSpellID
                     or (assistFrame and assistFrame.IsShown and assistFrame:IsShown())
                     or (spellHighlight and spellHighlight.IsShown and spellHighlight:IsShown())
@@ -3195,6 +3195,9 @@ function ActionBars:ClearButtonGlow(button)
     self:HidePixelGlow(button)
     self:HideProcGlow(button)
     self:HideNativeOverlayGlow(button)
+    button.__twichuiABGlowTintR = nil
+    button.__twichuiABGlowTintG = nil
+    button.__twichuiABGlowTintB = nil
     button.__twichuiABOverlayTintR = nil
     button.__twichuiABOverlayTintG = nil
     button.__twichuiABOverlayTintB = nil
@@ -3570,27 +3573,13 @@ function ActionBars:UpdateButtonsForSpellID(spellID)
 end
 
 function ActionBars:IsButtonGlowActive(button, spellStateCache)
-    local assistedSpellID = button and ((button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID) or nil
-    if assistedSpellID and assistedSpellID == self.currentAssistedSpellID and self:IsAssistedRotationSpell(assistedSpellID) then
-        return true
-    end
-
-    local assistedFrame = button and button.AssistedCombatHighlightFrame or nil
-    if assistedFrame and assistedFrame.IsShown and assistedFrame:IsShown() then
+    if self:IsButtonAssistedGlowActive(button) then
         return true
     end
 
     local spellHighlight = GetButtonSpellHighlightTexture(button)
     if spellHighlight and spellHighlight.IsShown and spellHighlight:IsShown() then
         return true
-    end
-
-    if LAB and type(LAB.activeAssist) == "table" then
-        local assistedSpellID = button and (button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID or
-        nil
-        if assistedSpellID and LAB.activeAssist[assistedSpellID] == true then
-            return true
-        end
     end
 
     local spellID = button and button.__twichuiABSpellID or nil
@@ -3639,6 +3628,28 @@ function ActionBars:IsButtonGlowActive(button, spellStateCache)
     return isActive
 end
 
+function ActionBars:IsButtonAssistedGlowActive(button)
+    local spellID = button and ((button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID) or nil
+    if spellID and spellID == self.currentAssistedSpellID and self:IsAssistedRotationSpell(spellID) then
+        return true
+    end
+
+    local assistedFrame = GetButtonAssistedCombatFrame(button)
+    if assistedFrame and assistedFrame.IsShown and assistedFrame:IsShown() then
+        return true
+    end
+
+    if LAB and type(LAB.activeAssist) == "table" then
+        local assistedSpellID = button and (button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID or
+        nil
+        if assistedSpellID and LAB.activeAssist[assistedSpellID] == true then
+            return true
+        end
+    end
+
+    return false
+end
+
 function ActionBars:HasActiveAssistedHighlights()
     if self.currentAssistedSpellID and self:IsAssistedRotationSpell(self.currentAssistedSpellID) then
         return true
@@ -3675,9 +3686,14 @@ function ActionBars:GetGlowStyle()
     return "pixel"
 end
 
-function ActionBars:GetGlowColor()
+function ActionBars:GetGlowColor(button)
     local fallback = { 0.96, 0.76, 0.24 }
+    local assistedFallback = { 0.30, 0.78, 0.98 }
     local db = self:GetDB()
+    if button and db and db.assistedGlowUseSeparateColor == true and self:IsButtonAssistedGlowActive(button) then
+        return ResolveConfiguredColor(db.assistedGlowColor or nil, assistedFallback)
+    end
+
     if db and db.procGlowUseThemeColor ~= false then
         local theme = T:GetModule("Theme", true)
         return FetchThemeColor(theme, "accentColor", fallback)
@@ -4160,7 +4176,7 @@ function ActionBars:UpdatePixelGlowLayout(button)
     glow:SetPoint("TOPLEFT", target, "TOPLEFT", -1, 1)
     glow:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 1, -1)
 
-    local red, green, blue = self:GetGlowColor()
+    local red, green, blue = self:GetGlowColor(button)
 
     glow.top:ClearAllPoints()
     glow.top:SetPoint("TOPLEFT", glow, "TOPLEFT", 0, 0)
@@ -4187,6 +4203,9 @@ function ActionBars:UpdatePixelGlowLayout(button)
     glow.right:SetColorTexture(red, green, blue, 1)
 
     glow:SetParent(targetParent)
+    button.__twichuiABGlowTintR = red
+    button.__twichuiABGlowTintG = green
+    button.__twichuiABGlowTintB = blue
 end
 
 function ActionBars:UpdateProcGlowLayout(button)
@@ -4202,7 +4221,7 @@ function ActionBars:UpdateProcGlowLayout(button)
     glow:SetPoint("TOPLEFT", target, "TOPLEFT", -7, 7)
     glow:SetPoint("BOTTOMRIGHT", target, "BOTTOMRIGHT", 7, -7)
 
-    local red, green, blue = self:GetGlowColor()
+    local red, green, blue = self:GetGlowColor(button)
 
     glow.outer:ClearAllPoints()
     glow.outer:SetPoint("CENTER", glow, "CENTER", 0, 0)
@@ -4235,6 +4254,9 @@ function ActionBars:UpdateProcGlowLayout(button)
     glow.spark:SetDesaturated(true)
 
     glow:SetParent(targetParent)
+    button.__twichuiABGlowTintR = red
+    button.__twichuiABGlowTintG = green
+    button.__twichuiABGlowTintB = blue
 end
 
 function ActionBars:ShowPixelGlow(button)
@@ -4324,7 +4346,7 @@ function ActionBars:ShowActionButtonGlow(button)
 
     if LBG and LBG.ShowOverlayGlow then
         LBG.ShowOverlayGlow(button)
-        local red, green, blue = self:GetGlowColor()
+        local red, green, blue = self:GetGlowColor(button)
         self:TintOverlayGlow(button, red, green, blue)
         return
     end
@@ -4401,15 +4423,19 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
         button.__twichuiGlowH = height
 
         if desiredStyle == "pixel" then
-            if sizeChanged then
+            local red, green, blue = self:GetGlowColor(button)
+            if sizeChanged or button.__twichuiABGlowTintR ~= red or button.__twichuiABGlowTintG ~= green or
+                button.__twichuiABGlowTintB ~= blue then
                 self:UpdatePixelGlowLayout(button)
             end
         elseif desiredStyle == "proc" then
-            if sizeChanged then
+            local red, green, blue = self:GetGlowColor(button)
+            if sizeChanged or button.__twichuiABGlowTintR ~= red or button.__twichuiABGlowTintG ~= green or
+                button.__twichuiABGlowTintB ~= blue then
                 self:UpdateProcGlowLayout(button)
             end
         elseif desiredStyle == "button" then
-            local red, green, blue = self:GetGlowColor()
+            local red, green, blue = self:GetGlowColor(button)
             if button.__twichuiABOverlayTintR ~= red or button.__twichuiABOverlayTintG ~= green or
                 button.__twichuiABOverlayTintB ~= blue then
                 self:TintOverlayGlow(button, red, green, blue)
