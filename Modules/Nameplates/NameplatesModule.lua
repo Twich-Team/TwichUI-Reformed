@@ -518,15 +518,41 @@ local _activeCastPlates  = {} -- frame → true
 local _castTickerActive  = false
 local _castTickerFrame   = CreateFrame("Frame", "TwichUI_NpCastTicker", UIParent)
 
+local function _clearCastState(frame, fireCallback)
+    if not frame then return end
+
+    local callback = frame._onCastEnd
+    frame._onCastEnd = nil
+    frame._casting = false
+    frame._channeling = false
+    frame._castObservedAt = 0
+    frame._castDurationSec = 1
+
+    _activeCastPlates[frame] = nil
+
+    if frame.castContainer then frame.castContainer:Hide() end
+
+    if frame._unit and Nameplates and Nameplates.UpdateTargetGlow then
+        Nameplates:UpdateTargetGlow(frame, frame._unit)
+        Nameplates:UpdatePlateAlpha(frame, frame._unit)
+    else
+        ApplyPlateFrameLevels(frame, NP_BASE_FRAME_LEVEL, NP_BASE_GLOW_LEVEL)
+        if frame.targetGlow then frame.targetGlow:Hide() end
+        if frame.arrowL then frame.arrowL:Hide() end
+        if frame.arrowR then frame.arrowR:Hide() end
+    end
+
+    if fireCallback and callback then
+        callback(frame)
+    end
+end
+
 local function _castTickerFn()
     local now     = GetTime()
     local anyLeft = false
     for frame in pairs(_activeCastPlates) do
         if not frame._casting then
-            _activeCastPlates[frame] = nil
-            if frame.castContainer then frame.castContainer:Hide() end
-            -- Fire optional post-cast callback (used by cast test mode to reschedule).
-            if frame._onCastEnd then frame._onCastEnd(frame) end
+            _clearCastState(frame, true)
         else
             anyLeft       = true
             local dur     = frame._castDurationSec or 1
@@ -538,10 +564,7 @@ local function _castTickerFn()
                 frame.castBar:SetValue(clamped)
             end
             if elapsed >= dur then
-                frame._casting = false
-                _activeCastPlates[frame] = nil
-                if frame.castContainer then frame.castContainer:Hide() end
-                if frame._onCastEnd then frame._onCastEnd(frame) end
+                _clearCastState(frame, true)
             end
         end
     end
@@ -2123,9 +2146,7 @@ function Nameplates:UpdateCastBar(frame, unit)
     local db = self:GetEffectiveDB(unit)
 
     if db.showCastBar == false then
-        frame._casting = false
-        frame.castContainer:Hide()
-        self:UpdateTargetGlow(frame, unit)
+        _clearCastState(frame, false)
         return
     end
 
@@ -2147,10 +2168,7 @@ function Nameplates:UpdateCastBar(frame, unit)
     end
 
     if not name then
-        frame._casting = false
-        frame.castContainer:Hide()
-        _stopCastTicker(frame)
-        self:UpdateTargetGlow(frame, unit)
+        _clearCastState(frame, false)
         return
     end
 

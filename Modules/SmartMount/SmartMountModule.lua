@@ -48,6 +48,12 @@ local function GetMountSpellID(mountID)
     return nil
 end
 
+local function SummonRandomFavoriteMount()
+    if type(SummonByID) == "function" then
+        SummonByID(0)
+    end
+end
+
 local function IsSpellKnownSafe(spellID)
     if not spellID then
         return false
@@ -196,7 +202,7 @@ function SmartMountModule:GetSecureAction()
 
     -- Last resort: use the random favorite mount macro when no specific mount is
     -- configured or usable (e.g. Dracthyr with only Soar set but Soar is blocked).
-    return "macro", "/run C_MountJournal.SummonRandomFavoriteMount()"
+    return "macro", "/run C_MountJournal.SummonByID(0)"
 end
 
 function SmartMountModule:RefreshSecureAction()
@@ -265,9 +271,7 @@ function SmartMountModule:MountUp()
 
     -- Last resort: summon a random favorite mount when no specific mount is configured
     -- or neither configured mount is currently usable.
-    if C_MountJournal and type(C_MountJournal.SummonRandomFavoriteMount) == "function" then
-        C_MountJournal.SummonRandomFavoriteMount()
-    end
+    SummonRandomFavoriteMount()
 end
 
 --- This function is called by AceAddon when the module is enabled.

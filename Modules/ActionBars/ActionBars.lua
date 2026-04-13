@@ -188,6 +188,27 @@ local BLIZZARD_FRAMES_TO_HIDE = {
     "MainMenuBarPerformanceBar",
 }
 
+local PROTECTED_BLIZZARD_BAR_FRAMES = {
+    MainMenuBar = true,
+    MainActionBar = true,
+    MultiBarBottomLeft = true,
+    MultiBarBottomRight = true,
+    MultiBarLeft = true,
+    MultiBarRight = true,
+    MultiBar5 = true,
+    MultiBar6 = true,
+    MultiBar7 = true,
+    ExtraActionBarFrame = true,
+    PetActionBarFrame = true,
+    PetActionBar = true,
+    StanceBarFrame = true,
+    StanceBar = true,
+    PossessBarFrame = true,
+    PossessActionBar = true,
+    OverrideActionBar = true,
+    OverrideActionBarExpBar = true,
+}
+
 local BLIZZARD_OBJECTS_TO_HIDE = {
     "MainMenuExpBar",
     "ReputationWatchBar",
@@ -5540,6 +5561,7 @@ function ActionBars:HideDefaultArt()
         local frame = _G[frameName]
         if frame then
             local capturedFrameName = frameName
+            local isProtectedBarFrame = PROTECTED_BLIZZARD_BAR_FRAMES[capturedFrameName] == true
             local function ForceSuppressFrame(selfFrame)
                 if not (ActionBars and ActionBars.IsEnabled and ActionBars:IsEnabled()) then
                     return
@@ -5551,25 +5573,31 @@ function ActionBars:HideDefaultArt()
 
                 selfFrame.__twichuiABSuppressing = true
                 pcall(function()
-                    if _G.UIPARENT_MANAGED_FRAME_POSITIONS then
+                    if not isProtectedBarFrame and _G.UIPARENT_MANAGED_FRAME_POSITIONS then
                         _G.UIPARENT_MANAGED_FRAME_POSITIONS[capturedFrameName] = nil
                     end
 
-                    SuppressFrameTree(selfFrame)
-                    if ActionBars.blizzardHiddenRoot and selfFrame.GetParent and selfFrame:GetParent() ~= ActionBars.blizzardHiddenRoot then
-                        selfFrame:SetParent(ActionBars.blizzardHiddenRoot)
+                    if isProtectedBarFrame then
+                        for _, region in ipairs({ selfFrame:GetRegions() }) do
+                            SuppressRegion(region)
+                        end
+                    else
+                        SuppressFrameTree(selfFrame)
+                        if ActionBars.blizzardHiddenRoot and selfFrame.GetParent and selfFrame:GetParent() ~= ActionBars.blizzardHiddenRoot then
+                            selfFrame:SetParent(ActionBars.blizzardHiddenRoot)
+                        end
                     end
                     if selfFrame.SetAlpha then
                         selfFrame:SetAlpha(0)
                     end
-                    if selfFrame.Hide then
+                    if not isProtectedBarFrame and selfFrame.Hide then
                         selfFrame:Hide()
                     end
                 end)
                 selfFrame.__twichuiABSuppressing = nil
             end
 
-            if frame.__twichuiABSuppressHooked ~= true and frame.HookScript then
+            if not isProtectedBarFrame and frame.__twichuiABSuppressHooked ~= true and frame.HookScript then
                 frame.__twichuiABSuppressHooked = true
                 frame:HookScript("OnShow", function(selfFrame)
                     ForceSuppressFrame(selfFrame)
@@ -5593,10 +5621,10 @@ function ActionBars:HideDefaultArt()
             for _, region in ipairs({ frame:GetRegions() }) do
                 self:CaptureRegionState(region)
             end
-            if _G.UIPARENT_MANAGED_FRAME_POSITIONS then
+            if not isProtectedBarFrame and _G.UIPARENT_MANAGED_FRAME_POSITIONS then
                 _G.UIPARENT_MANAGED_FRAME_POSITIONS[frameName] = nil
             end
-            if frame.ignoreInLayout ~= nil then
+            if not isProtectedBarFrame and frame.ignoreInLayout ~= nil then
                 frame.ignoreInLayout = true
             end
             local ok, err = pcall(function()

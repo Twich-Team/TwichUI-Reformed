@@ -76,6 +76,34 @@ local function GetMapFramePinMapID(pin)
     return WorldMapFrame and WorldMapFrame.mapID or nil
 end
 
+local function ResolveLayerIndex(pin, mapID)
+    local layers = C_Map.GetMapArtLayers(mapID)
+    if type(layers) ~= "table" or #layers == 0 then
+        return nil, nil
+    end
+
+    local layerIndex = 1
+    local mapCanvas = pin and pin.GetMap and pin:GetMap() or nil
+    local canvasContainer = mapCanvas and mapCanvas.GetCanvasContainer and mapCanvas:GetCanvasContainer() or nil
+
+    if canvasContainer and (not canvasContainer.HasZoomLevels or canvasContainer:HasZoomLevels()) then
+        local ok, resolvedLayerIndex = pcall(canvasContainer.GetCurrentLayerIndex, canvasContainer)
+        if ok and type(resolvedLayerIndex) == "number" then
+            layerIndex = resolvedLayerIndex
+        end
+    elseif type(pin and pin.layerIndex) == "number" then
+        layerIndex = pin.layerIndex
+    end
+
+    if layerIndex < 1 then
+        layerIndex = 1
+    elseif layerIndex > #layers then
+        layerIndex = #layers
+    end
+
+    return layerIndex, layers[layerIndex]
+end
+
 local function DrawRevealOverlays(pin)
     ClearInjectedTextures(pin)
 
@@ -102,12 +130,11 @@ local function DrawRevealOverlays(pin)
         end
     end
 
-    pin.layerIndex = pin:GetMap():GetCanvasContainer():GetCurrentLayerIndex()
-    local layers = C_Map.GetMapArtLayers(mapID)
-    local layerInfo = layers and layers[pin.layerIndex]
+    local layerIndex, layerInfo = ResolveLayerIndex(pin, mapID)
     if not layerInfo then
         return
     end
+    pin.layerIndex = layerIndex
 
     local mapInfo = C_Map.GetMapInfo(mapID)
     local mapType = mapInfo and mapInfo.mapType or 0
