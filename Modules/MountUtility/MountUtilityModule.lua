@@ -9,6 +9,8 @@ local GetMountInfoByID = C_MountJournal.GetMountInfoByID
 local GetDisplayedMountInfo = C_MountJournal.GetDisplayedMountInfo
 local GetNumMounts = C_MountJournal.GetNumMounts
 local GetMountFromSpell = C_MountJournal.GetMountFromSpell
+local C_Spell = _G.C_Spell
+local LegacyIsUsableSpell = rawget(_G, "IsUsableSpell")
 
 ---@class MountUtilityModule : AceModule, AceEvent-3.0
 ---@field flaggedForRefresh boolean indicates if the mount cache needs refreshing
@@ -257,6 +259,24 @@ end
 function MUM:IsMountUsable(mountID)
     if not mountID or mountID == 0 then return false end
 
-    local _, _, _, _, isUsable = GetMountInfoByID(mountID)
-    return isUsable and true or false
+    local _, spellID, _, _, isUsable = GetMountInfoByID(mountID)
+    if isUsable ~= true then
+        return false
+    end
+
+    if spellID and spellID > 0 then
+        local currentlyUsable = nil
+
+        if C_Spell and type(C_Spell.IsSpellUsable) == "function" then
+            currentlyUsable = C_Spell.IsSpellUsable(spellID)
+        elseif type(LegacyIsUsableSpell) == "function" then
+            currentlyUsable = LegacyIsUsableSpell(spellID)
+        end
+
+        if currentlyUsable == false then
+            return false
+        end
+    end
+
+    return true
 end

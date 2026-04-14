@@ -85,6 +85,19 @@ local QUALITY_DB_KEYS    = {
 
 local FALLBACK_ITEM_ICON = 134400
 
+local function SafeChatText(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+
+    local ok, text = pcall(string.format, "%s", value)
+    if ok and type(text) == "string" then
+        return text
+    end
+
+    return nil
+end
+
 -- Coin icon sizes (pixels at font size 12)
 local COIN_ATLAS         = {
     gold   = "auctionhouse-icon-gold",
@@ -1497,33 +1510,38 @@ function LF:CHAT_MSG_LOOT(_, msg, _, _, _, senderName2, _, _, _, _, _, _, guid)
     local settings = GetSettings()
     if not settings.showItems then return end
 
+    local parsedMsg = SafeChatText(msg)
+    if not parsedMsg then return end
+
     -- Only our own loot
     local myGuid = GetPlayerGuid and GetPlayerGuid("player") or _G.UnitGUID("player")
     if not myGuid then return end
 
     -- Raid loot history messages contain HlootHistory: — ignore them
-    if msg:find("HlootHistory:") then return end
+    if parsedMsg:find("HlootHistory:", 1, true) then return end
 
     -- In retail, guid matches ours; fallback check via sender name
-    if guid and guid ~= "" then
-        if guid ~= myGuid then return end
+    local parsedGuid = SafeChatText(guid) or guid
+    if parsedGuid and parsedGuid ~= "" then
+        if parsedGuid ~= myGuid then return end
     else
         local playerName = _G.UnitName("player")
-        if senderName2 and senderName2 ~= "" and senderName2 ~= playerName then
+        local parsedSenderName = SafeChatText(senderName2) or senderName2
+        if parsedSenderName and parsedSenderName ~= "" and parsedSenderName ~= playerName then
             return
         end
     end
 
     -- Extract item link(s) — upgrades produce two links
     local links = {}
-    for link in msg:gmatch("|c.-|Hitem:.-|h%[.-%]|h|r") do
+    for link in parsedMsg:gmatch("|c.-|Hitem:.-|h%[.-%]|h|r") do
         links[#links + 1] = link
     end
     local itemLink = links[#links]
     if not itemLink then return end
 
     -- Extract quantity (e.g. "You receive loot: x3")
-    local qty    = tonumber(msg:match("r ?x(%d+)")) or 1
+    local qty    = tonumber(parsedMsg:match("r ?x(%d+)")) or 1
 
     -- Resolve item info
     local itemID = C_Item and C_Item.GetItemIDByGUID and C_Item.GetItemIDByGUID(itemLink) or
@@ -1582,11 +1600,14 @@ function LF:CHAT_MSG_MONEY(_, msg)
     local settings = GetSettings()
     if not settings.showGold then return end
 
+    local parsedMsg = SafeChatText(msg)
+    if not parsedMsg then return end
+
     -- Parse copper from the system money message
     -- WoW formats: "You receive: <money>" with various gold/silver/copper sub-parts
-    local gold   = tonumber(msg:match("(%d+) Gold")) or 0
-    local silver = tonumber(msg:match("(%d+) Silver")) or 0
-    local copper = tonumber(msg:match("(%d+) Copper")) or 0
+    local gold   = tonumber(parsedMsg:match("(%d+) Gold")) or 0
+    local silver = tonumber(parsedMsg:match("(%d+) Silver")) or 0
+    local copper = tonumber(parsedMsg:match("(%d+) Copper")) or 0
     local total  = gold * 10000 + silver * 100 + copper
 
     if total == 0 then return end
@@ -1603,12 +1624,15 @@ function LF:CHAT_MSG_CURRENCY(_, msg)
     local settings = GetSettings()
     if not settings.showCurrency then return end
 
+    local parsedMsg = SafeChatText(msg)
+    if not parsedMsg then return end
+
     -- Extract currency link and quantity
-    local link = msg:match("|c.-|Hcurrency:(%d+)|h%[(.-)%]|h|r")
+    local link = parsedMsg:match("|c.-|Hcurrency:(%d+)|h%[(.-)%]|h|r")
 
     -- Try simpler pattern: get the display text
     local currencyLink, currencyName
-    for cl in msg:gmatch("|c.-|Hcurrency:.-|h%[.-%]|h|r") do
+    for cl in parsedMsg:gmatch("|c.-|Hcurrency:.-|h%[.-%]|h|r") do
         currencyLink = cl
         currencyName = cl:match("|h%[(.-)%]|h")
         break
@@ -1616,16 +1640,16 @@ function LF:CHAT_MSG_CURRENCY(_, msg)
 
     if not currencyName then
         -- Fallback: show the raw message snippet
-        currencyName = msg:match("receive (.+)$") or msg
+        currencyName = parsedMsg:match("receive (.+)$") or parsedMsg
     end
 
-    local qty = tonumber(msg:match("r ?x(%d+)")) or 1
+    local qty = tonumber(parsedMsg:match("r ?x(%d+)")) or 1
     local text = qty > 1 and (currencyName .. " x" .. qty) or currencyName
 
     -- Try to get a currency icon if we have the ID
     local currencyID = tonumber(
         (currencyLink or ""):match("|Hcurrency:(%d+)") or
-        msg:match("|Hcurrency:(%d+)")
+        parsedMsg:match("|Hcurrency:(%d+)")
     )
     local icon = nil
     if currencyID and _G.C_CurrencyInfo and _G.C_CurrencyInfo.GetCurrencyInfo then
