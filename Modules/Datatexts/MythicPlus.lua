@@ -15,21 +15,35 @@ local tinsert = table.insert
 local sort = table.sort
 
 local C_ChallengeMode = _G.C_ChallengeMode
+local C_AddOns = rawget(_G, "C_AddOns")
 local C_MythicPlus = _G.C_MythicPlus
 local C_PlayerInfo = _G.C_PlayerInfo
+local C_Timer = _G.C_Timer
 local C_TooltipInfo = _G.C_TooltipInfo
 local C_WeeklyRewards = _G.C_WeeklyRewards
+local CreateFrame = _G.CreateFrame
 local Enum = _G.Enum
+local GetAddOnEnableState = rawget(_G, "GetAddOnEnableState")
+local LegacyGetAddOnMetadata = rawget(_G, "GetAddOnMetadata")
 local ShowUIPanel = _G.ShowUIPanel
+local UIParent = _G.UIParent
+local UnitName = _G.UnitName
 local WeeklyRewards_ShowUI = rawget(_G, "WeeklyRewards_ShowUI")
 local LegacyLoadAddOn = rawget(_G, "LoadAddOn")
+local LibStub = _G.LibStub
 local PlayerInteractionFrameManager_ShowFrame = rawget(_G, "PlayerInteractionFrameManager_ShowFrame")
 local GetDetailedItemLevelInfo = _G.C_Item and _G.C_Item.GetDetailedItemLevelInfo
+
+local SIMC_ADDON_NAME = "Simulationcraft"
 
 ---@class MythicPlusDataText : AceModule
 ---@field definition DatatextDefinition
 ---@field panel ElvUI_DT_Panel|nil
+---@field SimulationCraftFrame Frame|nil
 local MPDT = DataTextModule:NewModule("MythicPlusDataText")
+
+---@class SimulationCraftAddon : AceModule
+---@field GetSimcProfile fun(self: SimulationCraftAddon, debugOutput:boolean, noBags:boolean, showMerchant:boolean, links:any|nil): string, string|nil
 
 local MILESTONES = {
     { score = 2000, label = "Catalyst Charge + Mount" },
@@ -98,6 +112,292 @@ local function OpenBestInSlotWindow()
     if bestInSlot and bestInSlot.Frame and bestInSlot.Frame.Show then
         bestInSlot.Frame:Show()
     end
+end
+
+local function GetSimulationCraftInstallState()
+    local installed = false
+
+    if C_AddOns and type(C_AddOns.GetAddOnMetadata) == "function" then
+        installed = type(C_AddOns.GetAddOnMetadata(SIMC_ADDON_NAME, "Title")) == "string"
+    elseif type(LegacyGetAddOnMetadata) == "function" then
+        installed = type(LegacyGetAddOnMetadata(SIMC_ADDON_NAME, "Title")) == "string"
+    end
+
+    if not installed then
+        return false, false, false
+    end
+
+    local enabled = false
+    if type(GetAddOnEnableState) == "function" then
+        enabled = (GetAddOnEnableState(UnitName("player"), SIMC_ADDON_NAME) or 0) > 0
+    end
+
+    local loaded = C_AddOns and type(C_AddOns.IsAddOnLoaded) == "function" and C_AddOns.IsAddOnLoaded(SIMC_ADDON_NAME) or
+    false
+    if loaded then
+        enabled = true
+    end
+
+    return installed, enabled, loaded
+end
+
+local function GetSimulationCraftMenuLabel()
+    local installed, enabled = GetSimulationCraftInstallState()
+    if not installed then
+        return "SimulationCraft Export (Not Installed)", true
+    end
+
+    if not enabled then
+        return "SimulationCraft Export (Disabled)", true
+    end
+
+    return "SimulationCraft Export", false
+end
+
+local function GetSimulationCraftAddon()
+    local installed, enabled, loaded = GetSimulationCraftInstallState()
+    if not installed then
+        return nil, "SimulationCraft is not installed."
+    end
+
+    if not enabled then
+        return nil, "SimulationCraft is installed but disabled."
+    end
+
+    if not loaded then
+        if C_AddOns and type(C_AddOns.LoadAddOn) == "function" then
+            local ok, reason = C_AddOns.LoadAddOn(SIMC_ADDON_NAME)
+            if ok ~= true then
+                return nil,
+                    reason and ("SimulationCraft could not be loaded: " .. tostring(reason)) or
+                    "SimulationCraft could not be loaded."
+            end
+        elseif type(LegacyLoadAddOn) == "function" then
+            local ok, reason = pcall(LegacyLoadAddOn, SIMC_ADDON_NAME)
+            if not ok then
+                return nil,
+                    reason and ("SimulationCraft could not be loaded: " .. tostring(reason)) or
+                    "SimulationCraft could not be loaded."
+            end
+        end
+    end
+
+    local aceAddon = LibStub and LibStub("AceAddon-3.0", true)
+    ---@type SimulationCraftAddon|nil
+    local addon = aceAddon and aceAddon.GetAddon and aceAddon:GetAddon(SIMC_ADDON_NAME, true) or nil
+    if not addon or type(addon.GetSimcProfile) ~= "function" then
+        return nil, "SimulationCraft export API is unavailable."
+    end
+
+    return addon, nil
+end
+
+local function CreateSimulationCraftExportFrame(owner)
+    local frame = CreateFrame("Frame", "TwichUISimulationCraftExportFrame", UIParent, "BackdropTemplate")
+    frame:SetSize(820, 560)
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetFrameLevel(180)
+    frame:SetToplevel(true)
+    frame:SetMovable(true)
+    frame:SetClampedToScreen(true)
+    frame:EnableMouse(true)
+    frame:Hide()
+
+    if frame.SetBackdrop then
+        frame:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        frame:SetBackdropColor(0.035, 0.045, 0.06, 0.97)
+        frame:SetBackdropBorderColor(0.14, 0.72, 0.72, 0.24)
+    end
+
+    frame.TopAccent = frame:CreateTexture(nil, "ARTWORK")
+    frame.TopAccent:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+    frame.TopAccent:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
+    frame.TopAccent:SetHeight(3)
+    frame.TopAccent:SetColorTexture(0.95, 0.76, 0.24, 0.95)
+
+    frame.Glow = frame:CreateTexture(nil, "BACKGROUND")
+    frame.Glow:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+    frame.Glow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+    frame.Glow:SetTexture("Interface\\Buttons\\WHITE8X8")
+    frame.Glow:SetGradient("VERTICAL", CreateColor(0.16, 0.78, 0.78, 0.12), CreateColor(0, 0, 0, 0))
+
+    frame:SetScript("OnMouseDown", function(self, button)
+        if button == "LeftButton" then
+            self:StartMoving()
+        end
+    end)
+    frame:SetScript("OnMouseUp", function(self)
+        self:StopMovingOrSizing()
+    end)
+
+    frame.Title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    frame.Title:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -14)
+    frame.Title:SetText("SimulationCraft Export")
+
+    frame.Subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.Subtitle:SetPoint("TOPLEFT", frame.Title, "BOTTOMLEFT", 0, -6)
+    frame.Subtitle:SetPoint("RIGHT", frame, "RIGHT", -60, 0)
+    frame.Subtitle:SetJustifyH("LEFT")
+    frame.Subtitle:SetText("Press Ctrl+C to copy. The window closes automatically after copy.")
+
+    frame.CloseButton = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    frame.CloseButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -6, -6)
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinCloseButton then
+        T.Tools.UI.SkinCloseButton(frame.CloseButton)
+    end
+    frame.CloseButton:SetScript("OnClick", function()
+        frame:Hide()
+    end)
+
+    frame.ScrollFrame = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    frame.ScrollFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -56)
+    frame.ScrollFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -36, 52)
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichScrollBar then
+        T.Tools.UI.SkinTwichScrollBar(frame.ScrollFrame, { 0.16, 0.78, 0.78 }, true)
+    end
+
+    frame.EditBox = CreateFrame("EditBox", nil, frame.ScrollFrame, "BackdropTemplate")
+    frame.EditBox:SetMultiLine(true)
+    frame.EditBox:SetAutoFocus(true)
+    frame.EditBox:SetFontObject("ChatFontNormal")
+    frame.EditBox:SetWidth(740)
+    frame.EditBox:SetScript("OnEscapePressed", function()
+        frame:Hide()
+    end)
+    frame.EditBox:SetScript("OnEditFocusGained", function(self)
+        self:HighlightText()
+    end)
+    frame.EditBox:SetScript("OnMouseUp", function(self)
+        self:SetFocus()
+    end)
+
+    local ctrlDown = false
+    frame.EditBox:SetScript("OnKeyDown", function(_, key)
+        if key == "LCTRL" or key == "RCTRL" or key == "LMETA" or key == "RMETA" then
+            ctrlDown = true
+        end
+    end)
+    frame.EditBox:SetScript("OnKeyUp", function(_, key)
+        if key == "LCTRL" or key == "RCTRL" or key == "LMETA" or key == "RMETA" then
+            if C_Timer and type(C_Timer.After) == "function" then
+                C_Timer.After(0.2, function()
+                    ctrlDown = false
+                end)
+            else
+                ctrlDown = false
+            end
+            return
+        end
+
+        if ctrlDown and (key == "C" or key == "X") then
+            if C_Timer and type(C_Timer.After) == "function" then
+                C_Timer.After(0.1, function()
+                    if frame and frame.Hide then
+                        frame:Hide()
+                    end
+                end)
+            else
+                frame:Hide()
+            end
+        end
+    end)
+
+    if frame.EditBox.SetBackdrop then
+        frame.EditBox:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        frame.EditBox:SetBackdropColor(0.06, 0.07, 0.09, 0.96)
+        frame.EditBox:SetBackdropBorderColor(0.22, 0.24, 0.3, 0.16)
+    end
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinEditBox then
+        T.Tools.UI.SkinEditBox(frame.EditBox)
+    end
+
+    frame.ScrollFrame:SetScrollChild(frame.EditBox)
+
+    frame.ActionButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.ActionButton:SetSize(120, 24)
+    frame.ActionButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -18, 16)
+    frame.ActionButton:SetText("Highlight All")
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichButton then
+        T.Tools.UI.SkinTwichButton(frame.ActionButton, { 0.95, 0.76, 0.24 })
+    elseif T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
+        T.Tools.UI.SkinButton(frame.ActionButton)
+    end
+    frame.ActionButton:SetScript("OnClick", function()
+        frame.EditBox:SetFocus()
+        frame.EditBox:HighlightText()
+    end)
+
+    frame.CloseAction = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    frame.CloseAction:SetSize(84, 24)
+    frame.CloseAction:SetPoint("RIGHT", frame.ActionButton, "LEFT", -10, 0)
+    frame.CloseAction:SetText("Close")
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichButton then
+        T.Tools.UI.SkinTwichButton(frame.CloseAction, { 0.16, 0.78, 0.78 })
+    elseif T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
+        T.Tools.UI.SkinButton(frame.CloseAction)
+    end
+    frame.CloseAction:SetScript("OnClick", function()
+        frame:Hide()
+    end)
+
+    frame:SetScript("OnHide", function(self)
+        if self.EditBox and self.EditBox.ClearFocus then
+            self.EditBox:ClearFocus()
+        end
+    end)
+
+    frame:SetScript("OnSizeChanged", function(self)
+        if self.EditBox then
+            self.EditBox:SetWidth(math.max(1, (self.ScrollFrame:GetWidth() or 1) - 8))
+        end
+    end)
+
+    owner.SimulationCraftFrame = frame
+    return frame
+end
+
+function MPDT:ShowSimulationCraftExportFrame(text, isError)
+    local frame = self.SimulationCraftFrame or CreateSimulationCraftExportFrame(self)
+    if not frame then
+        return
+    end
+
+    frame.Title:SetText(isError and "SimulationCraft Message" or "SimulationCraft Export")
+    frame.Subtitle:SetText(isError and "SimulationCraft returned a message instead of an export string." or
+    "Press Ctrl+C to copy. The window closes automatically after copy.")
+    frame.EditBox:SetText(text or "")
+    frame.EditBox:SetCursorPosition(0)
+    frame.EditBox:SetFocus()
+    frame.EditBox:HighlightText()
+    frame:Show()
+end
+
+function MPDT:OpenSimulationCraftExport()
+    local addon, err = GetSimulationCraftAddon()
+    if not addon then
+        T:Print(err)
+        return
+    end
+
+    local profile, simcError = addon:GetSimcProfile(false, false, false)
+    local output = simcError or profile
+    if type(output) ~= "string" or output == "" then
+        T:Print("SimulationCraft did not return an export string.")
+        return
+    end
+
+    self:ShowSimulationCraftExportFrame(output, simcError ~= nil)
 end
 
 local function GetMapName(mapID)
@@ -372,7 +672,8 @@ local function GetVaultUpgradeTrackLabel(itemLink)
                     return format("%s %s/%s", trackName, currentRank, maxRank)
                 end
 
-                local prefixedTrackName, prefixedCurrent, prefixedMax = leftText:match("Upgrade Level:%s+([A-Za-z]+)%s+(%d+)%/(%d+)")
+                local prefixedTrackName, prefixedCurrent, prefixedMax = leftText:match(
+                "Upgrade Level:%s+([A-Za-z]+)%s+(%d+)%/(%d+)")
                 if prefixedTrackName and prefixedCurrent and prefixedMax then
                     return format("%s %s/%s", prefixedTrackName, prefixedCurrent, prefixedMax)
                 end
@@ -540,6 +841,7 @@ end
 
 function MPDT:OnClick(panel)
     local mythicPlusToolsOptions = GetMythicPlusToolsOptions()
+    local simcMenuLabel, simcDisabled = GetSimulationCraftMenuLabel()
     local menuList = {
         {
             text = "Mythic+",
@@ -556,7 +858,8 @@ function MPDT:OnClick(panel)
             keepShownOnClick = true,
             func = function()
                 if mythicPlusToolsOptions and mythicPlusToolsOptions.SetMythicPlusTimerEnabled and mythicPlusToolsOptions.GetMythicPlusTimerEnabled then
-                    mythicPlusToolsOptions:SetMythicPlusTimerEnabled(nil, not mythicPlusToolsOptions:GetMythicPlusTimerEnabled())
+                    mythicPlusToolsOptions:SetMythicPlusTimerEnabled(nil,
+                        not mythicPlusToolsOptions:GetMythicPlusTimerEnabled())
                 end
             end,
         },
@@ -569,6 +872,14 @@ function MPDT:OnClick(panel)
             text = "Great Vault",
             notCheckable = true,
             func = OpenGreatVaultRewards,
+        },
+        {
+            text = simcMenuLabel,
+            notCheckable = true,
+            disabled = simcDisabled,
+            func = function()
+                self:OpenSimulationCraftExport()
+            end,
         },
     }
 
