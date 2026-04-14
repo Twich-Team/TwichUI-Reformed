@@ -22,7 +22,6 @@ local EJ_GetLootFilter = EJ_GetLootFilter
 local EJ_GetCurrentTier = EJ_GetCurrentTier
 local EJ_GetDifficulty = EJ_GetDifficulty
 local EJ_GetNumTiers = EJ_GetNumTiers
-local EJ_GetCurrentTier = EJ_GetCurrentTier
 local EJ_SelectTier = EJ_SelectTier
 local EJ_GetInstanceByIndex = EJ_GetInstanceByIndex
 local EJ_SelectInstance = EJ_SelectInstance
@@ -38,6 +37,11 @@ local GetMapUIInfo = C_ChallengeMode.GetMapUIInfo
 local GetLootInfoByIndex = C_EncounterJournal.GetLootInfoByIndex
 local GetItemSets = C_LootJournal.GetItemSets
 local GetItemSetItems = C_LootJournal.GetItemSetItems
+
+local ITEM_CLASS_WEAPON = Enum and Enum.ItemClass and Enum.ItemClass.Weapon or 2
+local ITEM_CLASS_ARMOR = Enum and Enum.ItemClass and Enum.ItemClass.Armor or 4
+local SHIELD_SUBCLASS_ID = Enum and Enum.ItemArmorSubclass and Enum.ItemArmorSubclass.Shield or 6
+local CACHE_SCHEMA_VERSION = 2
 
 
 -- Armor Types: 1=Cloth, 2=Leather, 3=Mail, 4=Plate
@@ -74,6 +78,157 @@ local CLASS_WEAPON_TYPES = {
 }
 
 local _, _, PLAYER_CLASS_ID = UnitClass("player")
+local SHIELD_CLASSES = {
+    [1] = true,
+    [2] = true,
+    [7] = true,
+}
+
+local UNIVERSAL_EQUIP_LOCS = {
+    INVTYPE_CLOAK = true,
+    INVTYPE_FINGER = true,
+    INVTYPE_NECK = true,
+    INVTYPE_TRINKET = true,
+}
+
+local function GetCurrentSpecID()
+    if type(GetSpecialization) ~= "function" or type(GetSpecializationInfo) ~= "function" then
+        return nil
+    end
+
+    local specIndex = GetSpecialization()
+    if type(specIndex) ~= "number" then
+        return nil
+    end
+
+    local specID = GetSpecializationInfo(specIndex)
+    if type(specID) ~= "number" then
+        return nil
+    end
+
+    return specID
+end
+
+local function NormalizeLootJournalSetID(setInfo)
+    if type(setInfo) == "number" then
+        return setInfo
+    end
+
+    if type(setInfo) ~= "table" then
+        return nil
+    end
+
+    return tonumber(setInfo.setID or setInfo.itemSetID or setInfo.id)
+end
+
+local function NormalizeLootJournalItemID(itemInfo)
+    if type(itemInfo) == "number" then
+        return itemInfo
+    end
+
+    if type(itemInfo) ~= "table" then
+        return nil
+    end
+
+    local itemID = tonumber(itemInfo.itemID or itemInfo.itemId or itemInfo.id)
+    if itemID then
+        return itemID
+    end
+
+    if type(itemInfo.link) == "string" then
+        local fromLink = itemInfo.link:match("item:(%d+)")
+        if fromLink then
+            return tonumber(fromLink)
+        end
+    end
+
+    return nil
+end
+
+local function InsertUniqueItem(items, seenItems, itemID)
+    if type(itemID) ~= "number" or itemID <= 0 then
+        return false
+    end
+
+    if seenItems[itemID] then
+        return false
+    end
+
+    seenItems[itemID] = true
+    table.insert(items, itemID)
+    return true
+end
+
+local function GetLootJournalItemSetsForPlayer(classID, specID)
+    if type(GetItemSets) ~= "function" or type(classID) ~= "number" then
+        return nil
+    end
+
+    if type(specID) == "number" then
+        local ok, itemSets = pcall(GetItemSets, classID, specID)
+        if ok and type(itemSets) == "table" and next(itemSets) ~= nil then
+            return itemSets
+        end
+    end
+
+    local ok, classWideSets = pcall(GetItemSets, classID, 0)
+    if ok and type(classWideSets) == "table" and next(classWideSets) ~= nil then
+        return classWideSets
+    end
+
+    local fallbackOk, fallbackSets = pcall(GetItemSets, classID)
+    if fallbackOk and type(fallbackSets) == "table" then
+        return fallbackSets
+    end
+
+    return nil
+end
+
+local function CollectTierSetItems(cache)
+    if not IsAddOnLoaded("Blizzard_LootJournal") then
+        LoadAddon("Blizzard_LootJournal")
+    end
+
+    if type(GetItemSetItems) ~= "function" then
+        return
+    end
+
+    local _, _, classID = UnitClass("player")
+    if type(classID) ~= "number" then
+        return
+    end
+
+    local itemSets = GetLootJournalItemSetsForPlayer(classID, GetCurrentSpecID())
+    if type(itemSets) ~= "table" then
+        return
+    end
+
+    cache["Tier Sets"] = cache["Tier Sets"] or {}
+
+    local seenItems = {}
+    for _, itemID in ipairs(cache["Tier Sets"]) do
+        if type(itemID) == "number" then
+            seenItems[itemID] = true
+        end
+    end
+
+    for _, setInfo in ipairs(itemSets) do
+        local setID = NormalizeLootJournalSetID(setInfo)
+        if setID then
+            local ok, setItems = pcall(GetItemSetItems, setID)
+            if ok and type(setItems) == "table" then
+                for _, itemInfo in ipairs(setItems) do
+                    local itemID = NormalizeLootJournalItemID(itemInfo)
+                    InsertUniqueItem(cache["Tier Sets"], seenItems, itemID)
+                end
+            end
+        end
+    end
+
+    if next(cache["Tier Sets"]) == nil then
+        cache["Tier Sets"] = nil
+    end
+end
 
 
 --- Ensures the encounter journal is setup for scanning. If the filters are not supplied, all items will be returned.
@@ -153,16 +308,46 @@ local function FindBestMatchingInstanceName(sourceName, candidateNames)
 end
 
 
-local function IsItemUsableByPlayer(itemClassID, itemSubClassID, itemEquipLoc)
+local function IsItemUsableByPlayer(itemID, itemClassID, itemSubClassID, itemEquipLoc)
     if not itemClassID or not itemSubClassID then
         return true
     end
 
-    if itemEquipLoc and itemEquipLoc ~= "" then
+    if not itemEquipLoc or itemEquipLoc == "" then
+        return false
+    end
+
+    if UNIVERSAL_EQUIP_LOCS[itemEquipLoc] then
         return true
     end
 
-    return false
+    if itemEquipLoc == "INVTYPE_HOLDABLE" then
+        return true
+    end
+
+    if itemClassID == ITEM_CLASS_ARMOR then
+        if itemEquipLoc == "INVTYPE_SHIELD" or itemSubClassID == SHIELD_SUBCLASS_ID then
+            return SHIELD_CLASSES[PLAYER_CLASS_ID] == true
+        end
+
+        local requiredArmorType = CLASS_ARMOR_TYPE[PLAYER_CLASS_ID]
+        if not requiredArmorType then
+            return true
+        end
+
+        return itemSubClassID == requiredArmorType
+    end
+
+    if itemClassID == ITEM_CLASS_WEAPON then
+        local allowedWeapons = CLASS_WEAPON_TYPES[PLAYER_CLASS_ID]
+        if not allowedWeapons then
+            return true
+        end
+
+        return allowedWeapons[itemSubClassID] == true
+    end
+
+    return true
 end
 
 
@@ -235,13 +420,11 @@ local function FindRewards(currentInstances)
                             local item = GetLootInfoByIndex(i)
 
                             if item and not seenInInstance[item.itemID] then
-                                seenInInstance[item.itemID] = true
-
                                 local _, _, _, itemEquipLoc, _, itemClassID, itemSubClassID =
                                     C_Item.GetItemInfoInstant(item.itemID)
 
-                                if IsItemUsableByPlayer(itemClassID, itemSubClassID, itemEquipLoc) then
-                                    table.insert(instanceItems, item.itemID)
+                                if IsItemUsableByPlayer(item.itemID, itemClassID, itemSubClassID, itemEquipLoc) then
+                                    InsertUniqueItem(instanceItems, seenInInstance, item.itemID)
                                 end
                             end
                         end
@@ -259,40 +442,7 @@ local function FindRewards(currentInstances)
         ProcessInstance(true)  -- raids
     end
 
-    -- Tier set handling remains the same.
-    if not IsAddOnLoaded("Blizzard_LootJournal") then
-        LoadAddon("Blizzard_LootJournal")
-    end
-
-    local _, _, classID = UnitClass("player")
-    local specID = GetSpecializationInfo(GetSpecialization())
-    if classID and specID then
-        local itemSets = GetItemSets(classID, specID)
-        if itemSets then
-            for _, set in ipairs(itemSets) do
-                local setItems = GetItemSetItems(set.setID)
-                if setItems then
-                    for _, item in ipairs(setItems) do
-                        if not newInstanceLootCache["Tier Sets"] then
-                            newInstanceLootCache["Tier Sets"] = {}
-                        end
-
-                        local alreadyInList = false
-                        for _, id in ipairs(newInstanceLootCache["Tier Sets"]) do
-                            if id == item.itemID then
-                                alreadyInList = true
-                                break
-                            end
-                        end
-
-                        if not alreadyInList then
-                            table.insert(newInstanceLootCache["Tier Sets"], item.itemID)
-                        end
-                    end
-                end
-            end
-        end
-    end
+    CollectTierSetItems(newInstanceLootCache)
 
     ---@class BestInSlotLootCache
     local t = {
@@ -346,7 +496,7 @@ local function FindCurrentInstances()
     end
 
     -- current M+ dungeons (may include old dungeons)
-    local mythicPlusMapIDs = GetMapTable()
+    local mythicPlusMapIDs = GetMapTable() or {}
     for _, mapID in ipairs(mythicPlusMapIDs) do
         local name = GetMapUIInfo(mapID)
         if name then
@@ -366,14 +516,25 @@ local function FindCurrentInstances()
 end
 
 local function GetGameVersion()
-    return select(1, GetBuildInfo())
+    return string.format("%s-bis%d", select(1, GetBuildInfo()), CACHE_SCHEMA_VERSION)
+end
+
+local function CacheHasTierSets(cache)
+    return type(cache) == "table"
+        and type(cache.InstanceLoot) == "table"
+        and type(cache.InstanceLoot["Tier Sets"]) == "table"
+        and next(cache.InstanceLoot["Tier Sets"]) ~= nil
 end
 
 function ItemScanner.Scan()
     T:Print("Scanning Encounter Journal for rewards. This may take a moment and can cause a brief performance loss.")
+    local originalTier = EJ_GetCurrentTier()
     PrepareEncounterJournal()
     local currentInstances = FindCurrentInstances()
     local rewards = FindRewards(currentInstances)
+    if originalTier then
+        EJ_SelectTier(originalTier)
+    end
     BIS.GetCharacterBISDB().LootCache = rewards
     BIS.GetCharacterBISDB().CacheGameVersion = GetGameVersion()
     T:Print("Scan complete.")
@@ -381,7 +542,8 @@ end
 
 --- @return boolean requiresRefresh
 function ItemScanner.DoesCacheRequireRefresh()
-    return not BIS.GetCharacterBISDB().LootCache or BIS.GetCharacterBISDB().CacheGameVersion ~= GetGameVersion()
+    local cache = BIS.GetCharacterBISDB().LootCache
+    return not cache or BIS.GetCharacterBISDB().CacheGameVersion ~= GetGameVersion() or not CacheHasTierSets(cache)
 end
 
 ---@return boolean isOwned
@@ -404,7 +566,8 @@ function ItemScanner.PlayerOwnsItem(itemID)
     end
 
     -- check all bag slots
-    for bag = 0, 4 do
+    local maxBagIndex = rawget(_G, "NUM_TOTAL_EQUIPPED_BAG_SLOTS") or rawget(_G, "NUM_BAG_SLOTS") or 4
+    for bag = 0, maxBagIndex do
         for slot = 1, C_Container.GetContainerNumSlots(bag) do
             local iItemID = C_Container.GetContainerItemID(bag, slot)
             if iItemID == itemID then
@@ -438,29 +601,29 @@ local function ParseTipData(tipData)
     end
 end
 
----@return string track
----@return number currentStage
----@return number maximumStage
+---@return string|nil track
+---@return number|nil currentStage
+---@return number|nil maximumStage
 function ItemScanner.GetTrackFromEquippedItem(slot)
     local tipData = C_TooltipInfo.GetInventoryItem("player", slot)
     return ParseTipData(tipData)
 end
 
----@return string track
----@return number currentStage
----@return number maximumStage
+---@return string|nil track
+---@return number|nil currentStage
+---@return number|nil maximumStage
 function ItemScanner.GetTrackFromBagItem(bag, slot)
     local tipData = C_TooltipInfo.GetBagItem(bag, slot)
     return ParseTipData(tipData)
 end
 
 ---@param link string
----@return string track
----@return number currentStage
----@return number maximumStage
+---@return string|nil track
+---@return number|nil currentStage
+---@return number|nil maximumStage
 function ItemScanner.GetTrackFromLink(link)
-    if type(link) ~= "string" or link == "" then return end
-    if not C_TooltipInfo or type(C_TooltipInfo.GetHyperlink) ~= "function" then return end
+    if type(link) ~= "string" or link == "" then return nil, nil, nil end
+    if not C_TooltipInfo or type(C_TooltipInfo.GetHyperlink) ~= "function" then return nil, nil, nil end
 
     local tipData = C_TooltipInfo.GetHyperlink(link)
     return ParseTipData(tipData)
@@ -470,7 +633,7 @@ ItemScanner.GearTracks = {
     EXPLORER = 1,
     ADVENTURER = 2,
     VETERAN = 3,
-    CHAMPTION = 4,
+    CHAMPION = 4,
     HERO = 5,
     MYTH = 6,
 }

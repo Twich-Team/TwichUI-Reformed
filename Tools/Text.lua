@@ -1,7 +1,7 @@
 --[[
     Provides various text-based utilities used throughout the addon
 ]]
----@type TwichUI_Reformed
+---@type any
 local TwichRx = _G.TwichRx
 local T, W, I, C = unpack(TwichRx)
 
@@ -88,7 +88,8 @@ function Text.DumpTable(t, indent)
 end
 
 function Text.GetElvUIFont()
-    local E = unpack(ElvUI)
+    local elvUI = rawget(_G, "ElvUI")
+    local E = elvUI and elvUI[1]
     if E and E.media and E.media.normFont then return E.media.normFont end
     return nil
 end

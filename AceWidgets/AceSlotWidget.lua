@@ -1,5 +1,5 @@
 ---@diagnostic disable: undefined-global, return-type-mismatch
-local E = unpack(ElvUI)
+local TwichRx = _G.TwichRx
 local T = unpack(TwichRx)
 
 local AceGUI = LibStub("AceGUI-3.0")
@@ -14,6 +14,18 @@ local ACEGUI_GEAR_SLOT_TYPE = "TwichUI_GearSlot"
 local Type, Version = ACEGUI_GEAR_SLOT_TYPE, 1
 
 local DEFAULT_DETAILS_TEXT = "Select an item..."
+local DEFAULT_CARD_TEXT = "Curate your chase piece"
+local TEX_COORDS = { 0.08, 0.92, 0.08, 0.92 }
+
+local function GetFallbackFont()
+    local font = T.Tools and T.Tools.Text and T.Tools.Text.GetElvUIFont and T.Tools.Text.GetElvUIFont()
+    if font then
+        return font
+    end
+
+    local gameFont = _G.GameFontNormal
+    return gameFont and select(1, gameFont:GetFont()) or nil
+end
 
 ---@return BestInSlotModule
 local function GetBISModule()
@@ -31,43 +43,88 @@ end
 ---Builds the Gear Slot AceGUI Widget.
 ---@return AceGUIWidget
 local function Constructor()
-    local frame = CreateFrame("Button", nil, UIParent)
+    local frame = CreateFrame("Button", nil, UIParent, "BackdropTemplate")
     frame:Hide()
 
     frame:SetSize(SLOT_WIDTH, SLOT_HEIGHT)
 
+    if not frame.LeftAccent then
+        frame.LeftAccent = frame:CreateTexture(nil, "ARTWORK")
+        frame.LeftAccent:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+        frame.LeftAccent:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 1, 1)
+        frame.LeftAccent:SetWidth(3)
+    end
+
+    if not frame.InnerGlow then
+        frame.InnerGlow = frame:CreateTexture(nil, "ARTWORK")
+        frame.InnerGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", 1, -1)
+        frame.InnerGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -1, 1)
+    end
+
+    local iconFrame = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    iconFrame:SetPoint("LEFT", frame, "LEFT", 8, 0)
+    iconFrame:SetSize(ICON_SIZE + 8, ICON_SIZE + 8)
+    if iconFrame.SetTemplate then
+        iconFrame:SetTemplate("Transparent")
+    end
+
     -- icon
-    local icon = frame:CreateTexture(nil, "ARTWORK")
+    local icon = iconFrame:CreateTexture(nil, "ARTWORK")
     icon:SetSize(ICON_SIZE, ICON_SIZE)
-    icon:SetPoint("LEFT", frame, "LEFT", 4, 0)
-    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    icon:SetTexture(unpack(E.TexCoords))
+    icon:SetPoint("CENTER", iconFrame, "CENTER", 0, 0)
+    icon:SetTexCoord(unpack(TEX_COORDS))
     frame.Icon = icon
+    frame.IconFrame = iconFrame
 
     -- icon Border
-    frame.IconBorder = frame:CreateTexture(nil, "OVERLAY")
-    frame.IconBorder:SetAllPoints(frame.Icon)
-    frame.IconBorder:SetColorTexture(0, 0, 0, 0)
+    frame.IconBorder = CreateFrame("Frame", nil, iconFrame, "BackdropTemplate")
+    frame.IconBorder:SetAllPoints(iconFrame)
+    if frame.IconBorder.SetTemplate then
+        frame.IconBorder:SetTemplate("Transparent")
+    end
 
     -- name
     frame.Name = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    frame.Name:SetPoint("LEFT", frame.Icon, "RIGHT", 8, 3)
+    frame.Name:SetPoint("LEFT", iconFrame, "RIGHT", 10, 7)
     frame.Name:SetJustifyH("LEFT")
+    frame.Name:SetPoint("RIGHT", frame, "RIGHT", -28, 0)
 
     -- details
     frame.Details = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    frame.Details:SetPoint("BOTTOMLEFT", frame.Icon, "BOTTOMRIGHT", 8, 0)
+    frame.Details:SetPoint("TOPLEFT", frame.Name, "BOTTOMLEFT", 0, -3)
+    frame.Details:SetPoint("RIGHT", frame, "RIGHT", -28, 0)
     frame.Details:SetText(DEFAULT_DETAILS_TEXT)
     frame.Details:SetTextColor(0.5, 0.5, 0.5)
     frame.Details:SetJustifyH("LEFT")
 
+    frame.Badge = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    frame.Badge:SetPoint("BOTTOMLEFT", frame.Name, "TOPLEFT", 0, 4)
+    frame.Badge:SetJustifyH("LEFT")
+    frame.Badge:SetText("")
+
+    local font = GetFallbackFont()
+    if font then
+        frame.Name:SetFont(font, 12, "")
+        frame.Details:SetFont(font, 10, "")
+        frame.Badge:SetFont(font, 9, "OUTLINE")
+    end
+
     -- clear button (red x)
-    frame.ClearButton = CreateFrame("Button", nil, frame)
-    frame.ClearButton:SetSize(16, 16)
-    frame.ClearButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
-    frame.ClearButton:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
-    frame.ClearButton:SetHighlightTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Highlight")
-    frame.ClearButton:SetPushedTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Down")
+    frame.ClearButton = CreateFrame("Button", nil, frame, "BackdropTemplate")
+    frame.ClearButton:SetSize(18, 18)
+    frame.ClearButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -5, -5)
+    frame.ClearButton:SetNormalFontObject("GameFontHighlightSmall")
+    frame.ClearButton:SetText("x")
+    if frame.ClearButton.SetBackdrop then
+        frame.ClearButton:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+        frame.ClearButton:SetBackdropColor(0.18, 0.06, 0.06, 0.95)
+        frame.ClearButton:SetBackdropBorderColor(0.92, 0.34, 0.28, 0.5)
+    end
     frame.ClearButton:Hide()
 
     -- checkmark (gear is owned)
@@ -97,13 +154,19 @@ local function Constructor()
         if frame.SetBackdropBorderColor then
             frame:SetBackdropBorderColor(border[1], border[2], border[3], 0.28)
         end
+        frame.LeftAccent:SetColorTexture(accent[1], accent[2], accent[3], 0.92)
+        frame.InnerGlow:SetColorTexture(0, 0, 0, 0)
         frame.Details:SetTextColor(accent[1], accent[2], accent[3], 0.72)
+        frame.Badge:SetTextColor(accent[1], accent[2], accent[3], 0.95)
     end
 
     frame:SetScript("OnEnter", function(self)
         local accent = GetWidgetColors()
         if self.SetBackdropBorderColor then
             self:SetBackdropBorderColor(accent[1], accent[2], accent[3], 0.9)
+        end
+        if self.InnerGlow then
+            self.InnerGlow:SetColorTexture(accent[1], accent[2], accent[3], 0.08)
         end
 
         -- show tooltip if this slot has a selected item
@@ -133,6 +196,9 @@ local function Constructor()
         local _, border = GetWidgetColors()
         if self.SetBackdropBorderColor then
             self:SetBackdropBorderColor(border[1], border[2], border[3], 0.28)
+        end
+        if self.InnerGlow then
+            self.InnerGlow:SetColorTexture(0, 0, 0, 0)
         end
 
         if not self.ClearButton:IsMouseOver() then
@@ -257,6 +323,7 @@ local function Constructor()
                 self.frame.Name:SetTextColor(1, 1, 1)
                 self.frame.Details:SetText(DEFAULT_DETAILS_TEXT)
                 self.frame.Details:SetTextColor(0.5, 0.5, 0.5)
+                self.frame.Badge:SetText("")
             end
             self.itemID = nil
             if self.frame.Check then
@@ -284,9 +351,10 @@ local function Constructor()
             self.frame.Icon:SetTexture(slotData.texture)
             self.frame.Icon:SetDesaturated(false)
             self.frame.Name:SetText(slotData.name)
-            self.frame.Name:SetTextColor(1, 1, 1)
-            self.frame.Details:SetText(DEFAULT_DETAILS_TEXT)
-            self.frame.Details:SetTextColor(0.5, 0.5, 0.5)
+            self.frame.Name:SetTextColor(0.97, 0.95, 0.89)
+            self.frame.Details:SetText(DEFAULT_CARD_TEXT)
+            self.frame.Details:SetTextColor(0.64, 0.68, 0.76)
+            self.frame.Badge:SetText("OPEN SLOT")
             self.itemID = nil
             if self.frame.Check then
                 self.frame.Check:Hide()
@@ -319,15 +387,18 @@ local function Constructor()
 
                 if itemData.sourceInstance then
                     self.frame.Details:SetText(itemData.sourceInstance)
-                    self.frame.Details:SetTextColor(0.8, 0.8, 0.8)
+                    self.frame.Details:SetTextColor(0.74, 0.78, 0.84)
                 else
                     self.frame.Details:SetText("Selected Best in Slot")
                     self.frame.Details:SetTextColor(0.5, 0.8, 1)
                 end
 
+                self.frame.Badge:SetText("CURATED")
+
                 -- show the checkmark and instance-specific text if the player owns this item
                 if owned then
                     self.frame.Check:Show()
+                    self.frame.Badge:SetText("OWNED")
                     if ilvl then
                         if equipped then
                             self.frame.Details:SetText("iLvl: " .. ilvl .. " (Equipped)")

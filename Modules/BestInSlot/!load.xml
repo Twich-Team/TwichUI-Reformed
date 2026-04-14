@@ -6,5 +6,4 @@
     <Include file='Monitor_DroppedItems.lua' />
     <Include file='GreatVaultEnhancement.lua' />
     <Include file='Frame.lua' />
-    <Include file='Frame\!load.xml' />
 </Ui>
