@@ -76,7 +76,7 @@ local function GetThemeColors()
     local primary = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("primaryColor") or { 0.16, 0.78, 0.78 }
     local accent = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("accentColor") or { 0.95, 0.76, 0.26 }
     local surface = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("backgroundColor") or
-    { 0.06, 0.06, 0.08 }
+        { 0.06, 0.06, 0.08 }
     local border = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("borderColor") or { 0.24, 0.26, 0.32 }
     return primary, accent, surface, border
 end
@@ -801,7 +801,7 @@ function BISFrame:GetCollectedSelectedCount()
     for _, item in pairs(self:GetSelectedDB()) do
         if item and item.itemID then
             local owned = BIS.ItemScanner and BIS.ItemScanner.PlayerOwnsItem and
-            BIS.ItemScanner.PlayerOwnsItem(item.itemID)
+                BIS.ItemScanner.PlayerOwnsItem(item.itemID)
             if owned then
                 count = count + 1
             end
@@ -1102,25 +1102,23 @@ function BISFrame:UpdateHeader()
     local curatedCount = self:GetSelectedSlotCount()
     local collectedCount = self:GetCollectedSelectedCount()
     local cacheNeedsRefresh = BIS.ItemScanner and BIS.ItemScanner.DoesCacheRequireRefresh and
-    BIS.ItemScanner.DoesCacheRequireRefresh()
+        BIS.ItemScanner.DoesCacheRequireRefresh()
     self.frame.SpecValue:SetText(GetSpecLabel())
     SetMetricBar(self.frame.CacheBar, cacheNeedsRefresh and 0.18 or 1, cacheNeedsRefresh and "Rebuild" or "Ready")
     SetMetricBarStatus(self.frame.CacheBar, cacheNeedsRefresh and SECTION_TINTS.sources or SECTION_TINTS.slots,
         cacheNeedsRefresh and "Stale" or "OK")
     SetMetricBar(self.frame.SelectionBar, curatedCount > 0 and (collectedCount / curatedCount) or 0,
         string.format("%d / %d collected", collectedCount, curatedCount))
-    self.frame.HeroSubtitle:SetText(string.format(
-    "Choose a target for %s, compare where it drops, and plan your next dungeon or raid run.", slotData.name))
     if self.frame.ActionHint then
         self.frame.ActionHint:SetText(string.format(
-        "Current slot: %s. Custom Item accepts an item ID, item name, in-game item link, or Wowhead link.", slotData
-        .name))
+            "Current slot: %s. Custom Item accepts an item ID, item name, in-game item link, or Wowhead link.", slotData
+            .name))
     end
     if self.frame.TierHint then
         local hasTierSets = catalog.itemsBySource["Tier Sets"] ~= nil and #catalog.itemsBySource["Tier Sets"] > 0
         if IsTierSlot(slotData.slotID) and not hasTierSets then
             self.frame.TierHint:SetText(
-            "Tier pieces are missing for this slot. Use Rebuild Cache to rescan Loot Journal sets.")
+                "Tier pieces are missing for this slot. Use Rebuild Cache to rescan Loot Journal sets.")
             self.frame.TierHint:Show()
         else
             self.frame.TierHint:Hide()
@@ -1552,7 +1550,7 @@ function BISFrame:RefreshSources()
         SetInteractiveState(card, SECTION_TINTS.sources, self.BrowseSource == sourceData.name)
         if sourceData.isAggregate then
             card.tooltipText = string.format(
-            "All\nShows every candidate item available for %s without filtering by source.",
+                "All\nShows every candidate item available for %s without filtering by source.",
                 self:GetSlotDefinition(self.SelectedSlotID).name)
         else
             card.tooltipText = string.format("%s\nThis source can drop %d candidate items for %s.", sourceData.name,
@@ -1580,10 +1578,10 @@ function BISFrame:RefreshPriorities()
     if self.frame.PriorityPanel.Subtitle then
         if entries[1] then
             self.frame.PriorityPanel.Subtitle:SetText(string.format(
-            "Most worth doing now: %s covers %d of your curated slots.", entries[1].name, entries[1].slotCount))
+                "Most worth doing now: %s covers %d of your curated slots.", entries[1].name, entries[1].slotCount))
         else
             self.frame.PriorityPanel.Subtitle:SetText(
-            "Your current curated plan grouped by source so you can see what is worth doing next.")
+                "Your current curated plan grouped by source so you can see what is worth doing next.")
         end
     end
 
@@ -1680,7 +1678,7 @@ function BISFrame:RefreshDetail()
 
         local itemTypeName, itemSubTypeName, _, _, equipLoc = C_Item.GetItemInfoInstant(selected.itemID)
         local equipText = equipLoc and equipLoc ~= "" and (_G[equipLoc] or itemSubTypeName or itemTypeName) or
-        itemSubTypeName or itemTypeName or "Best in Slot item"
+            itemSubTypeName or itemTypeName or "Best in Slot item"
         local sourceText = selected.sourceInstance and ("Source: " .. selected.sourceInstance) or "Custom selection"
         self.frame.DetailMeta:SetText(string.format("%s | %s", equipText, sourceText))
     end)
@@ -1756,7 +1754,7 @@ function BISFrame:RefreshItems()
 
             local itemTypeName, itemSubTypeName, _, _, equipLoc = C_Item.GetItemInfoInstant(itemID)
             local equipText = equipLoc and equipLoc ~= "" and (_G[equipLoc] or itemSubTypeName or itemTypeName) or
-            itemSubTypeName or itemTypeName or "Loot"
+                itemSubTypeName or itemTypeName or "Loot"
             card.Detail:SetText(string.format("%s | %s", card.sourceName or "Source", equipText))
 
             if owned then
@@ -1957,17 +1955,18 @@ function BISFrame:Create()
     frame.Header = CreateFrame("Frame", nil, frame, "BackdropTemplate")
     frame.Header:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -12)
     frame.Header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -12)
-    frame.Header:SetHeight(94)
+    frame.Header:SetHeight(70)
     ApplySectionChrome(frame.Header, SECTION_TINTS.hero)
 
     frame.HeroTitle = CreateText(frame.Header, "OVERLAY", 22, "", { 1, 0.96, 0.9 })
-    frame.HeroTitle:SetPoint("TOPLEFT", frame.Header, "TOPLEFT", 18, -16)
+    frame.HeroTitle:SetPoint("TOPLEFT", frame.Header, "TOPLEFT", 18, -12)
     frame.HeroTitle:SetText("Best in Slot")
 
     frame.HeroSubtitle = CreateText(frame.Header, "OVERLAY", 11, "", { 0.74, 0.78, 0.84 })
     frame.HeroSubtitle:SetPoint("TOPLEFT", frame.HeroTitle, "BOTTOMLEFT", 0, -4)
     frame.HeroSubtitle:SetPoint("RIGHT", frame.Header, "RIGHT", -440, 0)
     frame.HeroSubtitle:SetJustifyH("LEFT")
+    frame.HeroSubtitle:Hide()
 
     frame.TierHint = CreateText(frame.Header, "OVERLAY", 10, "OUTLINE", { 1, 0.86, 0.58 })
     frame.TierHint:SetJustifyH("LEFT")
@@ -1975,7 +1974,7 @@ function BISFrame:Create()
     frame.TierHint:Hide()
 
     frame.SpecValue = CreateText(frame.Header, "OVERLAY", 11, "", { 1, 0.96, 0.9 })
-    frame.SpecValue:SetPoint("BOTTOMLEFT", frame.Header, "BOTTOMLEFT", 18, 14)
+    frame.SpecValue:SetPoint("BOTTOMLEFT", frame.Header, "BOTTOMLEFT", 18, 8)
 
     frame.CacheBar = CreateMetricBar(frame.Header, 214, primary, "CACHE")
     frame.CacheBar:SetPoint("BOTTOMLEFT", frame.SpecValue, "BOTTOMRIGHT", 18, -2)
@@ -1995,8 +1994,8 @@ function BISFrame:Create()
     end
 
     frame.ActionBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    frame.ActionBar:SetPoint("TOPLEFT", frame.Header, "BOTTOMLEFT", 0, -12)
-    frame.ActionBar:SetPoint("TOPRIGHT", frame.Header, "BOTTOMRIGHT", 0, -12)
+    frame.ActionBar:SetPoint("TOPLEFT", frame.Header, "BOTTOMLEFT", 0, -6)
+    frame.ActionBar:SetPoint("TOPRIGHT", frame.Header, "BOTTOMRIGHT", 0, -6)
     frame.ActionBar:SetHeight(52)
     ApplyBackdrop(frame.ActionBar, { surface[1] * 0.7, surface[2] * 0.72, surface[3] * 0.82 }, border, 0.38, 0.12)
 
@@ -2237,7 +2236,7 @@ function BISFrame:Create()
     frame.CustomSubtitle = CreateText(frame.CustomModal, "OVERLAY", 10, "", { 0.72, 0.76, 0.84 })
     frame.CustomSubtitle:SetPoint("TOPLEFT", frame.CustomTitle, "BOTTOMLEFT", 0, -4)
     frame.CustomSubtitle:SetText(
-    "Use this when the seasonal scan misses an item or you want to pin a manual chase target.")
+        "Use this when the seasonal scan misses an item or you want to pin a manual chase target.")
 
     frame.CustomItemInput = CreateFrame("EditBox", nil, frame.CustomModal, "InputBoxTemplate")
     frame.CustomItemInput:SetPoint("TOPLEFT", frame.CustomSubtitle, "BOTTOMLEFT", 0, -24)
