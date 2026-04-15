@@ -4,12 +4,21 @@
 
 - i am not seeing world quests in our objective tracker
 
+- when i clear the error log while the configuration UI is open, the error log button that shows the number of errors does not change to show no errors it justr keeps showing the number before i cleared
+
 ## NOTES
 
-- in the header area, there is "Choose a target" text, remove that. also there is an add section of the background that is behind that text. see image.
+- Can we add a context menu to the minimap to configure tracking options
 
-- Need raid markers on unit frames
-- Some way to emphasize nameplates where the unit is casting
+- Our nameplates have a nice system to emphasize when npcs are casting. I have noticed that if my target casts, the nameplate doesnt assume the casting emphasis. so for example i have it configured to scale up the size and addd blue arrows when casting. it works fine for enemies im not actively targeting. but my active target starts to cast, those emphasis items do not appear.
+
+- Can we add a reloadui button to the popup error frame? Also, add a button silence for the current session. this no longer shows the popup/chat announcements, and mutes any sounds until reload, log off, etc.
+
+- our objective tracker is still showing all world quests in the current zone. It should not do this. it should only show a world quest if it is active meaning im in the direct quest spot in the zone. Additionally, world quests should be split into their own category in the objective tracker
+
+- the objective tracker seems to not be showing newly obtained quests, or campaign quests. We could have a category dedicated to campaign quests and always show those, at the top.
+
+- i dont think the objective tracker is showing quests that are ready to turn in. like the ones you can click on to turn in remotely. please inspect horizon closesly to ensure we have all the basic logic we need for typical gameplay at least.
 
 # Tweaks
 

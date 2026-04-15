@@ -26,6 +26,10 @@ local function GetObjectiveTrackerModule()
     return T:GetModule("ObjectiveTracker", true) --[[@as any]]
 end
 
+local function GetMinimapModule()
+    return T:GetModule("Minimap", true) --[[@as any]]
+end
+
 local function OpenDebugSource(sourceKey)
     local console = GetDebugConsole()
     if console and type(console.Show) == "function" then
@@ -177,6 +181,65 @@ local function BuildDebugConsoleConfiguration()
                 local module = GetObjectiveTrackerModule()
                 if module and module.RefreshNow then
                     module:RefreshNow("debugger")
+                end
+            end,
+        },
+    })
+
+    local minimapDiagGroup = W.IGroup(18.5, "Minimap Diagnostics", {
+        minimapStatus = {
+            type  = "description",
+            order = 1,
+            name  = function()
+                local module = GetMinimapModule()
+                if not module then
+                    return "|cffff9a6cMinimap module not loaded.|r"
+                end
+
+                if module.GetDebugSummaryLine then
+                    return module:GetDebugSummaryLine()
+                end
+
+                return "|cff69b86fMinimap module loaded.|r"
+            end,
+        },
+        minimapSnapshot = {
+            type  = "execute",
+            order = 2,
+            name  = "Capture Minimap Snapshot",
+            desc  = "Dump live minimap ownership, mask, points, hidden chrome, and managed buttons into the debugger.",
+            func  = function()
+                local module = GetMinimapModule()
+                if module and module.CaptureDebugSnapshot then
+                    module:CaptureDebugSnapshot(true)
+                end
+            end,
+        },
+        minimapLogs = {
+            type  = "execute",
+            order = 3,
+            name  = "Open Minimap Logs",
+            func  = function() OpenDebugSource("minimap") end,
+        },
+        minimapReapply = {
+            type  = "execute",
+            order = 4,
+            name  = "Force Minimap Reapply",
+            func  = function()
+                local module = GetMinimapModule()
+                if module and module.RequestApply then
+                    module:RequestApply("debugger")
+                end
+            end,
+        },
+        minimapPreview = {
+            type  = "execute",
+            order = 5,
+            name  = "Pulse Minimap Preview",
+            func  = function()
+                local module = GetMinimapModule()
+                if module and module.ShowPreview then
+                    module:ShowPreview()
                 end
             end,
         },
@@ -388,6 +451,7 @@ local function BuildDebugConsoleConfiguration()
         actions    = actionsGroup,
         tooltips   = tooltipDiagGroup,
         tracker    = objectiveTrackerDiagGroup,
+        minimap    = minimapDiagGroup,
         profiler   = profilerGroup,
         nameplates = npDiagGroup,
         sources    = sourcesGroup,

@@ -98,8 +98,57 @@ local function SafeChatText(value)
     return nil
 end
 
+local function SafeStringFind(text, pattern, init, plain)
+    if type(text) ~= "string" or type(pattern) ~= "string" then
+        return nil
+    end
+
+    local ok, found = pcall(string.find, text, pattern, init, plain)
+    if ok then
+        return found
+    end
+
+    return nil
+end
+
+local function SafeStringMatch(text, pattern, init)
+    if type(text) ~= "string" or type(pattern) ~= "string" then
+        return nil
+    end
+
+    local ok, first, second, third, fourth = pcall(string.match, text, pattern, init)
+    if ok then
+        return first, second, third, fourth
+    end
+
+    return nil
+end
+
+local function SafeCollectMatches(text, pattern)
+    if type(text) ~= "string" or type(pattern) ~= "string" then
+        return {}
+    end
+
+    local ok, iterator = pcall(string.gmatch, text, pattern)
+    if not ok or type(iterator) ~= "function" then
+        return {}
+    end
+
+    local matches = {}
+    while true do
+        local nextOk, value = pcall(iterator)
+        if not nextOk or value == nil then
+            break
+        end
+
+        matches[#matches + 1] = value
+    end
+
+    return matches
+end
+
 -- Coin icon sizes (pixels at font size 12)
-local COIN_ATLAS         = {
+local COIN_ATLAS = {
     gold   = "auctionhouse-icon-gold",
     silver = "auctionhouse-icon-silver",
     copper = "auctionhouse-icon-copper",
@@ -1354,7 +1403,7 @@ local function ScheduleExit(entry, displayTime)
 end
 
 ---Push a new entry into the feed.
----@param icon      string|nil   Texture path or fileID
+---@param icon      string|number|nil   Texture path or fileID
 ---@param text      string       Display text (may contain colour codes or links)
 ---@param link      string|nil   Item hyperlink for tooltip on hover
 ---@param quality   number|nil   Enum.ItemQuality value
@@ -1502,6 +1551,16 @@ local function ResolveItemIcon(itemLink, itemID, texture)
     return FALLBACK_ITEM_ICON
 end
 
+local function GetResolvedItemInfo(itemLink)
+    if _G.C_Item and _G.C_Item.GetItemInfo then
+        local itemName, _, itemQuality, _, _, _, _, _, _, itemTexture = _G.C_Item.GetItemInfo(itemLink)
+        return itemName, itemQuality, itemTexture
+    end
+
+    local itemName, _, itemQuality, _, _, _, _, _, _, itemTexture = GetItemInfo(itemLink)
+    return itemName, itemQuality, itemTexture
+end
+
 -- ---------------------------------------------------------------------------
 -- Event handlers
 -- ---------------------------------------------------------------------------
@@ -1518,44 +1577,45 @@ function LF:CHAT_MSG_LOOT(_, msg, _, _, _, senderName2, _, _, _, _, _, _, guid)
     if not myGuid then return end
 
     -- Raid loot history messages contain HlootHistory: — ignore them
-    if parsedMsg:find("HlootHistory:", 1, true) then return end
+    if SafeStringFind(parsedMsg, "HlootHistory:", 1, true) then return end
 
     -- In retail, guid matches ours; fallback check via sender name
-    local parsedGuid = SafeChatText(guid) or guid
+    local parsedGuid = SafeChatText(guid)
     if parsedGuid and parsedGuid ~= "" then
         if parsedGuid ~= myGuid then return end
     else
         local playerName = _G.UnitName("player")
-        local parsedSenderName = SafeChatText(senderName2) or senderName2
-        if parsedSenderName and parsedSenderName ~= "" and parsedSenderName ~= playerName then
+        local parsedSenderName = SafeChatText(senderName2)
+        if not parsedSenderName or parsedSenderName == "" then
+            return
+        end
+        if parsedSenderName ~= playerName then
             return
         end
     end
 
     -- Extract item link(s) — upgrades produce two links
     local links = {}
-    for link in parsedMsg:gmatch("|c.-|Hitem:.-|h%[.-%]|h|r") do
+    for _, link in ipairs(SafeCollectMatches(parsedMsg, "|c.-|Hitem:.-|h%[.-%]|h|r")) do
         links[#links + 1] = link
     end
     local itemLink = links[#links]
     if not itemLink then return end
 
     -- Extract quantity (e.g. "You receive loot: x3")
-    local qty    = tonumber(parsedMsg:match("r ?x(%d+)")) or 1
+    local qty = tonumber(SafeStringMatch(parsedMsg, "r ?x(%d+)")) or 1
 
     -- Resolve item info
     local itemID = C_Item and C_Item.GetItemIDByGUID and C_Item.GetItemIDByGUID(itemLink) or
-        tonumber(itemLink:match("item:(%d+)"))
+        tonumber(SafeStringMatch(itemLink, "item:(%d+)"))
     if not itemID then
         -- Fallback: parse id from link content
-        itemID = tonumber(itemLink:match("|Hitem:(%d+)"))
+        itemID = tonumber(SafeStringMatch(itemLink, "|Hitem:(%d+)"))
     end
 
     if not itemID then return end
 
-    local name, _, quality, _, _, _, _, _, _, texture = _G.C_Item and
-        _G.C_Item.GetItemInfo and _G.C_Item.GetItemInfo(itemLink) or
-        GetItemInfo(itemLink)
+    local name, quality, texture = GetResolvedItemInfo(itemLink)
 
     if not name then
         -- Defer until item data arrives
@@ -1581,12 +1641,10 @@ function LF:GET_ITEM_INFO_RECEIVED(_, itemID, success)
     local settings = GetSettings()
     if not settings.showItems then return end
 
-    local itemLink                                    = pending.link
-    local qty                                         = pending.qty
+    local itemLink               = pending.link
+    local qty                    = pending.qty
 
-    local name, _, quality, _, _, _, _, _, _, texture = _G.C_Item and
-        _G.C_Item.GetItemInfo and _G.C_Item.GetItemInfo(itemLink) or
-        GetItemInfo(itemLink)
+    local name, quality, texture = GetResolvedItemInfo(itemLink)
 
     if not name then return end
     if not IsQualityShown(quality, settings) then return end
@@ -1605,9 +1663,9 @@ function LF:CHAT_MSG_MONEY(_, msg)
 
     -- Parse copper from the system money message
     -- WoW formats: "You receive: <money>" with various gold/silver/copper sub-parts
-    local gold   = tonumber(parsedMsg:match("(%d+) Gold")) or 0
-    local silver = tonumber(parsedMsg:match("(%d+) Silver")) or 0
-    local copper = tonumber(parsedMsg:match("(%d+) Copper")) or 0
+    local gold   = tonumber(SafeStringMatch(parsedMsg, "(%d+) Gold")) or 0
+    local silver = tonumber(SafeStringMatch(parsedMsg, "(%d+) Silver")) or 0
+    local copper = tonumber(SafeStringMatch(parsedMsg, "(%d+) Copper")) or 0
     local total  = gold * 10000 + silver * 100 + copper
 
     if total == 0 then return end
@@ -1628,28 +1686,28 @@ function LF:CHAT_MSG_CURRENCY(_, msg)
     if not parsedMsg then return end
 
     -- Extract currency link and quantity
-    local link = parsedMsg:match("|c.-|Hcurrency:(%d+)|h%[(.-)%]|h|r")
+    local link = SafeStringMatch(parsedMsg, "|c.-|Hcurrency:(%d+)|h%[(.-)%]|h|r")
 
     -- Try simpler pattern: get the display text
     local currencyLink, currencyName
-    for cl in parsedMsg:gmatch("|c.-|Hcurrency:.-|h%[.-%]|h|r") do
+    for _, cl in ipairs(SafeCollectMatches(parsedMsg, "|c.-|Hcurrency:.-|h%[.-%]|h|r")) do
         currencyLink = cl
-        currencyName = cl:match("|h%[(.-)%]|h")
+        currencyName = SafeStringMatch(cl, "|h%[(.-)%]|h")
         break
     end
 
     if not currencyName then
         -- Fallback: show the raw message snippet
-        currencyName = parsedMsg:match("receive (.+)$") or parsedMsg
+        currencyName = SafeStringMatch(parsedMsg, "receive (.+)$") or parsedMsg
     end
 
-    local qty = tonumber(parsedMsg:match("r ?x(%d+)")) or 1
+    local qty = tonumber(SafeStringMatch(parsedMsg, "r ?x(%d+)")) or 1
     local text = qty > 1 and (currencyName .. " x" .. qty) or currencyName
 
     -- Try to get a currency icon if we have the ID
     local currencyID = tonumber(
-        (currencyLink or ""):match("|Hcurrency:(%d+)") or
-        parsedMsg:match("|Hcurrency:(%d+)")
+        SafeStringMatch(currencyLink or "", "|Hcurrency:(%d+)") or
+        SafeStringMatch(parsedMsg, "|Hcurrency:(%d+)")
     )
     local icon = nil
     if currencyID and _G.C_CurrencyInfo and _G.C_CurrencyInfo.GetCurrencyInfo then

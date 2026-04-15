@@ -11,6 +11,7 @@
     <Include file='Datatexts.lua' />
     <Include file='UnitFrames.lua' />
     <Include file='Nameplates.lua' />
+    <Include file='Minimap.lua' />
     <Include file='Tooltip.lua' />
     <Include file='ObjectiveTracker.lua' />
     <Include file='Gathering.lua' />

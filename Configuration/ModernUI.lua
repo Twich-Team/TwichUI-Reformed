@@ -85,6 +85,14 @@ local NAV_ITEMS = {
         path = { "Notification Panel" },
     },
     {
+        id = "minimap",
+        title = "Minimap",
+        description =
+        "Custom shell, overlay text, addon button collection, and interface placement for the world map radar.",
+        accent = { 0.94, 0.77, 0.28 },
+        path = { "Minimap" },
+    },
+    {
         id = "tooltip",
         title = "Tooltip",
         description = "Anchor behavior, chrome polish, fonts, and unit tooltip treatment.",
@@ -248,6 +256,32 @@ local FEATURE_CARDS = {
             local width = options.GetPanelWidth and options:GetPanelWidth() or 0
             local maxToasts = options.GetMaxToasts and options:GetMaxToasts() or 0
             return ("Width %d | Max %d toasts"):format(width, maxToasts)
+        end,
+    },
+    {
+        title = "Minimap",
+        subtitle = "Wrap the Blizzard minimap with TwichUI chrome, zone data, a clock, and a managed addon-button bar.",
+        accent = { 0.95, 0.77, 0.28 },
+        pageId = "minimap",
+        path = { "Minimap" },
+        status = function()
+            local options = ConfigurationModule.Options and ConfigurationModule.Options.Minimap
+            if not options then
+                return "Unavailable"
+            end
+
+            local shape = options.GetCircular and options:GetCircular() and "Circular" or "Square"
+            local size = options.GetSize and options:GetSize() or 0
+            local buttons = options.GetManageAddonButtons and options:GetManageAddonButtons() and "Buttons Managed" or
+            "Buttons Native"
+            return ("%s  •  %dpx  •  %s"):format(shape, size, buttons)
+        end,
+        actionLabel = "Pulse",
+        action = function()
+            local module = T:GetModule("Minimap", true)
+            if module and module.ShowPreview then
+                module:ShowPreview()
+            end
         end,
     },
     {

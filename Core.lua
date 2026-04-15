@@ -102,6 +102,7 @@ function T:OnInitialize()
         { module = self:GetModule("Datatexts"),                                  enabled = Options.Datatext:IsModuleEnabled() },
         { module = self:GetModule("UnitFrames"),                                 enabled = Options.UnitFrames:GetEnabled() },
         { module = self:GetModule("Nameplates"),                                 enabled = Options.Nameplates:IsModuleEnabled() },
+        { module = self:GetModule("Minimap"),                                    enabled = Options.Minimap:GetEnabled() },
         { module = self:GetModule("Tooltip"),                                    enabled = Options.Tooltip:GetEnabled() },
         { module = self:GetModule("ObjectiveTracker"),                           enabled = Options.ObjectiveTracker:GetEnabled() },
         { module = self:GetModule("BestInSlot"),                                 enabled = Options.BestInSlot:IsBestInSlotModuleEnabled() },
