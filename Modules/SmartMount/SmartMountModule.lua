@@ -8,21 +8,36 @@ local T = unpack(TwichRx)
 local C_Spell = _G.C_Spell
 local IsFlyAbleArea = IsFlyableArea
 local GetMountInfoByID = C_MountJournal.GetMountInfoByID
+local GetMountInfoExtraByID = C_MountJournal.GetMountInfoExtraByID
 local SummonByID = C_MountJournal.SummonByID
 local IsMounted = IsMounted
 local Dismount = Dismount
 local CastSpellByID = rawget(_G, "CastSpellByID")
 local GetSpellCooldown = rawget(_G, "GetSpellCooldown")
+local GetSpellInfo = rawget(_G, "GetSpellInfo")
 local IsUsableSpell = rawget(_G, "IsUsableSpell")
 local UnitRace = UnitRace
 local LegacyIsPlayerSpell = rawget(_G, "IsPlayerSpell")
 local LegacyIsSpellKnown = rawget(_G, "IsSpellKnown")
+local date = _G.date
+local format = string.format
+local GetTime = _G.GetTime
 
 local PLAYER_RACE = select(2, UnitRace("player"))
 local SOAR_SPELL_ID = 369536
+local DEBUG_SOURCE_KEY = "smartmount"
+local GROUND_MOUNT_TYPES = {
+    [230] = true,
+}
+local FLYING_MOUNT_TYPES = {
+    [248] = true,
+    [402] = true,
+    [424] = true,
+}
 
 ---@class MountUtilityModule
 local MountUtilityModule = T:GetModule("MountUtility")
+local DebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
 
 ---@class SmartMountModule : AceModule, AceConsole-3.0
 ---@field buttonFrame Frame the frame that is keybound to toggle the mount behavior
@@ -46,6 +61,46 @@ local function GetMountSpellID(mountID)
     end
 
     return nil
+end
+
+local function GetMountSecureSpellValue(mountID)
+    local id = tonumber(mountID) or 0
+    if id <= 0 then
+        return nil
+    end
+
+    local mountName, spellID = GetMountInfoByID(id)
+    if spellID and type(GetSpellInfo) == "function" then
+        local spellName = GetSpellInfo(spellID)
+        if type(spellName) == "string" and spellName ~= "" then
+            return spellName
+        end
+    end
+
+    if type(mountName) == "string" and mountName ~= "" then
+        return mountName
+    end
+
+    return nil
+end
+
+local function GetSoarSecureSpellValue()
+    if type(GetSpellInfo) == "function" then
+        local spellName = GetSpellInfo(SOAR_SPELL_ID)
+        if type(spellName) == "string" and spellName ~= "" then
+            return spellName
+        end
+    end
+
+    return SOAR_SPELL_ID
+end
+
+local function BuildSecureCastMacro(spellValue)
+    if spellValue == nil then
+        return nil
+    end
+
+    return "/cast " .. tostring(spellValue)
 end
 
 local function SummonRandomFavoriteMount()
@@ -161,56 +216,296 @@ local function CastSoar()
     end
 end
 
-function SmartMountModule:GetSecureAction()
-    local options = GetConfigurationOptions()
-
-    if IsMounted() then
-        if options:GetDismountIfMounted() then
-            return "macro", "/dismount"
-        end
-
-        return nil, nil
+local function GetMountType(mountID)
+    if not mountID or type(GetMountInfoExtraByID) ~= "function" then
+        return nil
     end
 
-    local flyingMountID = options:GetSelectedFlyingMount() or 0
-    local groundMountID = options:GetSelectedGroundMount() or 0
-    local aquaticMountID = options:GetSelectedAquaticMount() or 0
+    local _, _, _, _, mountType = GetMountInfoExtraByID(mountID)
+    return tonumber(mountType)
+end
 
-    if IsSwimming("player") and options:GetUseAquaticMounts() then
-        if MountUtilityModule:IsMountUsable(aquaticMountID) then
-            local aquaticSpellID = GetMountSpellID(aquaticMountID)
-            if aquaticSpellID then
-                return "spell", aquaticSpellID
+local function GetMountTypeLabel(mountID)
+    local mountType = GetMountType(mountID)
+    if GROUND_MOUNT_TYPES[mountType] then
+        return "ground"
+    end
+
+    if FLYING_MOUNT_TYPES[mountType] then
+        return "flying"
+    end
+
+    if mountType then
+        return "type-" .. tostring(mountType)
+    end
+
+    return "unknown"
+end
+
+local function IsPreferredMountType(mountID, preferredMode)
+    if preferredMode == nil or preferredMode == "any" then
+        return true
+    end
+
+    local mountType = GetMountType(mountID)
+    if preferredMode == "ground" then
+        return GROUND_MOUNT_TYPES[mountType] == true
+    end
+
+    if preferredMode == "flying" then
+        return FLYING_MOUNT_TYPES[mountType] == true
+    end
+
+    return false
+end
+
+local function FindFirstUsableMountID(mounts, preferredMode)
+    if type(mounts) ~= "table" then
+        return nil
+    end
+
+    for _, entry in ipairs(mounts) do
+        local mountID = entry and tonumber(entry.mountID) or 0
+        if mountID > 0 and MountUtilityModule:IsMountUsable(mountID) and IsPreferredMountType(mountID, preferredMode) then
+            return mountID
+        end
+    end
+
+    return nil
+end
+
+local function GetAdaptiveFallbackMountID(preferFlying)
+    local preferredModes = preferFlying and { "flying", "ground", "any" } or { "ground", "any" }
+    local mountLists = { "FAVORITE", "ALL" }
+
+    for _, preferredMode in ipairs(preferredModes) do
+        for _, mountList in ipairs(mountLists) do
+            local mountID = FindFirstUsableMountID(MountUtilityModule:GetPlayerMounts(mountList), preferredMode)
+            if mountID then
+                return mountID, preferredMode, mountList
             end
         end
     end
 
-    local flyable = CanUseFlyingMounts()
+    return nil, nil, nil
+end
 
-    if flyable and CanUseSoar(options) then
-        return "spell", SOAR_SPELL_ID
+local function GetMountDebugName(mountID)
+    local label = MountUtilityModule:GetMountLabelByID(mountID)
+    return tostring(label or tostring(mountID or 0))
+end
+
+local function ResolveMountDecision(options, allowRandomFavorite)
+    local decision = {
+        timestamp = GetTime(),
+        isMounted = IsMounted(),
+        swimming = IsSwimming("player"),
+        inInstance = IsInInstance and IsInInstance() or false,
+        flyable = false,
+        allowRandomFavorite = allowRandomFavorite == true,
+        flyingMountID = options:GetSelectedFlyingMount() or 0,
+        groundMountID = options:GetSelectedGroundMount() or 0,
+        aquaticMountID = options:GetSelectedAquaticMount() or 0,
+        useAquatic = options:GetUseAquaticMounts() == true,
+        useSoar = options:GetUseDracthyrSoar() == true,
+        action = "none",
+        source = "none",
+    }
+
+    if decision.isMounted then
+        if options:GetDismountIfMounted() then
+            decision.action = "dismount"
+            decision.source = "mounted-dismount"
+        else
+            decision.source = "mounted-ignore"
+        end
+
+        return decision
     end
 
-    local primaryMountID = flyable and flyingMountID or groundMountID
-    local fallbackMountID = flyable and groundMountID or flyingMountID
+    if decision.swimming and decision.useAquatic and MountUtilityModule:IsMountUsable(decision.aquaticMountID) then
+        decision.action = "mount"
+        decision.source = "aquatic-selected"
+        decision.mountID = decision.aquaticMountID
+        decision.spellID = GetMountSpellID(decision.mountID)
+        return decision
+    end
+
+    decision.flyable = CanUseFlyingMounts()
+    decision.canUseSoar = decision.flyable and CanUseSoar(options)
+
+    if decision.canUseSoar then
+        decision.action = "soar"
+        decision.source = "soar"
+        decision.spellID = SOAR_SPELL_ID
+        decision.secureSpellValue = GetSoarSecureSpellValue()
+        return decision
+    end
+
+    local primaryMountID = decision.flyable and decision.flyingMountID or decision.groundMountID
+    local fallbackMountID = decision.flyable and decision.groundMountID or decision.flyingMountID
+    decision.primaryMountID = primaryMountID
+    decision.fallbackMountID = fallbackMountID
 
     if MountUtilityModule:IsMountUsable(primaryMountID) then
-        local primarySpellID = GetMountSpellID(primaryMountID)
-        if primarySpellID then
-            return "spell", primarySpellID
-        end
+        decision.action = "mount"
+        decision.source = "selected-primary"
+        decision.mountID = primaryMountID
+        decision.spellID = GetMountSpellID(primaryMountID)
+        decision.secureSpellValue = GetMountSecureSpellValue(primaryMountID)
+        return decision
     end
 
     if MountUtilityModule:IsMountUsable(fallbackMountID) then
-        local fallbackSpellID = GetMountSpellID(fallbackMountID)
-        if fallbackSpellID then
-            return "spell", fallbackSpellID
-        end
+        decision.action = "mount"
+        decision.source = "selected-fallback"
+        decision.mountID = fallbackMountID
+        decision.spellID = GetMountSpellID(fallbackMountID)
+        decision.secureSpellValue = GetMountSecureSpellValue(fallbackMountID)
+        return decision
     end
 
-    -- Last resort: use the random favorite mount macro when no specific mount is
-    -- configured or usable (e.g. Dracthyr with only Soar set but Soar is blocked).
-    return "macro", "/run C_MountJournal.SummonByID(0)"
+    local adaptiveFallbackMountID, adaptiveMode, adaptiveList = GetAdaptiveFallbackMountID(decision.flyable)
+    if adaptiveFallbackMountID then
+        decision.action = "mount"
+        decision.source = "adaptive-" .. tostring(adaptiveMode or "any")
+        decision.mountID = adaptiveFallbackMountID
+        decision.spellID = GetMountSpellID(adaptiveFallbackMountID)
+        decision.secureSpellValue = GetMountSecureSpellValue(adaptiveFallbackMountID)
+        decision.adaptiveMode = adaptiveMode
+        decision.adaptiveList = adaptiveList
+        return decision
+    end
+
+    if allowRandomFavorite then
+        decision.action = "random-favorite"
+        decision.source = "random-favorite"
+        return decision
+    end
+
+    decision.source = "no-secure-fallback"
+    return decision
+end
+
+function SmartMountModule:IsDebugEnabled()
+    local options = GetConfigurationOptions()
+    return options and options.GetDebugEnabled and options:GetDebugEnabled() or false
+end
+
+function SmartMountModule:LogDebugf(shouldShow, messageFormat, ...)
+    if not DebugConsole or type(DebugConsole.Logf) ~= "function" or not self:IsDebugEnabled() then
+        return false
+    end
+
+    return DebugConsole:Logf(DEBUG_SOURCE_KEY, shouldShow, messageFormat, ...)
+end
+
+function SmartMountModule:BuildDebugReport()
+    local options = GetConfigurationOptions()
+    local decision = self.lastDecision or {}
+    local lines = {
+        "TwichUI Smart Mount Debug",
+        format("Timestamp: %s",
+            date and type(date) == "function" and date("%Y-%m-%d %H:%M:%S") or format("%.3f", GetTime())),
+        "",
+        "Runtime",
+        format("enabled=%s debugCapture=%s race=%s keybinding=%s",
+            tostring(self:IsEnabled() == true),
+            tostring(self:IsDebugEnabled()),
+            tostring(PLAYER_RACE),
+            tostring(options:GetSmartMountKeybinding() or "")),
+        format("selectedGround=%s type=%s usable=%s",
+            GetMountDebugName(options:GetSelectedGroundMount() or 0),
+            GetMountTypeLabel(options:GetSelectedGroundMount() or 0),
+            tostring(MountUtilityModule:IsMountUsable(options:GetSelectedGroundMount() or 0))),
+        format("selectedFlying=%s type=%s usable=%s",
+            GetMountDebugName(options:GetSelectedFlyingMount() or 0),
+            GetMountTypeLabel(options:GetSelectedFlyingMount() or 0),
+            tostring(MountUtilityModule:IsMountUsable(options:GetSelectedFlyingMount() or 0))),
+        format("selectedAquatic=%s type=%s usable=%s",
+            GetMountDebugName(options:GetSelectedAquaticMount() or 0),
+            GetMountTypeLabel(options:GetSelectedAquaticMount() or 0),
+            tostring(MountUtilityModule:IsMountUsable(options:GetSelectedAquaticMount() or 0))),
+        "",
+        "Last Decision",
+        format("source=%s action=%s mountType=%s adaptive=%s/%s",
+            tostring(decision.source or "none"),
+            tostring(decision.action or "none"),
+            GetMountTypeLabel(decision.mountID),
+            tostring(decision.adaptiveMode or "n/a"),
+            tostring(decision.adaptiveList or "n/a")),
+        format("isMounted=%s swimming=%s inInstance=%s flyable=%s canUseSoar=%s",
+            tostring(decision.isMounted),
+            tostring(decision.swimming),
+            tostring(decision.inInstance),
+            tostring(decision.flyable),
+            tostring(decision.canUseSoar)),
+        format("mount=%s spellID=%s primary=%s fallback=%s",
+            GetMountDebugName(decision.mountID or 0),
+            tostring(decision.spellID or "nil"),
+            GetMountDebugName(decision.primaryMountID or 0),
+            GetMountDebugName(decision.fallbackMountID or 0)),
+        format("secureSpell=%s",
+            tostring(decision.secureSpellValue or "nil")),
+    }
+
+    return table.concat(lines, "\n")
+end
+
+function SmartMountModule:CaptureDebugSnapshot(shouldShow)
+    if DebugConsole and type(DebugConsole.Log) == "function" then
+        DebugConsole:Log(DEBUG_SOURCE_KEY, self:BuildDebugReport(), shouldShow == true)
+        return
+    end
+
+    T:Print("[TwichUI] Smart Mount debug console is unavailable")
+end
+
+function SmartMountModule:GetDebugStatusLine()
+    local decision = self.lastDecision or {}
+    return format("SmartMount debug=%s last=%s action=%s flyable=%s inInstance=%s",
+        tostring(self:IsDebugEnabled()),
+        tostring(decision.source or "none"),
+        tostring(decision.action or "none"),
+        tostring(decision.flyable),
+        tostring(decision.inInstance))
+end
+
+function SmartMountModule:RecordDecision(decision, shouldShow)
+    self.lastDecision = decision
+
+    self:LogDebugf(shouldShow == true,
+        "decision source=%s action=%s mountID=%s spellID=%s secureSpell=%s flyable=%s inInstance=%s swimming=%s adaptive=%s/%s",
+        tostring(decision.source or "none"),
+        tostring(decision.action or "none"),
+        tostring(decision.mountID or 0),
+        tostring(decision.spellID or "nil"),
+        tostring(decision.secureSpellValue or "nil"),
+        tostring(decision.flyable),
+        tostring(decision.inInstance),
+        tostring(decision.swimming),
+        tostring(decision.adaptiveMode or "n/a"),
+        tostring(decision.adaptiveList or "n/a"))
+end
+
+function SmartMountModule:GetSecureAction()
+    local options = GetConfigurationOptions()
+    local decision = ResolveMountDecision(options, false)
+    self:RecordDecision(decision, false)
+
+    if decision.action == "dismount" then
+        return "macro", "/dismount"
+    end
+
+    if decision.action == "soar" and decision.secureSpellValue then
+        return "spell", decision.secureSpellValue
+    end
+
+    if decision.action == "mount" and decision.secureSpellValue then
+        return "macro", BuildSecureCastMacro(decision.secureSpellValue)
+    end
+
+    return nil, nil
 end
 
 function SmartMountModule:RefreshSecureAction()
@@ -235,56 +530,47 @@ end
 --- Performs the mounting action based on flyable or noflyable and configured favorite mounts.
 function SmartMountModule:MountUp()
     local Options = GetConfigurationOptions()
+    local decision = ResolveMountDecision(Options, true)
+    self:RecordDecision(decision, false)
 
-    -- if the player is mounted, dismount if enabled. otherwise, ignore the command.
-    if IsMounted() then
-        if Options:GetDismountIfMounted() then
-            Dismount()
-            return
-        end
+    if decision.action == "dismount" then
+        Dismount()
         return
     end
 
-    local flyingMountID = Options:GetSelectedFlyingMount() or 0
-    local groundMountID = Options:GetSelectedGroundMount() or 0
-    local aquaticMountID = Options:GetSelectedAquaticMount() or 0
-
-    -- if player is swimming
-    if IsSwimming("player") and Options:GetUseAquaticMounts() then
-        if MountUtilityModule:IsMountUsable(aquaticMountID) then
-            SummonByID(aquaticMountID)
-            return
-        end
-    end
-
-    local flyable = CanUseFlyingMounts()
-
-    if flyable and CanUseSoar(Options) then
+    if decision.action == "soar" then
         CastSoar()
         return
     end
 
-    local primaryMountID = flyable and flyingMountID or groundMountID
-    local fallbackMountID = flyable and groundMountID or flyingMountID
-
-    if MountUtilityModule:IsMountUsable(primaryMountID) then
-        SummonByID(primaryMountID)
+    if decision.action == "mount" and decision.mountID then
+        SummonByID(decision.mountID)
         return
     end
 
-    if MountUtilityModule:IsMountUsable(fallbackMountID) then
-        SummonByID(fallbackMountID)
-        return
+    if decision.action == "random-favorite" then
+        SummonRandomFavoriteMount()
     end
-
-    -- Last resort: summon a random favorite mount when no specific mount is configured
-    -- or neither configured mount is currently usable.
-    SummonRandomFavoriteMount()
 end
 
 --- This function is called by AceAddon when the module is enabled.
 function SmartMountModule:OnEnable()
     self:RegisterChatCommand("smartMount", "MountUp")
+
+    if DebugConsole and DebugConsole.RegisterSource then
+        DebugConsole:RegisterSource(DEBUG_SOURCE_KEY, {
+            title = "Smart Mount",
+            order = 38,
+            aliases = { "smartmount", "mount" },
+            maxLines = 120,
+            isEnabled = function()
+                return self:IsDebugEnabled()
+            end,
+            buildReport = function()
+                return self:BuildDebugReport()
+            end,
+        })
+    end
 
     -- create the button frame for keybinding
     if not self.buttonFrame then

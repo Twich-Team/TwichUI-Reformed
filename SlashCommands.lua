@@ -9,6 +9,10 @@ local function GetUnitFramesModule()
     return T:GetModule("UnitFrames", true)
 end
 
+local function GetSmartMountModule()
+    return T:GetModule("SmartMount", true)
+end
+
 local function OpenConfigurationPanel(input)
     local command = type(input) == "string" and input:match("^%s*(.-)%s*$") or ""
     local primaryCommand, remainder = command:match("^(%S+)%s*(.-)%s*$")
@@ -208,6 +212,49 @@ local function OpenConfigurationPanel(input)
         local console = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
         if console and type(console.Show) == "function" then
             console:Show("unitframes")
+        end
+        return
+    end
+
+    if primaryCommand == "smartmountdebug" or primaryCommand == "smdebug" then
+        local smartMount = GetSmartMountModule()
+        if not smartMount then
+            T:Print("[TwichUI] Smart Mount is unavailable")
+            return
+        end
+
+        local options = T:GetModule("Configuration").Options.SmartMount
+        local subCmd, subArgs = remainder:match("^(%S+)%s*(.-)%s*$")
+        subCmd = (subCmd or "status"):lower()
+        subArgs = subArgs or ""
+
+        if subCmd == "on" or subCmd == "enable" or subCmd == "start" then
+            if options and options.SetDebugEnabled then
+                options:SetDebugEnabled(nil, true)
+            end
+            T:Print("[TwichUI] Smart Mount diagnostics enabled.")
+        elseif subCmd == "off" or subCmd == "disable" or subCmd == "stop" then
+            if options and options.SetDebugEnabled then
+                options:SetDebugEnabled(nil, false)
+            end
+            T:Print("[TwichUI] Smart Mount diagnostics disabled.")
+        elseif subCmd == "once" or subCmd == "snapshot" then
+            if smartMount.CaptureDebugSnapshot then
+                smartMount:CaptureDebugSnapshot(true)
+                T:Print("[TwichUI] Smart Mount diagnostics snapshot emitted to debugger.")
+            end
+        else
+            if smartMount.GetDebugStatusLine then
+                T:Print("[TwichUI] " .. smartMount:GetDebugStatusLine())
+            else
+                T:Print("[TwichUI] Smart Mount diagnostics are unavailable.")
+            end
+            T:Print("[TwichUI] /tui smartmountdebug on|off|once|status")
+        end
+
+        local console = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
+        if console and type(console.Show) == "function" then
+            console:Show("smartmount")
         end
         return
     end

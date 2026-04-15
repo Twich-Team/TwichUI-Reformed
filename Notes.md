@@ -1,8 +1,10 @@
 ## BUGS
 
-- I am a dracthyr and I've configured our smart mount to use soar for the flying mount. however, when i try to use it say in a dungeon where you can only use a ground mount, nothing happens.
+-
 
 ## NOTES
+
+- i dont think we have a mover for the zone button. its currently in the center of my screen and i cannot move or configure it
 
 - Our nameplates have a nice system to emphasize when npcs are casting. I have noticed that if my target casts, the nameplate doesnt assume the casting emphasis. so for example i have it configured to scale up the size and addd blue arrows when casting. it works fine for enemies im not actively targeting. but my active target starts to cast, those emphasis items do not appear.
 

@@ -82,6 +82,14 @@ function Options:SetUseDracthyrSoar(info, value)
     self:GetDB().useDracthyrSoar = value
 end
 
+function Options:GetDebugEnabled(info)
+    return self:GetDB().debugEnabled == true
+end
+
+function Options:SetDebugEnabled(info, value)
+    self:GetDB().debugEnabled = value == true
+end
+
 function Options:GetUseDruidFlightForm(info)
     return self:GetDB().useDruidFlightForm or false
 end

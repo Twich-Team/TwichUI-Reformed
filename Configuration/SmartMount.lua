@@ -295,6 +295,48 @@ local function BuildSmartMountTab(order)
                     end)
                 end,
             },
+            diagnostics = {
+                type = "group",
+                name = "Diagnostics",
+                order = 10,
+                args = {
+                    debugEnabled = {
+                        type = "toggle",
+                        width = "full",
+                        name = "Enable Debug Capture",
+                        desc = "Capture Smart Mount decision traces into the TwichUI Debug Console.",
+                        handler = Options,
+                        get = "GetDebugEnabled",
+                        set = "SetDebugEnabled",
+                        order = 1,
+                    },
+                    debugSnapshot = {
+                        type = "execute",
+                        width = "full",
+                        name = "Capture Debug Snapshot",
+                        desc = "Emit the current Smart Mount runtime snapshot into the TwichUI Debug Console.",
+                        order = 2,
+                        func = function()
+                            local module = T:GetModule("SmartMount", true) --[[@as any]]
+                            if module and module.CaptureDebugSnapshot then
+                                module:CaptureDebugSnapshot(true)
+                            end
+                        end,
+                    },
+                    debugStatus = {
+                        type = "description",
+                        order = 3,
+                        name = function()
+                            local module = T:GetModule("SmartMount", true) --[[@as any]]
+                            if module and module.GetDebugStatusLine then
+                                return module:GetDebugStatusLine()
+                            end
+
+                            return "Smart Mount diagnostics unavailable."
+                        end,
+                    },
+                },
+            },
             cache = {
                 type = "group",
                 name = "Cache",
