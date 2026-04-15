@@ -42,6 +42,7 @@ local SHORT_MAX_LEN           = 220
 ---@field installed boolean
 ---@field _handler function|nil
 ---@field _previousHandler function|nil
+---@field _sessionSilenced boolean|nil
 ---@field Capture fun(self:TwichUIErrorLog, detail:any, context:string|nil, stack:string|nil)
 ---@field CaptureFailure fun(self:TwichUIErrorLog, context:string|nil, detail:any, stackLevel:number|nil)
 ---@field _InjectTestError fun(self:TwichUIErrorLog, msg:string)
@@ -81,7 +82,7 @@ end
 
 local function PlayAlertSound()
     local db = GetLogsDB()
-    if not db or db.playAlertSound ~= true then
+    if not db or db.playAlertSound ~= true or ErrorLog._sessionSilenced == true then
         return
     end
 
@@ -240,7 +241,7 @@ end
 
 local function NotifyPopup(entry)
     local db = GetLogsDB()
-    if not db or db.popupOnError ~= true or not entry then
+    if not db or db.popupOnError ~= true or not entry or ErrorLog._sessionSilenced == true then
         return
     end
 
@@ -266,7 +267,7 @@ function ErrorLog:Capture(detail, context, stack)
         PlayAlertSound()
         NotifyPopup(entry)
     end
-    if entry and T.Print and self:GetSuppressChatOutput() ~= true then
+    if entry and T.Print and self:GetSuppressChatOutput() ~= true and self:GetSessionSilenced() ~= true then
         T:Print("[TwichUI] Encountered an error. View details using /tui errors.")
     end
 end
@@ -508,6 +509,21 @@ function ErrorLog:SetPopupOnError(value)
     local db = GetLogsDB()
     if not db then return end
     db.popupOnError = value == true
+end
+
+function ErrorLog:GetSessionSilenced()
+    return self._sessionSilenced == true
+end
+
+function ErrorLog:SetSessionSilenced(value)
+    self._sessionSilenced = value == true
+
+    if self._sessionSilenced == true then
+        local popup = Tools.UI and Tools.UI.ErrorLogPopup
+        if popup and type(popup.Hide) == "function" then
+            popup:Hide()
+        end
+    end
 end
 
 --- FOR TESTING ONLY: directly inject a fake error entry.

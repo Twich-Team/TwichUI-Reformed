@@ -11,6 +11,7 @@ local UI = Tools.UI or {}
 Tools.UI = UI
 
 local CreateFrame = _G.CreateFrame
+local ReloadUI = _G.ReloadUI
 local UIParent = _G.UIParent
 
 local CLR_ACCENT = { 0.10, 0.79, 0.77 }
@@ -74,7 +75,7 @@ function ErrorLogPopup:EnsureFrame()
     end
 
     local frame = Panel(UIParent, CLR_BG[1], CLR_BG[2], CLR_BG[3], 0.98, CLR_GOLD[1], CLR_GOLD[2], CLR_GOLD[3], 0.30)
-    frame:SetSize(420, 148)
+    frame:SetSize(420, 184)
     frame:SetPoint("CENTER", UIParent, "CENTER", -220, 0)
     frame:SetFrameStrata("DIALOG")
     frame:SetFrameLevel(90)
@@ -124,6 +125,17 @@ function ErrorLogPopup:EnsureFrame()
     summary:SetText("")
     frame.summary = summary
 
+    local sessionNote = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    sessionNote:SetPoint("TOPLEFT", summary, "BOTTOMLEFT", 0, -8)
+    sessionNote:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, 0)
+    sessionNote:SetJustifyH("LEFT")
+    sessionNote:SetJustifyV("TOP")
+    sessionNote:SetWordWrap(true)
+    sessionNote:SetTextColor(0.76, 0.80, 0.86)
+    sessionNote:SetText(
+    "Silence for Session disables this popup, chat announcements, and alert sounds until reload, logout, or exit.")
+    frame.sessionNote = sessionNote
+
     local openButton = Button(frame, 108, 28, "Open Log", CLR_ACCENT[1], CLR_ACCENT[2], CLR_ACCENT[3])
     openButton:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -12, 12)
     openButton:SetScript("OnClick", function()
@@ -135,8 +147,29 @@ function ErrorLogPopup:EnsureFrame()
         frame:Hide()
     end)
 
+    local reloadButton = Button(frame, 92, 28, "Reload UI", CLR_GOLD[1], CLR_GOLD[2], CLR_GOLD[3])
+    reloadButton:SetPoint("RIGHT", openButton, "LEFT", -8, 0)
+    reloadButton:SetScript("OnClick", function()
+        ErrorLogPopup.pendingCount = 0
+        if type(ReloadUI) == "function" then
+            ReloadUI()
+        end
+    end)
+
+    local silenceButton = Button(frame, 140, 28, "Silence Session", CLR_ACCENT[1], CLR_GOLD[2], CLR_WARN[3])
+    silenceButton:SetPoint("RIGHT", reloadButton, "LEFT", -8, 0)
+    silenceButton:SetScript("OnClick", function()
+        local errorLog = Tools.ErrorLog
+        if errorLog and type(errorLog.SetSessionSilenced) == "function" then
+            errorLog:SetSessionSilenced(true)
+        else
+            ErrorLogPopup.pendingCount = 0
+            frame:Hide()
+        end
+    end)
+
     local dismissButton = Button(frame, 92, 28, "Dismiss", CLR_WARN[1], CLR_WARN[2], CLR_WARN[3])
-    dismissButton:SetPoint("RIGHT", openButton, "LEFT", -8, 0)
+    dismissButton:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 12)
     dismissButton:SetScript("OnClick", function()
         ErrorLogPopup.pendingCount = 0
         frame:Hide()

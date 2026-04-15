@@ -4,8 +4,6 @@
 
 ## NOTES
 
-- Can we add a reloadui button to the popup error frame? Also, add a button silence for the current session. this no longer shows the popup/chat announcements, and mutes any sounds until reload, log off, etc.
-
 - our objective tracker is still showing all world quests in the current zone. It should not do this. it should only show a world quest if it is active meaning im in the direct quest spot in the zone. Additionally, world quests should be split into their own category in the objective tracker
 
 - the objective tracker seems to not be showing newly obtained quests, or campaign quests. We could have a category dedicated to campaign quests and always show those, at the top.

@@ -3174,6 +3174,15 @@ function ActionBars:ApplyZoneAbilityLayout(definition, holder, buttons, barSetti
     end
 
     local availableCount = self:GetButtonCountForDefinition(definition, buttons)
+    if availableCount <= 0 then
+        pcall(UnregisterStateDriver, holder, "visibility")
+        pcall(UnregisterStateDriver, holder, "page")
+        holder:SetAlpha(0)
+        holder:SetShown(false)
+        holder.__twichuiABLayoutSig = nil
+        return true
+    end
+
     local clampedScale = ClampNumber(barSettings.scale, 0.5, 2, 1)
     local clampedButtonSize = ClampNumber(barSettings.buttonSize, 22, 64, definition.fallbackButtonSize)
     local clampedSpacing = ClampNumber(actionBarDB.buttonSpacing, 0, 20, 4)
@@ -3228,17 +3237,6 @@ function ActionBars:ApplyZoneAbilityLayout(definition, holder, buttons, barSetti
 
     holder.__twichuiABHolderStyleSig = nil
     self:ApplyHolderStyle(holder, barSettings)
-    if availableCount == 0 then
-        holder:SetBackdropColor(0, 0, 0, 0)
-        holder:SetBackdropBorderColor(0, 0, 0, 0)
-        if holder.innerGlow then
-            holder.innerGlow:SetAlpha(0)
-        end
-        if holder.leftAccent then
-            holder.leftAccent:SetAlpha(0)
-        end
-    end
-
     if container then
         container:ClearAllPoints()
         container:SetPoint("CENTER", holder, "CENTER", 0, 0)
