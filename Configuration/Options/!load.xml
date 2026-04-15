@@ -12,6 +12,7 @@
     <Include file='DatatextOptions.lua' />
     <Include file='UnitFramesOptions.lua' />
     <Include file='NameplatesOptions.lua' />
+    <Include file='TooltipOptions.lua' />
     <Include file='QuestAutomationOptions.lua' />
     <Include file='QuestLogCleanerOptions.lua' />
     <Include file='DungeonTrackingOptions.lua' />

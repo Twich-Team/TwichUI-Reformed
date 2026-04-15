@@ -521,7 +521,16 @@ function DebugConsole:RefreshSourceButtons()
     end
 
     local keys = self:GetSortedSourceKeys()
-    local previous
+    local buttonSpacing = 6
+    local rowHeight = 22
+    local rowSpacing = 4
+    local leftPadding = 8
+    local topPadding = -4
+    local sourceBarWidth = frame.sourceBar.GetWidth and frame.sourceBar:GetWidth() or 0
+    local usableWidth = max(180, sourceBarWidth - (leftPadding * 2))
+    local cursorX = leftPadding
+    local cursorY = topPadding
+    local rows = 1
 
     for index, key in ipairs(keys) do
         local button = frame.sourceButtons[index]
@@ -549,9 +558,17 @@ function DebugConsole:RefreshSourceButtons()
 
         local source = self.sources[key]
         local labelText = source.title or key
-        button:SetWidth(max(80, #labelText * 7 + 18))
+        local buttonWidth = max(80, #labelText * 7 + 18)
+        if cursorX > leftPadding and (cursorX + buttonWidth) > (leftPadding + usableWidth) then
+            cursorX = leftPadding
+            cursorY = cursorY - (rowHeight + rowSpacing)
+            rows = rows + 1
+        end
+
+        button:SetWidth(buttonWidth)
         button.__twichuiLabel:SetText(labelText)
-        button:SetPoint("LEFT", previous or frame.sourceBar, previous and "RIGHT" or "LEFT", previous and 6 or 8, 0)
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", frame.sourceBar, "TOPLEFT", cursorX, cursorY)
         button:SetScript("OnClick", function()
             self:Show(key)
         end)
@@ -573,8 +590,10 @@ function DebugConsole:RefreshSourceButtons()
         end
 
         button:Show()
-        previous = button
+        cursorX = cursorX + buttonWidth + buttonSpacing
     end
+
+    frame.sourceBar:SetHeight(30 + ((rows - 1) * (rowHeight + rowSpacing)))
 
     for index = #keys + 1, #frame.sourceButtons do
         frame.sourceButtons[index]:Hide()

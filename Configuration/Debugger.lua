@@ -18,6 +18,10 @@ local function GetProfiler()
     return T.Tools and T.Tools.UI and T.Tools.UI.Profiler
 end
 
+local function GetTooltipModule()
+    return T:GetModule("Tooltip", true) --[[@as any]]
+end
+
 local function OpenDebugSource(sourceKey)
     local console = GetDebugConsole()
     if console and type(console.Show) == "function" then
@@ -56,9 +60,15 @@ local function BuildDebugConsoleConfiguration()
             name  = "Nameplates Logs",
             func  = function() OpenDebugSource("nameplates") end,
         },
+        openTooltips = {
+            type  = "execute",
+            order = 5,
+            name  = "Tooltip Logs",
+            func  = function() OpenDebugSource("tooltip") end,
+        },
         clearAll = {
             type        = "execute",
-            order       = 5,
+            order       = 6,
             name        = "Clear All Logs",
             confirm     = true,
             confirmText = "Clear all debug logs?",
@@ -68,6 +78,54 @@ local function BuildDebugConsoleConfiguration()
                     console:ClearLogs()
                 end
             end,
+        },
+    })
+
+    local tooltipDiagGroup = W.IGroup(17, "Tooltip Diagnostics", {
+        tooltipStatus = {
+            type  = "description",
+            order = 1,
+            name  = function()
+                local module = GetTooltipModule()
+                if not module then
+                    return "|cffff9a6cTooltip module not loaded.|r"
+                end
+
+                if module.GetDebugSummaryLine then
+                    return module:GetDebugSummaryLine()
+                end
+
+                return "|cff69b86fTooltip module loaded.|r"
+            end,
+        },
+        tooltipPreview = {
+            type  = "execute",
+            order = 2,
+            name  = "Preview Tooltip",
+            func  = function()
+                local module = GetTooltipModule()
+                if module and module.ShowPreview then
+                    module:ShowPreview()
+                end
+            end,
+        },
+        tooltipSnapshot = {
+            type  = "execute",
+            order = 3,
+            name  = "Capture Tooltip Snapshot",
+            desc  = "Emit a paste-friendly tooltip snapshot into the debugger.",
+            func  = function()
+                local module = GetTooltipModule()
+                if module and module.CaptureDebugSnapshot then
+                    module:CaptureDebugSnapshot(true)
+                end
+            end,
+        },
+        tooltipLogs = {
+            type  = "execute",
+            order = 4,
+            name  = "Open Tooltip Logs",
+            func  = function() OpenDebugSource("tooltip") end,
         },
     })
 
@@ -275,6 +333,7 @@ local function BuildDebugConsoleConfiguration()
         title      = W.TitleWidget(0, "Debug"),
         desc       = W.Description(5, "Debug console, profiler controls, and live diagnostics."),
         actions    = actionsGroup,
+        tooltips   = tooltipDiagGroup,
         profiler   = profilerGroup,
         nameplates = npDiagGroup,
         sources    = sourcesGroup,

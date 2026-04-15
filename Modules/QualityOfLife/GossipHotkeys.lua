@@ -43,6 +43,32 @@ local function KeyToIndex(key)
 	return tonumber(key)
 end
 
+local function CanModifyOverrideBindings()
+	return not InCombatLockdown or not InCombatLockdown()
+end
+
+function GH:ClearHotkeyOverrides()
+	if not self.hotkeyFrame or not ClearOverrideBindings then
+		self.pendingClear = false
+		return false
+	end
+
+	if not CanModifyOverrideBindings() then
+		self.pendingClear = true
+		if self.RegisterEvent then
+			self:RegisterEvent("PLAYER_REGEN_ENABLED")
+		end
+		return false
+	end
+
+	ClearOverrideBindings(self.hotkeyFrame)
+	self.pendingClear = false
+	if self.UnregisterEvent then
+		self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+	end
+	return true
+end
+
 --- Prepend the assigned hotkey (1-9) to each gossip option's
 --- button text in the default GossipFrame, so players can see which
 --- key will activate which option.
@@ -175,11 +201,11 @@ function GH:GOSSIP_SHOW()
 		if self.overrideButtons and self.hotkeyFrame and ClearOverrideBindings and SetOverrideBindingClick then
 			-- Do not attempt to change override bindings while in combat; this is
 			-- a protected action and will cause a blocked action / chat error.
-			if InCombatLockdown and InCombatLockdown() then
+			if not CanModifyOverrideBindings() then
 				return
 			end
 
-			ClearOverrideBindings(self.hotkeyFrame)
+			self:ClearHotkeyOverrides()
 			local maxIndex = math.min(9, #self.activeButtons)
 			for i = 1, maxIndex do
 				local overrideBtn = self.overrideButtons[i]
@@ -191,7 +217,7 @@ function GH:GOSSIP_SHOW()
 	else
 		-- No active options; ensure any temporary overrides are cleared.
 		if self.hotkeyFrame and ClearOverrideBindings then
-			ClearOverrideBindings(self.hotkeyFrame)
+			self:ClearHotkeyOverrides()
 		end
 	end
 end
@@ -208,22 +234,7 @@ function GH:UnregisterHotkeys()
 	self.activeButtons = nil
 	if self.hotkeyFrame then
 		if ClearOverrideBindings then
-			-- ClearOverrideBindings is protected in combat. If we are in
-			-- combat lockdown, defer the clear until combat ends so we
-			-- avoid blocked-action / chat-locked errors and still restore
-			-- the player's normal keybinds as soon as possible.
-			if InCombatLockdown and InCombatLockdown() then
-				GH.pendingClear = true
-				if GH.RegisterEvent then
-					GH:RegisterEvent("PLAYER_REGEN_ENABLED")
-				end
-			else
-				ClearOverrideBindings(self.hotkeyFrame)
-				GH.pendingClear = false
-				if GH.UnregisterEvent then
-					GH:UnregisterEvent("PLAYER_REGEN_ENABLED")
-				end
-			end
+			self:ClearHotkeyOverrides()
 		end
 	end
 end
@@ -232,9 +243,7 @@ end
 --- gossip override bindings that we could not clear while in combat.
 function GH:PLAYER_REGEN_ENABLED()
 	if self.pendingClear and self.hotkeyFrame and ClearOverrideBindings then
-		if not InCombatLockdown or not InCombatLockdown() then
-			ClearOverrideBindings(self.hotkeyFrame)
-		end
+		self:ClearHotkeyOverrides()
 	end
 	self.pendingClear = false
 	if self.UnregisterEvent then
