@@ -10,6 +10,9 @@
 
 - Can we add a context menu to the minimap to configure tracking options
 
+- add bottom center and top center to anchors for our map items
+- the typography settings shold reside in each features tab, not separately like this.
+
 - Our nameplates have a nice system to emphasize when npcs are casting. I have noticed that if my target casts, the nameplate doesnt assume the casting emphasis. so for example i have it configured to scale up the size and addd blue arrows when casting. it works fine for enemies im not actively targeting. but my active target starts to cast, those emphasis items do not appear.
 
 - Can we add a reloadui button to the popup error frame? Also, add a button silence for the current session. this no longer shows the popup/chat announcements, and mutes any sounds until reload, log off, etc.

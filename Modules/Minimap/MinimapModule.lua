@@ -76,6 +76,7 @@ local HIDDEN_FRAME_NAMES = {
 
 local HIDDEN_CHILD_PATTERNS = {
     "^AddonCompartment",
+    "^BorderTop$",
     "^GameTime",
     "^TimeManagerClock",
     "^MinimapZoneText",
@@ -518,12 +519,86 @@ local function RestoreSuppressedFrame(frame)
     frame:Show()
 end
 
+local function SuppressFrameRegions(frame)
+    if not frame or not frame.GetRegions then
+        return
+    end
+
+    for _, region in ipairs({ frame:GetRegions() }) do
+        if region then
+            region:Hide()
+            region:SetAlpha(0)
+        end
+    end
+end
+
+local function RestoreFrameRegions(frame)
+    if not frame or not frame.GetRegions then
+        return
+    end
+
+    for _, region in ipairs({ frame:GetRegions() }) do
+        if region then
+            region:SetAlpha(1)
+            region:Show()
+        end
+    end
+end
+
+local function SuppressFrameTree(frame)
+    if not frame then
+        return
+    end
+
+    if frame.GetObjectType and frame:GetObjectType() ~= "Texture" and frame:GetObjectType() ~= "FontString" then
+        SuppressFrame(frame)
+    else
+        frame:Hide()
+        frame:SetAlpha(0)
+    end
+
+    SuppressFrameRegions(frame)
+
+    if frame.GetChildren then
+        for _, child in ipairs({ frame:GetChildren() }) do
+            SuppressFrameTree(child)
+        end
+    end
+end
+
+local function RestoreFrameTree(frame)
+    if not frame then
+        return
+    end
+
+    if frame.__TwichUIOriginalShow then
+        RestoreSuppressedFrame(frame)
+    elseif frame.SetAlpha and frame.Show then
+        frame:SetAlpha(1)
+        frame:Show()
+    end
+
+    RestoreFrameRegions(frame)
+
+    if frame.GetChildren then
+        for _, child in ipairs({ frame:GetChildren() }) do
+            RestoreFrameTree(child)
+        end
+    end
+end
+
 local function GetAdditionalHiddenFrames()
     local frames = {}
 
     if MinimapCluster then
+        if MinimapCluster.BorderTop then
+            frames[#frames + 1] = MinimapCluster.BorderTop
+        end
         if MinimapCluster.Tracking then
             frames[#frames + 1] = MinimapCluster.Tracking
+            if MinimapCluster.Tracking.Background then
+                frames[#frames + 1] = MinimapCluster.Tracking.Background
+            end
             if MinimapCluster.Tracking.Button then
                 frames[#frames + 1] = MinimapCluster.Tracking.Button
             end
@@ -533,6 +608,27 @@ local function GetAdditionalHiddenFrames()
         end
         if MinimapCluster.ZoneTextButton then
             frames[#frames + 1] = MinimapCluster.ZoneTextButton
+        end
+        if MinimapCluster.InstanceDifficulty then
+            frames[#frames + 1] = MinimapCluster.InstanceDifficulty
+        end
+        if MinimapCluster.MailFrame then
+            frames[#frames + 1] = MinimapCluster.MailFrame
+        end
+        if MinimapCluster.CraftingOrderIcon then
+            frames[#frames + 1] = MinimapCluster.CraftingOrderIcon
+        end
+        if MinimapCluster.GuildInstanceDifficulty then
+            frames[#frames + 1] = MinimapCluster.GuildInstanceDifficulty
+        end
+        if MinimapCluster.DungeonDifficulty then
+            frames[#frames + 1] = MinimapCluster.DungeonDifficulty
+        end
+        if MinimapCluster.ZoomIn then
+            frames[#frames + 1] = MinimapCluster.ZoomIn
+        end
+        if MinimapCluster.ZoomOut then
+            frames[#frames + 1] = MinimapCluster.ZoomOut
         end
     end
 
@@ -635,7 +731,7 @@ function MinimapModule:HideDefaultChrome()
     end
 
     for _, frame in ipairs(GetAdditionalHiddenFrames()) do
-        SuppressFrame(frame)
+        SuppressFrameTree(frame)
     end
 
     if MinimapCluster then
@@ -646,7 +742,7 @@ function MinimapModule:HideDefaultChrome()
                 if type(name) == "string" then
                     for _, pattern in ipairs(HIDDEN_CHILD_PATTERNS) do
                         if name:find(pattern) then
-                            SuppressFrame(child)
+                            SuppressFrameTree(child)
                             break
                         end
                     end
@@ -675,7 +771,7 @@ function MinimapModule:HideDefaultChrome()
     if MinimapCluster and MinimapCluster.GetRegions then
         local regions = { MinimapCluster:GetRegions() }
         for _, region in ipairs(regions) do
-            if region and region.GetObjectType and region:GetObjectType() == "FontString" then
+            if region then
                 region:Hide()
                 region:SetAlpha(0)
             end
@@ -692,16 +788,16 @@ function MinimapModule:RestoreDefaultChrome()
     end
 
     for _, frame in ipairs(GetAdditionalHiddenFrames()) do
-        if frame and frame.__TwichUIOriginalShow then
-            RestoreSuppressedFrame(frame)
+        if frame then
+            RestoreFrameTree(frame)
         end
     end
 
     if MinimapCluster then
         local children = { MinimapCluster:GetChildren() }
         for _, child in ipairs(children) do
-            if child and child.__TwichUIOriginalShow then
-                RestoreSuppressedFrame(child)
+            if child then
+                RestoreFrameTree(child)
             end
         end
     end
@@ -728,7 +824,7 @@ function MinimapModule:RestoreDefaultChrome()
     if MinimapCluster and MinimapCluster.GetRegions then
         local regions = { MinimapCluster:GetRegions() }
         for _, region in ipairs(regions) do
-            if region and region.GetObjectType and region:GetObjectType() == "FontString" then
+            if region then
                 region:SetAlpha(1)
                 region:Show()
             end
@@ -1675,7 +1771,7 @@ function MinimapModule:RegisterWithMoverModule()
         end,
         getRelativePoint = function()
             return options.GetRelativePoint and options:GetRelativePoint() or
-            (options.GetAnchorPoint and options:GetAnchorPoint() or "BOTTOMLEFT")
+                (options.GetAnchorPoint and options:GetAnchorPoint() or "BOTTOMLEFT")
         end,
         getX = function()
             return options:GetAnchorX()
