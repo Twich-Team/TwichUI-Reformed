@@ -10,5 +10,6 @@
 
 - Added tooltips module
 - Addded objective tracker module
+- Added minimap module
 
 #### Other

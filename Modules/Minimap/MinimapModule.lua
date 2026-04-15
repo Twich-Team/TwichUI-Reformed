@@ -13,6 +13,7 @@ local MinimapCluster = _G.MinimapCluster
 local InCombatLockdown = _G.InCombatLockdown
 local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
 local C_Map = _G.C_Map
+local C_Minimap = _G.C_Minimap
 local C_Timer = _G.C_Timer
 local GetTime = _G.GetTime
 local GetZoneText = _G.GetZoneText
@@ -36,6 +37,7 @@ local next = next
 local select = select
 local unpackValues = table.unpack or _G.unpack
 local format = string.format
+local hooksecurefunc = _G.hooksecurefunc
 
 local MINIMAP_BASE_SIZE = 256
 local ROUND_MASK = 186178
@@ -342,12 +344,29 @@ local function BuildPointSnapshot(frame)
 end
 
 local function IsTopPosition(position)
-    return position == "top" or position == "top-left" or position == "top-right"
+    return position == "top" or position == "top-center" or position == "top-left" or position == "top-right"
+end
+
+local function GetHorizontalJustify(position)
+    if position == "top-center" or position == "bottom-center" or position == "top" or position == "bottom" then
+        return "CENTER"
+    end
+    if position and position:find("right") then
+        return "RIGHT"
+    end
+
+    return "LEFT"
 end
 
 local function GetInsetAnchorPoint(position)
+    if position == "top-center" or position == "top" then
+        return "TOP", 0, -8
+    end
     if position == "top-right" then
         return "TOPRIGHT", -8, -8
+    end
+    if position == "bottom-center" or position == "bottom" then
+        return "BOTTOM", 0, 8
     end
     if position == "bottom-left" then
         return "BOTTOMLEFT", 8, 8
@@ -359,7 +378,7 @@ local function GetInsetAnchorPoint(position)
 end
 
 local function GetEdgeAnchorPoint(position)
-    if position == "top" then
+    if position == "top" or position == "top-center" then
         return "TOP", 0, -8
     end
     if position == "left" then
@@ -369,6 +388,17 @@ local function GetEdgeAnchorPoint(position)
         return "RIGHT", -8, 0
     end
     return "BOTTOM", 0, 8
+end
+
+local function SuppressShow(frame)
+    if not frame or not hooksecurefunc or frame.__TwichUISuppressShowHooked then
+        return
+    end
+
+    frame.__TwichUISuppressShowHooked = true
+    hooksecurefunc(frame, "Show", function(self)
+        self:SetAlpha(0)
+    end)
 end
 
 local function GetFontConfig(options, part)
@@ -632,6 +662,15 @@ local function GetAdditionalHiddenFrames()
         end
     end
 
+    if Minimap then
+        if Minimap.ZoomIn then
+            frames[#frames + 1] = Minimap.ZoomIn
+        end
+        if Minimap.ZoomOut then
+            frames[#frames + 1] = Minimap.ZoomOut
+        end
+    end
+
     return frames
 end
 
@@ -732,6 +771,7 @@ function MinimapModule:HideDefaultChrome()
 
     for _, frame in ipairs(GetAdditionalHiddenFrames()) do
         SuppressFrameTree(frame)
+        SuppressShow(frame)
     end
 
     if MinimapCluster then
@@ -743,6 +783,7 @@ function MinimapModule:HideDefaultChrome()
                     for _, pattern in ipairs(HIDDEN_CHILD_PATTERNS) do
                         if name:find(pattern) then
                             SuppressFrameTree(child)
+                            SuppressShow(child)
                             break
                         end
                     end
@@ -862,6 +903,13 @@ function MinimapModule:EnsureShell()
     overlay:SetFrameLevel(holder:GetFrameLevel() + 6)
     overlay:EnableMouse(false)
 
+    local clickHandler = CreateFrame("Button", nil, holder)
+    clickHandler:SetAllPoints(mapBackdrop)
+    clickHandler:SetFrameStrata(holder:GetFrameStrata())
+    clickHandler:SetFrameLevel(holder:GetFrameLevel() + 5)
+    clickHandler:EnableMouse(false)
+    clickHandler:EnableMouseWheel(false)
+
     local title = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetJustifyH("CENTER")
     title:SetJustifyV("MIDDLE")
@@ -890,6 +938,7 @@ function MinimapModule:EnsureShell()
     holder.shell = shell
     holder.mapBackdrop = mapBackdrop
     holder.overlay = overlay
+    holder.clickHandler = clickHandler
     holder.title = title
     holder.detail = detail
     holder.leftInfo = leftInfo
@@ -902,6 +951,7 @@ function MinimapModule:EnsureShell()
     self.shellAccent = accent
     self.mapBackdrop = mapBackdrop
     self.overlayFrame = overlay
+    self.clickHandler = clickHandler
     self.titleText = title
     self.detailText = detail
     self.leftInfoText = leftInfo
@@ -909,6 +959,19 @@ function MinimapModule:EnsureShell()
     self.mailBadge = mailBadge
     self.buttonBar = buttonBar
     self.currentButtonAlpha = 1
+
+    if not self.inputHooksInstalled and Minimap then
+        self.inputHooksInstalled = true
+        Minimap:EnableMouseWheel(true)
+        Minimap:HookScript("OnMouseWheel", function(_, delta)
+            self:HandleMouseWheel(delta)
+        end)
+        Minimap:HookScript("OnMouseUp", function(_, button)
+            if button == "RightButton" then
+                self:ToggleTrackingMenu(self.shell or self.holder or Minimap)
+            end
+        end)
+    end
 
     holder:SetScript("OnUpdate", function(_, elapsed)
         self:OnUpdate(elapsed)
@@ -1394,6 +1457,173 @@ function MinimapModule:ApplyMinimapState()
     MinimapCluster:Show()
 end
 
+function MinimapModule:CancelAutoZoom()
+    if self.autoZoomTimer then
+        self.autoZoomTimer:Cancel()
+        self.autoZoomTimer = nil
+    end
+end
+
+function MinimapModule:ResetZoom()
+    if not Minimap or not Minimap.GetZoom or not Minimap.SetZoom then
+        return
+    end
+
+    local zoom = Minimap:GetZoom() or 0
+    if zoom > 0 then
+        Minimap:SetZoom(0)
+    end
+end
+
+function MinimapModule:ScheduleAutoZoom()
+    self:CancelAutoZoom()
+
+    local options = GetOptions()
+    local delay = options and options.GetAutoZoomDelay and options:GetAutoZoomDelay() or 0
+    if not C_Timer or not C_Timer.NewTimer or delay <= 0 then
+        return
+    end
+
+    self.autoZoomTimer = C_Timer.NewTimer(delay, function()
+        self.autoZoomTimer = nil
+        if self:IsEnabled() then
+            self:ResetZoom()
+        end
+    end)
+end
+
+function MinimapModule:AdjustZoom(delta)
+    if not Minimap or not Minimap.GetZoom or not Minimap.SetZoom then
+        return
+    end
+
+    local zoom = Minimap:GetZoom() or 0
+    local zoomLevels = Minimap.GetZoomLevels and Minimap:GetZoomLevels() or 5
+    local targetZoom = zoom
+    if delta > 0 then
+        targetZoom = min(zoomLevels, zoom + 1)
+    elseif delta < 0 then
+        targetZoom = max(0, zoom - 1)
+    end
+
+    if targetZoom ~= zoom then
+        Minimap:SetZoom(targetZoom)
+    end
+
+    self:ScheduleAutoZoom()
+end
+
+function MinimapModule:BuildTrackingMenu()
+    if self.trackingMenu then
+        return self.trackingMenu
+    end
+
+    local menu = CreateFrame("Frame", "TwichUIMinimapTrackingMenu", UIParent, "BackdropTemplate")
+    menu:SetFrameStrata("TOOLTIP")
+    menu:SetClampedToScreen(true)
+    menu:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 12,
+        insets = { left = 3, right = 3, top = 3, bottom = 3 },
+    })
+    menu:SetBackdropColor(0.05, 0.07, 0.10, 0.96)
+    menu:EnableMouse(true)
+    menu:Hide()
+    menu._rows = {}
+    menu:SetScript("OnLeave", function(frame)
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0.2, function()
+                if frame and not frame:IsMouseOver() then
+                    frame:Hide()
+                end
+            end)
+        end
+    end)
+
+    self.trackingMenu = menu
+    return menu
+end
+
+function MinimapModule:ToggleTrackingMenu(anchorFrame)
+    if not C_Minimap or not C_Minimap.GetNumTrackingTypes or not anchorFrame then
+        return
+    end
+
+    local menu = self:BuildTrackingMenu()
+    if menu:IsShown() then
+        menu:Hide()
+        return
+    end
+
+    local accentR, accentG, accentB = self:GetFrameAccentColor()
+    menu:SetBackdropBorderColor(accentR, accentG, accentB, 0.9)
+
+    for _, row in ipairs(menu._rows) do
+        row:Hide()
+    end
+
+    local numTypes = C_Minimap.GetNumTrackingTypes()
+    local rowIndex = 0
+    local rowHeight = 20
+    local padding = 6
+    local maxWidth = 120
+
+    for index = 1, numTypes do
+        local info = C_Minimap.GetTrackingInfo(index)
+        if info then
+            rowIndex = rowIndex + 1
+            local row = menu._rows[rowIndex]
+            if not row then
+                row = CreateFrame("Button", nil, menu)
+                row:SetHeight(rowHeight)
+                row._icon = row:CreateTexture(nil, "ARTWORK")
+                row._icon:SetSize(16, 16)
+                row._icon:SetPoint("LEFT", row, "LEFT", 4, 0)
+                row._check = row:CreateTexture(nil, "OVERLAY")
+                row._check:SetSize(12, 12)
+                row._check:SetPoint("LEFT", row._icon, "RIGHT", 2, 0)
+                row._check:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
+                row._label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                row._label:SetPoint("LEFT", row._check, "RIGHT", 2, 0)
+                row._label:SetJustifyH("LEFT")
+                row._highlight = row:CreateTexture(nil, "HIGHLIGHT")
+                row._highlight:SetAllPoints()
+                row._highlight:SetColorTexture(1, 1, 1, 0.08)
+                menu._rows[rowIndex] = row
+            end
+
+            row:ClearAllPoints()
+            row:SetPoint("TOPLEFT", menu, "TOPLEFT", padding, -(padding + ((rowIndex - 1) * rowHeight)))
+            row:SetPoint("RIGHT", menu, "RIGHT", -padding, 0)
+            row._icon:SetTexture(info.texture)
+            row._check:SetShown(info.active)
+            row._label:SetText(info.name or "")
+            maxWidth = max(maxWidth, (row._label:GetStringWidth() or 0) + 48)
+            local trackingIndex = index
+            row:SetScript("OnClick", function()
+                C_Minimap.SetTracking(trackingIndex, not info.active)
+                menu:Hide()
+            end)
+            row:Show()
+        end
+    end
+
+    if rowIndex == 0 then
+        menu:Hide()
+        return
+    end
+
+    menu:SetSize(maxWidth + (padding * 2), (padding * 2) + (rowIndex * rowHeight))
+    menu:ClearAllPoints()
+    menu:SetPoint("TOPRIGHT", anchorFrame, "BOTTOMRIGHT", 0, -2)
+    menu:Show()
+end
+
+function MinimapModule:HandleMouseWheel(delta)
+    self:AdjustZoom(delta)
+end
+
 function MinimapModule:ApplyLayout()
     local options = GetOptions()
     if not options or not self.holder then
@@ -1410,8 +1640,8 @@ function MinimapModule:ApplyLayout()
     local coordinatesPosition = options:GetCoordinatesPosition()
     local buttonPosition = options:GetAddonButtonPosition()
     local buttonBarVisible = self.managedButtonCount and self.managedButtonCount > 0 and options:GetManageAddonButtons()
-    local zoneTop = showZone and zonePosition == "top"
-    local zoneBottom = showZone and zonePosition ~= "top"
+    local zoneTop = showZone and IsTopPosition(zonePosition)
+    local zoneBottom = showZone and not zoneTop
     local mapAnchor = self.mapBackdrop or self.shell
     local zoneOffsetX = options.GetZoneTextOffsetX and options:GetZoneTextOffsetX() or 0
     local zoneOffsetY = options.GetZoneTextOffsetY and options:GetZoneTextOffsetY() or 0
@@ -1450,7 +1680,7 @@ function MinimapModule:ApplyLayout()
     self.titleText:SetShown(showZone)
 
     self.leftInfoText:ClearAllPoints()
-    self.leftInfoText:SetJustifyH(clockPosition and clockPosition:find("right") and "RIGHT" or "LEFT")
+    self.leftInfoText:SetJustifyH(GetHorizontalJustify(clockPosition))
     if showClock then
         local clockAnchor, clockBaseX, clockBaseY = GetInsetAnchorPoint(clockPosition)
         self.leftInfoText:SetPoint(clockAnchor, mapAnchor, clockAnchor, clockBaseX + clockOffsetX,
@@ -1459,7 +1689,7 @@ function MinimapModule:ApplyLayout()
     self.leftInfoText:SetShown(showClock)
 
     self.rightInfoText:ClearAllPoints()
-    self.rightInfoText:SetJustifyH(coordinatesPosition and coordinatesPosition:find("right") and "RIGHT" or "LEFT")
+    self.rightInfoText:SetJustifyH(GetHorizontalJustify(coordinatesPosition))
     if showCoordinates then
         local coordinatesAnchor, coordinatesBaseX, coordinatesBaseY = GetInsetAnchorPoint(coordinatesPosition)
         self.rightInfoText:SetPoint(coordinatesAnchor, mapAnchor, coordinatesAnchor,
@@ -1818,6 +2048,7 @@ function MinimapModule:ApplySettings(reason)
     self:ApplyLayout()
     self:ApplyPosition()
     self:HideDefaultChrome()
+    self:CancelAutoZoom()
     self:UpdateDynamicText(true)
     self.holder:Show()
     self.previewUntil = reason == "preview" and (GetTime() + 1.6) or self.previewUntil
@@ -2051,9 +2282,13 @@ function MinimapModule:OnDisable()
     self:UnregisterAllEvents()
     self:UnregisterAllMessages()
     self.pendingApplyReason = nil
+    self:CancelAutoZoom()
     self:RestoreManagedButtons()
     self:RestoreBaseState()
     self:RestoreDefaultChrome()
+    if self.trackingMenu then
+        self.trackingMenu:Hide()
+    end
     if self.holder then
         self.holder:Hide()
     end

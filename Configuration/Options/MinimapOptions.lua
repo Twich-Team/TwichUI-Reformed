@@ -20,6 +20,7 @@ local DEFAULTS = {
     enabled = true,
     size = 228,
     circular = false,
+    autoZoomDelay = 0,
     showZoneText = true,
     showSubzone = true,
     showCoordinates = true,
@@ -69,20 +70,26 @@ local DEFAULTS = {
 
 local POSITION_VALUES = {
     top = "Top",
+    ["top-center"] = "Top Center",
     bottom = "Bottom",
+    ["bottom-center"] = "Bottom Center",
 }
 
 local EDGE_POSITION_VALUES = {
     top = "Top",
+    ["top-center"] = "Top Center",
     bottom = "Bottom",
+    ["bottom-center"] = "Bottom Center",
     left = "Left",
     right = "Right",
 }
 
 local CORNER_POSITION_VALUES = {
     ["top-left"] = "Top Left",
+    ["top-center"] = "Top Center",
     ["top-right"] = "Top Right",
     ["bottom-left"] = "Bottom Left",
+    ["bottom-center"] = "Bottom Center",
     ["bottom-right"] = "Bottom Right",
 }
 
@@ -291,6 +298,14 @@ end
 
 function Options:SetCircular(_, value)
     SetBoolean(self, "circular", value)
+end
+
+function Options:GetAutoZoomDelay()
+    return GetRange(self, "autoZoomDelay", 0, 30)
+end
+
+function Options:SetAutoZoomDelay(_, value)
+    SetRange(self, "autoZoomDelay", value, 0, 30)
 end
 
 function Options:GetAnchorX()
@@ -808,6 +823,19 @@ function Options:BuildConfiguration()
                             get = "GetCircular",
                             set = "SetCircular",
                         },
+                        autoZoomDelay = {
+                            type = "range",
+                            order = 6,
+                            name = "Auto Zoom-Out Delay",
+                            desc =
+                            "Automatically reset the minimap zoom to fully zoomed out after this many seconds. Set to 0 to disable.",
+                            min = 0,
+                            max = 30,
+                            step = 1,
+                            handler = Options,
+                            get = "GetAutoZoomDelay",
+                            set = "SetAutoZoomDelay",
+                        },
                     }),
                 },
             },
@@ -879,6 +907,86 @@ function Options:BuildConfiguration()
                                 return not Options:GetShowZoneText()
                             end,
                         },
+                        titleFont = {
+                            type = "select",
+                            dialogControl = "LSM30_Font",
+                            order = 4,
+                            name = "Title Font",
+                            width = 2,
+                            values = GetFontValues,
+                            handler = Options,
+                            get = "GetTitleFont",
+                            set = "SetTitleFont",
+                            disabled = function()
+                                return not Options:GetShowZoneText()
+                            end,
+                        },
+                        titleSize = {
+                            type = "range",
+                            order = 5,
+                            name = "Title Size",
+                            min = 8,
+                            max = 28,
+                            step = 1,
+                            handler = Options,
+                            get = "GetTitleFontSize",
+                            set = "SetTitleFontSize",
+                            disabled = function()
+                                return not Options:GetShowZoneText()
+                            end,
+                        },
+                        titleColor = {
+                            type = "color",
+                            order = 6,
+                            name = "Title Color",
+                            hasAlpha = false,
+                            handler = Options,
+                            get = "GetTitleColor",
+                            set = "SetTitleColor",
+                            disabled = function()
+                                return not Options:GetShowZoneText()
+                            end,
+                        },
+                        detailFont = {
+                            type = "select",
+                            dialogControl = "LSM30_Font",
+                            order = 7,
+                            name = "Detail Font",
+                            width = 2,
+                            values = GetFontValues,
+                            handler = Options,
+                            get = "GetDetailFont",
+                            set = "SetDetailFont",
+                            disabled = function()
+                                return not Options:GetShowZoneText() or not Options:GetShowSubzone()
+                            end,
+                        },
+                        detailSize = {
+                            type = "range",
+                            order = 8,
+                            name = "Detail Size",
+                            min = 8,
+                            max = 24,
+                            step = 1,
+                            handler = Options,
+                            get = "GetDetailFontSize",
+                            set = "SetDetailFontSize",
+                            disabled = function()
+                                return not Options:GetShowZoneText() or not Options:GetShowSubzone()
+                            end,
+                        },
+                        detailColor = {
+                            type = "color",
+                            order = 9,
+                            name = "Detail Color",
+                            hasAlpha = false,
+                            handler = Options,
+                            get = "GetDetailColor",
+                            set = "SetDetailColor",
+                            disabled = function()
+                                return not Options:GetShowZoneText() or not Options:GetShowSubzone()
+                            end,
+                        },
                     }),
                 },
             },
@@ -948,6 +1056,46 @@ function Options:BuildConfiguration()
                             handler = Options,
                             get = "GetCoordinatePrecision",
                             set = "SetCoordinatePrecision",
+                            disabled = function()
+                                return not Options:GetShowCoordinates()
+                            end,
+                        },
+                        coordinatesFont = {
+                            type = "select",
+                            dialogControl = "LSM30_Font",
+                            order = 7,
+                            name = "Coordinates Font",
+                            width = 2,
+                            values = GetFontValues,
+                            handler = Options,
+                            get = "GetCoordinatesFont",
+                            set = "SetCoordinatesFont",
+                            disabled = function()
+                                return not Options:GetShowCoordinates()
+                            end,
+                        },
+                        coordinatesSize = {
+                            type = "range",
+                            order = 8,
+                            name = "Coordinates Size",
+                            min = 8,
+                            max = 24,
+                            step = 1,
+                            handler = Options,
+                            get = "GetCoordinatesFontSize",
+                            set = "SetCoordinatesFontSize",
+                            disabled = function()
+                                return not Options:GetShowCoordinates()
+                            end,
+                        },
+                        coordinatesColor = {
+                            type = "color",
+                            order = 9,
+                            name = "Coordinates Color",
+                            hasAlpha = false,
+                            handler = Options,
+                            get = "GetCoordinatesColor",
+                            set = "SetCoordinatesColor",
                             disabled = function()
                                 return not Options:GetShowCoordinates()
                             end,
@@ -1043,91 +1191,23 @@ function Options:BuildConfiguration()
                             get = "GetShowMailIndicator",
                             set = "SetShowMailIndicator",
                         },
-                    }),
-                },
-            },
-            typographyTab = {
-                type = "group",
-                name = "Typography",
-                order = 50,
-                args = {
-                    typography = W.IGroup(10, "Typography", {
-                        titleFont = {
-                            type = "select",
-                            dialogControl = "LSM30_Font",
-                            order = 1,
-                            name = "Title Font",
-                            width = 2,
-                            values = GetFontValues,
-                            handler = Options,
-                            get = "GetTitleFont",
-                            set = "SetTitleFont",
-                        },
-                        titleSize = {
-                            type = "range",
-                            order = 2,
-                            name = "Title Size",
-                            min = 8,
-                            max = 28,
-                            step = 1,
-                            handler = Options,
-                            get = "GetTitleFontSize",
-                            set = "SetTitleFontSize",
-                        },
-                        titleColor = {
-                            type = "color",
-                            order = 3,
-                            name = "Title Color",
-                            hasAlpha = false,
-                            handler = Options,
-                            get = "GetTitleColor",
-                            set = "SetTitleColor",
-                        },
-                        detailFont = {
-                            type = "select",
-                            dialogControl = "LSM30_Font",
-                            order = 4,
-                            name = "Detail Font",
-                            width = 2,
-                            values = GetFontValues,
-                            handler = Options,
-                            get = "GetDetailFont",
-                            set = "SetDetailFont",
-                        },
-                        detailSize = {
-                            type = "range",
-                            order = 5,
-                            name = "Detail Size",
-                            min = 8,
-                            max = 24,
-                            step = 1,
-                            handler = Options,
-                            get = "GetDetailFontSize",
-                            set = "SetDetailFontSize",
-                        },
-                        detailColor = {
-                            type = "color",
-                            order = 6,
-                            name = "Detail Color",
-                            hasAlpha = false,
-                            handler = Options,
-                            get = "GetDetailColor",
-                            set = "SetDetailColor",
-                        },
                         clockFont = {
                             type = "select",
                             dialogControl = "LSM30_Font",
-                            order = 7,
+                            order = 12,
                             name = "Clock Font",
                             width = 2,
                             values = GetFontValues,
                             handler = Options,
                             get = "GetClockFont",
                             set = "SetClockFont",
+                            disabled = function()
+                                return not Options:GetShowClock()
+                            end,
                         },
                         clockSize = {
                             type = "range",
-                            order = 8,
+                            order = 13,
                             name = "Clock Size",
                             min = 8,
                             max = 24,
@@ -1135,61 +1215,39 @@ function Options:BuildConfiguration()
                             handler = Options,
                             get = "GetClockFontSize",
                             set = "SetClockFontSize",
+                            disabled = function()
+                                return not Options:GetShowClock()
+                            end,
                         },
                         clockColor = {
                             type = "color",
-                            order = 9,
+                            order = 14,
                             name = "Clock Color",
                             hasAlpha = false,
                             handler = Options,
                             get = "GetClockColor",
                             set = "SetClockColor",
-                        },
-                        coordinatesFont = {
-                            type = "select",
-                            dialogControl = "LSM30_Font",
-                            order = 10,
-                            name = "Coordinates Font",
-                            width = 2,
-                            values = GetFontValues,
-                            handler = Options,
-                            get = "GetCoordinatesFont",
-                            set = "SetCoordinatesFont",
-                        },
-                        coordinatesSize = {
-                            type = "range",
-                            order = 11,
-                            name = "Coordinates Size",
-                            min = 8,
-                            max = 24,
-                            step = 1,
-                            handler = Options,
-                            get = "GetCoordinatesFontSize",
-                            set = "SetCoordinatesFontSize",
-                        },
-                        coordinatesColor = {
-                            type = "color",
-                            order = 12,
-                            name = "Coordinates Color",
-                            hasAlpha = false,
-                            handler = Options,
-                            get = "GetCoordinatesColor",
-                            set = "SetCoordinatesColor",
+                            disabled = function()
+                                return not Options:GetShowClock()
+                            end,
                         },
                         mailFont = {
                             type = "select",
                             dialogControl = "LSM30_Font",
-                            order = 13,
+                            order = 15,
                             name = "Mail Font",
                             width = 2,
                             values = GetFontValues,
                             handler = Options,
                             get = "GetMailFont",
                             set = "SetMailFont",
+                            disabled = function()
+                                return not Options:GetShowMailIndicator()
+                            end,
                         },
                         mailSize = {
                             type = "range",
-                            order = 14,
+                            order = 16,
                             name = "Mail Size",
                             min = 8,
                             max = 20,
@@ -1197,15 +1255,21 @@ function Options:BuildConfiguration()
                             handler = Options,
                             get = "GetMailFontSize",
                             set = "SetMailFontSize",
+                            disabled = function()
+                                return not Options:GetShowMailIndicator()
+                            end,
                         },
                         mailColor = {
                             type = "color",
-                            order = 15,
+                            order = 17,
                             name = "Mail Color",
                             hasAlpha = false,
                             handler = Options,
                             get = "GetMailColor",
                             set = "SetMailColor",
+                            disabled = function()
+                                return not Options:GetShowMailIndicator()
+                            end,
                         },
                     }),
                 },
@@ -1213,7 +1277,7 @@ function Options:BuildConfiguration()
             buttonsTab = {
                 type = "group",
                 name = "Buttons",
-                order = 60,
+                order = 50,
                 args = {
                     buttons = W.IGroup(10, "Addon Buttons", {
                         manage = {
@@ -1328,7 +1392,7 @@ function Options:BuildConfiguration()
             appearanceTab = {
                 type = "group",
                 name = "Appearance",
-                order = 70,
+                order = 60,
                 args = {
                     appearance = W.IGroup(10, "Appearance", {
                         accentUsesTheme = {
