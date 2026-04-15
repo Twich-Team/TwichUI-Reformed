@@ -11,30 +11,41 @@ local GT = QOL:NewModule("GameTweaks", "AceEvent-3.0")
 GT:SetEnabledState(false)
 
 local C_BattleNet = _G.C_BattleNet
+local C_Bank = _G.C_Bank
 local C_Club = _G.C_Club
 local C_Container = _G.C_Container
 local C_CurrencyInfo = _G.C_CurrencyInfo
 local C_DeathInfo = _G.C_DeathInfo
 local C_FriendList = _G.C_FriendList
 local C_GossipInfo = _G.C_GossipInfo
+local C_Item = _G.C_Item
 local C_Map = _G.C_Map
 local C_PetBattles = _G.C_PetBattles
 local C_QuestSession = _G.C_QuestSession
 local C_SummonInfo = _G.C_SummonInfo
 local C_Timer = _G.C_Timer
+local Enum = _G.Enum
 local GetInstanceInfo = _G.GetInstanceInfo
+local GetItemInfo = C_Item.GetItemInfo
+local GetNetStats = _G.GetNetStats
 local CommunitiesUtil = _G["CommunitiesUtil"]
 local EventToastManagerFrame = _G["EventToastManagerFrame"]
 local hasanysecretvalues = _G.hasanysecretvalues
+local IsCosmeticItem = C_Item.IsCosmeticItem
+local IsEquippableItem = C_Item.IsEquippableItem
+local IsUsableItem = C_Item.IsUsableItem
 local ItemLocation = _G.ItemLocation
 local StaticPopupDialogs = _G["StaticPopupDialogs"]
 local UIErrorsFrame = _G["UIErrorsFrame"]
 local DEFAULT_CHAT_FRAME = _G.DEFAULT_CHAT_FRAME
 local UIParent = _G.UIParent
+local max = math.max
+local sort = table.sort
 local tonumber = tonumber
 local tostring = tostring
 local ipairs = ipairs
 local pairs = pairs
+local select = select
 local strfind = string.find
 local strlower = string.lower
 local strmatch = string.match
@@ -243,6 +254,156 @@ local PVP_AUTO_RELEASE_WORLD_MAPS = {
     [1478] = true, -- Ashran PvP variant
 }
 
+local AUTOSELL_BAG_MAX = _G.NUM_TOTAL_EQUIPPED_BAG_SLOTS or _G.NUM_BAG_SLOTS or 4
+local AUTOSELL_SAFE_MODE_LIMIT = 12
+local AUTOSELL_START_DELAY_SECONDS = 0.1
+local AUTOSELL_EQUIPMENT_INVTYPE_EXCEPTIONS = {
+    INVTYPE_FINGER = true,
+    INVTYPE_NECK = true,
+    INVTYPE_TRINKET = true,
+    INVTYPE_HOLDABLE = true,
+    INVTYPE_CLOAK = true,
+}
+local AUTOSELL_PRIMARY_ARMOR = {
+    WARRIOR = Enum.ItemArmorSubclass.Plate,
+    PALADIN = Enum.ItemArmorSubclass.Plate,
+    DEATHKNIGHT = Enum.ItemArmorSubclass.Plate,
+    HUNTER = Enum.ItemArmorSubclass.Mail,
+    SHAMAN = Enum.ItemArmorSubclass.Mail,
+    EVOKER = Enum.ItemArmorSubclass.Mail,
+    ROGUE = Enum.ItemArmorSubclass.Leather,
+    DRUID = Enum.ItemArmorSubclass.Leather,
+    MONK = Enum.ItemArmorSubclass.Leather,
+    DEMONHUNTER = Enum.ItemArmorSubclass.Leather,
+    MAGE = Enum.ItemArmorSubclass.Cloth,
+    PRIEST = Enum.ItemArmorSubclass.Cloth,
+    WARLOCK = Enum.ItemArmorSubclass.Cloth,
+}
+local AUTOSELL_SHIELD_CLASSES = {
+    PALADIN = true,
+    SHAMAN = true,
+    WARRIOR = true,
+}
+local AUTOSELL_WEAPON_PROFICIENCIES = {
+    DEATHKNIGHT = {
+        [Enum.ItemWeaponSubclass.Axe1H] = true,
+        [Enum.ItemWeaponSubclass.Axe2H] = true,
+        [Enum.ItemWeaponSubclass.Mace1H] = true,
+        [Enum.ItemWeaponSubclass.Mace2H] = true,
+        [Enum.ItemWeaponSubclass.Polearm] = true,
+        [Enum.ItemWeaponSubclass.Sword1H] = true,
+        [Enum.ItemWeaponSubclass.Sword2H] = true,
+    },
+    DEMONHUNTER = {
+        [Enum.ItemWeaponSubclass.Axe1H] = true,
+        [Enum.ItemWeaponSubclass.Dagger] = true,
+        [Enum.ItemWeaponSubclass.Fist] = true,
+        [Enum.ItemWeaponSubclass.Mace1H] = true,
+        [Enum.ItemWeaponSubclass.Sword1H] = true,
+        [Enum.ItemWeaponSubclass.Warglaive] = true,
+    },
+    DRUID = {
+        [Enum.ItemWeaponSubclass.Dagger] = true,
+        [Enum.ItemWeaponSubclass.Fist] = true,
+        [Enum.ItemWeaponSubclass.Mace1H] = true,
+        [Enum.ItemWeaponSubclass.Mace2H] = true,
+        [Enum.ItemWeaponSubclass.Polearm] = true,
+        [Enum.ItemWeaponSubclass.Staff] = true,
+    },
+    EVOKER = {
+        [Enum.ItemWeaponSubclass.Axe1H] = true,
+        [Enum.ItemWeaponSubclass.Dagger] = true,
+        [Enum.ItemWeaponSubclass.Fist] = true,
+        [Enum.ItemWeaponSubclass.Mace1H] = true,
+        [Enum.ItemWeaponSubclass.Sword1H] = true,
+        [Enum.ItemWeaponSubclass.Staff] = true,
+    },
+    HUNTER = {
+        [Enum.ItemWeaponSubclass.Axe1H] = true,
+        [Enum.ItemWeaponSubclass.Axe2H] = true,
+        [Enum.ItemWeaponSubclass.Bows] = true,
+        [Enum.ItemWeaponSubclass.Crossbow] = true,
+        [Enum.ItemWeaponSubclass.Dagger] = true,
+        [Enum.ItemWeaponSubclass.Fist] = true,
+        [Enum.ItemWeaponSubclass.Guns] = true,
+        [Enum.ItemWeaponSubclass.Polearm] = true,
+        [Enum.ItemWeaponSubclass.Staff] = true,
+        [Enum.ItemWeaponSubclass.Sword1H] = true,
+        [Enum.ItemWeaponSubclass.Sword2H] = true,
+    },
+    MAGE = {
+        [Enum.ItemWeaponSubclass.Dagger] = true,
+        [Enum.ItemWeaponSubclass.Staff] = true,
+        [Enum.ItemWeaponSubclass.Sword1H] = true,
+        [Enum.ItemWeaponSubclass.Wand] = true,
+    },
+    MONK = {
+        [Enum.ItemWeaponSubclass.Axe1H] = true,
+        [Enum.ItemWeaponSubclass.Fist] = true,
+        [Enum.ItemWeaponSubclass.Mace1H] = true,
+        [Enum.ItemWeaponSubclass.Polearm] = true,
+        [Enum.ItemWeaponSubclass.Staff] = true,
+        [Enum.ItemWeaponSubclass.Sword1H] = true,
+    },
+    PALADIN = {
+        [Enum.ItemWeaponSubclass.Axe1H] = true,
+        [Enum.ItemWeaponSubclass.Axe2H] = true,
+        [Enum.ItemWeaponSubclass.Mace1H] = true,
+        [Enum.ItemWeaponSubclass.Mace2H] = true,
+        [Enum.ItemWeaponSubclass.Polearm] = true,
+        [Enum.ItemWeaponSubclass.Sword1H] = true,
+        [Enum.ItemWeaponSubclass.Sword2H] = true,
+    },
+    PRIEST = {
+        [Enum.ItemWeaponSubclass.Dagger] = true,
+        [Enum.ItemWeaponSubclass.Mace1H] = true,
+        [Enum.ItemWeaponSubclass.Staff] = true,
+        [Enum.ItemWeaponSubclass.Wand] = true,
+    },
+    ROGUE = {
+        [Enum.ItemWeaponSubclass.Axe1H] = true,
+        [Enum.ItemWeaponSubclass.Bows] = true,
+        [Enum.ItemWeaponSubclass.Crossbow] = true,
+        [Enum.ItemWeaponSubclass.Dagger] = true,
+        [Enum.ItemWeaponSubclass.Fist] = true,
+        [Enum.ItemWeaponSubclass.Guns] = true,
+        [Enum.ItemWeaponSubclass.Mace1H] = true,
+        [Enum.ItemWeaponSubclass.Sword1H] = true,
+        [Enum.ItemWeaponSubclass.Thrown] = true,
+    },
+    SHAMAN = {
+        [Enum.ItemWeaponSubclass.Axe1H] = true,
+        [Enum.ItemWeaponSubclass.Axe2H] = true,
+        [Enum.ItemWeaponSubclass.Dagger] = true,
+        [Enum.ItemWeaponSubclass.Fist] = true,
+        [Enum.ItemWeaponSubclass.Mace1H] = true,
+        [Enum.ItemWeaponSubclass.Mace2H] = true,
+        [Enum.ItemWeaponSubclass.Staff] = true,
+    },
+    WARLOCK = {
+        [Enum.ItemWeaponSubclass.Dagger] = true,
+        [Enum.ItemWeaponSubclass.Sword1H] = true,
+        [Enum.ItemWeaponSubclass.Staff] = true,
+        [Enum.ItemWeaponSubclass.Wand] = true,
+    },
+    WARRIOR = {
+        [Enum.ItemWeaponSubclass.Axe1H] = true,
+        [Enum.ItemWeaponSubclass.Axe2H] = true,
+        [Enum.ItemWeaponSubclass.Bows] = true,
+        [Enum.ItemWeaponSubclass.Crossbow] = true,
+        [Enum.ItemWeaponSubclass.Dagger] = true,
+        [Enum.ItemWeaponSubclass.Fist] = true,
+        [Enum.ItemWeaponSubclass.Guns] = true,
+        [Enum.ItemWeaponSubclass.Mace1H] = true,
+        [Enum.ItemWeaponSubclass.Mace2H] = true,
+        [Enum.ItemWeaponSubclass.Polearm] = true,
+        [Enum.ItemWeaponSubclass.Staff] = true,
+        [Enum.ItemWeaponSubclass.Sword1H] = true,
+        [Enum.ItemWeaponSubclass.Sword2H] = true,
+        [Enum.ItemWeaponSubclass.Thrown] = true,
+    },
+}
+
 local function GetAutoReleaseContext()
     local mapID = (C_Map and C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")) or 0
     local instanceName, _, _, _, _, _, _, instanceMapID, instanceGroupSize, lfgDungeonID = GetInstanceInfo()
@@ -296,6 +457,350 @@ local function ParseNumberList(value)
     end
 
     return ids
+end
+
+local function BuildIDLookup(value)
+    local lookup = {}
+    local ids = ParseNumberList(value)
+    for index = 1, #ids do
+        lookup[ids[index]] = true
+    end
+    return lookup
+end
+
+local function GetQualityKey(quality)
+    if quality == Enum.ItemQuality.Poor then
+        return "poor"
+    end
+
+    local commonQuality = Enum.ItemQuality.Common or Enum.ItemQuality.Standard
+    if quality == commonQuality then
+        return "common"
+    end
+
+    local uncommonQuality = Enum.ItemQuality.Uncommon or Enum.ItemQuality.Good
+    if quality == uncommonQuality then
+        return "uncommon"
+    end
+
+    if quality == Enum.ItemQuality.Rare then
+        return "rare"
+    end
+
+    if quality == Enum.ItemQuality.Epic then
+        return "epic"
+    end
+
+    return nil
+end
+
+local function QualityValue(path, quality, defaultValue)
+    local qualityKey = GetQualityKey(quality)
+    if not qualityKey then
+        return false
+    end
+
+    return Value({ path[1], path[2], path[3], qualityKey }, defaultValue) == true
+end
+
+local function IsLocationBound(location)
+    if not location or not C_Item then
+        return false
+    end
+
+    local success, isBound = pcall(C_Item.IsBound, location)
+    if success and isBound then
+        return true
+    end
+
+    success, isBound = pcall(C_Item.IsBoundToAccountUntilEquip, location)
+    return success and isBound or false
+end
+
+local function BuildEquipmentSetLookup()
+    local lookup = {}
+    local bagsModule = T:GetModule("Bags")
+    if not bagsModule or type(bagsModule.ScanEquipmentSets) ~= "function" or type(bagsModule.equipmentSetByGUID) ~= "table" then
+        return lookup
+    end
+
+    bagsModule:ScanEquipmentSets()
+    for itemGUID in pairs(bagsModule.equipmentSetByGUID) do
+        lookup[itemGUID] = true
+    end
+
+    return lookup
+end
+
+local function IsSellableEquipment(item)
+    if not item.link or not IsEquippableItem or not IsEquippableItem(item.link) then
+        return false
+    end
+
+    if IsCosmeticItem and IsCosmeticItem(item.link) then
+        return false
+    end
+
+    if item.classID == Enum.ItemClass.Armor then
+        if AUTOSELL_EQUIPMENT_INVTYPE_EXCEPTIONS[item.invType] then
+            return true
+        end
+
+        return item.subclassID ~= Enum.ItemArmorSubclass.Generic and item.subclassID ~= Enum.ItemArmorSubclass.Cosmetic
+    end
+
+    if item.classID == Enum.ItemClass.Weapon then
+        return item.subclassID ~= Enum.ItemWeaponSubclass.Generic and
+        item.subclassID ~= Enum.ItemWeaponSubclass.Fishingpole
+    end
+
+    return false
+end
+
+local function IsArmorSuitableForPlayer(item, playerClass)
+    if item.invType == "INVTYPE_CLOAK" or AUTOSELL_EQUIPMENT_INVTYPE_EXCEPTIONS[item.invType] then
+        return true
+    end
+
+    if item.subclassID == Enum.ItemArmorSubclass.Shield then
+        return AUTOSELL_SHIELD_CLASSES[playerClass] == true
+    end
+
+    return AUTOSELL_PRIMARY_ARMOR[playerClass] == item.subclassID
+end
+
+local function IsWeaponSuitableForPlayer(item, playerClass)
+    local proficiency = AUTOSELL_WEAPON_PROFICIENCIES[playerClass]
+    if proficiency and proficiency[item.subclassID] then
+        return true
+    end
+
+    return IsUsableItem and select(1, IsUsableItem(item.link)) == true or false
+end
+
+local function IsItemSuitableForPlayer(item)
+    if not item.isEquipment then
+        return true
+    end
+
+    local _, playerClass = UnitClass("player")
+    if not playerClass then
+        return true
+    end
+
+    if item.classID == Enum.ItemClass.Armor then
+        return IsArmorSuitableForPlayer(item, playerClass)
+    end
+
+    if item.classID == Enum.ItemClass.Weapon then
+        return IsWeaponSuitableForPlayer(item, playerClass)
+    end
+
+    return true
+end
+
+local function IsItemWarbandEquipment(item, location)
+    if not (item.isEquipment and C_Bank and C_Bank.IsItemAllowedInBankType and Enum.BankType and Enum.BankType.Account) then
+        return false
+    end
+
+    local success, isWarband = pcall(C_Bank.IsItemAllowedInBankType, Enum.BankType.Account, location)
+    return success and isWarband or false
+end
+
+local function IsArtifactRelic(item)
+    return item.classID == Enum.ItemClass.Gem and Enum.ItemGemSubclass and
+    item.subclassID == Enum.ItemGemSubclass.Artifactrelic
+end
+
+local function GetContainerSellItem(bagID, slotID, equipmentSetLookup)
+    local containerInfo = C_Container.GetContainerItemInfo(bagID, slotID)
+    if type(containerInfo) ~= "table" then
+        return nil
+    end
+
+    local link = containerInfo.hyperlink or C_Container.GetContainerItemLink(bagID, slotID)
+    if not link then
+        return nil
+    end
+
+    local itemName, _, quality, _, _, _, _, _, invType, _, vendorPrice, classID, subclassID = GetItemInfo(link)
+    local itemID = containerInfo.itemID or (_G.GetItemInfoFromHyperlink and _G.GetItemInfoFromHyperlink(link))
+    if not itemID or not vendorPrice or vendorPrice <= 0 or containerInfo.hasNoValue then
+        return nil
+    end
+
+    local location = ItemLocation and ItemLocation:CreateFromBagAndSlot(bagID, slotID)
+    if not location then
+        return nil
+    end
+
+    local item = {
+        bagID = bagID,
+        slotID = slotID,
+        itemID = itemID,
+        link = link,
+        name = itemName or link,
+        quality = quality or containerInfo.quality,
+        itemLevel = (C_Item and C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(link)) or 0,
+        vendorPrice = vendorPrice,
+        stackCount = containerInfo.stackCount or 1,
+        totalPrice = vendorPrice * (containerInfo.stackCount or 1),
+        classID = classID,
+        subclassID = subclassID,
+        invType = invType,
+        isLocked = containerInfo.isLocked == true,
+        isRefundable = false,
+        isEquipment = false,
+        isEquipmentSet = false,
+        isBound = false,
+        isSuitable = true,
+        isWarbandEquipment = false,
+    }
+
+    local purchaseInfo = C_Container.GetContainerItemPurchaseInfo(bagID, slotID, false)
+    item.isRefundable = purchaseInfo and purchaseInfo.refundSeconds and purchaseInfo.refundSeconds > 0 or false
+    item.isEquipment = IsSellableEquipment(item)
+    item.isBound = IsLocationBound(location)
+
+    if C_Item and C_Item.GetItemGUID then
+        local itemGUID = C_Item.GetItemGUID(location)
+        item.isEquipmentSet = itemGUID and equipmentSetLookup[itemGUID] == true or false
+    end
+
+    if item.isEquipment then
+        item.isSuitable = IsItemSuitableForPlayer(item)
+        item.isWarbandEquipment = IsItemWarbandEquipment(item, location)
+    end
+
+    return item
+end
+
+local function GetAutoSellSettings()
+    return {
+        includeLookup = BuildIDLookup(Value({ "automation", "autoSellIncludeList" }, "")),
+        excludeLookup = BuildIDLookup(Value({ "automation", "autoSellExcludeList" }, "")),
+        showSummary = Value({ "automation", "autoSellShowSummary" }, true) == true,
+        safeMode = Value({ "automation", "autoSellSafeMode" }, false) == true,
+        excludeEquipmentSets = Value({ "automation", "autoSellExcludeEquipmentSets" }, true) == true,
+        excludeUnbound = Value({ "automation", "autoSellExcludeUnboundEquipment" }, false) == true,
+        excludeWarband = Value({ "automation", "autoSellExcludeWarbandEquipment" }, false) == true,
+        includeBelowEnabled = Value({ "automation", "autoSellIncludeBelowItemLevel", "enabled" }, false) == true,
+        includeBelowValue = Value({ "automation", "autoSellIncludeBelowItemLevel", "value" }, 0) or 0,
+        includeUnsuitable = Value({ "automation", "autoSellIncludeUnsuitableEquipment" }, false) == true,
+        includeArtifactRelics = Value({ "automation", "autoSellIncludeArtifactRelics" }, false) == true,
+        legacyKeepUnboundGrey = Value({ "automation", "autoSellExcludeGreyGear" }, false) == true,
+    }
+end
+
+local function IsAutoSellItem(item, settings)
+    if not item or item.isRefundable or item.isLocked or not item.itemID then
+        return false
+    end
+
+    if settings.excludeLookup[item.itemID] then
+        return false
+    end
+
+    if settings.includeLookup[item.itemID] then
+        return true
+    end
+
+    if item.isEquipment and settings.excludeEquipmentSets and item.isEquipmentSet then
+        return false
+    end
+
+    if item.isEquipment and not item.isBound then
+        if settings.legacyKeepUnboundGrey and item.quality == Enum.ItemQuality.Poor then
+            return false
+        end
+
+        if settings.excludeUnbound and QualityValue({ "automation", "autoSellExcludeUnboundEquipmentQualities" }, item.quality, false) then
+            return false
+        end
+    end
+
+    if item.isEquipment and settings.excludeWarband and item.isWarbandEquipment and
+        QualityValue({ "automation", "autoSellExcludeWarbandEquipmentQualities" }, item.quality, false) then
+        return false
+    end
+
+    if QualityValue({ "automation", "autoSellIncludeByQuality" }, item.quality, false) then
+        return true
+    end
+
+    if item.isEquipment and settings.includeBelowEnabled and settings.includeBelowValue > 0 and item.itemLevel > 0 and
+        item.itemLevel < settings.includeBelowValue and
+        QualityValue({ "automation", "autoSellIncludeBelowItemLevel", "qualities" }, item.quality, false) then
+        return true
+    end
+
+    if item.isEquipment and settings.includeUnsuitable and not item.isSuitable and
+        QualityValue({ "automation", "autoSellIncludeUnsuitableEquipmentQualities" }, item.quality, false) then
+        return true
+    end
+
+    if settings.includeArtifactRelics and IsArtifactRelic(item) then
+        return true
+    end
+
+    return false
+end
+
+local function BuildAutoSellQueue()
+    local settings = GetAutoSellSettings()
+    local equipmentSetLookup = BuildEquipmentSetLookup()
+    local items = {}
+
+    for bagID = 0, AUTOSELL_BAG_MAX do
+        for slotID = 1, C_Container.GetContainerNumSlots(bagID) do
+            local item = GetContainerSellItem(bagID, slotID, equipmentSetLookup)
+            if item and IsAutoSellItem(item, settings) then
+                items[#items + 1] = item
+            end
+        end
+    end
+
+    sort(items, function(left, right)
+        if left.totalPrice ~= right.totalPrice then
+            return left.totalPrice < right.totalPrice
+        end
+
+        if left.quality ~= right.quality then
+            return left.quality < right.quality
+        end
+
+        if left.name ~= right.name then
+            return left.name < right.name
+        end
+
+        return left.stackCount < right.stackCount
+    end)
+
+    local truncated = false
+    if settings.safeMode and #items > AUTOSELL_SAFE_MODE_LIMIT then
+        while #items > AUTOSELL_SAFE_MODE_LIMIT do
+            items[#items] = nil
+        end
+        truncated = true
+    end
+
+    return items, settings, truncated
+end
+
+local function GetAutoSellIntervalSeconds()
+    local _, _, homeLatency, worldLatency = GetNetStats()
+    local configuredMs = Value({ "automation", "autoSellThrottleMs" }, 150) or 150
+    return max(0.08, (configuredMs / 1000), max(homeLatency or 0, worldLatency or 0) / 1000)
+end
+
+local function IsMerchantVisible()
+    return _G.MerchantFrame and _G.MerchantFrame:IsShown()
+end
+
+local function FormatMoney(copper)
+    return T.Tools and T.Tools.Text and T.Tools.Text.FormatCopper(copper)
+        or C_CurrencyInfo.GetCoinText(copper)
 end
 
 local function ParseSoundRefList(value)
@@ -930,9 +1435,12 @@ function GT:RefreshSettings()
     if shouldMerchant then
         self:RegisterEvent("MERCHANT_SHOW")
         self:RegisterEvent("MERCHANT_CLOSED")
+        self:RegisterEvent("UI_ERROR_MESSAGE")
     else
         self:UnregisterEvent("MERCHANT_SHOW")
         self:UnregisterEvent("MERCHANT_CLOSED")
+        self:UnregisterEvent("UI_ERROR_MESSAGE")
+        self:AbortAutoSellSession()
     end
 
     local events = {
@@ -1196,20 +1704,121 @@ function GT:CONFIRM_DISENCHANT_ROLL(_, rollID, rollType)
     end
 end
 
-local function ShouldKeepItem(itemID, quality, classID, bagID, slotID)
-    local exclusions = ParseNumberList(Value({ "automation", "autoSellExcludeList" }, ""))
-    for index = 1, #exclusions do
-        if exclusions[index] == itemID then
-            return true
-        end
+function GT:AbortAutoSellSession()
+    self.autoSellToken = (self.autoSellToken or 0) + 1
+
+    if self.autoSellTicker then
+        self.autoSellTicker:Cancel()
+        self.autoSellTicker = nil
     end
-    if quality == 0 and Value({ "automation", "autoSellExcludeGreyGear" }, false) and (classID == Enum.ItemClass.Weapon or classID == Enum.ItemClass.Armor) then
-        local location = ItemLocation:CreateFromBagAndSlot(bagID, slotID)
-        if location and not _G.C_Item.IsBound(location) then
-            return true
+
+    self.autoSellQueue = nil
+    self.autoSellTotalPrice = 0
+    self.autoSellSoldCount = 0
+    self.autoSellSafeModeTruncated = false
+    self.autoSellSettings = nil
+end
+
+function GT:FinishAutoSellSession()
+    local totalPrice = self.autoSellTotalPrice or 0
+    local soldCount = self.autoSellSoldCount or 0
+    local truncated = self.autoSellSafeModeTruncated == true
+    local settings = self.autoSellSettings
+
+    self:AbortAutoSellSession()
+
+    if totalPrice > 0 and settings and settings.showSummary then
+        local summary = string.format("|cff69b86f[TwichUI]|r Sold %d junk %s for %s.", soldCount,
+            soldCount == 1 and "slot" or "slots", FormatMoney(totalPrice))
+        if truncated then
+            summary = summary .. " Safe mode capped this visit at 12 slots."
         end
+        DEFAULT_CHAT_FRAME:AddMessage(summary)
     end
-    return false
+end
+
+function GT:ProcessAutoSellQueue()
+    if not IsMerchantVisible() then
+        self:AbortAutoSellSession()
+        return
+    end
+
+    if not self.autoSellQueue or #self.autoSellQueue == 0 then
+        self:FinishAutoSellSession()
+        return
+    end
+
+    local item = table.remove(self.autoSellQueue, 1)
+    if not item then
+        self:FinishAutoSellSession()
+        return
+    end
+
+    local containerInfo = C_Container.GetContainerItemInfo(item.bagID, item.slotID)
+    if type(containerInfo) ~= "table" or containerInfo.itemID ~= item.itemID then
+        if not self.autoSellQueue or #self.autoSellQueue == 0 then
+            self:FinishAutoSellSession()
+        end
+        return
+    end
+
+    if containerInfo.isLocked then
+        item.retryCount = (item.retryCount or 0) + 1
+        if item.retryCount < 3 then
+            self.autoSellQueue[#self.autoSellQueue + 1] = item
+        end
+
+        if #self.autoSellQueue == 0 then
+            self:FinishAutoSellSession()
+        end
+        return
+    end
+
+    self.autoSellTotalPrice = (self.autoSellTotalPrice or 0) + item.totalPrice
+    self.autoSellSoldCount = (self.autoSellSoldCount or 0) + 1
+    C_Container.UseContainerItem(item.bagID, item.slotID)
+
+    if #self.autoSellQueue == 0 then
+        self:FinishAutoSellSession()
+    end
+end
+
+function GT:StartAutoSellSession()
+    if not IsMerchantVisible() then
+        return
+    end
+
+    local queue, settings, truncated = BuildAutoSellQueue()
+    if #queue == 0 then
+        self:AbortAutoSellSession()
+        return
+    end
+
+    self.autoSellQueue = queue
+    self.autoSellTotalPrice = 0
+    self.autoSellSoldCount = 0
+    self.autoSellSafeModeTruncated = truncated
+    self.autoSellSettings = settings
+
+    self:ProcessAutoSellQueue()
+    if self.autoSellQueue and #self.autoSellQueue > 0 then
+        self.autoSellTicker = C_Timer.NewTicker(GetAutoSellIntervalSeconds(), function()
+            self:ProcessAutoSellQueue()
+        end)
+    end
+end
+
+function GT:ScheduleAutoSellSession()
+    self:AbortAutoSellSession()
+
+    local token = self.autoSellToken
+    C_Timer.After(AUTOSELL_START_DELAY_SECONDS, function()
+        if self.autoSellToken ~= token or not self:IsEnabled() then
+            return
+        end
+
+        self:StartAutoSellSession()
+    end)
 end
 
 function GT:MERCHANT_SHOW()
@@ -1218,26 +1827,9 @@ function GT:MERCHANT_SHOW()
     end
 
     if Feature({ "automation", "autoSellJunk" }) then
-        local totalPrice = 0
-        for bagID = 0, 5 do
-            for slotID = 1, C_Container.GetContainerNumSlots(bagID) do
-                local link = C_Container.GetContainerItemLink(bagID, slotID)
-                if link then
-                    local itemName, _, quality, _, _, _, _, _, _, _, vendorPrice, classID = _G.C_Item.GetItemInfo(link)
-                    local itemInfo = C_Container.GetContainerItemInfo(bagID, slotID)
-                    local itemID = _G.GetItemInfoFromHyperlink and _G.GetItemInfoFromHyperlink(link)
-                    if itemID and quality == 0 and vendorPrice and vendorPrice > 0 and not ShouldKeepItem(itemID, quality, classID, bagID, slotID) then
-                        totalPrice = totalPrice + (vendorPrice * ((itemInfo and itemInfo.stackCount) or 1))
-                        C_Container.UseContainerItem(bagID, slotID)
-                    end
-                end
-            end
-        end
-        if totalPrice > 0 and Value({ "automation", "autoSellShowSummary" }, true) then
-            local moneyStr = T.Tools and T.Tools.Text and T.Tools.Text.FormatCopper(totalPrice)
-                or C_CurrencyInfo.GetCoinText(totalPrice)
-            DEFAULT_CHAT_FRAME:AddMessage("|cff69b86f[TwichUI]|r Sold junk for " .. moneyStr .. ".")
-        end
+        self:ScheduleAutoSellSession()
+    else
+        self:AbortAutoSellSession()
     end
 
     if Feature({ "automation", "autoRepairGear" }) and _G.CanMerchantRepair and _G.CanMerchantRepair() then
@@ -1249,15 +1841,20 @@ function GT:MERCHANT_SHOW()
                 _G.RepairAllItems()
             end
             if repairCost and repairCost > 0 and Value({ "automation", "autoRepairShowSummary" }, true) then
-                local moneyStr = T.Tools and T.Tools.Text and T.Tools.Text.FormatCopper(repairCost)
-                    or C_CurrencyInfo.GetCoinText(repairCost)
-                DEFAULT_CHAT_FRAME:AddMessage("|cff69b86f[TwichUI]|r Repaired for " .. moneyStr .. ".")
+                DEFAULT_CHAT_FRAME:AddMessage("|cff69b86f[TwichUI]|r Repaired for " .. FormatMoney(repairCost) .. ".")
             end
         end
     end
 end
 
 function GT:MERCHANT_CLOSED()
+    self:AbortAutoSellSession()
+end
+
+function GT:UI_ERROR_MESSAGE(_, _, message)
+    if message == ERR_VENDOR_DOESNT_BUY or message == ERR_TOO_MUCH_GOLD then
+        self:AbortAutoSellSession()
+    end
 end
 
 function GT:OnEnable()
@@ -1282,6 +1879,7 @@ end
 
 function GT:OnDisable()
     self:UnregisterAllEvents()
+    self:AbortAutoSellSession()
     RemoveErrorFilter()
 
     if originalState.ffxGlow ~= nil then _G.SetCVar("ffxGlow", tostring(originalState.ffxGlow)) end

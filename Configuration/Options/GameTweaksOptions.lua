@@ -27,8 +27,56 @@ local DEFAULT_DB = {
         excludeAshran = false,
         autoSellJunk = false,
         autoSellShowSummary = true,
+        autoSellSafeMode = false,
+        autoSellThrottleMs = 150,
+        autoSellIncludeList = "",
         autoSellExcludeGreyGear = false,
         autoSellExcludeList = "",
+        autoSellLegacyMigrated = false,
+        autoSellExcludeEquipmentSets = true,
+        autoSellExcludeUnboundEquipment = false,
+        autoSellExcludeUnboundEquipmentQualities = {
+            poor = true,
+            common = true,
+            uncommon = true,
+            rare = true,
+            epic = true,
+        },
+        autoSellExcludeWarbandEquipment = false,
+        autoSellExcludeWarbandEquipmentQualities = {
+            poor = true,
+            common = true,
+            uncommon = true,
+            rare = true,
+            epic = true,
+        },
+        autoSellIncludeByQuality = {
+            poor = true,
+            common = false,
+            uncommon = false,
+            rare = false,
+            epic = false,
+        },
+        autoSellIncludeBelowItemLevel = {
+            enabled = false,
+            value = 0,
+            qualities = {
+                poor = true,
+                common = true,
+                uncommon = true,
+                rare = true,
+                epic = true,
+            },
+        },
+        autoSellIncludeUnsuitableEquipment = false,
+        autoSellIncludeUnsuitableEquipmentQualities = {
+            poor = true,
+            common = true,
+            uncommon = true,
+            rare = true,
+            epic = true,
+        },
+        autoSellIncludeArtifactRelics = false,
         autoRepairGear = false,
         autoRepairGuildFunds = true,
         autoRepairShowSummary = true,
@@ -150,6 +198,21 @@ local function GetDB()
     local profile = ConfigurationModule:GetProfileDB()
     profile.gameTweaks = profile.gameTweaks or {}
     MergeDefaults(profile.gameTweaks, DEFAULT_DB)
+
+    local automation = profile.gameTweaks.automation
+    if automation.autoSellLegacyMigrated ~= true then
+        if automation.autoSellExcludeGreyGear == true and automation.autoSellExcludeUnboundEquipment ~= true then
+            automation.autoSellExcludeUnboundEquipment = true
+            automation.autoSellExcludeUnboundEquipmentQualities.poor = true
+            automation.autoSellExcludeUnboundEquipmentQualities.common = false
+            automation.autoSellExcludeUnboundEquipmentQualities.uncommon = false
+            automation.autoSellExcludeUnboundEquipmentQualities.rare = false
+            automation.autoSellExcludeUnboundEquipmentQualities.epic = false
+        end
+
+        automation.autoSellLegacyMigrated = true
+    end
+
     return profile.gameTweaks
 end
 
