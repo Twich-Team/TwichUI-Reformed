@@ -33,6 +33,7 @@ local C_TaskQuest = _G.C_TaskQuest
 local C_CampaignInfo = _G.C_CampaignInfo
 local C_QuestInfoSystem = _G.C_QuestInfoSystem
 local C_QuestLine = _G.C_QuestLine
+local C_UIWidgetManager = _G.C_UIWidgetManager
 local Enum = _G.Enum
 local StaticPopupDialogs = _G.StaticPopupDialogs
 local StaticPopup_Show = _G.StaticPopup_Show
@@ -65,11 +66,16 @@ local PANEL_PADDING = 12
 local SECTION_GAP = 8
 local ENTRY_GAP = 6
 local OBJECTIVE_GAP = 2
+local OBJECTIVE_PROGRESS_GAP = 3
 local ROW_PADDING = 8
 local MAX_SCENARIO_CRITERIA = 10
 local ALPHA_LERP_SPEED = 12
 local DEBUG_SOURCE_KEY = "objectivetracker"
 local WORLD_QUEST_OBJECTIVE_RADIUS = 0.08
+local STATUSBAR_TEXTURE_FALLBACK = "Interface\\TargetingFrame\\UI-StatusBar"
+local WIDGET_TYPE_STATUSBAR = (Enum and Enum.UIWidgetVisualizationType and Enum.UIWidgetVisualizationType.StatusBar) or 2
+local WIDGET_TYPE_ICONANDTEXT = (Enum and Enum.UIWidgetVisualizationType and Enum.UIWidgetVisualizationType.IconAndText) or
+0
 
 local SECTION_ORDER = {
     "instance",
@@ -114,6 +120,8 @@ local EVENT_REFRESHES = {
     "QUEST_COMPLETE",
     "QUEST_AUTOCOMPLETE",
     "QUEST_TURNED_IN",
+    "UPDATE_UI_WIDGET",
+    "UPDATE_ALL_UI_WIDGETS",
     "SUPER_TRACKING_CHANGED",
     "UPDATE_INSTANCE_INFO",
     "ENCOUNTER_END",
@@ -255,6 +263,18 @@ local function ResolveFontPath(fontKey)
     return STANDARD_TEXT_FONT
 end
 
+local function ResolveStatusBarTexturePath()
+    local LSM = T.Libs and T.Libs.LSM
+    if LSM and type(LSM.Fetch) == "function" then
+        local path = SafeCall(LSM.Fetch, LSM, "statusbar", "Blizzard", true)
+        if type(path) == "string" and path ~= "" then
+            return path
+        end
+    end
+
+    return STATUSBAR_TEXTURE_FALLBACK
+end
+
 local function GetQuestInfoByID(questID)
     if type(questID) ~= "number" or type(C_QuestLog) ~= "table" then
         if type(C_TaskQuest) == "table" and type(C_TaskQuest.GetQuestInfoByQuestID) == "function" then
@@ -275,7 +295,7 @@ local function GetQuestInfoByID(questID)
     if not logIndex or logIndex <= 0 then
         local isAccepted = type(C_QuestLog.IsOnQuest) == "function" and SafeCall(C_QuestLog.IsOnQuest, questID) == true
         local isWorld = type(C_QuestLog.IsWorldQuest) == "function" and
-        SafeCall(C_QuestLog.IsWorldQuest, questID) == true
+            SafeCall(C_QuestLog.IsWorldQuest, questID) == true
         local isTaskActive = type(C_TaskQuest) == "table"
             and type(C_TaskQuest.IsActive) == "function"
             and SafeCall(C_TaskQuest.IsActive, questID) == true
@@ -306,6 +326,180 @@ local function GetQuestObjectives(questID)
     end
 
     return SafeCall(C_QuestLog.GetQuestObjectives, questID)
+end
+
+local function StripColorCodes(text)
+    if type(text) ~= "string" then
+        return nil
+    end
+
+    local cleanText = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    cleanText = cleanText:gsub("^%s+", ""):gsub("%s+$", "")
+    if cleanText == "" then
+        return nil
+    end
+
+    return cleanText
+end
+
+local function NormalizeObjectiveSignature(text, value, maxValue, percent)
+    local cleanText = StripColorCodes(text) or ""
+    cleanText = cleanText:lower():gsub("%s+", " ")
+    return string_format("%s:%s:%s:%s", cleanText, tostring(value), tostring(maxValue), tostring(percent))
+end
+
+local function BuildProgressBarLabel(progress)
+    if type(progress) ~= "table" then
+        return nil
+    end
+
+    if type(progress.value) == "number" and type(progress.maxValue) == "number" and progress.maxValue > 0 then
+        return string_format("%d/%d (%d%%)", progress.value, progress.maxValue, progress.percent or 0)
+    end
+
+    if type(progress.percent) == "number" then
+        return string_format("%d%%", progress.percent)
+    end
+
+    return nil
+end
+
+local function BuildObjectiveProgress(objective, displayText)
+    if type(objective) ~= "table" then
+        return nil
+    end
+
+    local value = tonumber(objective.numFulfilled or objective.quantity or objective.barValue or objective.curValue)
+    local maxValue = tonumber(objective.numRequired or objective.totalQuantity or objective.barMax or objective.maxValue)
+    if type(maxValue) == "number" and maxValue > 0 and type(value) == "number" then
+        local clampedValue = Clamp(value, 0, maxValue)
+        local percent = math_floor(((clampedValue / maxValue) * 100) + 0.5)
+        if maxValue > 1 then
+            local progress = {
+                value = clampedValue,
+                maxValue = maxValue,
+                percent = Clamp(percent, 0, 100),
+            }
+            progress.label = BuildProgressBarLabel(progress)
+            return progress
+        end
+    end
+
+    local percentText = type(displayText) == "string" and tonumber(displayText:match("(%d+)%%")) or nil
+    local percent = tonumber(objective.percent or objective.fulfilledPercent or objective.progress or percentText)
+    if type(percent) == "number" then
+        local progress = {
+            percent = Clamp(percent, 0, 100),
+            isPercentOnly = true,
+        }
+        progress.label = BuildProgressBarLabel(progress)
+        return progress
+    end
+
+    return nil
+end
+
+local function GetScenarioWidgetSetID()
+    if type(C_Scenario) == "table" and type(C_Scenario.GetStepInfo) == "function" then
+        local stepInfo = { SafeCall(C_Scenario.GetStepInfo) }
+        local widgetSetID = stepInfo[12]
+        if type(widgetSetID) == "number" and widgetSetID > 0 then
+            return widgetSetID
+        end
+    end
+
+    if type(C_UIWidgetManager) == "table" and type(C_UIWidgetManager.GetObjectiveTrackerWidgetSetID) == "function" then
+        local widgetSetID = SafeCall(C_UIWidgetManager.GetObjectiveTrackerWidgetSetID)
+        if type(widgetSetID) == "number" and widgetSetID > 0 then
+            return widgetSetID
+        end
+    end
+
+    return nil
+end
+
+local function GetScenarioWidgetObjectives(widgetSetID)
+    if type(widgetSetID) ~= "number"
+        or widgetSetID <= 0
+        or type(C_UIWidgetManager) ~= "table"
+        or type(C_UIWidgetManager.GetAllWidgetsBySetID) ~= "function"
+    then
+        return nil
+    end
+
+    local widgets = SafeCall(C_UIWidgetManager.GetAllWidgetsBySetID, widgetSetID)
+    if type(widgets) ~= "table" then
+        return nil
+    end
+
+    local objectives = {}
+    local seen = {}
+    for _, widgetInfo in pairs(widgets) do
+        local widgetID = type(widgetInfo) == "table" and widgetInfo.widgetID or widgetInfo
+        local widgetType = type(widgetInfo) == "table" and widgetInfo.widgetType or nil
+
+        if type(widgetID) == "number" then
+            if (widgetType == nil or widgetType == WIDGET_TYPE_STATUSBAR)
+                and type(C_UIWidgetManager.GetStatusBarWidgetVisualizationInfo) == "function"
+            then
+                local barInfo = SafeCall(C_UIWidgetManager.GetStatusBarWidgetVisualizationInfo, widgetID)
+                local maxValue = nil
+                if type(barInfo) == "table" then
+                    maxValue = tonumber(barInfo.barMax)
+                end
+                if type(maxValue) == "number" and maxValue > 0 then
+                    local value = 0
+                    local text = nil
+                    if type(barInfo) == "table" then
+                        value = Clamp(tonumber(barInfo.barValue) or 0, 0, maxValue)
+                        text = StripColorCodes(barInfo.overrideBarText or barInfo.text)
+                    end
+                    text = text or string_format("%d/%d", value, maxValue)
+                    local signature = NormalizeObjectiveSignature(text, value, maxValue, nil)
+                    if not seen[signature] then
+                        seen[signature] = true
+                        objectives[#objectives + 1] = {
+                            description = text,
+                            completed = value >= maxValue,
+                            numFulfilled = value,
+                            numRequired = maxValue,
+                            percent = math_floor(((value / maxValue) * 100) + 0.5),
+                            isWeighted = true,
+                        }
+                    end
+                end
+            end
+
+            if (widgetType == nil or widgetType == WIDGET_TYPE_ICONANDTEXT)
+                and type(C_UIWidgetManager.GetIconAndTextWidgetVisualizationInfo) == "function"
+            then
+                local iconTextInfo = SafeCall(C_UIWidgetManager.GetIconAndTextWidgetVisualizationInfo, widgetID)
+                local text = type(iconTextInfo) == "table" and StripColorCodes(iconTextInfo.text) or nil
+                if type(text) == "string" then
+                    local currentText, maxText = text:match("(%d[%d,]*)%s*/%s*(%d[%d,]*)")
+                    if currentText and maxText then
+                        local currentValue = tonumber((currentText:gsub(",", "")))
+                        local maxValue = tonumber((maxText:gsub(",", "")))
+                        if type(currentValue) == "number" and type(maxValue) == "number" and maxValue > 0 then
+                            local signature = NormalizeObjectiveSignature(text, currentValue, maxValue, nil)
+                            if not seen[signature] then
+                                seen[signature] = true
+                                objectives[#objectives + 1] = {
+                                    description = text,
+                                    completed = currentValue >= maxValue,
+                                    numFulfilled = currentValue,
+                                    numRequired = maxValue,
+                                    percent = math_floor(((currentValue / maxValue) * 100) + 0.5),
+                                }
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return #objectives > 0 and objectives or nil
 end
 
 local function GetCurrentMapID()
@@ -1296,6 +1490,7 @@ function ObjectiveTracker:CreateEntryFrame(parent, index)
     frame.Meta:SetWordWrap(true)
 
     frame.Objectives = {}
+    frame.ProgressBars = {}
     frame.index = index
     frame:SetScript("OnEnter", function(self)
         ObjectiveTracker.frameHovered = true
@@ -1332,6 +1527,38 @@ function ObjectiveTracker:GetObjectiveFontString(entryFrame, index)
     text:SetWordWrap(true)
     entryFrame.Objectives[index] = text
     return text
+end
+
+function ObjectiveTracker:GetObjectiveProgressBar(entryFrame, index)
+    entryFrame.ProgressBars = entryFrame.ProgressBars or {}
+    if entryFrame.ProgressBars[index] then
+        return entryFrame.ProgressBars[index]
+    end
+
+    local bar = CreateFrame("StatusBar", nil, entryFrame)
+    bar:SetMinMaxValues(0, 100)
+    bar:SetValue(0)
+    bar:SetStatusBarTexture(ResolveStatusBarTexturePath())
+
+    bar.Background = bar:CreateTexture(nil, "BACKGROUND")
+    bar.Background:SetAllPoints()
+    bar.Background:SetColorTexture(0.10, 0.12, 0.15, 0.85)
+
+    bar.Border = CreateFrame("Frame", nil, bar, "BackdropTemplate")
+    bar.Border:SetAllPoints()
+    bar.Border:SetBackdrop({
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    bar.Border:SetBackdropBorderColor(0, 0, 0, 0.35)
+
+    bar.Label = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    bar.Label:SetPoint("CENTER", bar, "CENTER", 0, 0)
+    bar.Label:SetJustifyH("CENTER")
+    bar.Label:SetJustifyV("MIDDLE")
+
+    entryFrame.ProgressBars[index] = bar
+    return bar
 end
 
 local function BuildInstanceDebugSnapshotData()
@@ -1708,15 +1935,22 @@ end
 
 function ObjectiveTracker:BuildQuestObjectiveText(objective)
     if type(objective) ~= "table" then
-        return nil, false
+        return nil
     end
 
-    local text = objective.text or objective.description
-    if type(text) ~= "string" or text == "" then
-        return nil, false
+    local rawText = StripColorCodes(objective.text or objective.description)
+    if type(rawText) ~= "string" or rawText == "" then
+        return nil
     end
 
-    return "• " .. text, self:IsQuestObjectiveComplete(objective)
+    local objectiveEntry = {
+        text = "• " .. rawText,
+        rawText = rawText,
+        isComplete = self:IsQuestObjectiveComplete(objective),
+    }
+
+    objectiveEntry.progress = BuildObjectiveProgress(objective, rawText)
+    return objectiveEntry
 end
 
 function ObjectiveTracker:BuildQuestEntry(questID, currentMapID)
@@ -1790,12 +2024,9 @@ function ObjectiveTracker:BuildQuestEntry(questID, currentMapID)
         local objectives = GetQuestObjectives(questID)
         if type(objectives) == "table" then
             for _, objective in ipairs(objectives) do
-                local objectiveText, objectiveComplete = self:BuildQuestObjectiveText(objective)
-                if objectiveText then
-                    table_insert(entry.objectives, {
-                        text = objectiveText,
-                        isComplete = objectiveComplete,
-                    })
+                local objectiveEntry = self:BuildQuestObjectiveText(objective)
+                if objectiveEntry then
+                    table_insert(entry.objectives, objectiveEntry)
                 end
             end
         end
@@ -1915,14 +2146,48 @@ function ObjectiveTracker:BuildScenarioEntry()
         metaText = scenarioName,
     }
 
+    local objectiveSignatures = {}
+
     if type(C_ScenarioInfo) == "table" and type(C_ScenarioInfo.GetCriteriaInfo) == "function" then
         for index = 1, math_max(numCriteria, MAX_SCENARIO_CRITERIA) do
             local info = SafeCall(C_ScenarioInfo.GetCriteriaInfo, index)
             if type(info) == "table" and type(info.description) == "string" and info.description ~= "" then
-                table_insert(entry.objectives, {
-                    text = "• " .. info.description,
+                local cleanText = StripColorCodes(info.description)
+                local objectiveEntry = {
+                    text = "• " .. cleanText,
+                    rawText = cleanText,
                     isComplete = info.completed == true,
-                })
+                    progress = BuildObjectiveProgress(info, cleanText),
+                }
+                local signature = NormalizeObjectiveSignature(cleanText,
+                    objectiveEntry.progress and objectiveEntry.progress.value or nil,
+                    objectiveEntry.progress and objectiveEntry.progress.maxValue or nil,
+                    objectiveEntry.progress and objectiveEntry.progress.percent or nil)
+                objectiveSignatures[signature] = true
+                table_insert(entry.objectives, objectiveEntry)
+            end
+        end
+    end
+
+    local widgetObjectives = GetScenarioWidgetObjectives(GetScenarioWidgetSetID())
+    if type(widgetObjectives) == "table" then
+        for _, widgetObjective in ipairs(widgetObjectives) do
+            local cleanText = StripColorCodes(widgetObjective.description or widgetObjective.text)
+            if cleanText then
+                local progress = BuildObjectiveProgress(widgetObjective, cleanText)
+                local signature = NormalizeObjectiveSignature(cleanText,
+                    progress and progress.value or nil,
+                    progress and progress.maxValue or nil,
+                    progress and progress.percent or nil)
+                if objectiveSignatures[signature] ~= true then
+                    objectiveSignatures[signature] = true
+                    table_insert(entry.objectives, {
+                        text = "• " .. cleanText,
+                        rawText = cleanText,
+                        isComplete = widgetObjective.completed == true,
+                        progress = progress,
+                    })
+                end
             end
         end
     end
@@ -2666,6 +2931,9 @@ function ObjectiveTracker:LayoutEntry(sectionFrame, entryFrame, entry, yOffset)
     local completeR, completeG, completeB = ResolveColor(options, "completeColor", { 0.42, 0.88, 0.64 }, nil)
     local objectiveR, objectiveG, objectiveB = ResolveColor(options, "objectiveColor", { 0.74, 0.77, 0.84 }, nil)
     local accentR, accentG, accentB = self:GetSectionColor(sectionFrame.sectionKey)
+    local progressBarTexture = ResolveStatusBarTexturePath()
+    local progressTextSize = math_max(8, options:GetMetaFontSize() - 1)
+    local progressBarHeight = math_max(10, progressTextSize + 5)
 
     entryFrame.entry = entry
     entryFrame.sectionKey = sectionFrame.sectionKey
@@ -2709,6 +2977,9 @@ function ObjectiveTracker:LayoutEntry(sectionFrame, entryFrame, entry, yOffset)
     for objectiveIndex, objectiveLine in ipairs(entryFrame.Objectives or {}) do
         objectiveLine:Hide()
     end
+    for progressIndex, progressBar in ipairs(entryFrame.ProgressBars or {}) do
+        progressBar:Hide()
+    end
 
     if options:GetShowQuestObjectives() and type(entry.objectives) == "table" then
         for objectiveIndex, objective in ipairs(entry.objectives) do
@@ -2727,6 +2998,32 @@ function ObjectiveTracker:LayoutEntry(sectionFrame, entryFrame, entry, yOffset)
             local lineHeight = math_max(options:GetMetaFontSize(), textLine:GetStringHeight())
             contentOffset = contentOffset + lineHeight + OBJECTIVE_GAP
             height = math_max(height, contentOffset)
+
+            if type(objective.progress) == "table" then
+                local progressBar = self:GetObjectiveProgressBar(entryFrame, objectiveIndex)
+                progressBar:ClearAllPoints()
+                progressBar:SetPoint("TOPLEFT", textLine, "BOTTOMLEFT", 0, -OBJECTIVE_PROGRESS_GAP)
+                progressBar:SetPoint("TOPRIGHT", textLine, "BOTTOMRIGHT", 0, -OBJECTIVE_PROGRESS_GAP)
+                progressBar:SetHeight(progressBarHeight)
+                progressBar:SetStatusBarTexture(progressBarTexture)
+                progressBar.Background:SetColorTexture(0.10, 0.12, 0.15, 0.85)
+
+                local fillR, fillG, fillB = accentR, accentG, accentB
+                if objective.isComplete then
+                    fillR, fillG, fillB = completeR, completeG, completeB
+                end
+
+                progressBar:SetMinMaxValues(0, objective.progress.maxValue or 100)
+                progressBar:SetValue(objective.progress.value or objective.progress.percent or 0)
+                progressBar:SetStatusBarColor(fillR, fillG, fillB, objective.isComplete and 0.95 or 0.85)
+                progressBar.Label:SetFont(bodyFontPath, progressTextSize, "")
+                progressBar.Label:SetTextColor(metaR, metaG, metaB)
+                progressBar.Label:SetText(objective.progress.label or "")
+                progressBar:Show()
+
+                contentOffset = contentOffset + progressBarHeight + OBJECTIVE_PROGRESS_GAP
+                height = math_max(height, contentOffset)
+            end
         end
     end
 
@@ -2743,6 +3040,9 @@ function ObjectiveTracker:HideUnusedSections()
                 entryFrame:Hide()
                 for _, objectiveLine in ipairs(entryFrame.Objectives or {}) do
                     objectiveLine:Hide()
+                end
+                for _, progressBar in ipairs(entryFrame.ProgressBars or {}) do
+                    progressBar:Hide()
                 end
             end
         end
@@ -2787,6 +3087,9 @@ function ObjectiveTracker:LayoutSection(sectionFrame, section, yOffset)
         entryFrame:Hide()
         for _, objectiveLine in ipairs(entryFrame.Objectives or {}) do
             objectiveLine:Hide()
+        end
+        for _, progressBar in ipairs(entryFrame.ProgressBars or {}) do
+            progressBar:Hide()
         end
     end
 
