@@ -3459,6 +3459,47 @@ function ActionBars:OnBindModeCombatLockdown()
     self:DeactivateBindMode(false)
 end
 
+function ActionBars:GetButtonActionSlots(button)
+    if not button then
+        return {}
+    end
+
+    local candidates = {}
+    local seen = {}
+
+    local function AddCandidate(value)
+        local slot = tonumber(value) or nil
+        if not slot or slot < 1 or seen[slot] == true then
+            return
+        end
+
+        seen[slot] = true
+        candidates[#candidates + 1] = slot
+    end
+
+    AddCandidate(button.action)
+    AddCandidate(button.GetAttribute and button:GetAttribute("action") or nil)
+
+    local holder = button.GetParent and button:GetParent() or nil
+    if holder and holder.GetAttribute then
+        local statePage = tonumber(holder:GetAttribute("state") or holder:GetAttribute("state-page") or nil) or nil
+        local buttonIndex = tonumber(button.parentBarIndex or (button.GetID and button:GetID()) or nil) or nil
+        if statePage and buttonIndex then
+            AddCandidate(((statePage - 1) * 12) + buttonIndex)
+        end
+    end
+
+    local definition = self:GetBarDefinition(button.parentBarKey)
+    if definition and definition.basePage then
+        local buttonIndex = tonumber(button.parentBarIndex or (button.GetID and button:GetID()) or nil) or nil
+        if buttonIndex then
+            AddCandidate(((definition.basePage - 1) * 12) + buttonIndex)
+        end
+    end
+
+    return candidates
+end
+
 function ActionBars:GetButtonSpellID(button)
     if not button then
         return nil
@@ -3470,23 +3511,31 @@ function ActionBars:GetButtonSpellID(button)
         return directSpellID
     end
 
-    local action = tonumber(button.action or (button.GetAttribute and button:GetAttribute("action")) or nil)
-    if not action or not GetActionInfo then
+    if not GetActionInfo then
         return nil
     end
 
-    if button.__twichuiABSpellIDAction == action and button.__twichuiABSpellIDResolved == true then
+    local actionSlots = self:GetButtonActionSlots(button)
+    if #actionSlots == 0 then
+        return nil
+    end
+
+    local actionSignature = table.concat(actionSlots, ":")
+    if button.__twichuiABSpellIDAction == actionSignature and button.__twichuiABSpellIDResolved == true then
         return button.__twichuiABSpellID
     end
 
-    local actionType, actionID = GetActionInfo(action)
     local resolvedSpellID = nil
-    if actionType == "spell" then
-        resolvedSpellID = actionID
+    for _, actionSlot in ipairs(actionSlots) do
+        local actionType, actionID = GetActionInfo(actionSlot)
+        if actionType == "spell" and actionID then
+            resolvedSpellID = actionID
+            break
+        end
     end
 
     button.__twichuiABSpellID = resolvedSpellID
-    button.__twichuiABSpellIDAction = action
+    button.__twichuiABSpellIDAction = actionSignature
     button.__twichuiABSpellIDResolved = true
 
     return resolvedSpellID
@@ -3630,6 +3679,9 @@ end
 
 function ActionBars:IsButtonAssistedGlowActive(button)
     local spellID = button and ((button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID) or nil
+    if not spellID and button and button.__twichuiABSpellIDResolved ~= true then
+        spellID = self:GetButtonSpellID(button)
+    end
     if spellID and spellID == self.currentAssistedSpellID and self:IsAssistedRotationSpell(spellID) then
         return true
     end
@@ -3640,8 +3692,7 @@ function ActionBars:IsButtonAssistedGlowActive(button)
     end
 
     if LAB and type(LAB.activeAssist) == "table" then
-        local assistedSpellID = button and (button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID or
-            nil
+        local assistedSpellID = spellID or nil
         if assistedSpellID and LAB.activeAssist[assistedSpellID] == true then
             return true
         end
@@ -4339,6 +4390,17 @@ function ActionBars:TintOverlayGlow(button, red, green, blue)
     button.__twichuiABOverlayTintB = blue
 end
 
+function ActionBars:IsOverlayGlowShown(button)
+    local buttonName = button and button.GetName and button:GetName() or nil
+    local overlay = button and (button.__LBGoverlay or button.overlay or button.SpellActivationAlert or nil) or nil
+
+    if not overlay and buttonName then
+        overlay = _G[buttonName .. "SpellActivationAlert"] or nil
+    end
+
+    return overlay and overlay.IsShown and overlay:IsShown() or false
+end
+
 function ActionBars:ShowActionButtonGlow(button)
     if not button then
         return
@@ -4353,6 +4415,8 @@ function ActionBars:ShowActionButtonGlow(button)
 
     if ActionButton_ShowOverlayGlow then
         pcall(ActionButton_ShowOverlayGlow, button)
+        local red, green, blue = self:GetGlowColor(button)
+        self:TintOverlayGlow(button, red, green, blue)
     end
 end
 
@@ -4436,10 +4500,14 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
             end
         elseif desiredStyle == "button" then
             local red, green, blue = self:GetGlowColor(button)
-            if button.__twichuiABOverlayTintR ~= red or button.__twichuiABOverlayTintG ~= green or
+            if self:IsOverlayGlowShown(button) ~= true then
+                self:ShowActionButtonGlow(button)
+            elseif button.__twichuiABOverlayTintR ~= red or button.__twichuiABOverlayTintG ~= green or
                 button.__twichuiABOverlayTintB ~= blue then
                 self:TintOverlayGlow(button, red, green, blue)
             end
+        elseif desiredStyle == "blizzard" and self:IsOverlayGlowShown(button) ~= true and ActionButton_ShowOverlayGlow then
+            pcall(ActionButton_ShowOverlayGlow, button)
         end
         return
     end
@@ -4584,7 +4652,7 @@ function ActionBars:CaptureFrameState(frame)
         shown = frame.IsShown and frame:IsShown() or true,
         ignoreInLayout = not isProtectedBarFrame and frame.ignoreInLayout or nil,
         managedPosition = (not isProtectedBarFrame and managedFramePositions and frameName and managedFramePositions[frameName]) or
-        nil,
+            nil,
     }
 end
 
@@ -4669,8 +4737,10 @@ function ActionBars:RestoreOriginalLayout()
     for frame, state in pairs(self.originalFrames) do
         if frame and state then
             if not state.isProtectedBarFrame and state.parent then frame:SetParent(state.parent) end
-            if not state.isProtectedBarFrame and frame.ignoreInLayout ~= nil then frame.ignoreInLayout = state
-                .ignoreInLayout end
+            if not state.isProtectedBarFrame and frame.ignoreInLayout ~= nil then
+                frame.ignoreInLayout = state
+                    .ignoreInLayout
+            end
             if not state.isProtectedBarFrame and _G.UIPARENT_MANAGED_FRAME_POSITIONS and state.name then
                 _G.UIPARENT_MANAGED_FRAME_POSITIONS[state.name] = state.managedPosition
             end
@@ -4866,7 +4936,7 @@ function ActionBars:ApplyPaging(holder, definition, barSettings, buttons)
         end
     end
 
-    holder:SetAttribute("state-page", basePage)
+    holder:SetAttribute("state", basePage)
     local ok = pcall(RegisterStateDriver, holder, "page", driver)
     if not ok then
         pcall(RegisterStateDriver, holder, "page", tostring(basePage))
