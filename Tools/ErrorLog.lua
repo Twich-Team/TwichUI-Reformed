@@ -7,35 +7,36 @@
 
     Install is deferred until after the DB is available (called from Core.lua).
 ]]
-local TwichRx                = _G.TwichRx
+local TwichRx                 = _G.TwichRx
 ---@type TwichUI
-local T                      = unpack(TwichRx)
+local T                       = unpack(TwichRx)
 
 ---@type Tools
-local Tools                  = T.Tools
+local Tools                   = T.Tools
 
-local CreateFrame            = _G.CreateFrame
-local date                   = _G.date
-local debugstack             = _G.debugstack
-local EventRegistry          = _G.EventRegistry
-local geterrorhandler        = _G.geterrorhandler
-local LibStub                = _G.LibStub
-local math                   = math
-local pcall                  = pcall
-local PlaySoundFile          = _G.PlaySoundFile
-local seterrorhandler        = _G.seterrorhandler
-local table                  = table
-local time                   = _G.time
-local GetTime                = _G.GetTime or _G.GetTimePreciseSec or _G.time
-local tostring               = tostring
-local type                   = type
-local ipairs                 = ipairs
+local CreateFrame             = _G.CreateFrame
+local date                    = _G.date
+local debugstack              = _G.debugstack
+local EventRegistry           = _G.EventRegistry
+local geterrorhandler         = _G.geterrorhandler
+local LibStub                 = _G.LibStub
+local math                    = math
+local pcall                   = pcall
+local PlaySoundFile           = _G.PlaySoundFile
+local seterrorhandler         = _G.seterrorhandler
+local table                   = table
+local time                    = _G.time
+local GetTime                 = _G.GetTime or _G.GetTimePreciseSec or _G.time
+local tostring                = tostring
+local type                    = type
+local ipairs                  = ipairs
 
-local ADDON_NAME             = "TwichUI_Reformed"
-local DEFAULT_MAX            = 100
-local DEFAULT_SOUND          = "TwichUI Alert 1"
-local DEFAULT_SOUND_THROTTLE = 5
-local SHORT_MAX_LEN          = 220
+local ADDON_NAME              = "TwichUI_Reformed"
+local ERROR_LOG_UPDATED_EVENT = "TwichUI.ErrorLogUpdated"
+local DEFAULT_MAX             = 100
+local DEFAULT_SOUND           = "TwichUI Alert 1"
+local DEFAULT_SOUND_THROTTLE  = 5
+local SHORT_MAX_LEN           = 220
 
 ---@class TwichUIErrorLog
 ---@field installed boolean
@@ -44,9 +45,9 @@ local SHORT_MAX_LEN          = 220
 ---@field Capture fun(self:TwichUIErrorLog, detail:any, context:string|nil, stack:string|nil)
 ---@field CaptureFailure fun(self:TwichUIErrorLog, context:string|nil, detail:any, stackLevel:number|nil)
 ---@field _InjectTestError fun(self:TwichUIErrorLog, msg:string)
-local ErrorLog               = (Tools.ErrorLog or {}) --[[@as TwichUIErrorLog]]
-Tools.ErrorLog               = ErrorLog
-ErrorLog.installed           = ErrorLog.installed or false
+local ErrorLog                = (Tools.ErrorLog or {}) --[[@as TwichUIErrorLog]]
+Tools.ErrorLog                = ErrorLog
+ErrorLog.installed            = ErrorLog.installed or false
 
 -- ---------------------------------------------------------------------------
 -- Private helpers
@@ -112,6 +113,12 @@ local function PlayAlertSound()
     if soundPath and type(PlaySoundFile) == "function" then
         PlaySoundFile(soundPath, "Master")
         ErrorLog._lastAlertSoundAt = now
+    end
+end
+
+local function NotifyChanged()
+    if EventRegistry and type(EventRegistry.TriggerEvent) == "function" then
+        EventRegistry:TriggerEvent(ERROR_LOG_UPDATED_EVENT)
     end
 end
 
@@ -194,6 +201,8 @@ local function AppendEntry(detail)
                 viewer:Refresh()
             end
 
+            NotifyChanged()
+
             db._lastDetail = detail
             db._lastCapturedAt = now
             return existing
@@ -223,6 +232,8 @@ local function AppendEntry(detail)
     if viewer and viewer.frame and viewer.frame:IsShown() then
         viewer:Refresh()
     end
+
+    NotifyChanged()
 
     return entry
 end
@@ -395,6 +406,7 @@ function ErrorLog:Clear()
     if viewer and viewer.frame and viewer.frame:IsShown() then
         viewer:Refresh()
     end
+    NotifyChanged()
 end
 
 ---@param entryId number|string
@@ -412,6 +424,7 @@ function ErrorLog:RemoveEntry(entryId)
             if viewer and viewer.frame and viewer.frame:IsShown() then
                 viewer:Refresh()
             end
+            NotifyChanged()
             return true
         end
     end

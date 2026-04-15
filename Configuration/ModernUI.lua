@@ -273,7 +273,7 @@ local FEATURE_CARDS = {
             local shape = options.GetCircular and options:GetCircular() and "Circular" or "Square"
             local size = options.GetSize and options:GetSize() or 0
             local buttons = options.GetManageAddonButtons and options:GetManageAddonButtons() and "Buttons Managed" or
-            "Buttons Native"
+                "Buttons Native"
             return ("%s  •  %dpx  •  %s"):format(shape, size, buttons)
         end,
         actionLabel = "Pulse",
@@ -1892,8 +1892,7 @@ function UI:EnsureFrame()
     end)
     AttachTooltip(frame.ErrorLogButton, "Error Log", "View errors captured from TwichUI_Reformed.")
 
-    -- Update error count badge on the button label dynamically
-    frame.ErrorLogButton:SetScript("OnShow", function()
+    local function RefreshErrorLogButton()
         local el = T.Tools and (T.Tools --[[@as any]]).ErrorLog
         local count = el and el:GetCount() or 0
         if count > 0 then
@@ -1903,7 +1902,21 @@ function UI:EnsureFrame()
             SetButtonText(frame.ErrorLogButton, "Error Log")
             frame.ErrorLogButton:SetBackdropBorderColor(0.98, 0.56, 0.5, 0.40)
         end
-    end)
+    end
+
+    frame.RefreshErrorLogButton = RefreshErrorLogButton
+    frame.ErrorLogButton:SetScript("OnShow", RefreshErrorLogButton)
+
+    local EventRegistry = _G.EventRegistry
+    if EventRegistry and type(EventRegistry.RegisterCallback) == "function" and not frame.__twichErrorLogBadgeRegistered then
+        frame.__twichErrorLogBadgeRegistered = true
+        EventRegistry:RegisterCallback("TwichUI.ErrorLogUpdated", function()
+            if frame.RefreshErrorLogButton then
+                frame:RefreshErrorLogButton()
+            end
+        end, frame)
+    end
+    RefreshErrorLogButton()
 
     frame.DebuggerButton = CreateFrame("Button", nil, frame.TitleBar, "BackdropTemplate")
     frame.DebuggerButton:SetSize(96, 24)
