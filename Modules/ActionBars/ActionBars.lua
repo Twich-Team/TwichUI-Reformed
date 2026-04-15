@@ -3641,7 +3641,7 @@ function ActionBars:IsButtonAssistedGlowActive(button)
 
     if LAB and type(LAB.activeAssist) == "table" then
         local assistedSpellID = button and (button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID or
-        nil
+            nil
         if assistedSpellID and LAB.activeAssist[assistedSpellID] == true then
             return true
         end
@@ -4573,15 +4573,18 @@ function ActionBars:CaptureFrameState(frame)
 
     local frameName = frame.GetName and frame:GetName() or nil
     local managedFramePositions = _G.UIPARENT_MANAGED_FRAME_POSITIONS
+    local isProtectedBarFrame = frameName and PROTECTED_BLIZZARD_BAR_FRAMES[frameName] == true or false
 
     self.originalFrames[frame] = {
         name = frameName,
-        parent = frame.GetParent and frame:GetParent() or nil,
-        points = CapturePoints(frame),
+        isProtectedBarFrame = isProtectedBarFrame,
+        parent = (not isProtectedBarFrame and frame.GetParent and frame:GetParent() or nil),
+        points = not isProtectedBarFrame and CapturePoints(frame) or nil,
         alpha = frame.GetAlpha and frame:GetAlpha() or 1,
         shown = frame.IsShown and frame:IsShown() or true,
-        ignoreInLayout = frame.ignoreInLayout,
-        managedPosition = managedFramePositions and frameName and managedFramePositions[frameName] or nil,
+        ignoreInLayout = not isProtectedBarFrame and frame.ignoreInLayout or nil,
+        managedPosition = (not isProtectedBarFrame and managedFramePositions and frameName and managedFramePositions[frameName]) or
+        nil,
     }
 end
 
@@ -4665,12 +4668,15 @@ function ActionBars:RestoreOriginalLayout()
 
     for frame, state in pairs(self.originalFrames) do
         if frame and state then
-            if state.parent then frame:SetParent(state.parent) end
-            if frame.ignoreInLayout ~= nil then frame.ignoreInLayout = state.ignoreInLayout end
-            if _G.UIPARENT_MANAGED_FRAME_POSITIONS and state.name then
+            if not state.isProtectedBarFrame and state.parent then frame:SetParent(state.parent) end
+            if not state.isProtectedBarFrame and frame.ignoreInLayout ~= nil then frame.ignoreInLayout = state
+                .ignoreInLayout end
+            if not state.isProtectedBarFrame and _G.UIPARENT_MANAGED_FRAME_POSITIONS and state.name then
                 _G.UIPARENT_MANAGED_FRAME_POSITIONS[state.name] = state.managedPosition
             end
-            RestorePoints(frame, state.points)
+            if not state.isProtectedBarFrame then
+                RestorePoints(frame, state.points)
+            end
             frame:SetAlpha(state.alpha or 1)
             if state.shown == true then frame:Show() else frame:Hide() end
         end
