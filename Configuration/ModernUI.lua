@@ -92,6 +92,14 @@ local NAV_ITEMS = {
         path = { "Tooltip" },
     },
     {
+        id = "objectiveTracker",
+        title = "Objective Tracker",
+        description =
+        "Tracked quests, scenario criteria, Blizzard tracker suppression, and the movable custom objective panel.",
+        accent = { 0.54, 0.84, 0.62 },
+        path = { "Objective Tracker" },
+    },
+    {
         id = "errorLog",
         title = "Error Log",
         description = "Captured TwichUI errors, notification behavior, and log retention settings.",
@@ -263,6 +271,35 @@ local FEATURE_CARDS = {
             local module = T:GetModule("Tooltip", true)
             if module and module.ShowPreview then
                 module:ShowPreview()
+            end
+        end,
+    },
+    {
+        title = "Objective Tracker",
+        subtitle =
+        "Surface tracked quests and scenario criteria in a TwichUI panel, with Blizzard tracker suppression and Interface Designer support.",
+        accent = { 0.54, 0.84, 0.62 },
+        pageId = "objectiveTracker",
+        path = { "Objective Tracker" },
+        status = function()
+            local options = ConfigurationModule.Options and ConfigurationModule.Options.ObjectiveTracker
+            if not options then
+                return "Unavailable"
+            end
+
+            local enabled = options.GetEnabled and options:GetEnabled() and "Enabled" or "Disabled"
+            local collapsed = options.GetCollapsed and options:GetCollapsed() and "Collapsed" or "Expanded"
+            local limit = options.GetMaxEntries and options:GetMaxEntries() or 0
+            return string.format("%s  •  %s  •  %d entries", enabled, collapsed, limit)
+        end,
+        actionLabel = "Refresh",
+        action = function()
+            local module = T:GetModule("ObjectiveTracker", true)
+            if module and module.RefreshNow then
+                module:RefreshNow("dashboard-preview")
+                if module.frame then
+                    module.frame:Show()
+                end
             end
         end,
     },

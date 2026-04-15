@@ -90,7 +90,7 @@ function T:OnInitialize()
     local Options = CM.Options --[[@as any]]
 
     --- Enable optional modules based on user settings
-    ---@type table<AceModule, boolean>
+    ---@type table<integer, { module: AceModule, enabled: boolean }>
     local moduleRegistry = {
         { module = self:GetModule("ChatEnhancements"):GetModule("ChatStyling"),  enabled = Options.ChatEnhancement:IsStylingEnabled() },
         { module = self:GetModule("ChatEnhancements"):GetModule("ChatRenderer"), enabled = Options.ChatEnhancement:IsStylingEnabled() },
@@ -103,6 +103,7 @@ function T:OnInitialize()
         { module = self:GetModule("UnitFrames"),                                 enabled = Options.UnitFrames:GetEnabled() },
         { module = self:GetModule("Nameplates"),                                 enabled = Options.Nameplates:IsModuleEnabled() },
         { module = self:GetModule("Tooltip"),                                    enabled = Options.Tooltip:GetEnabled() },
+        { module = self:GetModule("ObjectiveTracker"),                           enabled = Options.ObjectiveTracker:GetEnabled() },
         { module = self:GetModule("BestInSlot"),                                 enabled = Options.BestInSlot:IsBestInSlotModuleEnabled() },
         { module = self:GetModule("QualityOfLife"):GetModule("Gathering"),       enabled = Options.Gathering:GetEnabled() },
     }

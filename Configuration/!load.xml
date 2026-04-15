@@ -12,6 +12,7 @@
     <Include file='UnitFrames.lua' />
     <Include file='Nameplates.lua' />
     <Include file='Tooltip.lua' />
+    <Include file='ObjectiveTracker.lua' />
     <Include file='Gathering.lua' />
     <Include file='QualityOfLife.lua' />
     <Include file='LeatrixQoL.lua' />
