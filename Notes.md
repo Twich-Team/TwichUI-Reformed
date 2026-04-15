@@ -2,8 +2,6 @@
 
 ## NOTES
 
-- Instead of spelling out the class name lets move the class icon next to their name and make it larger.
-
 - in the header area, there is "Choose a target" text, remove that. also there is an add section of the background that is behind that text. see image.
 
 - Need raid markers on unit frames

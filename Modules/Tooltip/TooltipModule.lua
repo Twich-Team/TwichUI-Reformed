@@ -54,6 +54,11 @@ local table_insert = table.insert
 local tostring = tostring
 
 local DEBUG_SOURCE_KEY = "tooltip"
+local NAME_CLASS_ICON_SIZE = 18
+local ENRICHMENT_RETRY_DELAYS = { 0.15, 0.45, 0.90 }
+local MAX_NAMEPLATE_UNITS = 40
+local MAX_PARTY_MEMBERS = 4
+local MAX_RAID_MEMBERS = 40
 
 local FACTION_ICONS = {
     Horde = "|TInterface\\TargetingFrame\\UI-PVP-Horde:14:14:0:0|t",
@@ -273,6 +278,45 @@ local function StripTooltipMarkup(text)
     stripped = stripped:gsub("|H.-|h(.-)|h", "%1")
     stripped = stripped:gsub("|A.-|a", "")
     return stripped
+end
+
+local function TrimTooltipText(text)
+    if type(text) ~= "string" or text == "" then
+        return ""
+    end
+
+    return text:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s%s+", " ")
+end
+
+local function RemovePlainSubstring(text, target)
+    if type(text) ~= "string" or text == "" or type(target) ~= "string" or target == "" then
+        return text or ""
+    end
+
+    local result = text
+    local startIndex, endIndex = result:find(target, 1, true)
+    while startIndex do
+        result = result:sub(1, startIndex - 1) .. result:sub(endIndex + 1)
+        startIndex, endIndex = result:find(target, 1, true)
+    end
+
+    return result
+end
+
+local function IsPlayerStatLineText(text)
+    local stripped = StripTooltipMarkup(text)
+    if type(stripped) ~= "string" or stripped == "" then
+        return false
+    end
+
+    return stripped:find("iLvl ", 1, true) == 1
+        or stripped:find("[AFK]", 1, true) ~= nil
+        or stripped:find("[DND]", 1, true) ~= nil
+        or stripped:find("[PVP]", 1, true) ~= nil
+end
+
+local function SafeUnitExists(unit)
+    return SafeBooleanCall(_G.UnitExists, unit)
 end
 
 local function EstimateTooltipTextWidth(text)
@@ -582,6 +626,21 @@ function TooltipModule:GetMythicPlusSummary(unit)
     return nil, nil
 end
 
+function TooltipModule:GetOverallMythicScore(summary, unit)
+    if type(summary) == "table" and type(summary.currentSeasonScore) == "number" and summary.currentSeasonScore > 0 then
+        return summary.currentSeasonScore
+    end
+
+    if unit and SafeUnitIsUnit(unit, "player") and C_ChallengeMode and type(C_ChallengeMode.GetOverallDungeonScore) == "function" then
+        local overallScore = SafeCall(C_ChallengeMode.GetOverallDungeonScore)
+        if type(overallScore) == "number" and overallScore > 0 then
+            return overallScore
+        end
+    end
+
+    return nil
+end
+
 function TooltipModule:BuildPlayerDetailState(unit)
     local state = {
         unit = unit,
@@ -593,6 +652,7 @@ function TooltipModule:BuildPlayerDetailState(unit)
         return state
     end
 
+    state.guid = SafeCall(UnitGUID, unit)
     state.className, state.classToken = SafeUnitClass(unit)
     state.factionName = SafeUnitFactionGroup(unit)
 
@@ -613,10 +673,23 @@ function TooltipModule:BuildPlayerDetailState(unit)
     local summary, summaryToken = self:GetMythicPlusSummary(unit)
     state.mythicSummary = summary
     state.mythicSummaryToken = summaryToken
-    state.mythicScore = type(summary) == "table" and summary.currentSeasonScore or nil
+    state.mythicScore = self:GetOverallMythicScore(summary, unit)
     state.itemLevel = self:GetPlayerEquippedItemLevel(unit)
     state.classIconMarkup = self:GetClassIconMarkup(state.classToken, 14)
+    state.nameClassIconMarkup = self:GetClassIconMarkup(state.classToken, NAME_CLASS_ICON_SIZE)
     state.hasClassIconMarkup = type(state.classIconMarkup) == "string" and state.classIconMarkup ~= ""
+
+    if state.guid then
+        self.mythicScoreCache = self.mythicScoreCache or {}
+        if type(state.mythicScore) == "number" and state.mythicScore > 0 then
+            self.mythicScoreCache[state.guid] = state.mythicScore
+        else
+            local cachedScore = self.mythicScoreCache[state.guid]
+            if type(cachedScore) == "number" and cachedScore > 0 then
+                state.mythicScore = cachedScore
+            end
+        end
+    end
 
     if SafeBooleanCall(UnitIsAFK, unit) then
         table_insert(state.statusBadges, ColorizeText("[AFK]", 1.00, 0.48, 0.48))
@@ -725,7 +798,9 @@ function TooltipModule:GetPlayerEquippedItemLevel(unit)
     end
 
     if C_PaperDollInfo and type(C_PaperDollInfo.GetInspectItemLevel) == "function" and unit then
-        local equipped = SafeCall(C_PaperDollInfo.GetInspectItemLevel, unit)
+        local inspectUnit = guid and
+        (self:GetInspectableUnitToken(unit, guid) or self:ResolveUnitTokenForGUID(unit, guid)) or unit
+        local equipped = inspectUnit and SafeCall(C_PaperDollInfo.GetInspectItemLevel, inspectUnit) or nil
         if type(equipped) == "number" and equipped > 0 then
             if guid then
                 self.inspectItemLevelCache = self.inspectItemLevelCache or {}
@@ -733,6 +808,72 @@ function TooltipModule:GetPlayerEquippedItemLevel(unit)
             end
             return equipped
         end
+    end
+
+    return nil
+end
+
+function TooltipModule:DoesUnitMatchGUID(unit, guid)
+    if not unit or not guid or not SafeUnitExists(unit) or type(UnitGUID) ~= "function" then
+        return false
+    end
+
+    return SafeCall(UnitGUID, unit) == guid
+end
+
+function TooltipModule:ResolveUnitTokenForGUID(preferredUnit, guid)
+    if not guid then
+        return nil
+    end
+
+    local staticCandidates = { "mouseover", "target", "focus" }
+    for _, candidate in ipairs(staticCandidates) do
+        if self:DoesUnitMatchGUID(candidate, guid) then
+            return candidate
+        end
+    end
+
+    for index = 1, MAX_PARTY_MEMBERS do
+        local candidate = "party" .. index
+        if self:DoesUnitMatchGUID(candidate, guid) then
+            return candidate
+        end
+    end
+
+    for index = 1, MAX_RAID_MEMBERS do
+        local candidate = "raid" .. index
+        if self:DoesUnitMatchGUID(candidate, guid) then
+            return candidate
+        end
+    end
+
+    if preferredUnit and self:DoesUnitMatchGUID(preferredUnit, guid) then
+        return preferredUnit
+    end
+
+    for index = 1, MAX_NAMEPLATE_UNITS do
+        local candidate = "nameplate" .. index
+        if self:DoesUnitMatchGUID(candidate, guid) then
+            return candidate
+        end
+    end
+
+    return nil
+end
+
+function TooltipModule:GetInspectableUnitToken(unit, guid)
+    local inspectUnit = self:ResolveUnitTokenForGUID(unit, guid)
+    if not inspectUnit then
+        return nil
+    end
+
+    local canInspect = SafeCall(CanInspect, inspectUnit, false)
+    if canInspect == nil then
+        canInspect = SafeCall(CanInspect, inspectUnit)
+    end
+
+    if canInspect then
+        return inspectUnit
     end
 
     return nil
@@ -756,14 +897,15 @@ function TooltipModule:RequestInspectData(unit)
         return
     end
 
-    local canInspect = SafeCall(CanInspect, unit, false)
-    if not canInspect then
+    local inspectUnit = self:GetInspectableUnitToken(unit, guid)
+    if not inspectUnit then
         return
     end
 
     self.pendingInspectGUID = guid
     self.pendingInspectUnit = unit
-    SafeCall(NotifyInspect, unit)
+    self.pendingInspectToken = inspectUnit
+    SafeCall(NotifyInspect, inspectUnit)
 end
 
 function TooltipModule:INSPECT_READY(_, guid)
@@ -775,9 +917,17 @@ function TooltipModule:INSPECT_READY(_, guid)
         return
     end
 
-    local unit = self.pendingInspectUnit
+    local unit = self:ResolveUnitTokenForGUID(self.pendingInspectUnit or self.pendingInspectToken, guid)
     local itemLevel = unit and C_PaperDollInfo and type(C_PaperDollInfo.GetInspectItemLevel) == "function" and
         SafeCall(C_PaperDollInfo.GetInspectItemLevel, unit) or nil
+
+    if (type(itemLevel) ~= "number" or itemLevel <= 0) and GameTooltip and GameTooltip:IsShown() then
+        local tooltipUnit = SafeTooltipUnit(GameTooltip)
+        if self:DoesUnitMatchGUID(tooltipUnit, guid) and C_PaperDollInfo and type(C_PaperDollInfo.GetInspectItemLevel) == "function" then
+            itemLevel = SafeCall(C_PaperDollInfo.GetInspectItemLevel, tooltipUnit)
+            unit = tooltipUnit or unit
+        end
+    end
 
     if type(itemLevel) == "number" and itemLevel > 0 then
         self.inspectItemLevelCache = self.inspectItemLevelCache or {}
@@ -786,6 +936,7 @@ function TooltipModule:INSPECT_READY(_, guid)
 
     self.pendingInspectGUID = nil
     self.pendingInspectUnit = nil
+    self.pendingInspectToken = nil
     if type(ClearInspectPlayer) == "function" then
         SafeCall(ClearInspectPlayer)
     end
@@ -911,7 +1062,6 @@ function TooltipModule:AppendPlayerDetailState(frame, state)
 
     self.lastPlayerDetailState = state
 
-    local classLabel = state.specName and state.specName ~= "" and state.specName or state.className
     local classColorR, classColorG, classColorB = self:GetClassColor(state.classToken)
 
     if options:GetShowGuildRank() and state.guildName and state.guildRankName and state.guildRankName ~= "" then
@@ -925,25 +1075,30 @@ function TooltipModule:AppendPlayerDetailState(frame, state)
         end
     end
 
-    if classLabel and classLabel ~= "" then
+    if state.className and state.className ~= "" then
         local classIndex, classLine = self:FindTooltipLineIndex(frame, function(text)
-            return type(text) == "string" and (text:find(classLabel, 1, true) ~= nil
-                or (state.className and text:find(state.className, 1, true) ~= nil))
+            return type(text) == "string" and (text:find(state.className, 1, true) ~= nil
+                or (state.specName and text:find(state.specName, 1, true) ~= nil))
         end)
         if classIndex and classLine then
-            local classText = classLabel
-            if state.classIconMarkup and state.classIconMarkup ~= "" and not self:HasTexturePrefix(classLine:GetText()) then
-                classText = state.classIconMarkup .. " " .. classText
-            elseif classLine:GetText() and self:HasTexturePrefix(classLine:GetText()) then
-                classText = classLine:GetText()
+            local classText = TrimTooltipText(classLine:GetText() or "")
+            classText = classText:gsub("^|T.-|t%s*", "")
+            classText = TrimTooltipText(RemovePlainSubstring(classText, state.className))
+
+            if state.specName and state.specName ~= "" and classText == "" then
+                classText = state.specName
             end
 
-            if state.roleName and state.roleName ~= "" and not classText:find(state.roleName, 1, true) then
+            if state.roleName and state.roleName ~= "" and classText ~= "" and not classText:find(state.roleName, 1, true) then
                 classText = classText .. "  |cff556070•|r  " .. ColorizeText(state.roleName, 0.72, 0.78, 0.90)
             end
 
-            self:SetTooltipLeftText(frame, classIndex, classText, classColorR or 0.76, classColorG or 0.78,
-                classColorB or 0.84)
+            if classText ~= "" then
+                self:SetTooltipLeftText(frame, classIndex, classText, classColorR or 0.76, classColorG or 0.78,
+                    classColorB or 0.84)
+            else
+                self:ClearTooltipLine(frame, classIndex)
+            end
         end
     end
 
@@ -979,6 +1134,9 @@ function TooltipModule:AppendPlayerDetailState(frame, state)
         local stripped = StripTooltipMarkup(text)
         return type(stripped) == "string" and stripped:find("M+ ", 1, true) == 1
     end)
+    local statIndex, statLine = self:FindTooltipLineIndex(frame, function(text)
+        return IsPlayerStatLineText(text)
+    end)
 
     local statParts = {}
     if options:GetShowItemLevel() and type(state.itemLevel) == "number" and state.itemLevel > 0 then
@@ -991,15 +1149,29 @@ function TooltipModule:AppendPlayerDetailState(frame, state)
         end
     end
 
+    local statSuffix = table_concat(statParts, "  |cff556070•|r  ")
     if #statParts > 0 and levelIndex and levelLine then
         local baseLevelText = levelLine:GetText() or ""
         baseLevelText = baseLevelText:gsub("%s+|cff556070•|r%s+.-$", "")
-        local statSuffix = table_concat(statParts, "  |cff556070•|r  ")
         self:SetTooltipLeftText(frame, levelIndex, baseLevelText .. "  |cff556070•|r  " .. statSuffix, 0.82, 0.84, 0.90)
+        if statIndex and statIndex ~= levelIndex then
+            self:ClearTooltipLine(frame, statIndex)
+        end
+    elseif #statParts > 0 then
+        if statIndex and statLine then
+            self:SetTooltipLeftText(frame, statIndex, statSuffix, 0.82, 0.84, 0.90)
+        else
+            frame:AddLine(statSuffix, 0.82, 0.84, 0.90)
+        end
     elseif levelIndex and levelLine then
         local baseLevelText = levelLine:GetText() or ""
         baseLevelText = baseLevelText:gsub("%s+|cff556070•|r%s+.-$", "")
         self:SetTooltipLeftText(frame, levelIndex, baseLevelText, 0.82, 0.84, 0.90)
+        if statIndex and statIndex ~= levelIndex then
+            self:ClearTooltipLine(frame, statIndex)
+        end
+    elseif statIndex then
+        self:ClearTooltipLine(frame, statIndex)
     end
 
     if options:GetShowMythicScore() and type(state.mythicScore) == "number" and state.mythicScore > 0 then
@@ -1025,6 +1197,68 @@ function TooltipModule:AppendPlayerDetails(frame, unit)
     self:AppendPlayerDetailState(frame, state)
 end
 
+function TooltipModule:NeedsPlayerDataRefresh(state)
+    if type(state) ~= "table" or not state.isPlayer then
+        return false
+    end
+
+    return state.itemLevel == nil or not (type(state.mythicScore) == "number" and state.mythicScore > 0)
+end
+
+function TooltipModule:SchedulePlayerDataRefresh(frame, state, reason)
+    if not frame or frame ~= GameTooltip or not self:NeedsPlayerDataRefresh(state) then
+        return
+    end
+
+    if not (C_Timer and type(C_Timer.After) == "function") then
+        return
+    end
+
+    local guid = state.guid
+    local ticket = (frame.__tuiTooltipDataRetryTicket or 0) + 1
+    frame.__tuiTooltipDataRetryTicket = ticket
+
+    for index, delaySeconds in ipairs(ENRICHMENT_RETRY_DELAYS) do
+        C_Timer.After(delaySeconds, function()
+            if frame.__tuiTooltipDataRetryTicket ~= ticket then
+                return
+            end
+
+            if not (frame.IsShown and frame:IsShown()) then
+                return
+            end
+
+            local unit = SafeTooltipUnit(frame)
+            if not unit or not SafeUnitIsPlayer(unit) then
+                return
+            end
+
+            local currentGUID = SafeCall(UnitGUID, unit)
+            if guid and currentGUID and guid ~= currentGUID then
+                return
+            end
+
+            self:RequestInspectData(unit)
+            self:SetCachedPlayerDetailState(frame, nil)
+            self:StyleFrame(frame)
+
+            local refreshedState = self:GetCachedPlayerDetailState(frame)
+            self:LogDebugf(false,
+                "tooltip enrichment retry frame=%s reason=%s pass=%d guid=%s itemLevel=%s mythicScore=%s",
+                SafeDebugString(frame.GetName and frame:GetName() or "<unnamed>"),
+                SafeDebugString(reason),
+                index,
+                SafeDebugString(currentGUID),
+                SafeDebugString(refreshedState and refreshedState.itemLevel),
+                SafeDebugString(refreshedState and refreshedState.mythicScore))
+
+            if refreshedState and not self:NeedsPlayerDataRefresh(refreshedState) then
+                frame.__tuiTooltipDataRetryTicket = nil
+            end
+        end)
+    end
+end
+
 function TooltipModule:ApplyUnitIdentity(frame)
     local options = GetOptions()
     if not options or frame ~= GameTooltip then
@@ -1047,6 +1281,15 @@ function TooltipModule:ApplyUnitIdentity(frame)
 
     self:AppendPlayerDetailState(frame, state)
 
+    local title = self:GetTooltipLine(frame, 1, "Left")
+    if title then
+        local titleText = title:GetText() or ""
+        local nameIconMarkup = state.nameClassIconMarkup or state.classIconMarkup
+        if nameIconMarkup and nameIconMarkup ~= "" and titleText ~= "" and not self:HasTexturePrefix(titleText) then
+            self:SetTooltipLeftText(frame, 1, nameIconMarkup .. " " .. titleText)
+        end
+    end
+
     if not options:GetUsePlayerClassColors() then
         return
     end
@@ -1056,7 +1299,6 @@ function TooltipModule:ApplyUnitIdentity(frame)
         return
     end
 
-    local title = self:GetTooltipLine(frame, 1, "Left")
     if title then
         title:SetTextColor(red, green, blue)
     end
@@ -1852,6 +2094,7 @@ end
 function TooltipModule:OnTooltipHide(frame)
     if frame then
         frame.__tuiTooltipStyleTicket = nil
+        frame.__tuiTooltipDataRetryTicket = nil
         frame.__tuiTooltipPlayerState = nil
         frame.__tuiTooltipFadePlayed = nil
         if frame.SetMinimumWidth then
@@ -1878,6 +2121,7 @@ function TooltipModule:OnTooltipSetUnit(frame)
             self:RequestInspectData(unit)
             self.lastPlayerDetailState = state
             self:SetCachedPlayerDetailState(frame, state)
+            self:SchedulePlayerDataRefresh(frame, state, "unit")
             self:LogDebugf(false,
                 "tooltip unit frame=%s unit=%s class=%s spec=%s faction=%s score=%s itemLevel=%s summaryToken=%s",
                 SafeDebugString(frame:GetName()),
@@ -2211,6 +2455,7 @@ end
 function TooltipModule:OnEnable()
     self.registeredFrames = self.registeredFrames or {}
     self.inspectItemLevelCache = self.inspectItemLevelCache or {}
+    self.mythicScoreCache = self.mythicScoreCache or {}
     self:CreateAnchor()
     self:RegisterTooltipDataCallbacks()
     for _, frame in ipairs(self:GetManagedFrames()) do
@@ -2312,6 +2557,7 @@ function TooltipModule:OnDisable()
     self:UnregisterEvent("INSPECT_READY")
     self.pendingInspectGUID = nil
     self.pendingInspectUnit = nil
+    self.pendingInspectToken = nil
     if type(ClearInspectPlayer) == "function" then
         SafeCall(ClearInspectPlayer)
     end
