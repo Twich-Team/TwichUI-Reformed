@@ -4,15 +4,11 @@
 
 ## NOTES
 
-- our objective tracker is still showing all world quests in the current zone. It should not do this. it should only show a world quest if it is active meaning im in the direct quest spot in the zone. Additionally, world quests should be split into their own category in the objective tracker
-
-- the objective tracker seems to not be showing newly obtained quests, or campaign quests. We could have a category dedicated to campaign quests and always show those, at the top.
-
-- i dont think the objective tracker is showing quests that are ready to turn in. like the ones you can click on to turn in remotely. please inspect horizon closesly to ensure we have all the basic logic we need for typical gameplay at least.
-
 # Tweaks
 
 ## IDEAS/FUTURE
+
+- I have added the addon DeJunk to addonreferences. i would like to add the features that dejunk provides to our junk selling capabilities. please inspect dejunk, and update our logic along with our configuration. make sure to closely inspect how they sell, as i believe they retry, and or have delays, to increase success of selling large amounts of items. make sure to fully understand their item level and quality filters to implement this correctly in our interface. make our configuration extremely easy to understand and look good.
 
 - ElvUI provides skins for almost all standard blizzard interfaces. Please inspect how ElvUI does this, and implement our own skinning system for the blizzard interfaces. It should resemble our current styling, and be reminescent of our goals: performance, clean, modern, eye candy. To start, lets focus on the character panel. Please inspect the character panel skin and tweaks provided by ElvUI and implement our own.
 

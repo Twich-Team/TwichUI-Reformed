@@ -75,7 +75,7 @@ function ErrorLogPopup:EnsureFrame()
     end
 
     local frame = Panel(UIParent, CLR_BG[1], CLR_BG[2], CLR_BG[3], 0.98, CLR_GOLD[1], CLR_GOLD[2], CLR_GOLD[3], 0.30)
-    frame:SetSize(420, 184)
+    frame:SetSize(520, 184)
     frame:SetPoint("CENTER", UIParent, "CENTER", -220, 0)
     frame:SetFrameStrata("DIALOG")
     frame:SetFrameLevel(90)
@@ -133,7 +133,7 @@ function ErrorLogPopup:EnsureFrame()
     sessionNote:SetWordWrap(true)
     sessionNote:SetTextColor(0.76, 0.80, 0.86)
     sessionNote:SetText(
-    "Silence for Session disables this popup, chat announcements, and alert sounds until reload, logout, or exit.")
+        "Silence for Session disables this popup, chat announcements, and alert sounds until reload, logout, or exit.")
     frame.sessionNote = sessionNote
 
     local openButton = Button(frame, 108, 28, "Open Log", CLR_ACCENT[1], CLR_ACCENT[2], CLR_ACCENT[3])

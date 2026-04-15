@@ -30,7 +30,13 @@ local C_ScenarioInfo = _G.C_ScenarioInfo
 local C_Timer = _G.C_Timer
 local C_Map = _G.C_Map
 local C_TaskQuest = _G.C_TaskQuest
+local C_CampaignInfo = _G.C_CampaignInfo
+local C_QuestInfoSystem = _G.C_QuestInfoSystem
+local C_QuestLine = _G.C_QuestLine
 local Enum = _G.Enum
+local StaticPopupDialogs = _G.StaticPopupDialogs
+local StaticPopup_Show = _G.StaticPopup_Show
+local ShowQuestComplete = _G.ShowQuestComplete
 local IsAddOnLoaded = _G.IsAddOnLoaded
 local LoadAddOn = _G.LoadAddOn
 local GetQuestUiMapID = _G.GetQuestUiMapID
@@ -39,6 +45,7 @@ local math_abs = math.abs
 local math_floor = math.floor
 local math_max = math.max
 local math_min = math.min
+local math_sqrt = math.sqrt
 local ipairs = ipairs
 local next = next
 local pairs = pairs
@@ -50,6 +57,8 @@ local tostring = tostring
 local type = type
 local GetTime = _G.GetTime
 
+local ABANDON_POPUP_KEY = "TWICHUI_OBJECTIVE_TRACKER_ABANDON_QUEST"
+
 local HEADER_HEIGHT = 30
 local SECTION_HEADER_HEIGHT = 22
 local PANEL_PADDING = 12
@@ -60,10 +69,13 @@ local ROW_PADDING = 8
 local MAX_SCENARIO_CRITERIA = 10
 local ALPHA_LERP_SPEED = 12
 local DEBUG_SOURCE_KEY = "objectivetracker"
+local WORLD_QUEST_OBJECTIVE_RADIUS = 0.08
 
 local SECTION_ORDER = {
     "instance",
     "scenario",
+    "completeNow",
+    "campaign",
     "currentZone",
     "world",
     "quests",
@@ -73,6 +85,8 @@ local SECTION_ORDER = {
 local SECTION_TITLES = {
     instance = "Instance",
     scenario = "Scenario",
+    completeNow = "Complete Now",
+    campaign = "Campaign",
     currentZone = "Current Zone",
     world = "World Quests",
     quests = "Tracked Quests",
@@ -82,6 +96,8 @@ local SECTION_TITLES = {
 local SECTION_COLOR_KEYS = {
     instance = "sectionScenarioColor",
     scenario = "sectionScenarioColor",
+    completeNow = "sectionCompletedColor",
+    campaign = "sectionQuestColor",
     currentZone = "sectionCurrentZoneColor",
     world = "sectionWorldColor",
     quests = "sectionQuestColor",
@@ -95,6 +111,8 @@ local EVENT_REFRESHES = {
     "QUEST_WATCH_LIST_CHANGED",
     "QUEST_ACCEPTED",
     "QUEST_REMOVED",
+    "QUEST_COMPLETE",
+    "QUEST_AUTOCOMPLETE",
     "QUEST_TURNED_IN",
     "SUPER_TRACKING_CHANGED",
     "UPDATE_INSTANCE_INFO",
@@ -255,6 +273,16 @@ local function GetQuestInfoByID(questID)
 
     local logIndex = SafeCall(C_QuestLog.GetLogIndexForQuestID, questID)
     if not logIndex or logIndex <= 0 then
+        local isAccepted = type(C_QuestLog.IsOnQuest) == "function" and SafeCall(C_QuestLog.IsOnQuest, questID) == true
+        local isWorld = type(C_QuestLog.IsWorldQuest) == "function" and
+        SafeCall(C_QuestLog.IsWorldQuest, questID) == true
+        local isTaskActive = type(C_TaskQuest) == "table"
+            and type(C_TaskQuest.IsActive) == "function"
+            and SafeCall(C_TaskQuest.IsActive, questID) == true
+        if not isAccepted and not isWorld and not isTaskActive then
+            return nil
+        end
+
         if type(C_TaskQuest) == "table" and type(C_TaskQuest.GetQuestInfoByQuestID) == "function" then
             local taskTitle = SafeCall(C_TaskQuest.GetQuestInfoByQuestID, questID)
             if type(taskTitle) == "string" and taskTitle ~= "" then
@@ -382,6 +410,55 @@ local function GetQuestLocation(questID, mapID)
     return nil, nil
 end
 
+local function IsQuestAccepted(questID)
+    if type(questID) ~= "number" or type(C_QuestLog) ~= "table" then
+        return false
+    end
+
+    if type(C_QuestLog.IsOnQuest) == "function" then
+        return SafeCall(C_QuestLog.IsOnQuest, questID) == true
+    end
+
+    if type(C_QuestLog.GetLogIndexForQuestID) == "function" then
+        local logIndex = SafeCall(C_QuestLog.GetLogIndexForQuestID, questID)
+        return type(logIndex) == "number" and logIndex > 0
+    end
+
+    return false
+end
+
+local function IsTaskQuestActive(questID)
+    return type(C_TaskQuest) == "table"
+        and type(C_TaskQuest.IsActive) == "function"
+        and SafeCall(C_TaskQuest.IsActive, questID) == true
+end
+
+local function IsQuestStrictlyOnCurrentMap(questID, currentMapID)
+    if type(questID) ~= "number" or type(currentMapID) ~= "number" or currentMapID <= 0 then
+        return false
+    end
+
+    local x, y = GetQuestLocation(questID, currentMapID)
+    if type(x) ~= "number" or type(y) ~= "number" or type(C_Map) ~= "table" or type(C_Map.GetPlayerMapPosition) ~= "function" then
+        return false
+    end
+
+    local playerPosition = SafeCall(C_Map.GetPlayerMapPosition, currentMapID, "player")
+    if type(playerPosition) ~= "table" or type(playerPosition.GetXY) ~= "function" then
+        return false
+    end
+
+    local playerX, playerY = playerPosition:GetXY()
+    if type(playerX) ~= "number" or type(playerY) ~= "number" then
+        return false
+    end
+
+    local deltaX = x - playerX
+    local deltaY = y - playerY
+    local distance = math_sqrt((deltaX * deltaX) + (deltaY * deltaY))
+    return distance <= WORLD_QUEST_OBJECTIVE_RADIUS
+end
+
 local function GetQuestZoneName(questID, mapID)
     mapID = mapID or GetQuestMapID(questID)
     local info = GetMapInfoSafe(mapID)
@@ -390,6 +467,11 @@ local function GetQuestZoneName(questID, mapID)
     end
 
     return nil
+end
+
+local function IsEntryInCurrentArea(entry)
+    return type(entry) == "table"
+        and (entry.isCurrentZone == true or entry.isOnMap == true or entry.isCurrentTaskMap == true)
 end
 
 local function GetQuestTitle(questID)
@@ -410,16 +492,64 @@ local function GetQuestTitle(questID)
     return "Quest " .. tostring(questID)
 end
 
+local function IsCampaignQuest(questID)
+    if type(questID) ~= "number" or questID <= 0 then
+        return false
+    end
+
+    if type(C_CampaignInfo) == "table" and type(C_CampaignInfo.IsCampaignQuest) == "function" then
+        if SafeCall(C_CampaignInfo.IsCampaignQuest, questID) == true then
+            return true
+        end
+    end
+
+    if type(C_QuestInfoSystem) == "table"
+        and type(C_QuestInfoSystem.GetQuestClassification) == "function"
+        and type(Enum) == "table"
+        and type(Enum.QuestClassification) == "table"
+    then
+        return SafeCall(C_QuestInfoSystem.GetQuestClassification, questID) == Enum.QuestClassification.Campaign
+    end
+
+    return false
+end
+
 local function IsWorldQuest(questID)
     return type(C_QuestLog) == "table"
         and type(C_QuestLog.IsWorldQuest) == "function"
         and SafeCall(C_QuestLog.IsWorldQuest, questID) == true
 end
 
+local function IsQuestReadyForTurnIn(questID)
+    return type(C_QuestLog) == "table"
+        and type(C_QuestLog.ReadyForTurnIn) == "function"
+        and SafeCall(C_QuestLog.ReadyForTurnIn, questID) == true
+end
+
 local function IsQuestComplete(questID)
     return type(C_QuestLog) == "table"
         and type(C_QuestLog.IsComplete) == "function"
         and SafeCall(C_QuestLog.IsComplete, questID) == true
+end
+
+local function IsQuestAutoComplete(questID, info)
+    if type(info) == "table" and info.isAutoComplete == true then
+        return true
+    end
+
+    if type(questID) ~= "number" or type(C_QuestLog) ~= "table" then
+        return false
+    end
+
+    local logIndex = type(C_QuestLog.GetLogIndexForQuestID) == "function"
+        and SafeCall(C_QuestLog.GetLogIndexForQuestID, questID)
+        or nil
+    if type(logIndex) ~= "number" or logIndex <= 0 or type(C_QuestLog.GetInfo) ~= "function" then
+        return false
+    end
+
+    local questInfo = SafeCall(C_QuestLog.GetInfo, logIndex)
+    return type(questInfo) == "table" and questInfo.isAutoComplete == true
 end
 
 local function GetQuestTimeLeftSeconds(questID)
@@ -449,30 +579,20 @@ local function GetQuestTagName(questID)
     return nil
 end
 
-local function AppendQuestIDs(target, seen, questList)
-    if type(target) ~= "table" or type(seen) ~= "table" or type(questList) ~= "table" then
-        return
+local function GetQuestListEntryID(info)
+    if type(info) == "number" then
+        return info
     end
 
-    for _, info in pairs(questList) do
-        local questID = nil
-        if type(info) == "number" then
-            questID = info
-        elseif type(info) == "table" then
-            questID = tonumber(info.questId or info.questID)
-        end
-
-        if type(questID) == "number" and questID > 0 and not seen[questID] then
-            seen[questID] = true
-            target[#target + 1] = questID
-        end
+    if type(info) == "table" then
+        return tonumber(info.questId or info.questID)
     end
+
+    return nil
 end
 
-local function AppendInstanceQuestLogIDs(target, seen, currentMapID)
-    local instance = GetCurrentInstanceContext()
-    if not instance
-        or type(target) ~= "table"
+local function AppendQuestLogIDs(target, seen, currentMapID)
+    if type(target) ~= "table"
         or type(seen) ~= "table"
         or type(C_QuestLog) ~= "table"
         or type(C_QuestLog.GetNumQuestLogEntries) ~= "function"
@@ -481,6 +601,7 @@ local function AppendInstanceQuestLogIDs(target, seen, currentMapID)
         return
     end
 
+    local instance = GetCurrentInstanceContext()
     local superTrackedQuestID = type(C_SuperTrack) == "table"
         and type(C_SuperTrack.GetSuperTrackedQuestID) == "function"
         and SafeCall(C_SuperTrack.GetSuperTrackedQuestID)
@@ -492,13 +613,14 @@ local function AppendInstanceQuestLogIDs(target, seen, currentMapID)
         if type(info) == "table" then
             local questID = tonumber(info.questID)
             if questID and questID > 0 and not seen[questID] and info.isHeader ~= true and info.isHidden ~= true then
-                local mapID = GetQuestMapID(questID)
                 local watchType = type(C_QuestLog.GetQuestWatchType) == "function"
                     and SafeCall(C_QuestLog.GetQuestWatchType, questID)
                     or nil
-                local isOnMap = type(C_QuestLog.IsOnMap) == "function" and SafeCall(C_QuestLog.IsOnMap, questID) == true
                 local isTracked = watchType ~= nil or superTrackedQuestID == questID
-                if isTracked or isOnMap or IsCurrentZoneMap(mapID, currentMapID) then
+                local isCampaign = IsCampaignQuest(questID)
+                local isReadyForTurnIn = IsQuestReadyForTurnIn(questID)
+                local isAutoComplete = IsQuestAutoComplete(questID, info)
+                if isTracked or isCampaign or isReadyForTurnIn or isAutoComplete or instance then
                     seen[questID] = true
                     target[#target + 1] = questID
                 end
@@ -597,7 +719,11 @@ end
 
 local function BuildEntryMetaText(entry)
     local parts = {}
-    if entry.isCurrentZone then
+    if entry.isCampaignQuest then
+        parts[#parts + 1] = "Campaign"
+    end
+
+    if IsEntryInCurrentArea(entry) then
         parts[#parts + 1] = "Current Zone"
     elseif type(entry.zoneName) == "string" and entry.zoneName ~= "" then
         parts[#parts + 1] = entry.zoneName
@@ -609,6 +735,14 @@ local function BuildEntryMetaText(entry)
 
     if type(entry.tagName) == "string" and entry.tagName ~= "" and entry.tagName ~= "World Quest" then
         parts[#parts + 1] = entry.tagName
+    end
+
+    if entry.isReadyForTurnIn then
+        parts[#parts + 1] = "Ready to Turn In"
+    end
+
+    if entry.isAutoComplete then
+        parts[#parts + 1] = "Click to Complete"
     end
 
     local timeText = FormatTimeRemaining(entry.timeLeftSeconds)
@@ -1080,6 +1214,57 @@ function ObjectiveTracker:ScheduleRefresh(reason)
     self:CreateRefreshDriver():Show()
 end
 
+function ObjectiveTracker:IsQuestSuppressed(questID)
+    return type(questID) == "number"
+        and type(self.suppressedQuestIDs) == "table"
+        and self.suppressedQuestIDs[questID] == true
+end
+
+function ObjectiveTracker:SetQuestSuppressed(questID, suppressed)
+    if type(questID) ~= "number" then
+        return
+    end
+
+    if type(self.suppressedQuestIDs) ~= "table" then
+        self.suppressedQuestIDs = {}
+    end
+
+    if suppressed == true then
+        self.suppressedQuestIDs[questID] = true
+    else
+        self.suppressedQuestIDs[questID] = nil
+    end
+end
+
+function ObjectiveTracker:ShouldHideSuppressedQuest(entry)
+    if type(entry) ~= "table" or type(entry.questID) ~= "number" then
+        return false
+    end
+
+    if not self:IsQuestSuppressed(entry.questID) then
+        return false
+    end
+
+    if entry.isAutoComplete == true then
+        return false
+    end
+
+    if entry.isSuperTracked == true then
+        self:SetQuestSuppressed(entry.questID, false)
+        return false
+    end
+
+    if type(C_QuestLog) == "table" and type(C_QuestLog.GetQuestWatchType) == "function" then
+        local watchType = SafeCall(C_QuestLog.GetQuestWatchType, entry.questID)
+        if watchType ~= nil then
+            self:SetQuestSuppressed(entry.questID, false)
+            return false
+        end
+    end
+
+    return true
+end
+
 function ObjectiveTracker:CreateEntryFrame(parent, index)
     local frame = CreateFrame("Button", nil, parent)
     frame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
@@ -1543,20 +1728,38 @@ function ObjectiveTracker:BuildQuestEntry(questID, currentMapID)
     local mapID = GetQuestMapID(questID)
     local isCurrentZone = IsCurrentZoneMap(mapID, currentMapID)
     local isWorld = IsWorldQuest(questID)
-    local isComplete = info.isComplete == true or IsQuestComplete(questID) == true
+    local isAccepted = IsQuestAccepted(questID)
+    local isTaskActive = IsTaskQuestActive(questID)
+    local isCampaign = isWorld ~= true and IsCampaignQuest(questID)
+    local isReadyForTurnIn = IsQuestReadyForTurnIn(questID)
+    local isAutoComplete = IsQuestAutoComplete(questID, info)
+    local isStrictCurrentMap = isWorld == true and IsQuestStrictlyOnCurrentMap(questID, currentMapID) or false
+    local isOnMap = type(C_QuestLog) == "table" and type(C_QuestLog.IsOnMap) == "function"
+        and SafeCall(C_QuestLog.IsOnMap, questID) == true
+
+    if isWorld ~= true and isAccepted ~= true and isTaskActive ~= true then
+        return nil
+    end
+
+    local isComplete = info.isComplete == true or IsQuestComplete(questID) == true or isReadyForTurnIn == true
     local tagName = GetQuestTagName(questID)
 
     local sectionKey = "quests"
-    if isComplete then
-        sectionKey = "completed"
-    elseif isCurrentZone then
-        sectionKey = "currentZone"
+    if isAutoComplete and isComplete then
+        sectionKey = "completeNow"
+    elseif isCampaign then
+        sectionKey = "campaign"
     elseif isWorld then
         sectionKey = "world"
+    elseif isComplete then
+        sectionKey = "completed"
+    elseif isCurrentZone or isOnMap then
+        sectionKey = "currentZone"
     end
 
     local entry = {
-        signature = string_format("quest:%d:%s:%s", questID, tostring(isComplete), tostring(isCurrentZone)),
+        signature = string_format("quest:%d:%s:%s:%s:%s:%s", questID, tostring(isComplete), tostring(isCurrentZone),
+            tostring(isCampaign), tostring(isReadyForTurnIn), tostring(isAutoComplete)),
         type = "quest",
         questID = questID,
         title = info.title or GetQuestTitle(questID),
@@ -1566,7 +1769,13 @@ function ObjectiveTracker:BuildQuestEntry(questID, currentMapID)
         y = nil,
         isCurrentZone = isCurrentZone,
         isWorldQuest = isWorld,
+        isCampaignQuest = isCampaign,
         isComplete = isComplete,
+        isReadyForTurnIn = isReadyForTurnIn,
+        isAutoComplete = isAutoComplete,
+        isStrictCurrentMap = isStrictCurrentMap,
+        isOnMap = isOnMap,
+        isCurrentTaskMap = false,
         isSuperTracked = GetSuperTrackedQuestID() == questID,
         timeLeftSeconds = GetQuestTimeLeftSeconds(questID),
         tagName = tagName,
@@ -1597,7 +1806,7 @@ function ObjectiveTracker:BuildQuestEntry(questID, currentMapID)
 end
 
 function ObjectiveTracker:ApplyInstanceQuestContext(entry)
-    if type(entry) ~= "table" or entry.type ~= "quest" or entry.isWorldQuest == true then
+    if type(entry) ~= "table" or entry.type ~= "quest" or entry.isWorldQuest == true or entry.isCampaignQuest == true then
         return entry
     end
 
@@ -1619,16 +1828,23 @@ function ObjectiveTracker:ShouldIncludeQuestEntryInContext(entry, currentMapID)
         return false
     end
 
-    local instance = GetCurrentInstanceContext()
-    if not instance or entry.isWorldQuest ~= true then
+    if entry.isAutoComplete == true and entry.isComplete == true then
         return true
     end
 
-    if entry.isSuperTracked == true then
-        return true
+    if entry.isWorldQuest == true then
+        if entry.isReadyForTurnIn == true or entry.isSuperTracked == true then
+            return true
+        end
+
+        if entry.isCurrentTaskMap == true and entry.isStrictCurrentMap == true then
+            return true
+        end
+
+        return false
     end
 
-    return IsExactCurrentMap(entry.mapID, currentMapID)
+    return true
 end
 
 function ObjectiveTracker:EnsureAutomaticSectionCollapseState()
@@ -1795,7 +2011,7 @@ function ObjectiveTracker:CollectEntries()
     local entries = {}
     local currentMapID = GetCurrentMapID()
     local seenQuestIDs = {}
-    local instanceQuestIDs = {}
+    local questLogQuestIDs = {}
 
     local instanceEntry = self:BuildInstanceEntry()
     if instanceEntry then
@@ -1813,32 +2029,71 @@ function ObjectiveTracker:CollectEntries()
                 seenQuestIDs[questID] = true
                 local entry = self:BuildQuestEntry(questID, currentMapID)
                 entry = self:ApplyInstanceQuestContext(entry)
-                if entry and self:ShouldIncludeQuestEntryInContext(entry, currentMapID) then
+                if entry
+                    and not self:ShouldHideSuppressedQuest(entry)
+                    and self:ShouldIncludeQuestEntryInContext(entry, currentMapID)
+                then
                     table_insert(entries, entry)
                 end
             end
         end
     end
 
-    AppendInstanceQuestLogIDs(instanceQuestIDs, seenQuestIDs, currentMapID)
-    for _, questID in ipairs(instanceQuestIDs) do
+    AppendQuestLogIDs(questLogQuestIDs, seenQuestIDs, currentMapID)
+    for _, questID in ipairs(questLogQuestIDs) do
         local entry = self:BuildQuestEntry(questID, currentMapID)
         entry = self:ApplyInstanceQuestContext(entry)
-        if entry and self:ShouldIncludeQuestEntryInContext(entry, currentMapID) then
+        if entry
+            and not self:ShouldHideSuppressedQuest(entry)
+            and self:ShouldIncludeQuestEntryInContext(entry, currentMapID)
+        then
             table_insert(entries, entry)
         end
     end
 
     local queryMaps = BuildMapQueryList(currentMapID)
     local taskQuestIDs = {}
+    local taskQuestSources = {}
     for _, mapID in ipairs(queryMaps) do
-        AppendQuestIDs(taskQuestIDs, seenQuestIDs, GetTaskQuestsForMap(mapID))
+        local questList = GetTaskQuestsForMap(mapID)
+        if type(questList) == "table" then
+            for _, info in pairs(questList) do
+                local questID = GetQuestListEntryID(info)
+                if type(questID) == "number" and questID > 0 then
+                    local source = taskQuestSources[questID]
+                    if not source then
+                        source = {
+                            onCurrentMap = false,
+                            onRelatedMap = false,
+                        }
+                        taskQuestSources[questID] = source
+                    end
+
+                    if mapID == currentMapID then
+                        source.onCurrentMap = true
+                    else
+                        source.onRelatedMap = true
+                    end
+
+                    if not seenQuestIDs[questID] then
+                        seenQuestIDs[questID] = true
+                        taskQuestIDs[#taskQuestIDs + 1] = questID
+                    end
+                end
+            end
+        end
     end
 
     for _, questID in ipairs(taskQuestIDs) do
         local entry = self:BuildQuestEntry(questID, currentMapID)
-        if entry and self:ShouldIncludeQuestEntryInContext(entry, currentMapID)
-            and (entry.isWorldQuest or entry.isCurrentZone)
+        local taskSource = taskQuestSources[questID]
+        if entry and type(taskSource) == "table" then
+            entry.isCurrentTaskMap = taskSource.onCurrentMap == true
+        end
+        if entry
+            and not self:ShouldHideSuppressedQuest(entry)
+            and self:ShouldIncludeQuestEntryInContext(entry, currentMapID)
+            and (entry.isWorldQuest == true or entry.isReadyForTurnIn == true or entry.isAutoComplete == true)
         then
             table_insert(entries, entry)
         end
@@ -1863,8 +2118,19 @@ function ObjectiveTracker:BuildSections(entries)
             effectiveSectionKey = entry.isWorldQuest and "world" or "quests"
         end
 
-        if not (zoneMode == "current" and effectiveSectionKey ~= "scenario" and entry.isCurrentZone ~= true) then
-            if not (entry.isComplete and options and options.GetShowCompletedQuests and options:GetShowCompletedQuests() ~= true) then
+        if not (zoneMode == "current"
+                and effectiveSectionKey ~= "scenario"
+                and effectiveSectionKey ~= "completeNow"
+                and effectiveSectionKey ~= "campaign"
+                and effectiveSectionKey ~= "completed"
+                and IsEntryInCurrentArea(entry) ~= true)
+        then
+            if not (entry.isComplete
+                    and entry.isAutoComplete ~= true
+                    and options
+                    and options.GetShowCompletedQuests
+                    and options:GetShowCompletedQuests() ~= true)
+            then
                 local section = sectionsByKey[effectiveSectionKey]
                 if not section then
                     section = {
@@ -1881,11 +2147,22 @@ function ObjectiveTracker:BuildSections(entries)
 
     for _, section in pairs(sectionsByKey) do
         table_sort(section.entries, function(a, b)
+            if a.isAutoComplete ~= b.isAutoComplete then
+                return a.isAutoComplete == true
+            end
+            if a.isReadyForTurnIn ~= b.isReadyForTurnIn then
+                return a.isReadyForTurnIn == true
+            end
             if a.isSuperTracked ~= b.isSuperTracked then
                 return a.isSuperTracked == true
             end
-            if a.isCurrentZone ~= b.isCurrentZone then
-                return a.isCurrentZone == true
+            if a.isCampaignQuest ~= b.isCampaignQuest then
+                return a.isCampaignQuest == true
+            end
+            local aIsCurrentArea = IsEntryInCurrentArea(a)
+            local bIsCurrentArea = IsEntryInCurrentArea(b)
+            if aIsCurrentArea ~= bIsCurrentArea then
+                return aIsCurrentArea == true
             end
             if a.isComplete ~= b.isComplete then
                 return a.isComplete == false
@@ -2101,6 +2378,10 @@ function ObjectiveTracker:SuperTrackEntry(entry)
         return
     end
 
+    if type(entry.questID) == "number" then
+        self:SetQuestSuppressed(entry.questID, false)
+    end
+
     if type(entry.questID) == "number" and type(C_SuperTrack) == "table" and type(C_SuperTrack.SetSuperTrackedQuestID) == "function" then
         SafeCall(C_SuperTrack.SetSuperTrackedQuestID, entry.questID)
     elseif type(entry.mapID) == "number" then
@@ -2114,6 +2395,8 @@ function ObjectiveTracker:UntrackEntry(entry)
     if not entry or type(entry.questID) ~= "number" then
         return
     end
+
+    self:SetQuestSuppressed(entry.questID, true)
 
     if entry.isWorldQuest and type(C_QuestLog) == "table" and type(C_QuestLog.RemoveWorldQuestWatch) == "function" then
         SafeCall(C_QuestLog.RemoveWorldQuestWatch, entry.questID)
@@ -2130,6 +2413,61 @@ function ObjectiveTracker:UntrackEntry(entry)
     end
 
     self:ScheduleRefresh("untrack")
+end
+
+function ObjectiveTracker:CanAbandonEntry(entry)
+    if type(entry) ~= "table" or type(entry.questID) ~= "number" or type(C_QuestLog) ~= "table" then
+        return false
+    end
+
+    if type(C_QuestLog.GetLogIndexForQuestID) == "function" then
+        local logIndex = SafeCall(C_QuestLog.GetLogIndexForQuestID, entry.questID)
+        if type(logIndex) ~= "number" or logIndex <= 0 then
+            return false
+        end
+    end
+
+    if type(C_QuestLog.CanAbandonQuest) == "function" then
+        return SafeCall(C_QuestLog.CanAbandonQuest, entry.questID) == true
+    end
+
+    return type(C_QuestLog.AbandonQuest) == "function"
+end
+
+function ObjectiveTracker:AbandonEntry(entry)
+    if not self:CanAbandonEntry(entry) or type(StaticPopup_Show) ~= "function" or type(StaticPopupDialogs) ~= "table" then
+        return
+    end
+
+    StaticPopupDialogs[ABANDON_POPUP_KEY] = StaticPopupDialogs[ABANDON_POPUP_KEY] or {
+        text = "Abandon %s?",
+        button1 = YES,
+        button2 = NO,
+        OnAccept = function(popup)
+            local popupEntry = popup and popup.data or nil
+            if not popupEntry or type(popupEntry.questID) ~= "number" or type(C_QuestLog) ~= "table" then
+                return
+            end
+
+            if type(C_QuestLog.SetSelectedQuest) == "function" then
+                SafeCall(C_QuestLog.SetSelectedQuest, popupEntry.questID)
+            end
+            if type(C_QuestLog.SetAbandonQuest) == "function" then
+                SafeCall(C_QuestLog.SetAbandonQuest)
+            end
+            if type(C_QuestLog.AbandonQuest) == "function" then
+                SafeCall(C_QuestLog.AbandonQuest)
+            end
+
+            ObjectiveTracker:SetQuestSuppressed(popupEntry.questID, false)
+            ObjectiveTracker:ScheduleRefresh("abandon")
+        end,
+        timeout = 0,
+        whileDead = true,
+        hideOnEscape = true,
+    }
+
+    StaticPopup_Show(ABANDON_POPUP_KEY, entry.title or "this quest", nil, entry)
 end
 
 function ObjectiveTracker:ShowEntryMenu(entryFrame)
@@ -2167,6 +2505,13 @@ function ObjectiveTracker:ShowEntryMenu(entryFrame)
             disabled = entry.questID == nil,
             func = function()
                 ObjectiveTracker:UntrackEntry(entry)
+            end,
+        },
+        {
+            text = "Abandon Quest",
+            disabled = ObjectiveTracker:CanAbandonEntry(entry) ~= true,
+            func = function()
+                ObjectiveTracker:AbandonEntry(entry)
             end,
         },
         {
@@ -2223,6 +2568,12 @@ function ObjectiveTracker:HandleEntryClick(entryFrame, button)
     if button == "LeftButton" then
         if IsShiftKeyDown and IsShiftKeyDown() then
             self:OpenQuestDetails(entry)
+        elseif entry.isAutoComplete == true and entry.isComplete == true and type(ShowQuestComplete) == "function" then
+            if type(C_QuestLog) == "table" and type(C_QuestLog.SetSelectedQuest) == "function" then
+                SafeCall(C_QuestLog.SetSelectedQuest, entry.questID)
+            end
+            SafeCall(ShowQuestComplete, entry.questID)
+            self:ScheduleRefresh("quest-complete-click")
         else
             self:SuperTrackEntry(entry)
         end
@@ -2744,7 +3095,14 @@ function ObjectiveTracker:RegisterWithMovers()
     self.moversRegistered = true
 end
 
-function ObjectiveTracker:OnRefreshEvent(event)
+function ObjectiveTracker:OnRefreshEvent(event, ...)
+    local questID = ...
+    if (event == "QUEST_ACCEPTED" or event == "QUEST_REMOVED" or event == "QUEST_TURNED_IN")
+        and type(questID) == "number"
+    then
+        self:SetQuestSuppressed(questID, false)
+    end
+
     if event == "PLAYER_ENTERING_WORLD"
         or event == "UPDATE_INSTANCE_INFO"
         or event == "ENCOUNTER_END"
@@ -2764,6 +3122,7 @@ function ObjectiveTracker:OnEnable()
         return
     end
 
+    self.suppressedQuestIDs = self.suppressedQuestIDs or {}
     self:CreateFrame()
     local console = GetDebugConsole()
     if console and console.RegisterSource then
@@ -2788,6 +3147,7 @@ end
 
 function ObjectiveTracker:OnDisable()
     self:UnregisterAllEvents()
+    self.suppressedQuestIDs = {}
     if self.frame then
         self.frame:Hide()
     end
