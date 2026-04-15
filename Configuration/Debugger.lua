@@ -22,6 +22,10 @@ local function GetTooltipModule()
     return T:GetModule("Tooltip", true) --[[@as any]]
 end
 
+local function GetObjectiveTrackerModule()
+    return T:GetModule("ObjectiveTracker", true) --[[@as any]]
+end
+
 local function OpenDebugSource(sourceKey)
     local console = GetDebugConsole()
     if console and type(console.Show) == "function" then
@@ -129,6 +133,55 @@ local function BuildDebugConsoleConfiguration()
         },
     })
 
+    local objectiveTrackerDiagGroup = W.IGroup(18, "Objective Tracker Diagnostics", {
+        trackerStatus = {
+            type = "description",
+            order = 1,
+            name = function()
+                local module = GetObjectiveTrackerModule()
+                if not module then
+                    return "|cffff9a6cObjective Tracker module not loaded.|r"
+                end
+
+                if module.GetDebugSummaryLine then
+                    return module:GetDebugSummaryLine()
+                end
+
+                return "|cff69b86fObjective Tracker module loaded.|r"
+            end,
+        },
+        trackerSnapshot = {
+            type = "execute",
+            order = 2,
+            name = "Capture Instance Snapshot",
+            desc =
+            "Request fresh raid info, dump the current instance/EJ/saved-lockout merge state into the debugger, and queue a follow-up snapshot one second later.",
+            func = function()
+                local module = GetObjectiveTrackerModule()
+                if module and module.CaptureDebugSnapshot then
+                    module:CaptureDebugSnapshot(true)
+                end
+            end,
+        },
+        trackerLogs = {
+            type = "execute",
+            order = 3,
+            name = "Open Objective Tracker Logs",
+            func = function() OpenDebugSource("objectivetracker") end,
+        },
+        trackerRefresh = {
+            type = "execute",
+            order = 4,
+            name = "Force Tracker Refresh",
+            func = function()
+                local module = GetObjectiveTrackerModule()
+                if module and module.RefreshNow then
+                    module:RefreshNow("debugger")
+                end
+            end,
+        },
+    })
+
     local profilerGroup = W.IGroup(15, "Profiler", {
         memoryEnabled = {
             type  = "toggle",
@@ -214,7 +267,7 @@ local function BuildDebugConsoleConfiguration()
         },
     })
 
-    local npDiagGroup = W.IGroup(18, "Nameplate Diagnostics", {
+    local npDiagGroup = W.IGroup(19, "Nameplate Diagnostics", {
         npDesc = {
             type  = "description",
             order = 1,
@@ -308,7 +361,7 @@ local function BuildDebugConsoleConfiguration()
         },
     })
 
-    local sourcesGroup = W.IGroup(20, "Registered Sources", {
+    local sourcesGroup = W.IGroup(21, "Registered Sources", {
         list = {
             type  = "description",
             order = 1,
@@ -334,6 +387,7 @@ local function BuildDebugConsoleConfiguration()
         desc       = W.Description(5, "Debug console, profiler controls, and live diagnostics."),
         actions    = actionsGroup,
         tooltips   = tooltipDiagGroup,
+        tracker    = objectiveTrackerDiagGroup,
         profiler   = profilerGroup,
         nameplates = npDiagGroup,
         sources    = sourcesGroup,

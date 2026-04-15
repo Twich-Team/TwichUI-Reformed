@@ -13,8 +13,16 @@ local STANDARD_TEXT_FONT = _G.STANDARD_TEXT_FONT
 local InCombatLockdown = _G.InCombatLockdown
 local IsInInstance = _G.IsInInstance
 local GetInstanceInfo = _G.GetInstanceInfo
+local GetNumSavedInstances = _G.GetNumSavedInstances
+local GetSavedInstanceInfo = _G.GetSavedInstanceInfo
+local GetSavedInstanceEncounterInfo = _G.GetSavedInstanceEncounterInfo
+local GetLFGDungeonNumEncounters = _G.GetLFGDungeonNumEncounters
+local GetLFGDungeonEncounterInfo = _G.GetLFGDungeonEncounterInfo
+local RequestRaidInfo = _G.RequestRaidInfo
 local IsShiftKeyDown = _G.IsShiftKeyDown
 local IsControlKeyDown = _G.IsControlKeyDown
+local C_AddOns = _G.C_AddOns
+local C_ChallengeMode = _G.C_ChallengeMode
 local C_QuestLog = _G.C_QuestLog
 local C_SuperTrack = _G.C_SuperTrack
 local C_Scenario = _G.C_Scenario
@@ -23,6 +31,8 @@ local C_Timer = _G.C_Timer
 local C_Map = _G.C_Map
 local C_TaskQuest = _G.C_TaskQuest
 local Enum = _G.Enum
+local IsAddOnLoaded = _G.IsAddOnLoaded
+local LoadAddOn = _G.LoadAddOn
 local GetQuestUiMapID = _G.GetQuestUiMapID
 local QuestMapFrame_OpenToQuestDetails = _G.QuestMapFrame_OpenToQuestDetails
 local math_abs = math.abs
@@ -32,11 +42,13 @@ local math_min = math.min
 local ipairs = ipairs
 local next = next
 local pairs = pairs
+local select = select
 local table_insert = table.insert
 local table_sort = table.sort
 local string_format = string.format
 local tostring = tostring
 local type = type
+local GetTime = _G.GetTime
 
 local HEADER_HEIGHT = 30
 local SECTION_HEADER_HEIGHT = 22
@@ -47,8 +59,10 @@ local OBJECTIVE_GAP = 2
 local ROW_PADDING = 8
 local MAX_SCENARIO_CRITERIA = 10
 local ALPHA_LERP_SPEED = 12
+local DEBUG_SOURCE_KEY = "objectivetracker"
 
 local SECTION_ORDER = {
+    "instance",
     "scenario",
     "currentZone",
     "world",
@@ -57,6 +71,7 @@ local SECTION_ORDER = {
 }
 
 local SECTION_TITLES = {
+    instance = "Instance",
     scenario = "Scenario",
     currentZone = "Current Zone",
     world = "World Quests",
@@ -65,6 +80,7 @@ local SECTION_TITLES = {
 }
 
 local SECTION_COLOR_KEYS = {
+    instance = "sectionScenarioColor",
     scenario = "sectionScenarioColor",
     currentZone = "sectionCurrentZoneColor",
     world = "sectionWorldColor",
@@ -81,9 +97,14 @@ local EVENT_REFRESHES = {
     "QUEST_REMOVED",
     "QUEST_TURNED_IN",
     "SUPER_TRACKING_CHANGED",
+    "UPDATE_INSTANCE_INFO",
+    "ENCOUNTER_END",
     "SCENARIO_UPDATE",
     "SCENARIO_CRITERIA_UPDATE",
     "SCENARIO_POI_UPDATE",
+    "CHALLENGE_MODE_START",
+    "CHALLENGE_MODE_COMPLETED",
+    "CHALLENGE_MODE_RESET",
     "ZONE_CHANGED",
     "ZONE_CHANGED_INDOORS",
     "ZONE_CHANGED_NEW_AREA",
@@ -98,12 +119,48 @@ local function SafeCall(func, ...)
         return nil
     end
 
-    local ok, result1, result2, result3, result4, result5, result6 = pcall(func, ...)
+    local results = { pcall(func, ...) }
+    local ok = results[1]
     if not ok then
         return nil
     end
 
-    return result1, result2, result3, result4, result5, result6
+    return select(2, unpack(results))
+end
+
+local function GetDebugConsole()
+    return T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole or nil
+end
+
+local function SafeDebugString(value)
+    if value == nil then
+        return "nil"
+    end
+
+    local ok, text = pcall(tostring, value)
+    if ok and type(text) == "string" then
+        return text
+    end
+
+    return "<unprintable>"
+end
+
+local function LogDebug(message, shouldShow)
+    local console = GetDebugConsole()
+    if not console or type(console.Log) ~= "function" then
+        return nil
+    end
+
+    return console:Log(DEBUG_SOURCE_KEY, SafeDebugString(message), shouldShow == true)
+end
+
+local function LogDebugf(shouldShow, messageFormat, ...)
+    local console = GetDebugConsole()
+    if not console or type(console.Logf) ~= "function" then
+        return nil
+    end
+
+    return console:Logf(DEBUG_SOURCE_KEY, shouldShow == true, messageFormat, ...)
 end
 
 local function Clamp(value, minValue, maxValue)
@@ -500,6 +557,389 @@ local function BuildEntryMetaText(entry)
     return table.concat(parts, "  •  ")
 end
 
+local function NormalizeInstanceSearchKey(value)
+    local normalized = type(value) == "string" and string.lower(value) or ""
+    normalized = normalized:gsub("['`%-]", "")
+    normalized = normalized:gsub("[^%w]", "")
+    return normalized
+end
+
+local function GetCurrentInstanceContext()
+    if type(IsInInstance) ~= "function" or type(GetInstanceInfo) ~= "function" then
+        return nil
+    end
+
+    if SafeCall(IsInInstance) ~= true then
+        return nil
+    end
+
+    local name, instanceType, difficultyID, difficultyName, _, _, _, mapID, _, lfgDungeonID = SafeCall(GetInstanceInfo)
+    if instanceType ~= "party" and instanceType ~= "raid" then
+        return nil
+    end
+
+    return {
+        name = type(name) == "string" and name ~= "" and name or (instanceType == "raid" and "Raid" or "Dungeon"),
+        instanceType = instanceType,
+        difficultyID = tonumber(difficultyID) or 0,
+        difficultyName = type(difficultyName) == "string" and difficultyName or "",
+        mapID = tonumber(mapID) or nil,
+        lfgDungeonID = tonumber(lfgDungeonID) or nil,
+        isRaid = instanceType == "raid",
+        isKeystone = type(C_ChallengeMode) == "table"
+            and type(C_ChallengeMode.IsChallengeModeActive) == "function"
+            and SafeCall(C_ChallengeMode.IsChallengeModeActive) == true,
+    }
+end
+
+local function RequestInstanceLockoutInfo(force)
+    if type(RequestRaidInfo) ~= "function" then
+        return
+    end
+
+    local now = type(GetTime) == "function" and GetTime() or 0
+    ObjectiveTracker.lastRaidInfoRequestAt = ObjectiveTracker.lastRaidInfoRequestAt or 0
+    if not force and (now - ObjectiveTracker.lastRaidInfoRequestAt) < 2 then
+        return
+    end
+
+    ObjectiveTracker.lastRaidInfoRequestAt = now
+    SafeCall(RequestRaidInfo)
+end
+
+local function GetSavedInstanceCandidates(instance)
+    if type(instance) ~= "table"
+        or type(GetNumSavedInstances) ~= "function"
+        or type(GetSavedInstanceInfo) ~= "function"
+    then
+        return {}, nil, nil, 0
+    end
+
+    local candidates = {}
+    local exactMatch = nil
+    local partialMatch = nil
+    local targetKey = NormalizeInstanceSearchKey(instance.name)
+    local totalSaved = tonumber(SafeCall(GetNumSavedInstances)) or 0
+
+    for index = 1, totalSaved do
+        local name, _, reset, difficultyID, locked, extended, _, isRaid, _, difficultyName, numEncounters, numCompleted =
+        SafeCall(
+            GetSavedInstanceInfo, index)
+        local normalizedName = type(name) == "string" and NormalizeInstanceSearchKey(name) or ""
+        local matchesType = isRaid == instance.isRaid
+        local isExact = normalizedName ~= "" and normalizedName == targetKey
+        local isPartial = normalizedName ~= "" and targetKey ~= ""
+            and (normalizedName:find(targetKey, 1, true) or targetKey:find(normalizedName, 1, true))
+
+        if type(name) == "string" and matchesType and (isExact or isPartial) then
+            local candidate = {
+                index = index,
+                name = name,
+                reset = reset,
+                difficultyID = tonumber(difficultyID) or 0,
+                difficultyName = type(difficultyName) == "string" and difficultyName or "",
+                locked = locked == true,
+                extended = extended == true,
+                numEncounters = tonumber(numEncounters) or 0,
+                numCompleted = tonumber(numCompleted) or 0,
+            }
+
+            table_insert(candidates, candidate)
+            if isExact and candidate.difficultyID == instance.difficultyID then
+                exactMatch = exactMatch or candidate
+            end
+            if partialMatch == nil then
+                partialMatch = candidate
+            elseif partialMatch.difficultyID ~= instance.difficultyID and candidate.difficultyID == instance.difficultyID then
+                partialMatch = candidate
+            elseif (tonumber(candidate.numCompleted) or 0) > (tonumber(partialMatch.numCompleted) or 0) then
+                partialMatch = candidate
+            end
+        end
+    end
+
+    return candidates, exactMatch, partialMatch, totalSaved
+end
+
+local function GetSavedInstanceProgress(instance)
+    if type(instance) ~= "table"
+        or type(GetNumSavedInstances) ~= "function"
+        or type(GetSavedInstanceInfo) ~= "function"
+    then
+        return nil
+    end
+
+    local _, exactMatch, partialMatch = GetSavedInstanceCandidates(instance)
+    local chosen = exactMatch or partialMatch
+    if not chosen then
+        return nil
+    end
+
+    local encounters = {}
+    if type(GetSavedInstanceEncounterInfo) == "function" and chosen.numEncounters > 0 then
+        for encounterIndex = 1, chosen.numEncounters do
+            local encounterName, _, isKilled = SafeCall(GetSavedInstanceEncounterInfo, chosen.index, encounterIndex)
+            if type(encounterName) == "string" and encounterName ~= "" then
+                encounters[#encounters + 1] = {
+                    name = encounterName,
+                    isCompleted = isKilled == true,
+                }
+            end
+        end
+    end
+
+    return {
+        numEncounters = chosen.numEncounters,
+        numCompleted = chosen.numCompleted,
+        encounters = encounters,
+    }
+end
+
+local function GetLFGEncounterProgress(lfgDungeonID)
+    if type(lfgDungeonID) ~= "number"
+        or lfgDungeonID <= 0
+        or type(GetLFGDungeonNumEncounters) ~= "function"
+    then
+        return nil
+    end
+
+    local numEncounters, numCompleted = SafeCall(GetLFGDungeonNumEncounters, lfgDungeonID)
+    if type(numEncounters) ~= "number" or numEncounters <= 0 then
+        return nil
+    end
+
+    local encounters = {}
+    if type(GetLFGDungeonEncounterInfo) == "function" then
+        for encounterIndex = 1, numEncounters do
+            local encounterName, _, isCompleted = SafeCall(GetLFGDungeonEncounterInfo, lfgDungeonID, encounterIndex)
+            if type(encounterName) == "string" and encounterName ~= "" then
+                encounters[#encounters + 1] = {
+                    name = encounterName,
+                    isCompleted = isCompleted == true,
+                }
+            end
+        end
+    end
+
+    return {
+        numEncounters = numEncounters,
+        numCompleted = tonumber(numCompleted) or 0,
+        encounters = encounters,
+    }
+end
+
+local function GetEncounterJournalFunctions()
+    local isLoaded = (type(C_AddOns) == "table"
+            and type(C_AddOns.IsAddOnLoaded) == "function"
+            and C_AddOns.IsAddOnLoaded("Blizzard_EncounterJournal"))
+        or (type(IsAddOnLoaded) == "function" and IsAddOnLoaded("Blizzard_EncounterJournal"))
+
+    if not isLoaded and type(LoadAddOn) == "function" then
+        pcall(LoadAddOn, "Blizzard_EncounterJournal")
+    end
+
+    if type(_G.EJ_SelectTier) ~= "function"
+        or type(_G.EJ_GetCurrentTier) ~= "function"
+        or type(_G.EJ_GetNumTiers) ~= "function"
+        or type(_G.EJ_GetInstanceByIndex) ~= "function"
+        or type(_G.EJ_SelectInstance) ~= "function"
+        or type(_G.EJ_GetEncounterInfoByIndex) ~= "function"
+    then
+        return nil
+    end
+
+    return {
+        selectTier = _G.EJ_SelectTier,
+        getCurrentTier = _G.EJ_GetCurrentTier,
+        getNumTiers = _G.EJ_GetNumTiers,
+        getInstanceByIndex = _G.EJ_GetInstanceByIndex,
+        selectInstance = _G.EJ_SelectInstance,
+        getEncounterInfoByIndex = _G.EJ_GetEncounterInfoByIndex,
+    }
+end
+
+local function SafeEncounterJournalSelectTier(ej, tierIndex)
+    if not ej or type(ej.selectTier) ~= "function" then
+        return false
+    end
+
+    local numericTier = tonumber(tierIndex)
+    if not numericTier or numericTier <= 0 then
+        return false
+    end
+
+    return pcall(ej.selectTier, numericTier) == true
+end
+
+local function FindBestEncounterJournalInstance(mapID, mapName, expectRaid)
+    local ej = GetEncounterJournalFunctions()
+    if not ej then
+        return nil
+    end
+
+    local searchKey = NormalizeInstanceSearchKey(mapName)
+    if searchKey == "" then
+        return nil
+    end
+
+    local exactMatch = nil
+    local partialMatch = nil
+    local previousTier = ej.getCurrentTier()
+    local tierCount = tonumber(ej.getNumTiers()) or 0
+
+    for tierIndex = 1, tierCount do
+        if not SafeEncounterJournalSelectTier(ej, tierIndex) then
+            break
+        end
+
+        for _, isRaid in ipairs({ expectRaid == true, expectRaid ~= true }) do
+            local instanceIndex = 1
+            while true do
+                local instanceID, instanceName = ej.getInstanceByIndex(instanceIndex, isRaid)
+                if not instanceID then
+                    break
+                end
+
+                local instanceKey = NormalizeInstanceSearchKey(instanceName)
+                if instanceKey == searchKey then
+                    exactMatch = { tier = tierIndex, id = instanceID, name = instanceName, isRaid = isRaid }
+                    break
+                elseif partialMatch == nil and instanceKey ~= "" and
+                    (instanceKey:find(searchKey, 1, true) or searchKey:find(instanceKey, 1, true)) then
+                    partialMatch = { tier = tierIndex, id = instanceID, name = instanceName, isRaid = isRaid }
+                end
+
+                instanceIndex = instanceIndex + 1
+            end
+
+            if exactMatch then
+                break
+            end
+        end
+
+        if exactMatch then
+            break
+        end
+    end
+
+    if previousTier then
+        SafeEncounterJournalSelectTier(ej, previousTier)
+    end
+
+    return exactMatch or partialMatch
+end
+
+local function GetEncounterJournalProgress(instance)
+    if type(instance) ~= "table" then
+        return nil
+    end
+
+    local instanceInfo = FindBestEncounterJournalInstance(instance.mapID, instance.name, instance.isRaid)
+    local ej = GetEncounterJournalFunctions()
+    if not instanceInfo or not ej then
+        return nil
+    end
+
+    local encounters = {}
+    local previousTier = ej.getCurrentTier()
+    if SafeEncounterJournalSelectTier(ej, instanceInfo.tier) and pcall(ej.selectInstance, instanceInfo.id) then
+        local encounterIndex = 1
+        while true do
+            pcall(ej.selectInstance, instanceInfo.id)
+            local encounterName = ej.getEncounterInfoByIndex(encounterIndex)
+            if not encounterName then
+                break
+            end
+
+            encounters[#encounters + 1] = {
+                name = encounterName,
+                isCompleted = false,
+            }
+            encounterIndex = encounterIndex + 1
+        end
+    end
+
+    if previousTier then
+        SafeEncounterJournalSelectTier(ej, previousTier)
+    end
+
+    if #encounters == 0 then
+        return nil
+    end
+
+    return {
+        numEncounters = #encounters,
+        numCompleted = 0,
+        encounters = encounters,
+    }
+end
+
+local function MergeEncounterProgress(primary, overlay)
+    if type(primary) ~= "table" then
+        return overlay
+    end
+    if type(overlay) ~= "table" then
+        return primary
+    end
+
+    local merged = {
+        numEncounters = tonumber(primary.numEncounters) or tonumber(overlay.numEncounters) or 0,
+        numCompleted = tonumber(primary.numCompleted) or 0,
+        encounters = {},
+    }
+
+    local overlayByKey = {}
+    for index, encounter in ipairs(overlay.encounters or {}) do
+        local key = NormalizeInstanceSearchKey(encounter.name)
+        if key ~= "" then
+            overlayByKey[key] = encounter
+        end
+        overlayByKey["#" .. tostring(index)] = encounter
+    end
+
+    for index, encounter in ipairs(primary.encounters or {}) do
+        local key = NormalizeInstanceSearchKey(encounter.name)
+        local match = overlayByKey[key] or overlayByKey["#" .. tostring(index)]
+        local isCompleted = (match and match.isCompleted == true) or encounter.isCompleted == true
+        merged.encounters[#merged.encounters + 1] = {
+            name = encounter.name,
+            isCompleted = isCompleted,
+        }
+        if isCompleted then
+            merged.numCompleted = merged.numCompleted + 1
+        end
+    end
+
+    if #merged.encounters == 0 then
+        merged.encounters = overlay.encounters or {}
+        merged.numCompleted = tonumber(overlay.numCompleted) or 0
+    end
+
+    merged.numCompleted = math_max(merged.numCompleted, tonumber(overlay.numCompleted) or 0)
+
+    if merged.numEncounters <= 0 then
+        merged.numEncounters = #merged.encounters
+    end
+
+    return merged
+end
+
+local function BuildInstanceMetaText(instance, progress)
+    local parts = {}
+    parts[#parts + 1] = instance.isKeystone and "Mythic+" or (instance.isRaid and "Raid" or "Dungeon")
+
+    if type(instance.difficultyName) == "string" and instance.difficultyName ~= "" then
+        parts[#parts + 1] = instance.difficultyName
+    end
+
+    if type(progress) == "table" and tonumber(progress.numEncounters) and progress.numEncounters > 0 then
+        parts[#parts + 1] = string_format("%d/%d encounters", tonumber(progress.numCompleted) or 0,
+            tonumber(progress.numEncounters) or 0)
+    end
+
+    return table.concat(parts, "  •  ")
+end
+
 local function SetWaypoint(mapID, x, y, questID)
     if type(mapID) == "number" and type(x) == "number" and type(y) == "number"
         and type(_G.CreateVector2D) == "function"
@@ -645,6 +1085,141 @@ function ObjectiveTracker:GetObjectiveFontString(entryFrame, index)
     text:SetWordWrap(true)
     entryFrame.Objectives[index] = text
     return text
+end
+
+local function BuildInstanceDebugSnapshotData()
+    local instance = GetCurrentInstanceContext()
+    if not instance then
+        return {
+            inInstance = false,
+            reason = "No party or raid instance context detected.",
+        }
+    end
+
+    local savedCandidates, exactSaved, partialSaved, totalSavedInstances = GetSavedInstanceCandidates(instance)
+    local journal = GetEncounterJournalProgress(instance)
+    local lfg = GetLFGEncounterProgress(instance.lfgDungeonID)
+    local saved = GetSavedInstanceProgress(instance)
+    local merged = MergeEncounterProgress(journal, lfg)
+    merged = MergeEncounterProgress(merged, saved)
+
+    return {
+        inInstance = true,
+        instance = instance,
+        savedCandidates = savedCandidates,
+        exactSaved = exactSaved,
+        partialSaved = partialSaved,
+        totalSavedInstances = totalSavedInstances,
+        journal = journal,
+        lfg = lfg,
+        saved = saved,
+        merged = merged,
+        requestAge = type(GetTime) == "function" and ((GetTime() or 0) - (ObjectiveTracker.lastRaidInfoRequestAt or 0)) or
+        nil,
+    }
+end
+
+local function BuildProgressSummary(progress)
+    if type(progress) ~= "table" then
+        return "nil"
+    end
+
+    return string_format("%d/%d encounters, %d rows", tonumber(progress.numCompleted) or 0,
+        tonumber(progress.numEncounters) or 0, #(progress.encounters or {}))
+end
+
+local function BuildCandidateSummary(candidate)
+    if type(candidate) ~= "table" then
+        return "nil"
+    end
+
+    return string_format("index=%s difficulty=%s (%s) completed=%d/%d locked=%s extended=%s reset=%s",
+        SafeDebugString(candidate.index), SafeDebugString(candidate.difficultyID),
+        SafeDebugString(candidate.difficultyName ~= "" and candidate.difficultyName or "unknown"),
+        tonumber(candidate.numCompleted) or 0, tonumber(candidate.numEncounters) or 0,
+        SafeDebugString(candidate.locked), SafeDebugString(candidate.extended), SafeDebugString(candidate.reset))
+end
+
+local function BuildEncounterLines(label, progress)
+    local lines = {}
+    if type(progress) ~= "table" then
+        lines[#lines + 1] = string_format("%s encounters: nil", label)
+        return lines
+    end
+
+    lines[#lines + 1] = string_format("%s encounters: %s", label, BuildProgressSummary(progress))
+    for index, encounter in ipairs(progress.encounters or {}) do
+        lines[#lines + 1] = string_format("  %02d. [%s] %s", index,
+            encounter.isCompleted == true and "x" or " ", SafeDebugString(encounter.name))
+    end
+
+    return lines
+end
+
+local function EmitInstanceDebugSnapshot(shouldShow, contextLabel)
+    local data = BuildInstanceDebugSnapshotData()
+    ObjectiveTracker.lastInstanceDebugSnapshot = data
+
+    LogDebug(
+        string_format("----- Objective Tracker Instance Snapshot (%s) -----", SafeDebugString(contextLabel or "manual")),
+        shouldShow)
+
+    if data.inInstance ~= true then
+        LogDebug(data.reason or "No instance context available.", false)
+        return data
+    end
+
+    local instance = data.instance or {}
+    LogDebugf(false,
+        "instance name=%s type=%s difficultyID=%s difficulty=%s mapID=%s lfgDungeonID=%s raid=%s keystone=%s",
+        SafeDebugString(instance.name), SafeDebugString(instance.instanceType), SafeDebugString(instance.difficultyID),
+        SafeDebugString(instance.difficultyName), SafeDebugString(instance.mapID), SafeDebugString(instance.lfgDungeonID),
+        SafeDebugString(instance.isRaid), SafeDebugString(instance.isKeystone))
+    LogDebugf(false, "saved total=%s candidates=%d exact=%s partial=%s lastRaidInfoRequestAge=%s",
+        SafeDebugString(data.totalSavedInstances), #(data.savedCandidates or {}), BuildCandidateSummary(data.exactSaved),
+        BuildCandidateSummary(data.partialSaved), data.requestAge and string_format("%.2fs", data.requestAge) or "nil")
+
+    for index, candidate in ipairs(data.savedCandidates or {}) do
+        LogDebugf(false, "saved[%d] %s", index, BuildCandidateSummary(candidate))
+    end
+
+    if #(data.savedCandidates or {}) == 0 and type(GetNumSavedInstances) == "function" and type(GetSavedInstanceInfo) == "function" then
+        local totalSaved = tonumber(SafeCall(GetNumSavedInstances)) or 0
+        for index = 1, totalSaved do
+            local name, _, reset, difficultyID, locked, extended, _, isRaid, _, difficultyName, numEncounters, numCompleted =
+            SafeCall(
+                GetSavedInstanceInfo, index)
+            LogDebugf(false,
+                "saved-all[%d] name=%s difficultyID=%s difficulty=%s raid=%s completed=%s/%s locked=%s extended=%s reset=%s",
+                index, SafeDebugString(name), SafeDebugString(difficultyID), SafeDebugString(difficultyName),
+                SafeDebugString(isRaid), SafeDebugString(numCompleted), SafeDebugString(numEncounters),
+                SafeDebugString(locked), SafeDebugString(extended), SafeDebugString(reset))
+        end
+    end
+
+    LogDebugf(false, "journal=%s | lfg=%s | saved=%s | merged=%s",
+        BuildProgressSummary(data.journal), BuildProgressSummary(data.lfg), BuildProgressSummary(data.saved),
+        BuildProgressSummary(data.merged))
+
+    for _, line in ipairs(BuildEncounterLines("journal", data.journal)) do
+        LogDebug(line, false)
+    end
+    for _, line in ipairs(BuildEncounterLines("lfg", data.lfg)) do
+        LogDebug(line, false)
+    end
+    for _, line in ipairs(BuildEncounterLines("saved", data.saved)) do
+        LogDebug(line, false)
+    end
+    for _, line in ipairs(BuildEncounterLines("merged", data.merged)) do
+        LogDebug(line, false)
+    end
+
+    local console = GetDebugConsole()
+    if shouldShow and console and type(console.Show) == "function" then
+        console:Show(DEBUG_SOURCE_KEY)
+    end
+
+    return data
 end
 
 function ObjectiveTracker:CreateSectionFrame(parent, index)
@@ -1027,10 +1602,88 @@ function ObjectiveTracker:BuildScenarioEntry()
     return entry
 end
 
+function ObjectiveTracker:BuildInstanceEntry()
+    local options = GetOptions()
+    if not options or not options.GetShowInstanceSection or not options:GetShowInstanceSection() then
+        return nil
+    end
+
+    local instance = GetCurrentInstanceContext()
+    if not instance then
+        return nil
+    end
+
+    local progress = GetEncounterJournalProgress(instance)
+    progress = MergeEncounterProgress(progress, GetLFGEncounterProgress(instance.lfgDungeonID))
+    progress = MergeEncounterProgress(progress, GetSavedInstanceProgress(instance))
+
+    local entry = {
+        signature = string_format("instance:%s:%s:%s:%s", tostring(instance.name), tostring(instance.difficultyID),
+            tostring(progress and progress.numCompleted or 0), tostring(progress and progress.numEncounters or 0)),
+        type = "instance",
+        title = instance.name,
+        sectionKey = "instance",
+        isScenario = false,
+        isCurrentZone = true,
+        isWorldQuest = false,
+        isComplete = false,
+        isSuperTracked = false,
+        objectives = {},
+        mapID = instance.mapID,
+        metaText = BuildInstanceMetaText(instance, progress),
+    }
+
+    if options:GetShowQuestObjectives() and type(progress) == "table" then
+        for _, encounter in ipairs(progress.encounters or {}) do
+            if type(encounter.name) == "string" and encounter.name ~= "" then
+                table_insert(entry.objectives, {
+                    text = "• " .. encounter.name,
+                    isComplete = encounter.isCompleted == true,
+                })
+            end
+        end
+    end
+
+    return entry
+end
+
+function ObjectiveTracker:GetDebugSummaryLine()
+    local snapshot = self.lastInstanceDebugSnapshot or BuildInstanceDebugSnapshotData()
+    if type(snapshot) ~= "table" or snapshot.inInstance ~= true then
+        return "|cffff9a6cObjective tracker: no active raid or dungeon context.|r"
+    end
+
+    local instance = snapshot.instance or {}
+    local merged = snapshot.merged
+    local saved = snapshot.saved
+    return string_format(
+        "|cff69b86f%s|r  |  merged: |cff9ad1ff%s|r  |  saved: |cffd8c27a%s|r  |  candidates: |cffd8c27a%d|r",
+        SafeDebugString(instance.name or "Instance"), BuildProgressSummary(merged), BuildProgressSummary(saved),
+        #(snapshot.savedCandidates or {}))
+end
+
+function ObjectiveTracker:CaptureDebugSnapshot(shouldShow)
+    RequestInstanceLockoutInfo(true)
+    EmitInstanceDebugSnapshot(shouldShow == true, "manual-immediate")
+
+    if C_Timer and type(C_Timer.After) == "function" then
+        C_Timer.After(1.0, function()
+            if ObjectiveTracker and ObjectiveTracker:IsEnabled() then
+                EmitInstanceDebugSnapshot(false, "manual-follow-up")
+            end
+        end)
+    end
+end
+
 function ObjectiveTracker:CollectEntries()
     local entries = {}
     local currentMapID = GetCurrentMapID()
     local seenQuestIDs = {}
+
+    local instanceEntry = self:BuildInstanceEntry()
+    if instanceEntry then
+        table_insert(entries, instanceEntry)
+    end
 
     if type(C_QuestLog) == "table"
         and type(C_QuestLog.GetNumQuestWatches) == "function"
@@ -1064,7 +1717,7 @@ function ObjectiveTracker:CollectEntries()
 
     local scenarioEntry = self:BuildScenarioEntry()
     if scenarioEntry then
-        table_insert(entries, 1, scenarioEntry)
+        table_insert(entries, instanceEntry and 2 or 1, scenarioEntry)
     end
 
     return entries
@@ -1530,7 +2183,7 @@ function ObjectiveTracker:LayoutEntry(sectionFrame, entryFrame, entry, yOffset)
     entryFrame.Title:SetFont(bodyFontPath, options:GetBodyFontSize(), "")
     if entry.isComplete then
         entryFrame.Title:SetTextColor(completeR, completeG, completeB)
-    elseif entry.type == "quest" then
+    elseif entry.type == "quest" or entry.type == "instance" then
         entryFrame.Title:SetTextColor(questTitleR, questTitleG, questTitleB)
     else
         entryFrame.Title:SetTextColor(bodyTextR, bodyTextG, bodyTextB)
@@ -1678,6 +2331,8 @@ function ObjectiveTracker:RefreshNow(reason)
     self:ApplyTheme()
     self:ApplyFramePosition()
     self:ApplyBlizzardTrackerState()
+
+    RequestInstanceLockoutInfo(reason == "enable")
 
     if self:ShouldHideForContext() then
         frame:Hide()
@@ -1944,6 +2599,17 @@ function ObjectiveTracker:RegisterWithMovers()
 end
 
 function ObjectiveTracker:OnRefreshEvent(event)
+    if event == "PLAYER_ENTERING_WORLD"
+        or event == "UPDATE_INSTANCE_INFO"
+        or event == "ENCOUNTER_END"
+        or event == "PLAYER_DIFFICULTY_CHANGED"
+        or event == "CHALLENGE_MODE_START"
+        or event == "CHALLENGE_MODE_COMPLETED"
+        or event == "CHALLENGE_MODE_RESET"
+    then
+        RequestInstanceLockoutInfo(event == "PLAYER_ENTERING_WORLD")
+    end
+
     self:ScheduleRefresh(event)
 end
 
@@ -1953,6 +2619,13 @@ function ObjectiveTracker:OnEnable()
     end
 
     self:CreateFrame()
+    local console = GetDebugConsole()
+    if console and console.RegisterSource then
+        console:RegisterSource(DEBUG_SOURCE_KEY, {
+            title = "Objective Tracker",
+            category = "Gameplay",
+        })
+    end
     for _, eventName in ipairs(EVENT_REFRESHES) do
         self:RegisterEvent(eventName, "OnRefreshEvent")
     end

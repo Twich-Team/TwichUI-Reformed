@@ -16,6 +16,7 @@ ConfigurationModule.Options.ObjectiveTracker = Options
 local DEFAULTS = {
     enabled = true,
     hideBlizzardTracker = true,
+    showInstanceSection = true,
     showScenario = true,
     showQuestObjectives = true,
     showCompletedQuests = true,
@@ -205,6 +206,14 @@ end
 
 function Options:SetShowScenario(_, value)
     SetBooleanSetting(self, "showScenario", value)
+end
+
+function Options:GetShowInstanceSection()
+    return GetBooleanSetting(self, "showInstanceSection")
+end
+
+function Options:SetShowInstanceSection(_, value)
+    SetBooleanSetting(self, "showInstanceSection", value)
 end
 
 function Options:GetShowQuestObjectives()
@@ -497,14 +506,15 @@ function Options:BuildConfiguration()
                 enable = { type = "toggle", order = 1, name = "Enable", handler = Options, get = "GetEnabled", set = "SetEnabled" },
                 collapse = { type = "toggle", order = 2, name = "Collapse Tracker", handler = Options, get = "GetCollapsed", set = "SetCollapsed" },
                 hideBlizzard = { type = "toggle", order = 3, name = "Hide Blizzard Tracker", handler = Options, get = "GetHideBlizzardTracker", set = "SetHideBlizzardTracker" },
-                showScenario = { type = "toggle", order = 4, name = "Show Scenario Section", handler = Options, get = "GetShowScenario", set = "SetShowScenario" },
-                showObjectives = { type = "toggle", order = 5, name = "Show Objective Lines", handler = Options, get = "GetShowQuestObjectives", set = "SetShowQuestObjectives" },
-                showCompleted = { type = "toggle", order = 6, name = "Show Completed Section", handler = Options, get = "GetShowCompletedQuests", set = "SetShowCompletedQuests" },
-                showTooltips = { type = "toggle", order = 7, name = "Show Tooltips", handler = Options, get = "GetShowTooltips", set = "SetShowTooltips" },
-                animateEntries = { type = "toggle", order = 8, name = "Animate Entries", handler = Options, get = "GetAnimateEntries", set = "SetAnimateEntries" },
+                showInstance = { type = "toggle", order = 4, name = "Show Instance Section", handler = Options, get = "GetShowInstanceSection", set = "SetShowInstanceSection" },
+                showScenario = { type = "toggle", order = 5, name = "Show Scenario Section", handler = Options, get = "GetShowScenario", set = "SetShowScenario" },
+                showObjectives = { type = "toggle", order = 6, name = "Show Objective Lines", handler = Options, get = "GetShowQuestObjectives", set = "SetShowQuestObjectives" },
+                showCompleted = { type = "toggle", order = 7, name = "Show Completed Section", handler = Options, get = "GetShowCompletedQuests", set = "SetShowCompletedQuests" },
+                showTooltips = { type = "toggle", order = 8, name = "Show Tooltips", handler = Options, get = "GetShowTooltips", set = "SetShowTooltips" },
+                animateEntries = { type = "toggle", order = 9, name = "Animate Entries", handler = Options, get = "GetAnimateEntries", set = "SetAnimateEntries" },
                 zoneFilterMode = {
                     type = "select",
-                    order = 9,
+                    order = 10,
                     name = "Zone Filter",
                     values = {
                         prioritize = "Prioritize Current Zone",
@@ -517,7 +527,7 @@ function Options:BuildConfiguration()
                 },
                 maxEntries = {
                     type = "range",
-                    order = 10,
+                    order = 11,
                     name = "Entry Limit",
                     desc = "Maximum number of visible quest rows before overflow is summarized.",
                     min = 1,
