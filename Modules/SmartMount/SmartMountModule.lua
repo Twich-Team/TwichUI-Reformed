@@ -82,6 +82,15 @@ local function IsSpellKnownSafe(spellID)
     return false
 end
 
+local function CanUseFlyingMounts()
+    local inInstance = IsInInstance and IsInInstance() or false
+    if inInstance then
+        return false
+    end
+
+    return IsFlyAbleArea() == true
+end
+
 local function CanUseSoar(options)
     if PLAYER_RACE ~= "Dracthyr" or not options:GetUseDracthyrSoar() then
         return false
@@ -91,12 +100,11 @@ local function CanUseSoar(options)
     -- IsFlyableArea() can incorrectly return true for some Midnight instance lobbies
     -- and does not know about per-instance flying restrictions. IsInInstance() is the
     -- definitive check: if we are in any instance, Soar will fail at cast time.
-    local inInstance = IsInInstance and IsInInstance() or false
-    if inInstance then return false end
+    if not CanUseFlyingMounts() then
+        return false
+    end
 
     -- Zone must actually support flying (outdoor flyable check).
-    if not IsFlyAbleArea() then return false end
-
     if not IsSpellKnownSafe(SOAR_SPELL_ID) then
         return false
     end
@@ -177,7 +185,7 @@ function SmartMountModule:GetSecureAction()
         end
     end
 
-    local flyable = IsFlyAbleArea() or false
+    local flyable = CanUseFlyingMounts()
 
     if flyable and CanUseSoar(options) then
         return "spell", SOAR_SPELL_ID
@@ -249,7 +257,7 @@ function SmartMountModule:MountUp()
         end
     end
 
-    local flyable = IsFlyAbleArea() or false
+    local flyable = CanUseFlyingMounts()
 
     if flyable and CanUseSoar(Options) then
         CastSoar()
