@@ -9,8 +9,10 @@ local T = unpack(TwichRx)
 local DataTextModule = T:GetModule("Datatexts")
 
 local floor = math.floor
+local max = math.max
 local min = math.min
 local format = string.format
+local gsub = string.gsub
 local tinsert = table.insert
 local sort = table.sort
 
@@ -39,6 +41,7 @@ local SIMC_ADDON_NAME = "Simulationcraft"
 ---@class MythicPlusDataText : AceModule
 ---@field definition DatatextDefinition
 ---@field panel ElvUI_DT_Panel|nil
+---@field EstimatorFrame Frame|nil
 ---@field SimulationCraftFrame Frame|nil
 local MPDT = DataTextModule:NewModule("MythicPlusDataText")
 
@@ -50,6 +53,35 @@ local MILESTONES = {
     { score = 2500, label = "Tier Appearance" },
     { score = 3000, label = "Additional Mount" },
 }
+
+local ESTIMATOR_OUTCOME_PROFILES = {
+    { key = "timed1", label = "Timed (+1)", shortLabel = "+1", starCount = 1, parFraction = 1.00, difficulty = 1 },
+    { key = "timed2", label = "Timed (+2)", shortLabel = "+2", starCount = 2, parFraction = 0.80, difficulty = 2 },
+    { key = "timed3", label = "Timed (+3)", shortLabel = "+3", starCount = 3, parFraction = 0.60, difficulty = 3 },
+}
+
+local ESTIMATOR_OUTCOME_CAPS = {
+    { key = "timed1", label = "Timed (+1) Max", maxDifficulty = 1 },
+    { key = "timed2", label = "Timed (+2) Max", maxDifficulty = 2 },
+    { key = "timed3", label = "Timed (+3) Max", maxDifficulty = 3 },
+}
+
+local ESTIMATOR_ROUTE_MODES = {
+    { key = "quickest",   label = "Quickest Route", description = "Prioritize the biggest score gains per run to hit the target in as few upgrades as possible." },
+    { key = "balanced",   label = "Balanced Route", description = "Trade some efficiency for easier keys and more forgiving upgrades." },
+    { key = "easiest",    label = "Easiest Route",  description = "Bias hard toward accessible completions and softer timer requirements." },
+    { key = "lowestkeys", label = "Lowest Keys",    description = "Push the minimum key level first, then take the best score gain available at that level." },
+}
+
+local ESTIMATOR_OUTCOME_COLORS = {
+    timed1 = { 0.24, 0.72, 0.92 },
+    timed2 = { 0.46, 0.78, 0.38 },
+    timed3 = { 0.90, 0.68, 0.22 },
+}
+
+local GetMapName
+local GetRatingSummary
+local GetOverallScore
 
 ---@return DatatextConfigurationOptions
 local function GetOptions()
@@ -133,7 +165,7 @@ local function GetSimulationCraftInstallState()
     end
 
     local loaded = C_AddOns and type(C_AddOns.IsAddOnLoaded) == "function" and C_AddOns.IsAddOnLoaded(SIMC_ADDON_NAME) or
-    false
+        false
     if loaded then
         enabled = true
     end
@@ -375,7 +407,7 @@ function MPDT:ShowSimulationCraftExportFrame(text, isError)
 
     frame.Title:SetText(isError and "SimulationCraft Message" or "SimulationCraft Export")
     frame.Subtitle:SetText(isError and "SimulationCraft returned a message instead of an export string." or
-    "Press Ctrl+C to copy. The window closes automatically after copy.")
+        "Press Ctrl+C to copy. The window closes automatically after copy.")
     frame.EditBox:SetText(text or "")
     frame.EditBox:SetCursorPosition(0)
     frame.EditBox:SetFocus()
@@ -400,7 +432,865 @@ function MPDT:OpenSimulationCraftExport()
     self:ShowSimulationCraftExportFrame(output, simcError ~= nil)
 end
 
-local function GetMapName(mapID)
+local function ClampNumber(value, low, high)
+    if type(value) ~= "number" then
+        return low
+    end
+
+    if value < low then
+        return low
+    end
+
+    if value > high then
+        return high
+    end
+
+    return value
+end
+
+local function RoundHalfUp(value)
+    if type(value) ~= "number" then
+        return 0
+    end
+
+    if value >= 0 then
+        return floor(value + 0.5)
+    end
+
+    return -floor(-value + 0.5)
+end
+
+local function FormatEstimatorNumber(value)
+    return format("%d", RoundHalfUp(value or 0))
+end
+
+local function FormatEstimatorDelta(value)
+    local rounded = RoundHalfUp(value or 0)
+    if rounded > 0 then
+        return "+" .. rounded
+    end
+
+    return tostring(rounded)
+end
+
+local function ParseEstimatorInteger(value, fallback)
+    if type(value) == "number" then
+        return RoundHalfUp(value)
+    end
+
+    if type(value) ~= "string" then
+        return fallback
+    end
+
+    local digits = value:match("%-?%d+")
+    local parsed = digits and tonumber(digits) or nil
+    if type(parsed) ~= "number" then
+        return fallback
+    end
+
+    return RoundHalfUp(parsed)
+end
+
+local function NormalizeEstimatorInputText(text)
+    if type(text) ~= "string" then
+        return ""
+    end
+
+    return (gsub(text, "^%s*(.-)%s*$", "%1"))
+end
+
+local function GetEstimatorMode(modeIndex)
+    return ESTIMATOR_ROUTE_MODES[ClampNumber(modeIndex or 1, 1, #ESTIMATOR_ROUTE_MODES)]
+end
+
+local function GetEstimatorOutcomeCap(capIndex)
+    return ESTIMATOR_OUTCOME_CAPS[ClampNumber(capIndex or 2, 1, #ESTIMATOR_OUTCOME_CAPS)]
+end
+
+local function GetEstimatorAllowedOutcomes(capIndex)
+    local cap = GetEstimatorOutcomeCap(capIndex)
+    local outcomes = {}
+
+    for _, profile in ipairs(ESTIMATOR_OUTCOME_PROFILES) do
+        if profile.difficulty <= cap.maxDifficulty then
+            tinsert(outcomes, profile)
+        end
+    end
+
+    return outcomes
+end
+
+local function GetOutcomeVisuals(outcomeKey)
+    local color = ESTIMATOR_OUTCOME_COLORS[outcomeKey] or { 0.75, 0.75, 0.75 }
+    return color[1], color[2], color[3]
+end
+
+local function GetEstimatorBreakpointBonus(level)
+    local bonus = 0
+    if level >= 5 then
+        bonus = bonus + 15
+    end
+    if level >= 7 then
+        bonus = bonus + 15
+    end
+    if level >= 10 then
+        bonus = bonus + 15
+    end
+    if level >= 12 then
+        bonus = bonus + 15
+    end
+    return bonus
+end
+
+local function GetEstimatorDungeonBaseScore(level)
+    if type(level) ~= "number" or level <= 0 then
+        return 0
+    end
+
+    local wholeLevel = RoundHalfUp(level)
+    if wholeLevel < 2 then
+        return 0
+    end
+
+    return 155 + ((wholeLevel - 2) * 15) + GetEstimatorBreakpointBonus(wholeLevel)
+end
+
+local function GetEstimatorTimeModifier(parTimeFraction)
+    if type(parTimeFraction) ~= "number" or parTimeFraction <= 0 then
+        return nil
+    end
+
+    local percentageOffset = 1 - parTimeFraction
+    if percentageOffset > 0.4 then
+        return 15
+    end
+
+    if percentageOffset > 0 then
+        return percentageOffset * 37.5
+    end
+
+    return 0
+end
+
+local function ComputeEstimatorRunScore(mapID, level, parFraction)
+    local parTime = C_ChallengeMode and type(C_ChallengeMode.GetMapUIInfo) == "function" and
+    select(3, C_ChallengeMode.GetMapUIInfo(mapID)) or nil
+    if type(parTime) ~= "number" or parTime <= 0 then
+        return nil
+    end
+
+    local timeModifier = GetEstimatorTimeModifier(parFraction)
+    if timeModifier == nil then
+        return {
+            baseScore = GetEstimatorDungeonBaseScore(level),
+            totalScore = 0,
+            modifier = nil,
+            parFraction = parFraction,
+        }
+    end
+
+    local baseScore = GetEstimatorDungeonBaseScore(level)
+    return {
+        baseScore = baseScore,
+        totalScore = max(0, baseScore + timeModifier),
+        modifier = timeModifier,
+        parFraction = parFraction,
+    }
+end
+
+local function ComputeEstimatorDungeonScore(score)
+    return score or 0
+end
+
+local function GetEstimatorCurrentMapState(summary, mapID)
+    local runInfo = nil
+    if type(summary) == "table" and type(summary.runs) == "table" then
+        for _, candidate in ipairs(summary.runs) do
+            if type(candidate) == "table" and candidate.challengeModeID == mapID then
+                runInfo = candidate
+                break
+            end
+        end
+    end
+
+    local mapScore = type(runInfo) == "table" and runInfo.mapScore or nil
+    local bestRunLevel = type(runInfo) == "table" and runInfo.bestRunLevel or nil
+
+    if (type(mapScore) ~= "number" or type(bestRunLevel) ~= "number") and C_MythicPlus and type(C_MythicPlus.GetSeasonBestForMap) == "function" then
+        local intimeInfo, overtimeInfo = C_MythicPlus.GetSeasonBestForMap(mapID)
+        local bestRun = nil
+        if type(intimeInfo) == "table" then
+            bestRun = intimeInfo
+        end
+        if type(overtimeInfo) == "table" and (not bestRun or (overtimeInfo.dungeonScore or 0) > (bestRun.dungeonScore or 0)) then
+            bestRun = overtimeInfo
+        end
+        if type(bestRun) == "table" then
+            local bestRunMapScore = rawget(bestRun, "mapScore")
+            local bestRunDungeonScore = rawget(bestRun, "dungeonScore")
+            local resolvedBestRunLevel = rawget(bestRun, "level") or rawget(bestRun, "bestRunLevel")
+            mapScore = bestRunMapScore or bestRunDungeonScore or mapScore
+            bestRunLevel = resolvedBestRunLevel or bestRunLevel
+        end
+    end
+
+    return {
+        score = type(mapScore) == "number" and mapScore or 0,
+        roundedScore = RoundHalfUp(type(mapScore) == "number" and mapScore or 0),
+        level = type(bestRunLevel) == "number" and bestRunLevel or 0,
+    }
+end
+
+local function GetEstimatorMapIDs(summary)
+    local seen = {}
+    local mapIDs = {}
+
+    if C_ChallengeMode and type(C_ChallengeMode.GetMapTable) == "function" then
+        local activeMapIDs = C_ChallengeMode.GetMapTable()
+        if type(activeMapIDs) == "table" then
+            for _, mapID in ipairs(activeMapIDs) do
+                if type(mapID) == "number" and mapID > 0 and not seen[mapID] then
+                    seen[mapID] = true
+                    tinsert(mapIDs, mapID)
+                end
+            end
+        end
+    end
+
+    if type(summary) == "table" and type(summary.runs) == "table" then
+        for _, runInfo in ipairs(summary.runs) do
+            local mapID = type(runInfo) == "table" and runInfo.challengeModeID or nil
+            if type(mapID) == "number" and mapID > 0 and not seen[mapID] then
+                seen[mapID] = true
+                tinsert(mapIDs, mapID)
+            end
+        end
+    end
+
+    sort(mapIDs, function(left, right)
+        return GetMapName(left) < GetMapName(right)
+    end)
+
+    return mapIDs
+end
+
+local function BuildEstimatorState(summary)
+    local state = {}
+
+    for _, mapID in ipairs(GetEstimatorMapIDs(summary)) do
+        local runState = GetEstimatorCurrentMapState(summary, mapID)
+        state[mapID] = {
+            mapID = mapID,
+            name = GetMapName(mapID),
+            bestRun = runState,
+            totalScore = ComputeEstimatorDungeonScore(runState.score),
+        }
+    end
+
+    return state
+end
+
+local function GetEstimatorCandidateWeight(candidate, modeKey)
+    if modeKey == "quickest" then
+        return (candidate.delta * 1000) - (candidate.level * 8) - candidate.outcome.difficulty
+    end
+
+    if modeKey == "balanced" then
+        return (candidate.delta * 240) - (candidate.level * 30) - (candidate.outcome.difficulty * 14)
+    end
+
+    if modeKey == "easiest" then
+        return (candidate.delta * 25) - (candidate.level * 240) - (candidate.outcome.difficulty * 100)
+    end
+
+    return (candidate.delta * 20) - (candidate.level * 320) - (candidate.outcome.difficulty * 70)
+end
+
+local function BuildEstimatorCandidates(state, maxKeyLevel, outcomeCapIndex, modeIndex)
+    local mode = GetEstimatorMode(modeIndex)
+    local candidates = {}
+    local allowedOutcomes = GetEstimatorAllowedOutcomes(outcomeCapIndex)
+
+    for mapID, mapState in pairs(state) do
+        for level = 2, maxKeyLevel do
+            for _, outcome in ipairs(allowedOutcomes) do
+                local projectedRun = ComputeEstimatorRunScore(mapID, level, outcome.parFraction)
+                local newDungeonScore = projectedRun and projectedRun.totalScore or 0
+                if newDungeonScore > ((mapState.totalScore or 0) + 0.05) then
+                    local delta = newDungeonScore - (mapState.totalScore or 0)
+                    if delta > 0.05 then
+                        local candidate = {
+                            mapID = mapID,
+                            mapName = mapState.name,
+                            currentDungeonScore = mapState.totalScore or 0,
+                            level = level,
+                            outcome = outcome,
+                            newDungeonScore = newDungeonScore,
+                            delta = delta,
+                        }
+                        candidate.weight = GetEstimatorCandidateWeight(candidate, mode.key)
+                        tinsert(candidates, candidate)
+                    end
+                end
+            end
+        end
+    end
+
+    sort(candidates, function(left, right)
+        if left.weight ~= right.weight then
+            return left.weight > right.weight
+        end
+
+        if left.level ~= right.level then
+            return left.level < right.level
+        end
+
+        if left.outcome.difficulty ~= right.outcome.difficulty then
+            return left.outcome.difficulty < right.outcome.difficulty
+        end
+
+        if left.delta ~= right.delta then
+            return left.delta > right.delta
+        end
+
+        if left.mapName ~= right.mapName then
+            return left.mapName < right.mapName
+        end
+
+        return left.outcome.difficulty < right.outcome.difficulty
+    end)
+
+    return candidates
+end
+
+local function ApplyEstimatorCandidate(state, candidate)
+    local mapState = state[candidate.mapID]
+    if not mapState or not mapState.bestRun then
+        return
+    end
+
+    mapState.bestRun.score = candidate.newDungeonScore
+    mapState.bestRun.roundedScore = RoundHalfUp(candidate.newDungeonScore)
+    mapState.bestRun.level = candidate.level
+    mapState.totalScore = candidate.newDungeonScore
+end
+
+local function BuildEstimatorPlan(currentScore, targetScore, maxKeyLevel, outcomeCapIndex, modeIndex, summary)
+    local plan = {
+        currentScore = currentScore,
+        targetScore = targetScore,
+        mode = GetEstimatorMode(modeIndex),
+        cap = GetEstimatorOutcomeCap(outcomeCapIndex),
+        maxKeyLevel = maxKeyLevel,
+        steps = {},
+        projectedScore = currentScore,
+        reachable = targetScore <= currentScore,
+    }
+
+    if targetScore <= currentScore then
+        return plan
+    end
+
+    local state = BuildEstimatorState(summary)
+    local stepLimit = 24
+
+    for _ = 1, stepLimit do
+        local candidates = BuildEstimatorCandidates(state, maxKeyLevel, outcomeCapIndex, modeIndex)
+        local candidate = candidates[1]
+        if not candidate then
+            break
+        end
+
+        ApplyEstimatorCandidate(state, candidate)
+        plan.projectedScore = plan.projectedScore + candidate.delta
+        candidate.projectedScore = plan.projectedScore
+        tinsert(plan.steps, candidate)
+
+        if plan.projectedScore >= (targetScore - 0.05) then
+            plan.reachable = true
+            break
+        end
+    end
+
+    plan.totalGain = plan.projectedScore - currentScore
+    plan.remaining = max(0, targetScore - plan.projectedScore)
+    if not plan.reachable then
+        plan.reason = #plan.steps == 0 and "No upgrades fit the current key and timer caps." or
+            "The current caps run out of score before the target is reached."
+    end
+
+    return plan
+end
+
+local function ApplyEstimatorBackdrop(frame, bgColor, borderColor)
+    frame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        tile = false,
+        edgeSize = 1,
+        insets = { left = 0, right = 0, top = 0, bottom = 0 },
+    })
+    frame:SetBackdropColor(bgColor[1], bgColor[2], bgColor[3], bgColor[4])
+    frame:SetBackdropBorderColor(borderColor[1], borderColor[2], borderColor[3], borderColor[4])
+end
+
+local function CreateEstimatorCard(parent, bgColor, borderColor)
+    local card = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    ApplyEstimatorBackdrop(card, bgColor, borderColor)
+
+    card.Accent = card:CreateTexture(nil, "ARTWORK")
+    card.Accent:SetPoint("TOPLEFT", card, "TOPLEFT", 0, 0)
+    card.Accent:SetPoint("BOTTOMLEFT", card, "BOTTOMLEFT", 0, 0)
+    card.Accent:SetWidth(3)
+    card.Accent:SetColorTexture(borderColor[1], borderColor[2], borderColor[3], 1)
+
+    return card
+end
+
+local function CreateEstimatorFrame(owner)
+    local frame = CreateFrame("Frame", "TwichUIMythicPlusEstimatorFrame", UIParent, "BackdropTemplate")
+    frame:SetSize(1040, 700)
+    frame:SetPoint("CENTER")
+    frame:SetFrameStrata("DIALOG")
+    frame:SetToplevel(true)
+    frame:SetMovable(true)
+    frame:EnableMouse(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetClampedToScreen(true)
+    ApplyEstimatorBackdrop(frame, { 0.035, 0.05, 0.08, 0.97 }, { 0.18, 0.24, 0.32, 1 })
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    frame:Hide()
+
+    frame.Header = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+    frame.Header:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -14)
+    frame.Header:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -14, -14)
+    frame.Header:SetHeight(92)
+    ApplyEstimatorBackdrop(frame.Header, { 0.06, 0.09, 0.13, 0.96 }, { 0.16, 0.22, 0.32, 1 })
+
+    frame.HeaderGlow = frame.Header:CreateTexture(nil, "BACKGROUND")
+    frame.HeaderGlow:SetPoint("TOPLEFT", frame.Header, "TOPLEFT", 1, -1)
+    frame.HeaderGlow:SetPoint("TOPRIGHT", frame.Header, "TOPRIGHT", -1, -1)
+    frame.HeaderGlow:SetHeight(28)
+    frame.HeaderGlow:SetColorTexture(0.18, 0.52, 0.74, 0.18)
+
+    frame.Title = frame.Header:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+    frame.Title:SetPoint("TOPLEFT", frame.Header, "TOPLEFT", 18, -14)
+    frame.Title:SetJustifyH("LEFT")
+    frame.Title:SetText("Mythic+ Score Estimator")
+    frame.Title:SetTextColor(0.96, 0.98, 1)
+
+    frame.Subtitle = frame.Header:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.Subtitle:SetPoint("TOPLEFT", frame.Title, "BOTTOMLEFT", 0, -6)
+    frame.Subtitle:SetJustifyH("LEFT")
+    frame.Subtitle:SetText("Plan a target score using Blizzard score math, route heuristics, and realistic key caps.")
+    frame.Subtitle:SetTextColor(0.65, 0.78, 0.92)
+
+    frame.Close = CreateFrame("Button", nil, frame.Header, "UIPanelCloseButton")
+    frame.Close:SetPoint("TOPRIGHT", frame.Header, "TOPRIGHT", 4, 4)
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinCloseButton then
+        T.Tools.UI.SkinCloseButton(frame.Close)
+    end
+    frame.Close:SetScript("OnClick", function()
+        frame:Hide()
+    end)
+
+    frame.HeaderMeta = frame.Header:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.HeaderMeta:SetPoint("BOTTOMLEFT", frame.Header, "BOTTOMLEFT", 18, 16)
+    frame.HeaderMeta:SetJustifyH("LEFT")
+    frame.HeaderMeta:SetTextColor(0.78, 0.85, 0.92)
+
+    frame.CurrentCard = CreateEstimatorCard(frame, { 0.06, 0.10, 0.14, 0.95 }, { 0.18, 0.56, 0.82, 1 })
+    frame.CurrentCard:SetPoint("TOPLEFT", frame.Header, "BOTTOMLEFT", 0, -14)
+    frame.CurrentCard:SetSize(246, 78)
+    frame.CurrentCard.Label = frame.CurrentCard:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.CurrentCard.Label:SetPoint("TOPLEFT", frame.CurrentCard, "TOPLEFT", 16, -12)
+    frame.CurrentCard.Label:SetText("Current Score")
+    frame.CurrentCard.Label:SetTextColor(0.62, 0.79, 0.92)
+    frame.CurrentCard.Value = frame.CurrentCard:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+    frame.CurrentCard.Value:SetPoint("BOTTOMLEFT", frame.CurrentCard, "BOTTOMLEFT", 16, 14)
+    frame.CurrentCard.Value:SetTextColor(0.95, 0.98, 1)
+
+    frame.NeededCard = CreateEstimatorCard(frame, { 0.085, 0.09, 0.14, 0.95 }, { 0.84, 0.66, 0.22, 1 })
+    frame.NeededCard:SetPoint("LEFT", frame.CurrentCard, "RIGHT", 12, 0)
+    frame.NeededCard:SetSize(246, 78)
+    frame.NeededCard.Label = frame.NeededCard:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.NeededCard.Label:SetPoint("TOPLEFT", frame.NeededCard, "TOPLEFT", 16, -12)
+    frame.NeededCard.Label:SetText("Needed Gain")
+    frame.NeededCard.Label:SetTextColor(0.92, 0.82, 0.56)
+    frame.NeededCard.Value = frame.NeededCard:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+    frame.NeededCard.Value:SetPoint("BOTTOMLEFT", frame.NeededCard, "BOTTOMLEFT", 16, 14)
+    frame.NeededCard.Value:SetTextColor(1, 0.94, 0.86)
+
+    frame.PlanCard = CreateEstimatorCard(frame, { 0.06, 0.09, 0.12, 0.95 }, { 0.44, 0.70, 0.40, 1 })
+    frame.PlanCard:SetPoint("LEFT", frame.NeededCard, "RIGHT", 12, 0)
+    frame.PlanCard:SetSize(246, 78)
+    frame.PlanCard.Label = frame.PlanCard:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.PlanCard.Label:SetPoint("TOPLEFT", frame.PlanCard, "TOPLEFT", 16, -12)
+    frame.PlanCard.Label:SetText("Estimated Runs")
+    frame.PlanCard.Label:SetTextColor(0.72, 0.90, 0.68)
+    frame.PlanCard.Value = frame.PlanCard:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+    frame.PlanCard.Value:SetPoint("BOTTOMLEFT", frame.PlanCard, "BOTTOMLEFT", 16, 14)
+    frame.PlanCard.Value:SetTextColor(0.93, 1, 0.91)
+
+    frame.CapCard = CreateEstimatorCard(frame, { 0.07, 0.08, 0.12, 0.95 }, { 0.62, 0.46, 0.86, 1 })
+    frame.CapCard:SetPoint("LEFT", frame.PlanCard, "RIGHT", 12, 0)
+    frame.CapCard:SetSize(246, 78)
+    frame.CapCard.Label = frame.CapCard:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.CapCard.Label:SetPoint("TOPLEFT", frame.CapCard, "TOPLEFT", 16, -12)
+    frame.CapCard.Label:SetText("Route Cap")
+    frame.CapCard.Label:SetTextColor(0.85, 0.74, 0.96)
+    frame.CapCard.Value = frame.CapCard:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    frame.CapCard.Value:SetPoint("BOTTOMLEFT", frame.CapCard, "BOTTOMLEFT", 16, 18)
+    frame.CapCard.Value:SetTextColor(0.97, 0.94, 1)
+
+    frame.ControlPanel = CreateEstimatorCard(frame, { 0.05, 0.07, 0.10, 0.96 }, { 0.14, 0.18, 0.24, 1 })
+    frame.ControlPanel:SetPoint("TOPLEFT", frame.CurrentCard, "BOTTOMLEFT", 0, -14)
+    frame.ControlPanel:SetPoint("TOPRIGHT", frame.CapCard, "BOTTOMRIGHT", 0, -14)
+    frame.ControlPanel:SetHeight(86)
+
+    frame.TargetLabel = frame.ControlPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.TargetLabel:SetPoint("TOPLEFT", frame.ControlPanel, "TOPLEFT", 16, -12)
+    frame.TargetLabel:SetText("Target Score")
+    frame.TargetLabel:SetTextColor(0.78, 0.84, 0.92)
+
+    frame.TargetInput = CreateFrame("EditBox", nil, frame.ControlPanel, "InputBoxTemplate")
+    frame.TargetInput:SetAutoFocus(false)
+    frame.TargetInput:SetSize(110, 28)
+    frame.TargetInput:SetPoint("TOPLEFT", frame.TargetLabel, "BOTTOMLEFT", -2, -10)
+    frame.TargetInput:SetNumeric(true)
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinEditBox then
+        T.Tools.UI.SkinEditBox(frame.TargetInput)
+    end
+
+    frame.MaxKeyLabel = frame.ControlPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.MaxKeyLabel:SetPoint("TOPLEFT", frame.TargetLabel, "TOPRIGHT", 34, 0)
+    frame.MaxKeyLabel:SetText("Max Key")
+    frame.MaxKeyLabel:SetTextColor(0.78, 0.84, 0.92)
+
+    frame.MaxKeyInput = CreateFrame("EditBox", nil, frame.ControlPanel, "InputBoxTemplate")
+    frame.MaxKeyInput:SetAutoFocus(false)
+    frame.MaxKeyInput:SetSize(80, 28)
+    frame.MaxKeyInput:SetPoint("TOPLEFT", frame.MaxKeyLabel, "BOTTOMLEFT", -2, -10)
+    frame.MaxKeyInput:SetNumeric(true)
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinEditBox then
+        T.Tools.UI.SkinEditBox(frame.MaxKeyInput)
+    end
+
+    frame.RouteModeButton = CreateFrame("Button", nil, frame.ControlPanel, "UIPanelButtonTemplate")
+    frame.RouteModeButton:SetSize(188, 28)
+    frame.RouteModeButton:SetPoint("TOPLEFT", frame.MaxKeyInput, "TOPRIGHT", 34, 0)
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichButton then
+        T.Tools.UI.SkinTwichButton(frame.RouteModeButton, { 0.18, 0.58, 0.84 })
+    elseif T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
+        T.Tools.UI.SkinButton(frame.RouteModeButton)
+    end
+
+    frame.RouteModeLabel = frame.ControlPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.RouteModeLabel:SetPoint("BOTTOMLEFT", frame.RouteModeButton, "TOPLEFT", 0, 8)
+    frame.RouteModeLabel:SetText("Planner Mode")
+    frame.RouteModeLabel:SetTextColor(0.78, 0.84, 0.92)
+
+    frame.OutcomeCapButton = CreateFrame("Button", nil, frame.ControlPanel, "UIPanelButtonTemplate")
+    frame.OutcomeCapButton:SetSize(170, 28)
+    frame.OutcomeCapButton:SetPoint("LEFT", frame.RouteModeButton, "RIGHT", 12, 0)
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichButton then
+        T.Tools.UI.SkinTwichButton(frame.OutcomeCapButton, { 0.52, 0.42, 0.84 })
+    elseif T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
+        T.Tools.UI.SkinButton(frame.OutcomeCapButton)
+    end
+
+    frame.OutcomeCapLabel = frame.ControlPanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.OutcomeCapLabel:SetPoint("BOTTOMLEFT", frame.OutcomeCapButton, "TOPLEFT", 0, 8)
+    frame.OutcomeCapLabel:SetText("Best Allowed Result")
+    frame.OutcomeCapLabel:SetTextColor(0.78, 0.84, 0.92)
+
+    frame.RecalculateButton = CreateFrame("Button", nil, frame.ControlPanel, "UIPanelButtonTemplate")
+    frame.RecalculateButton:SetSize(136, 28)
+    frame.RecalculateButton:SetPoint("LEFT", frame.OutcomeCapButton, "RIGHT", 12, 0)
+    frame.RecalculateButton:SetText("Build Route")
+    if T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichButton then
+        T.Tools.UI.SkinTwichButton(frame.RecalculateButton, { 0.90, 0.68, 0.22 })
+    elseif T.Tools and T.Tools.UI and T.Tools.UI.SkinButton then
+        T.Tools.UI.SkinButton(frame.RecalculateButton)
+    end
+
+    frame.RoutePanel = CreateEstimatorCard(frame, { 0.045, 0.06, 0.09, 0.98 }, { 0.14, 0.18, 0.24, 1 })
+    frame.RoutePanel:SetPoint("TOPLEFT", frame.ControlPanel, "BOTTOMLEFT", 0, -14)
+    frame.RoutePanel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -300, 14)
+
+    frame.RoutePanelTitle = frame.RoutePanel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    frame.RoutePanelTitle:SetPoint("TOPLEFT", frame.RoutePanel, "TOPLEFT", 16, -14)
+    frame.RoutePanelTitle:SetText("Recommended Route")
+    frame.RoutePanelTitle:SetTextColor(0.95, 0.98, 1)
+
+    frame.RoutePanelHint = frame.RoutePanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.RoutePanelHint:SetPoint("TOPRIGHT", frame.RoutePanel, "TOPRIGHT", -16, -16)
+    frame.RoutePanelHint:SetJustifyH("RIGHT")
+    frame.RoutePanelHint:SetTextColor(0.60, 0.74, 0.88)
+
+    frame.RouteScrollFrame = CreateFrame("ScrollFrame", "TwichUIMythicPlusEstimatorRouteScrollFrame", frame.RoutePanel,
+        "UIPanelScrollFrameTemplate")
+    frame.RouteScrollFrame:SetPoint("TOPLEFT", frame.RoutePanelTitle, "BOTTOMLEFT", -2, -14)
+    frame.RouteScrollFrame:SetPoint("BOTTOMRIGHT", frame.RoutePanel, "BOTTOMRIGHT", -28, 14)
+    local routeScrollBar = frame.RouteScrollFrame.ScrollBar or
+    rawget(_G, "TwichUIMythicPlusEstimatorRouteScrollFrameScrollBar")
+    if routeScrollBar and T.Tools and T.Tools.UI and T.Tools.UI.SkinTwichScrollBar then
+        T.Tools.UI.SkinTwichScrollBar(routeScrollBar)
+    elseif routeScrollBar and T.Tools and T.Tools.UI and T.Tools.UI.SkinScrollBar then
+        T.Tools.UI.SkinScrollBar(routeScrollBar)
+    end
+
+    frame.RouteContainer = CreateFrame("Frame", nil, frame.RouteScrollFrame)
+    frame.RouteContainer:SetSize(1, 1)
+    frame.RouteScrollFrame:SetScrollChild(frame.RouteContainer)
+    frame.RouteCards = {}
+
+    frame.EmptyState = frame.RouteContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    frame.EmptyState:SetPoint("TOPLEFT", frame.RouteContainer, "TOPLEFT", 12, -18)
+    frame.EmptyState:SetWidth(640)
+    frame.EmptyState:SetJustifyH("LEFT")
+    frame.EmptyState:SetJustifyV("TOP")
+    frame.EmptyState:SetTextColor(0.56, 0.68, 0.80)
+    frame.EmptyState:SetText("Enter a target score and build a route.")
+
+    frame.SidePanel = CreateEstimatorCard(frame, { 0.055, 0.07, 0.10, 0.98 }, { 0.14, 0.18, 0.24, 1 })
+    frame.SidePanel:SetPoint("TOPLEFT", frame.RoutePanel, "TOPRIGHT", 14, 0)
+    frame.SidePanel:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 14)
+
+    frame.SideTitle = frame.SidePanel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    frame.SideTitle:SetPoint("TOPLEFT", frame.SidePanel, "TOPLEFT", 16, -14)
+    frame.SideTitle:SetText("Plan Notes")
+    frame.SideTitle:SetTextColor(0.95, 0.98, 1)
+
+    frame.SummaryText = frame.SidePanel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.SummaryText:SetPoint("TOPLEFT", frame.SideTitle, "BOTTOMLEFT", 0, -14)
+    frame.SummaryText:SetPoint("TOPRIGHT", frame.SidePanel, "TOPRIGHT", -16, -48)
+    frame.SummaryText:SetJustifyH("LEFT")
+    frame.SummaryText:SetJustifyV("TOP")
+    frame.SummaryText:SetTextColor(0.76, 0.84, 0.92)
+
+    frame.AssumptionsCard = CreateEstimatorCard(frame.SidePanel, { 0.08, 0.10, 0.14, 0.95 }, { 0.18, 0.24, 0.32, 1 })
+    frame.AssumptionsCard:SetPoint("TOPLEFT", frame.SummaryText, "BOTTOMLEFT", 0, -18)
+    frame.AssumptionsCard:SetPoint("TOPRIGHT", frame.SidePanel, "TOPRIGHT", -16, 0)
+    frame.AssumptionsCard:SetHeight(160)
+
+    frame.AssumptionsTitle = frame.AssumptionsCard:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.AssumptionsTitle:SetPoint("TOPLEFT", frame.AssumptionsCard, "TOPLEFT", 14, -12)
+    frame.AssumptionsTitle:SetText("Assumptions")
+    frame.AssumptionsTitle:SetTextColor(0.94, 0.97, 1)
+
+    frame.AssumptionsText = frame.AssumptionsCard:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.AssumptionsText:SetPoint("TOPLEFT", frame.AssumptionsTitle, "BOTTOMLEFT", 0, -10)
+    frame.AssumptionsText:SetPoint("BOTTOMRIGHT", frame.AssumptionsCard, "BOTTOMRIGHT", -14, 14)
+    frame.AssumptionsText:SetJustifyH("LEFT")
+    frame.AssumptionsText:SetJustifyV("TOP")
+    frame.AssumptionsText:SetTextColor(0.76, 0.84, 0.92)
+
+    frame.modeIndex = 2
+    frame.outcomeCapIndex = 2
+
+    frame.TargetInput:SetScript("OnEnterPressed", function()
+        owner:RefreshMythicPlusEstimator()
+    end)
+    frame.TargetInput:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
+    frame.MaxKeyInput:SetScript("OnEnterPressed", function()
+        owner:RefreshMythicPlusEstimator()
+    end)
+    frame.MaxKeyInput:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
+    frame.RouteModeButton:SetScript("OnClick", function()
+        frame.modeIndex = frame.modeIndex + 1
+        if frame.modeIndex > #ESTIMATOR_ROUTE_MODES then
+            frame.modeIndex = 1
+        end
+        owner:RefreshMythicPlusEstimator()
+    end)
+    frame.OutcomeCapButton:SetScript("OnClick", function()
+        frame.outcomeCapIndex = frame.outcomeCapIndex + 1
+        if frame.outcomeCapIndex > #ESTIMATOR_OUTCOME_CAPS then
+            frame.outcomeCapIndex = 1
+        end
+        owner:RefreshMythicPlusEstimator()
+    end)
+    frame.RecalculateButton:SetScript("OnClick", function()
+        owner:RefreshMythicPlusEstimator()
+    end)
+    frame:SetScript("OnShow", function()
+        owner:RefreshMythicPlusEstimator(true)
+    end)
+
+    owner.EstimatorFrame = frame
+    return frame
+end
+
+local function EnsureEstimatorRouteCard(frame, index)
+    if frame.RouteCards[index] then
+        return frame.RouteCards[index]
+    end
+
+    local card = CreateEstimatorCard(frame.RouteContainer, { 0.065, 0.09, 0.12, 0.97 }, { 0.16, 0.22, 0.30, 1 })
+    card:SetSize(686, 76)
+
+    card.Step = card:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    card.Step:SetPoint("TOPLEFT", card, "TOPLEFT", 14, -12)
+    card.Step:SetTextColor(0.96, 0.98, 1)
+
+    card.Dungeon = card:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    card.Dungeon:SetPoint("TOPLEFT", card.Step, "TOPRIGHT", 16, 0)
+    card.Dungeon:SetJustifyH("LEFT")
+    card.Dungeon:SetTextColor(0.96, 0.98, 1)
+
+    card.Details = card:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    card.Details:SetPoint("BOTTOMLEFT", card.Dungeon, "BOTTOMLEFT", 0, -18)
+    card.Details:SetJustifyH("LEFT")
+    card.Details:SetTextColor(0.66, 0.78, 0.90)
+
+    card.Key = card:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    card.Key:SetPoint("TOPRIGHT", card, "TOPRIGHT", -16, -12)
+    card.Key:SetJustifyH("RIGHT")
+
+    card.Projected = card:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    card.Projected:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -16, 14)
+    card.Projected:SetJustifyH("RIGHT")
+    card.Projected:SetTextColor(0.78, 0.86, 0.92)
+
+    card.Gain = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    card.Gain:SetPoint("TOPRIGHT", card.Key, "BOTTOMRIGHT", 0, -6)
+    card.Gain:SetJustifyH("RIGHT")
+    card.Gain:SetTextColor(0.94, 0.84, 0.54)
+
+    frame.RouteCards[index] = card
+    return card
+end
+
+local function UpdateEstimatorRouteCards(frame, plan)
+    local topCard = nil
+
+    for index, step in ipairs(plan.steps or {}) do
+        local card = EnsureEstimatorRouteCard(frame, index)
+        if topCard then
+            card:SetPoint("TOPLEFT", topCard, "BOTTOMLEFT", 0, -10)
+        else
+            card:SetPoint("TOPLEFT", frame.RouteContainer, "TOPLEFT", 10, -10)
+        end
+        card:Show()
+
+        local red, green, blue = GetOutcomeVisuals(step.outcome.key)
+        card.Accent:SetColorTexture(red, green, blue, 1)
+        card.Step:SetText(format("%d", index))
+        card.Dungeon:SetText(step.mapName)
+        card.Details:SetText(format("%s  |  Dungeon +%s -> +%s", step.outcome.label,
+            FormatEstimatorNumber(step.currentDungeonScore), FormatEstimatorNumber(step.newDungeonScore)))
+        card.Key:SetText(format("+%d", step.level))
+        card.Key:SetTextColor(red, green, blue)
+        card.Gain:SetText(format("Gain %s", FormatEstimatorDelta(step.delta)))
+        card.Projected:SetText(format("Projected %s", FormatEstimatorNumber(step.projectedScore)))
+
+        topCard = card
+    end
+
+    for index = #(plan.steps or {}) + 1, #frame.RouteCards do
+        frame.RouteCards[index]:Hide()
+    end
+
+    local height = 24
+    if topCard then
+        local top = 10
+        local visibleCards = #plan.steps
+        height = top + (visibleCards * 76) + (max(0, visibleCards - 1) * 10) + 20
+    end
+    frame.RouteContainer:SetSize(686, height)
+end
+
+function MPDT:RefreshMythicPlusEstimator(resetDefaults)
+    local frame = self.EstimatorFrame or CreateEstimatorFrame(self)
+    if not frame then
+        return
+    end
+
+    local summary = GetRatingSummary()
+    local currentScore = GetOverallScore(summary)
+    local defaultTarget = RoundHalfUp(currentScore + 100)
+    local existingTarget = ParseEstimatorInteger(NormalizeEstimatorInputText(frame.TargetInput:GetText()), defaultTarget)
+    if resetDefaults or existingTarget <= RoundHalfUp(currentScore) then
+        frame.TargetInput:SetText(tostring(defaultTarget))
+        existingTarget = defaultTarget
+    end
+
+    local maxKeyLevel = ClampNumber(ParseEstimatorInteger(NormalizeEstimatorInputText(frame.MaxKeyInput:GetText()), 13),
+        2, 20)
+    if resetDefaults or NormalizeEstimatorInputText(frame.MaxKeyInput:GetText()) == "" then
+        frame.MaxKeyInput:SetText(tostring(maxKeyLevel))
+    end
+
+    local mode = GetEstimatorMode(frame.modeIndex)
+    local cap = GetEstimatorOutcomeCap(frame.outcomeCapIndex)
+    frame.RouteModeButton:SetText(mode.label)
+    frame.OutcomeCapButton:SetText(cap.label)
+
+    local plan = BuildEstimatorPlan(currentScore, existingTarget, maxKeyLevel, frame.outcomeCapIndex, frame.modeIndex,
+        summary)
+
+    frame.CurrentCard.Value:SetText(FormatEstimatorNumber(currentScore))
+    frame.NeededCard.Value:SetText(existingTarget > currentScore and FormatEstimatorDelta(existingTarget - currentScore) or
+    "+0")
+    frame.PlanCard.Value:SetText(FormatEstimatorNumber(#plan.steps))
+    frame.CapCard.Value:SetText(format("+%d, %s", maxKeyLevel, cap.label))
+    frame.HeaderMeta:SetText(format("Current %s  •  Target %s  •  Projected %s", FormatEstimatorNumber(currentScore),
+        FormatEstimatorNumber(existingTarget), FormatEstimatorNumber(plan.projectedScore)))
+    frame.RoutePanelHint:SetText(mode.label)
+
+    local summaryText
+    if existingTarget <= currentScore then
+        summaryText = "Your target is already met. Raise the target score to generate a route."
+    elseif plan.reachable then
+        summaryText = format("This route reaches %s with %d recommended upgrades, staying under +%d and %s.",
+            FormatEstimatorNumber(existingTarget), #plan.steps, maxKeyLevel, cap.label)
+    else
+        summaryText = format("Current cap tops out near %s. %s", FormatEstimatorNumber(plan.projectedScore),
+            plan.reason or
+            "Try a higher key cap or a stronger timer result.")
+    end
+    frame.SummaryText:SetText(summaryText)
+
+    frame.AssumptionsText:SetText(format(
+        "Mode: %s\n%s\n\nScoring: Midnight single-run dungeon score using Mr. Mythical's current breakpoints. Base is 155 at +2, +15 per level, +15 breakpoint bonuses at +5/+7/+10/+12, with up to +15 for faster timers.\nCaps: Up to +%d and %s.\nTarget: %s\nProjected Gain: %s",
+        mode.label,
+        mode.description,
+        maxKeyLevel,
+        cap.label,
+        FormatEstimatorNumber(existingTarget),
+        FormatEstimatorDelta(plan.totalGain or 0)
+    ))
+
+    if #plan.steps == 0 then
+        frame.EmptyState:SetText(existingTarget <= currentScore and
+            "Raise the target score above your current rating to build a route." or
+            "No score upgrades fit the current caps. Increase the maximum key level or allow stronger timed results.")
+        frame.EmptyState:Show()
+    else
+        frame.EmptyState:Hide()
+    end
+
+    UpdateEstimatorRouteCards(frame, plan)
+end
+
+function MPDT:OpenMythicPlusEstimator()
+    local frame = self.EstimatorFrame or CreateEstimatorFrame(self)
+    if not frame then
+        return
+    end
+
+    self:RefreshMythicPlusEstimator(true)
+    frame:Show()
+    frame:Raise()
+end
+
+GetMapName = function(mapID)
     if not C_ChallengeMode or type(C_ChallengeMode.GetMapUIInfo) ~= "function" then
         return format("Dungeon %d", mapID)
     end
@@ -437,7 +1327,7 @@ local function GetCurrentAffixNames()
     return names
 end
 
-local function GetRatingSummary()
+GetRatingSummary = function()
     if C_PlayerInfo and type(C_PlayerInfo.GetPlayerMythicPlusRatingSummary) == "function" then
         local summary = C_PlayerInfo.GetPlayerMythicPlusRatingSummary("player")
         if type(summary) == "table" then
@@ -448,7 +1338,7 @@ local function GetRatingSummary()
     return nil
 end
 
-local function GetOverallScore(summary)
+GetOverallScore = function(summary)
     if type(summary) == "table" and type(summary.currentSeasonScore) == "number" then
         return summary.currentSeasonScore
     end
@@ -673,7 +1563,7 @@ local function GetVaultUpgradeTrackLabel(itemLink)
                 end
 
                 local prefixedTrackName, prefixedCurrent, prefixedMax = leftText:match(
-                "Upgrade Level:%s+([A-Za-z]+)%s+(%d+)%/(%d+)")
+                    "Upgrade Level:%s+([A-Za-z]+)%s+(%d+)%/(%d+)")
                 if prefixedTrackName and prefixedCurrent and prefixedMax then
                     return format("%s %s/%s", prefixedTrackName, prefixedCurrent, prefixedMax)
                 end
@@ -763,6 +1653,10 @@ function MPDT:OnEvent(panel, event)
     end
 
     self:Refresh()
+
+    if self.EstimatorFrame and self.EstimatorFrame:IsShown() then
+        self:RefreshMythicPlusEstimator()
+    end
 end
 
 function MPDT:OnEnter(panel)
@@ -872,6 +1766,13 @@ function MPDT:OnClick(panel)
             text = "Great Vault",
             notCheckable = true,
             func = OpenGreatVaultRewards,
+        },
+        {
+            text = "Score Estimator",
+            notCheckable = true,
+            func = function()
+                self:OpenMythicPlusEstimator()
+            end,
         },
         {
             text = simcMenuLabel,
