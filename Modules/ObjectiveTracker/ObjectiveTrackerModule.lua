@@ -180,11 +180,33 @@ end
 
 local function GetQuestInfoByID(questID)
     if type(questID) ~= "number" or type(C_QuestLog) ~= "table" then
+        if type(C_TaskQuest) == "table" and type(C_TaskQuest.GetQuestInfoByQuestID) == "function" then
+            local taskTitle = SafeCall(C_TaskQuest.GetQuestInfoByQuestID, questID)
+            if type(taskTitle) == "string" and taskTitle ~= "" then
+                return {
+                    title = taskTitle,
+                    isHeader = false,
+                    isHidden = false,
+                    isComplete = false,
+                }
+            end
+        end
         return nil
     end
 
     local logIndex = SafeCall(C_QuestLog.GetLogIndexForQuestID, questID)
     if not logIndex or logIndex <= 0 then
+        if type(C_TaskQuest) == "table" and type(C_TaskQuest.GetQuestInfoByQuestID) == "function" then
+            local taskTitle = SafeCall(C_TaskQuest.GetQuestInfoByQuestID, questID)
+            if type(taskTitle) == "string" and taskTitle ~= "" then
+                return {
+                    title = taskTitle,
+                    isHeader = false,
+                    isHidden = false,
+                    isComplete = false,
+                }
+            end
+        end
         return nil
     end
 
@@ -314,6 +336,13 @@ local function GetQuestTitle(questID)
         end
     end
 
+    if type(C_TaskQuest) == "table" and type(C_TaskQuest.GetQuestInfoByQuestID) == "function" then
+        local title = SafeCall(C_TaskQuest.GetQuestInfoByQuestID, questID)
+        if type(title) == "string" and title ~= "" then
+            return title
+        end
+    end
+
     return "Quest " .. tostring(questID)
 end
 
@@ -354,6 +383,70 @@ local function GetQuestTagName(questID)
     end
 
     return nil
+end
+
+local function AppendQuestIDs(target, seen, questList)
+    if type(target) ~= "table" or type(seen) ~= "table" or type(questList) ~= "table" then
+        return
+    end
+
+    for _, info in pairs(questList) do
+        local questID = nil
+        if type(info) == "number" then
+            questID = info
+        elseif type(info) == "table" then
+            questID = tonumber(info.questId or info.questID)
+        end
+
+        if type(questID) == "number" and questID > 0 and not seen[questID] then
+            seen[questID] = true
+            target[#target + 1] = questID
+        end
+    end
+end
+
+local function GetTaskQuestsForMap(mapID)
+    if type(mapID) ~= "number" or mapID <= 0 or type(C_TaskQuest) ~= "table" then
+        return nil
+    end
+
+    if type(C_TaskQuest.GetQuestsForPlayerByMapID) == "function" then
+        local quests = SafeCall(C_TaskQuest.GetQuestsForPlayerByMapID, mapID)
+        if type(quests) == "table" then
+            return quests
+        end
+    end
+
+    if type(C_TaskQuest.GetQuestsOnMap) == "function" then
+        local quests = SafeCall(C_TaskQuest.GetQuestsOnMap, mapID)
+        if type(quests) == "table" then
+            return quests
+        end
+    end
+
+    return nil
+end
+
+local function BuildMapQueryList(currentMapID)
+    local queryList = {}
+    local seen = {}
+
+    local function AddMap(mapID)
+        if type(mapID) == "number" and mapID > 0 and not seen[mapID] then
+            seen[mapID] = true
+            queryList[#queryList + 1] = mapID
+        end
+    end
+
+    AddMap(currentMapID)
+
+    local info = GetMapInfoSafe(currentMapID)
+    while type(info) == "table" and type(info.parentMapID) == "number" and info.parentMapID > 0 do
+        AddMap(info.parentMapID)
+        info = GetMapInfoSafe(info.parentMapID)
+    end
+
+    return queryList
 end
 
 local function GetSuperTrackedQuestID()
@@ -937,6 +1030,7 @@ end
 function ObjectiveTracker:CollectEntries()
     local entries = {}
     local currentMapID = GetCurrentMapID()
+    local seenQuestIDs = {}
 
     if type(C_QuestLog) == "table"
         and type(C_QuestLog.GetNumQuestWatches) == "function"
@@ -946,11 +1040,25 @@ function ObjectiveTracker:CollectEntries()
         for index = 1, watchCount do
             local questID = SafeCall(C_QuestLog.GetQuestIDForQuestWatchIndex, index)
             if type(questID) == "number" then
+                seenQuestIDs[questID] = true
                 local entry = self:BuildQuestEntry(questID, currentMapID)
                 if entry then
                     table_insert(entries, entry)
                 end
             end
+        end
+    end
+
+    local queryMaps = BuildMapQueryList(currentMapID)
+    local taskQuestIDs = {}
+    for _, mapID in ipairs(queryMaps) do
+        AppendQuestIDs(taskQuestIDs, seenQuestIDs, GetTaskQuestsForMap(mapID))
+    end
+
+    for _, questID in ipairs(taskQuestIDs) do
+        local entry = self:BuildQuestEntry(questID, currentMapID)
+        if entry and (entry.isWorldQuest or entry.isCurrentZone) then
+            table_insert(entries, entry)
         end
     end
 

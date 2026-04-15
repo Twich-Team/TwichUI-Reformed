@@ -75,7 +75,7 @@ function ErrorLogPopup:EnsureFrame()
 
     local frame = Panel(UIParent, CLR_BG[1], CLR_BG[2], CLR_BG[3], 0.98, CLR_GOLD[1], CLR_GOLD[2], CLR_GOLD[3], 0.30)
     frame:SetSize(420, 148)
-    frame:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -36, -160)
+    frame:SetPoint("CENTER", UIParent, "CENTER", -220, 0)
     frame:SetFrameStrata("DIALOG")
     frame:SetFrameLevel(90)
     frame:SetMovable(true)
