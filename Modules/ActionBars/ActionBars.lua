@@ -1934,8 +1934,9 @@ function ActionBars:BuildDebugReport()
         tostring(self.pendingRefresh == true),
         tostring(self.pendingDisable == true))
     lines[#lines + 1] = string.format(
-        "glowStyle=%s currentAssistedSpellID=%s hasActiveSpellAlerts=%s hasAssistedHighlights=%s",
-        SafeDebugString(self:GetGlowStyle()),
+        "glowStyle=%s assistedGlowStyle=%s currentAssistedSpellID=%s hasActiveSpellAlerts=%s hasAssistedHighlights=%s",
+        SafeDebugString(self:GetDefaultGlowStyle()),
+        SafeDebugString(self:GetAssistedGlowStyle()),
         SafeDebugString(self.currentAssistedSpellID),
         tostring(next(self.activeAlertSpells or {}) ~= nil),
         tostring(self:HasActiveAssistedHighlights()))
@@ -1985,28 +1986,36 @@ function ActionBars:BuildDebugReport()
             local buttons = self.barButtons[definition.key] or {}
             for index, button in ipairs(buttons) do
                 local spellID = (button.GetSpellId and button:GetSpellId()) or self:GetButtonSpellID(button)
+                local actionSlots = self:GetButtonActionSlots(button)
+                local directSpellID = button and
+                    (button.spellID or button.spellId or (button.GetSpellId and button:GetSpellId())) or nil
                 local assistFrame = GetButtonAssistedCombatFrame(button)
                 local spellHighlight = GetButtonSpellHighlightTexture(button)
                 local overlay = button and (button.__LBGoverlay or button.overlay or button.SpellActivationAlert or nil) or
                     nil
+                local procGlow = button and button.__twichuiABProcGlow or nil
                 local isTracked = spellID == self.currentAssistedSpellID
                     or (assistFrame and assistFrame.IsShown and assistFrame:IsShown())
                     or (spellHighlight and spellHighlight.IsShown and spellHighlight:IsShown())
                     or (overlay and overlay.IsShown and overlay:IsShown())
+                    or (procGlow and procGlow.IsShown and procGlow:IsShown())
 
                 if isTracked then
                     foundAssistedButtonState = true
                     lines[#lines + 1] = string.format(
-                        "%s[%d] action=%s spellID=%s rotationSpell=%s glowActive=%s assistFrame=%s spellHighlight=%s overlay=%s checked=%s masque=%s",
+                        "%s[%d] action=%s slots=%s spellID=%s directSpellID=%s rotationSpell=%s glowActive=%s assistFrame=%s spellHighlight=%s overlay=%s procGlow=%s checked=%s masque=%s",
                         definition.key,
                         index,
                         SafeDebugString(button.action or (button.GetAttribute and button:GetAttribute("action")) or nil),
+                        SafeDebugString(table.concat(actionSlots, ":")),
                         SafeDebugString(spellID),
+                        SafeDebugString(directSpellID),
                         tostring(self:IsAssistedRotationSpell(spellID) == true),
                         tostring(self:IsButtonGlowActive(button, {})),
                         tostring(assistFrame and assistFrame.IsShown and assistFrame:IsShown() or false),
                         tostring(spellHighlight and spellHighlight.IsShown and spellHighlight:IsShown() or false),
                         tostring(overlay and overlay.IsShown and overlay:IsShown() or false),
+                        tostring(procGlow and procGlow.IsShown and procGlow:IsShown() or false),
                         tostring(button.GetChecked and button:GetChecked() or false),
                         tostring(db.useMasque == true and Masque ~= nil))
                 end
@@ -3459,34 +3468,94 @@ function ActionBars:OnBindModeCombatLockdown()
     self:DeactivateBindMode(false)
 end
 
+function ActionBars:GetButtonActionSlots(button)
+    if not button then
+        return {}
+    end
+
+    local candidates = {}
+    local seen = {}
+
+    local function AddCandidate(value)
+        local slot = tonumber(value) or nil
+        if not slot or slot < 1 or seen[slot] == true then
+            return
+        end
+
+        seen[slot] = true
+        candidates[#candidates + 1] = slot
+    end
+
+    AddCandidate(button.action)
+    AddCandidate(button.GetAttribute and button:GetAttribute("action") or nil)
+
+    local holder = button.GetParent and button:GetParent() or nil
+    if holder and holder.GetAttribute then
+        local statePage = tonumber(holder:GetAttribute("state") or holder:GetAttribute("state-page") or nil) or nil
+        local buttonIndex = tonumber(button.parentBarIndex or (button.GetID and button:GetID()) or nil) or nil
+        if statePage and buttonIndex then
+            AddCandidate(((statePage - 1) * 12) + buttonIndex)
+        end
+    end
+
+    local definition = self:GetBarDefinition(button.parentBarKey)
+    if definition and definition.basePage then
+        local buttonIndex = tonumber(button.parentBarIndex or (button.GetID and button:GetID()) or nil) or nil
+        if buttonIndex then
+            AddCandidate(((definition.basePage - 1) * 12) + buttonIndex)
+        end
+    end
+
+    return candidates
+end
+
 function ActionBars:GetButtonSpellID(button)
     if not button then
         return nil
     end
 
     local directSpellID = button.spellID or button.spellId or (button.GetSpellId and button:GetSpellId()) or nil
-    if directSpellID then
-        button.__twichuiABSpellID = directSpellID
-        return directSpellID
-    end
-
-    local action = tonumber(button.action or (button.GetAttribute and button:GetAttribute("action")) or nil)
-    if not action or not GetActionInfo then
-        return nil
-    end
-
-    if button.__twichuiABSpellIDAction == action and button.__twichuiABSpellIDResolved == true then
+    local actionSlots = self:GetButtonActionSlots(button)
+    local actionSignature = table.concat(actionSlots, ":") .. "|" .. tostring(directSpellID or "")
+    if button.__twichuiABSpellIDAction == actionSignature and button.__twichuiABSpellIDResolved == true then
         return button.__twichuiABSpellID
     end
 
-    local actionType, actionID = GetActionInfo(action)
     local resolvedSpellID = nil
-    if actionType == "spell" then
-        resolvedSpellID = actionID
+    local preferredSpellID = tonumber(self.currentAssistedSpellID) or nil
+    local firstSpellID = nil
+    local firstActiveAlertSpellID = nil
+
+    if GetActionInfo and #actionSlots > 0 then
+        for _, actionSlot in ipairs(actionSlots) do
+            local actionType, actionID = GetActionInfo(actionSlot)
+            if actionType == "spell" and actionID then
+                if not firstSpellID then
+                    firstSpellID = actionID
+                end
+
+                if preferredSpellID and actionID == preferredSpellID then
+                    resolvedSpellID = actionID
+                    break
+                end
+
+                if not firstActiveAlertSpellID and self.activeAlertSpells and self.activeAlertSpells[actionID] == true then
+                    firstActiveAlertSpellID = actionID
+                end
+            end
+        end
+    end
+
+    if not resolvedSpellID then
+        if preferredSpellID and directSpellID and directSpellID == preferredSpellID then
+            resolvedSpellID = directSpellID
+        else
+            resolvedSpellID = firstActiveAlertSpellID or firstSpellID or directSpellID
+        end
     end
 
     button.__twichuiABSpellID = resolvedSpellID
-    button.__twichuiABSpellIDAction = action
+    button.__twichuiABSpellIDAction = actionSignature
     button.__twichuiABSpellIDResolved = true
 
     return resolvedSpellID
@@ -3560,13 +3629,12 @@ function ActionBars:UpdateButtonsForSpellID(spellID)
         return false
     end
 
-    local style = self:GetGlowStyle()
     local spellStateCache = {
         [spellID] = self.activeAlertSpells[spellID] == true,
     }
 
     for _, button in ipairs(buttons) do
-        self:UpdateButtonGlow(button, style, spellStateCache)
+        self:UpdateButtonGlow(button, nil, spellStateCache)
     end
 
     return true
@@ -3630,6 +3698,9 @@ end
 
 function ActionBars:IsButtonAssistedGlowActive(button)
     local spellID = button and ((button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID) or nil
+    if not spellID and button and button.__twichuiABSpellIDResolved ~= true then
+        spellID = self:GetButtonSpellID(button)
+    end
     if spellID and spellID == self.currentAssistedSpellID and self:IsAssistedRotationSpell(spellID) then
         return true
     end
@@ -3640,8 +3711,7 @@ function ActionBars:IsButtonAssistedGlowActive(button)
     end
 
     if LAB and type(LAB.activeAssist) == "table" then
-        local assistedSpellID = button and (button.GetSpellId and button:GetSpellId()) or button.__twichuiABSpellID or
-        nil
+        local assistedSpellID = spellID or nil
         if assistedSpellID and LAB.activeAssist[assistedSpellID] == true then
             return true
         end
@@ -3676,7 +3746,7 @@ function ActionBars:HasActiveAssistedHighlights()
     return false
 end
 
-function ActionBars:GetGlowStyle()
+function ActionBars:GetDefaultGlowStyle()
     local db = self:GetDB()
     local style = db and db.procGlowStyle or "pixel"
     if style == "pixel" or style == "proc" or style == "button" or style == "blizzard" or style == "none" then
@@ -3684,6 +3754,32 @@ function ActionBars:GetGlowStyle()
     end
 
     return "pixel"
+end
+
+function ActionBars:GetAssistedGlowStyle()
+    local db = self:GetDB()
+    local style = db and db.assistedGlowStyle or "match"
+    if style == "match" then
+        return self:GetDefaultGlowStyle()
+    end
+
+    if style == "pixel" or style == "proc" or style == "button" or style == "blizzard" or style == "none" then
+        return style
+    end
+
+    return self:GetDefaultGlowStyle()
+end
+
+function ActionBars:GetGlowStyle(button)
+    if button and self:IsButtonAssistedGlowActive(button) then
+        return self:GetAssistedGlowStyle()
+    end
+
+    return self:GetDefaultGlowStyle()
+end
+
+function ActionBars:GetRenderedGlowStyle(style)
+    return style
 end
 
 function ActionBars:GetGlowColor(button)
@@ -4339,21 +4435,44 @@ function ActionBars:TintOverlayGlow(button, red, green, blue)
     button.__twichuiABOverlayTintB = blue
 end
 
+function ActionBars:IsOverlayGlowShown(button)
+    local buttonName = button and button.GetName and button:GetName() or nil
+    local overlay = button and (button.__LBGoverlay or button.overlay or button.SpellActivationAlert or nil) or nil
+
+    if not overlay and buttonName then
+        overlay = _G[buttonName .. "SpellActivationAlert"] or nil
+    end
+
+    return overlay and overlay.IsShown and overlay:IsShown() or false
+end
+
 function ActionBars:ShowActionButtonGlow(button)
     if not button then
-        return
+        return false
     end
 
     if LBG and LBG.ShowOverlayGlow then
         LBG.ShowOverlayGlow(button)
         local red, green, blue = self:GetGlowColor(button)
         self:TintOverlayGlow(button, red, green, blue)
-        return
+        if self:IsOverlayGlowShown(button) == true then
+            self:HideProcGlow(button)
+            return true
+        end
     end
 
     if ActionButton_ShowOverlayGlow then
         pcall(ActionButton_ShowOverlayGlow, button)
+        local red, green, blue = self:GetGlowColor(button)
+        self:TintOverlayGlow(button, red, green, blue)
+        if self:IsOverlayGlowShown(button) == true then
+            self:HideProcGlow(button)
+            return true
+        end
     end
+
+    self:ShowProcGlow(button)
+    return false
 end
 
 function ActionBars:HideNativeOverlayGlow(button)
@@ -4399,7 +4518,8 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
         return
     end
 
-    local style = cachedStyle or self:GetGlowStyle()
+    local configuredStyle = cachedStyle or self:GetGlowStyle(button)
+    local style = self:GetRenderedGlowStyle(configuredStyle)
     if style == "none" then
         if (button.__twichuiABGlowStyle or "none") ~= "none" then
             self:ClearButtonGlow(button)
@@ -4436,10 +4556,18 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
             end
         elseif desiredStyle == "button" then
             local red, green, blue = self:GetGlowColor(button)
-            if button.__twichuiABOverlayTintR ~= red or button.__twichuiABOverlayTintG ~= green or
+            if self:IsOverlayGlowShown(button) ~= true then
+                self:ShowActionButtonGlow(button)
+                self:UpdateProcGlowLayout(button)
+            elseif button.__twichuiABOverlayTintR ~= red or button.__twichuiABOverlayTintG ~= green or
                 button.__twichuiABOverlayTintB ~= blue then
+                self:HideProcGlow(button)
                 self:TintOverlayGlow(button, red, green, blue)
+            else
+                self:HideProcGlow(button)
             end
+        elseif desiredStyle == "blizzard" and self:IsOverlayGlowShown(button) ~= true and ActionButton_ShowOverlayGlow then
+            pcall(ActionButton_ShowOverlayGlow, button)
         end
         return
     end
@@ -4462,8 +4590,9 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
 end
 
 function ActionBars:UpdateAllButtonGlows()
-    local style = self:GetGlowStyle()
-    if style == "none" then
+    local procStyle = self:GetDefaultGlowStyle()
+    local assistedStyle = self:GetAssistedGlowStyle()
+    if procStyle == "none" and assistedStyle == "none" then
         for _, buttons in pairs(self.barButtons) do
             for _, button in ipairs(buttons) do
                 if (button.__twichuiABGlowStyle or "none") ~= "none" then
@@ -4483,7 +4612,12 @@ function ActionBars:UpdateAllButtonGlows()
     end
     self._lastFullGlowRefreshAt = now
 
-    if style ~= "blizzard" and next(self.activeAlertSpells or {}) == nil then
+    local hasActiveAlertSpells = next(self.activeAlertSpells or {}) ~= nil
+    local hasActiveAssistedHighlights = self:HasActiveAssistedHighlights()
+    local hasRenderableAlertGlows = hasActiveAlertSpells == true and procStyle ~= "none"
+    local hasRenderableAssistGlows = hasActiveAssistedHighlights == true and assistedStyle ~= "none"
+
+    if hasRenderableAlertGlows ~= true and hasRenderableAssistGlows ~= true then
         for _, buttons in pairs(self.barButtons) do
             for _, button in ipairs(buttons) do
                 if (button.__twichuiABGlowStyle or "none") ~= "none" then
@@ -4498,7 +4632,7 @@ function ActionBars:UpdateAllButtonGlows()
     local spellStateCache = {}
     for _, buttons in pairs(self.barButtons) do
         for _, button in ipairs(buttons) do
-            self:UpdateButtonGlow(button, style, spellStateCache)
+            self:UpdateButtonGlow(button, nil, spellStateCache)
         end
     end
 end
@@ -4573,15 +4707,18 @@ function ActionBars:CaptureFrameState(frame)
 
     local frameName = frame.GetName and frame:GetName() or nil
     local managedFramePositions = _G.UIPARENT_MANAGED_FRAME_POSITIONS
+    local isProtectedBarFrame = frameName and PROTECTED_BLIZZARD_BAR_FRAMES[frameName] == true or false
 
     self.originalFrames[frame] = {
         name = frameName,
-        parent = frame.GetParent and frame:GetParent() or nil,
-        points = CapturePoints(frame),
+        isProtectedBarFrame = isProtectedBarFrame,
+        parent = (not isProtectedBarFrame and frame.GetParent and frame:GetParent() or nil),
+        points = not isProtectedBarFrame and CapturePoints(frame) or nil,
         alpha = frame.GetAlpha and frame:GetAlpha() or 1,
         shown = frame.IsShown and frame:IsShown() or true,
-        ignoreInLayout = frame.ignoreInLayout,
-        managedPosition = managedFramePositions and frameName and managedFramePositions[frameName] or nil,
+        ignoreInLayout = not isProtectedBarFrame and frame.ignoreInLayout or nil,
+        managedPosition = (not isProtectedBarFrame and managedFramePositions and frameName and managedFramePositions[frameName]) or
+            nil,
     }
 end
 
@@ -4665,12 +4802,17 @@ function ActionBars:RestoreOriginalLayout()
 
     for frame, state in pairs(self.originalFrames) do
         if frame and state then
-            if state.parent then frame:SetParent(state.parent) end
-            if frame.ignoreInLayout ~= nil then frame.ignoreInLayout = state.ignoreInLayout end
-            if _G.UIPARENT_MANAGED_FRAME_POSITIONS and state.name then
+            if not state.isProtectedBarFrame and state.parent then frame:SetParent(state.parent) end
+            if not state.isProtectedBarFrame and frame.ignoreInLayout ~= nil then
+                frame.ignoreInLayout = state
+                    .ignoreInLayout
+            end
+            if not state.isProtectedBarFrame and _G.UIPARENT_MANAGED_FRAME_POSITIONS and state.name then
                 _G.UIPARENT_MANAGED_FRAME_POSITIONS[state.name] = state.managedPosition
             end
-            RestorePoints(frame, state.points)
+            if not state.isProtectedBarFrame then
+                RestorePoints(frame, state.points)
+            end
             frame:SetAlpha(state.alpha or 1)
             if state.shown == true then frame:Show() else frame:Hide() end
         end
@@ -4860,7 +5002,7 @@ function ActionBars:ApplyPaging(holder, definition, barSettings, buttons)
         end
     end
 
-    holder:SetAttribute("state-page", basePage)
+    holder:SetAttribute("state", basePage)
     local ok = pcall(RegisterStateDriver, holder, "page", driver)
     if not ok then
         pcall(RegisterStateDriver, holder, "page", tostring(basePage))
@@ -5648,7 +5790,8 @@ function ActionBars:RefreshButtonStates(event)
         or glowEvent == "PLAYER_SPECIALIZATION_CHANGED"
         or glowEvent == "ACTIONBAR_SLOT_CHANGED"
 
-    local glowStyle = shouldRefreshGlow and self:GetGlowStyle() or nil
+    local procGlowStyle = shouldRefreshGlow and self:GetDefaultGlowStyle() or nil
+    local assistedGlowStyle = shouldRefreshGlow and self:GetAssistedGlowStyle() or nil
     local showGrid = db.showGrid == true
     local shouldUpdateGrid = self._cachedShowGrid ~= showGrid
     if shouldUpdateGrid then
@@ -5672,8 +5815,9 @@ function ActionBars:RefreshButtonStates(event)
 
     local hasActiveAlertSpells = next(self.activeAlertSpells or {}) ~= nil
     local hasActiveAssistedHighlights = shouldRefreshGlow and self:HasActiveAssistedHighlights() or false
-    local skipGlowEvaluation = shouldRefreshGlow and glowStyle ~= "blizzard" and hasActiveAlertSpells ~= true and
-        hasActiveAssistedHighlights ~= true
+    local hasRenderableAlertGlows = hasActiveAlertSpells == true and procGlowStyle ~= "none"
+    local hasRenderableAssistGlows = hasActiveAssistedHighlights == true and assistedGlowStyle ~= "none"
+    local skipGlowEvaluation = shouldRefreshGlow and hasRenderableAlertGlows ~= true and hasRenderableAssistGlows ~= true
     local spellStateCache = (shouldRefreshGlow and not skipGlowEvaluation) and {} or nil
     for barKey, buttons in pairs(self.barButtons) do
         local settings = self:GetBarSettings(barKey)
@@ -5685,7 +5829,7 @@ function ActionBars:RefreshButtonStates(event)
                         button.__twichuiABGlowStyle = "none"
                     end
                 else
-                    self:UpdateButtonGlow(button, glowStyle, spellStateCache)
+                    self:UpdateButtonGlow(button, nil, spellStateCache)
                 end
             end
             if shouldUpdateGrid and button.__twichuiShowGrid ~= showGrid then
@@ -5703,7 +5847,8 @@ function ActionBars:RefreshButtonStates(event)
         end
     end
 
-    if shouldRefreshGlow and (glowStyle == "button" or glowStyle == "blizzard") then
+    if shouldRefreshGlow and
+        (procGlowStyle == "button" or procGlowStyle == "blizzard" or assistedGlowStyle == "button" or assistedGlowStyle == "blizzard") then
         self:ScheduleGlowSync(0.05)
     end
 end
@@ -6213,8 +6358,9 @@ function ActionBars:RefreshAll()
     self:RefreshButtonStates(true)
     self:ApplyOverrideBindings()
     self:QueueAssistedHighlightRefresh("refresh-all")
-    local glowStyle = self:GetGlowStyle()
-    if glowStyle == "button" or glowStyle == "blizzard" then
+    local glowStyle = self:GetDefaultGlowStyle()
+    local assistedGlowStyle = self:GetAssistedGlowStyle()
+    if glowStyle == "button" or glowStyle == "blizzard" or assistedGlowStyle == "button" or assistedGlowStyle == "blizzard" then
         self:ScheduleGlowSync(0.15)
     end
 end
