@@ -132,6 +132,8 @@ local function GetDebugConsole()
     return T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole or nil
 end
 
+local GetCurrentInstanceContext
+
 local function SafeDebugString(value)
     if value == nil then
         return "nil"
@@ -338,6 +340,11 @@ local function IsCurrentZoneMap(mapID, currentMapID)
     return false
 end
 
+local function IsExactCurrentMap(mapID, currentMapID)
+    return type(mapID) == "number" and type(currentMapID) == "number" and mapID > 0 and currentMapID > 0
+        and mapID == currentMapID
+end
+
 local function GetQuestMapID(questID)
     if type(questID) ~= "number" then
         return nil
@@ -462,6 +469,44 @@ local function AppendQuestIDs(target, seen, questList)
     end
 end
 
+local function AppendInstanceQuestLogIDs(target, seen, currentMapID)
+    local instance = GetCurrentInstanceContext()
+    if not instance
+        or type(target) ~= "table"
+        or type(seen) ~= "table"
+        or type(C_QuestLog) ~= "table"
+        or type(C_QuestLog.GetNumQuestLogEntries) ~= "function"
+        or type(C_QuestLog.GetInfo) ~= "function"
+    then
+        return
+    end
+
+    local superTrackedQuestID = type(C_SuperTrack) == "table"
+        and type(C_SuperTrack.GetSuperTrackedQuestID) == "function"
+        and SafeCall(C_SuperTrack.GetSuperTrackedQuestID)
+        or nil
+
+    local totalEntries = tonumber(SafeCall(C_QuestLog.GetNumQuestLogEntries)) or 0
+    for index = 1, totalEntries do
+        local info = SafeCall(C_QuestLog.GetInfo, index)
+        if type(info) == "table" then
+            local questID = tonumber(info.questID)
+            if questID and questID > 0 and not seen[questID] and info.isHeader ~= true and info.isHidden ~= true then
+                local mapID = GetQuestMapID(questID)
+                local watchType = type(C_QuestLog.GetQuestWatchType) == "function"
+                    and SafeCall(C_QuestLog.GetQuestWatchType, questID)
+                    or nil
+                local isOnMap = type(C_QuestLog.IsOnMap) == "function" and SafeCall(C_QuestLog.IsOnMap, questID) == true
+                local isTracked = watchType ~= nil or superTrackedQuestID == questID
+                if isTracked or isOnMap or IsCurrentZoneMap(mapID, currentMapID) then
+                    seen[questID] = true
+                    target[#target + 1] = questID
+                end
+            end
+        end
+    end
+end
+
 local function GetTaskQuestsForMap(mapID)
     if type(mapID) ~= "number" or mapID <= 0 or type(C_TaskQuest) ~= "table" then
         return nil
@@ -487,6 +532,7 @@ end
 local function BuildMapQueryList(currentMapID)
     local queryList = {}
     local seen = {}
+    local zoneTypeThreshold = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
 
     local function AddMap(mapID)
         if type(mapID) == "number" and mapID > 0 and not seen[mapID] then
@@ -499,11 +545,27 @@ local function BuildMapQueryList(currentMapID)
 
     local info = GetMapInfoSafe(currentMapID)
     while type(info) == "table" and type(info.parentMapID) == "number" and info.parentMapID > 0 do
+        local parentInfo = GetMapInfoSafe(info.parentMapID)
+        local parentMapType = parentInfo and tonumber(parentInfo.mapType) or nil
+        if parentMapType and parentMapType < zoneTypeThreshold then
+            break
+        end
+
         AddMap(info.parentMapID)
-        info = GetMapInfoSafe(info.parentMapID)
+        info = parentInfo
     end
 
     return queryList
+end
+
+local function GetInstanceCollapseContextKey()
+    local instance = GetCurrentInstanceContext()
+    if not instance or (instance.instanceType ~= "party" and instance.instanceType ~= "raid") then
+        return nil
+    end
+
+    return string_format("%s:%s:%s", SafeDebugString(instance.instanceType), SafeDebugString(instance.name),
+        SafeDebugString(instance.difficultyID))
 end
 
 local function GetSuperTrackedQuestID()
@@ -564,7 +626,7 @@ local function NormalizeInstanceSearchKey(value)
     return normalized
 end
 
-local function GetCurrentInstanceContext()
+GetCurrentInstanceContext = function()
     if type(IsInInstance) ~= "function" or type(GetInstanceInfo) ~= "function" then
         return nil
     end
@@ -623,8 +685,8 @@ local function GetSavedInstanceCandidates(instance)
 
     for index = 1, totalSaved do
         local name, _, reset, difficultyID, locked, extended, _, isRaid, _, difficultyName, numEncounters, numCompleted =
-        SafeCall(
-            GetSavedInstanceInfo, index)
+            SafeCall(
+                GetSavedInstanceInfo, index)
         local normalizedName = type(name) == "string" and NormalizeInstanceSearchKey(name) or ""
         local matchesType = isRaid == instance.isRaid
         local isExact = normalizedName ~= "" and normalizedName == targetKey
@@ -1115,7 +1177,7 @@ local function BuildInstanceDebugSnapshotData()
         saved = saved,
         merged = merged,
         requestAge = type(GetTime) == "function" and ((GetTime() or 0) - (ObjectiveTracker.lastRaidInfoRequestAt or 0)) or
-        nil,
+            nil,
     }
 end
 
@@ -1187,8 +1249,8 @@ local function EmitInstanceDebugSnapshot(shouldShow, contextLabel)
         local totalSaved = tonumber(SafeCall(GetNumSavedInstances)) or 0
         for index = 1, totalSaved do
             local name, _, reset, difficultyID, locked, extended, _, isRaid, _, difficultyName, numEncounters, numCompleted =
-            SafeCall(
-                GetSavedInstanceInfo, index)
+                SafeCall(
+                    GetSavedInstanceInfo, index)
             LogDebugf(false,
                 "saved-all[%d] name=%s difficultyID=%s difficulty=%s raid=%s completed=%s/%s locked=%s extended=%s reset=%s",
                 index, SafeDebugString(name), SafeDebugString(difficultyID), SafeDebugString(difficultyName),
@@ -1534,6 +1596,60 @@ function ObjectiveTracker:BuildQuestEntry(questID, currentMapID)
     return entry
 end
 
+function ObjectiveTracker:ApplyInstanceQuestContext(entry)
+    if type(entry) ~= "table" or entry.type ~= "quest" or entry.isWorldQuest == true then
+        return entry
+    end
+
+    local instance = GetCurrentInstanceContext()
+    if not instance then
+        return entry
+    end
+
+    entry.isCurrentZone = true
+    if entry.isComplete ~= true then
+        entry.sectionKey = "currentZone"
+    end
+    entry.metaText = BuildEntryMetaText(entry)
+    return entry
+end
+
+function ObjectiveTracker:ShouldIncludeQuestEntryInContext(entry, currentMapID)
+    if type(entry) ~= "table" then
+        return false
+    end
+
+    local instance = GetCurrentInstanceContext()
+    if not instance or entry.isWorldQuest ~= true then
+        return true
+    end
+
+    if entry.isSuperTracked == true then
+        return true
+    end
+
+    return IsExactCurrentMap(entry.mapID, currentMapID)
+end
+
+function ObjectiveTracker:EnsureAutomaticSectionCollapseState()
+    local contextKey = GetInstanceCollapseContextKey()
+    if not contextKey then
+        self.runtimeSectionCollapsed = nil
+        self.runtimeSectionCollapseContextKey = nil
+        return
+    end
+
+    if self.runtimeSectionCollapseContextKey == contextKey and type(self.runtimeSectionCollapsed) == "table" then
+        return
+    end
+
+    self.runtimeSectionCollapseContextKey = contextKey
+    self.runtimeSectionCollapsed = {}
+    for _, sectionKey in ipairs(SECTION_ORDER) do
+        self.runtimeSectionCollapsed[sectionKey] = sectionKey ~= "instance"
+    end
+end
+
 function ObjectiveTracker:BuildScenarioEntry()
     local options = GetOptions()
     if not options or not options:GetShowScenario() then
@@ -1679,6 +1795,7 @@ function ObjectiveTracker:CollectEntries()
     local entries = {}
     local currentMapID = GetCurrentMapID()
     local seenQuestIDs = {}
+    local instanceQuestIDs = {}
 
     local instanceEntry = self:BuildInstanceEntry()
     if instanceEntry then
@@ -1695,10 +1812,20 @@ function ObjectiveTracker:CollectEntries()
             if type(questID) == "number" then
                 seenQuestIDs[questID] = true
                 local entry = self:BuildQuestEntry(questID, currentMapID)
-                if entry then
+                entry = self:ApplyInstanceQuestContext(entry)
+                if entry and self:ShouldIncludeQuestEntryInContext(entry, currentMapID) then
                     table_insert(entries, entry)
                 end
             end
+        end
+    end
+
+    AppendInstanceQuestLogIDs(instanceQuestIDs, seenQuestIDs, currentMapID)
+    for _, questID in ipairs(instanceQuestIDs) do
+        local entry = self:BuildQuestEntry(questID, currentMapID)
+        entry = self:ApplyInstanceQuestContext(entry)
+        if entry and self:ShouldIncludeQuestEntryInContext(entry, currentMapID) then
+            table_insert(entries, entry)
         end
     end
 
@@ -1710,7 +1837,9 @@ function ObjectiveTracker:CollectEntries()
 
     for _, questID in ipairs(taskQuestIDs) do
         local entry = self:BuildQuestEntry(questID, currentMapID)
-        if entry and (entry.isWorldQuest or entry.isCurrentZone) then
+        if entry and self:ShouldIncludeQuestEntryInContext(entry, currentMapID)
+            and (entry.isWorldQuest or entry.isCurrentZone)
+        then
             table_insert(entries, entry)
         end
     end
@@ -2101,12 +2230,28 @@ function ObjectiveTracker:HandleEntryClick(entryFrame, button)
 end
 
 function ObjectiveTracker:IsSectionCollapsed(sectionKey)
+    self:EnsureAutomaticSectionCollapseState()
+
+    local runtimeState = self.runtimeSectionCollapsed
+    if type(runtimeState) == "table" and runtimeState[sectionKey] ~= nil then
+        return runtimeState[sectionKey] == true
+    end
+
     local options = GetOptions()
     return options and type(options.GetSectionCollapsed) == "function" and
         options:GetSectionCollapsed(sectionKey) == true
 end
 
 function ObjectiveTracker:ToggleSectionCollapsed(sectionKey)
+    self:EnsureAutomaticSectionCollapseState()
+
+    local runtimeState = self.runtimeSectionCollapsed
+    if type(runtimeState) == "table" and runtimeState[sectionKey] ~= nil then
+        runtimeState[sectionKey] = not (runtimeState[sectionKey] == true)
+        self:ScheduleRefresh("sectionCollapsed")
+        return
+    end
+
     local options = GetOptions()
     if not options or type(options.SetSectionCollapsed) ~= "function" then
         return
@@ -2331,6 +2476,7 @@ function ObjectiveTracker:RefreshNow(reason)
     self:ApplyTheme()
     self:ApplyFramePosition()
     self:ApplyBlizzardTrackerState()
+    self:EnsureAutomaticSectionCollapseState()
 
     RequestInstanceLockoutInfo(reason == "enable")
 
