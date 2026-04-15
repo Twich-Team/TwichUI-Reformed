@@ -1987,20 +1987,22 @@ function ActionBars:BuildDebugReport()
                 local spellID = (button.GetSpellId and button:GetSpellId()) or self:GetButtonSpellID(button)
                 local actionSlots = self:GetButtonActionSlots(button)
                 local directSpellID = button and
-                (button.spellID or button.spellId or (button.GetSpellId and button:GetSpellId())) or nil
+                    (button.spellID or button.spellId or (button.GetSpellId and button:GetSpellId())) or nil
                 local assistFrame = GetButtonAssistedCombatFrame(button)
                 local spellHighlight = GetButtonSpellHighlightTexture(button)
                 local overlay = button and (button.__LBGoverlay or button.overlay or button.SpellActivationAlert or nil) or
                     nil
+                local procGlow = button and button.__twichuiABProcGlow or nil
                 local isTracked = spellID == self.currentAssistedSpellID
                     or (assistFrame and assistFrame.IsShown and assistFrame:IsShown())
                     or (spellHighlight and spellHighlight.IsShown and spellHighlight:IsShown())
                     or (overlay and overlay.IsShown and overlay:IsShown())
+                    or (procGlow and procGlow.IsShown and procGlow:IsShown())
 
                 if isTracked then
                     foundAssistedButtonState = true
                     lines[#lines + 1] = string.format(
-                        "%s[%d] action=%s slots=%s spellID=%s directSpellID=%s rotationSpell=%s glowActive=%s assistFrame=%s spellHighlight=%s overlay=%s checked=%s masque=%s",
+                        "%s[%d] action=%s slots=%s spellID=%s directSpellID=%s rotationSpell=%s glowActive=%s assistFrame=%s spellHighlight=%s overlay=%s procGlow=%s checked=%s masque=%s",
                         definition.key,
                         index,
                         SafeDebugString(button.action or (button.GetAttribute and button:GetAttribute("action")) or nil),
@@ -2012,6 +2014,7 @@ function ActionBars:BuildDebugReport()
                         tostring(assistFrame and assistFrame.IsShown and assistFrame:IsShown() or false),
                         tostring(spellHighlight and spellHighlight.IsShown and spellHighlight:IsShown() or false),
                         tostring(overlay and overlay.IsShown and overlay:IsShown() or false),
+                        tostring(procGlow and procGlow.IsShown and procGlow:IsShown() or false),
                         tostring(button.GetChecked and button:GetChecked() or false),
                         tostring(db.useMasque == true and Masque ~= nil))
                 end
@@ -4419,21 +4422,31 @@ end
 
 function ActionBars:ShowActionButtonGlow(button)
     if not button then
-        return
+        return false
     end
 
     if LBG and LBG.ShowOverlayGlow then
         LBG.ShowOverlayGlow(button)
         local red, green, blue = self:GetGlowColor(button)
         self:TintOverlayGlow(button, red, green, blue)
-        return
+        if self:IsOverlayGlowShown(button) == true then
+            self:HideProcGlow(button)
+            return true
+        end
     end
 
     if ActionButton_ShowOverlayGlow then
         pcall(ActionButton_ShowOverlayGlow, button)
         local red, green, blue = self:GetGlowColor(button)
         self:TintOverlayGlow(button, red, green, blue)
+        if self:IsOverlayGlowShown(button) == true then
+            self:HideProcGlow(button)
+            return true
+        end
     end
+
+    self:ShowProcGlow(button)
+    return false
 end
 
 function ActionBars:HideNativeOverlayGlow(button)
@@ -4518,9 +4531,13 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
             local red, green, blue = self:GetGlowColor(button)
             if self:IsOverlayGlowShown(button) ~= true then
                 self:ShowActionButtonGlow(button)
+                self:UpdateProcGlowLayout(button)
             elseif button.__twichuiABOverlayTintR ~= red or button.__twichuiABOverlayTintG ~= green or
                 button.__twichuiABOverlayTintB ~= blue then
+                self:HideProcGlow(button)
                 self:TintOverlayGlow(button, red, green, blue)
+            else
+                self:HideProcGlow(button)
             end
         elseif desiredStyle == "blizzard" and self:IsOverlayGlowShown(button) ~= true and ActionButton_ShowOverlayGlow then
             pcall(ActionButton_ShowOverlayGlow, button)
