@@ -1,5 +1,9 @@
 ## BUGS
 
+- I am a dracthyr and I've configured our smart mount to use soar for the flying mount. however, when i try to use it say in a dungeon where you can only use a ground mount, nothing happens.
+
+- i am not seeing world quests in our objective tracker
+
 ## NOTES
 
 - in the header area, there is "Choose a target" text, remove that. also there is an add section of the background that is behind that text. see image.
@@ -12,8 +16,6 @@
 ## IDEAS/FUTURE
 
 - ElvUI provides skins for almost all standard blizzard interfaces. Please inspect how ElvUI does this, and implement our own skinning system for the blizzard interfaces. It should resemble our current styling, and be reminescent of our goals: performance, clean, modern, eye candy. To start, lets focus on the character panel. Please inspect the character panel skin and tweaks provided by ElvUI and implement our own.
-
-- I have added Horizon Suite to the AddOn references. Horizon, among other things, includes a very nice looking tooltip module. We will now implement our own Tooltip module. I have also included ElvUI which has tooltis as well, however I do perfer Horizon in general. Keep with our typical style, eye candy, performance. Ensure I can configure it from the Configuration UI and the interface designer. Please look at Horizon and create comparable features in our own implementation. Ensure that our implementation is performant and adheres to the newest Midnight changes.
 
 - I have added Horizon Suite to the AddOn references. Horizon, among other things, includes a very nice looking minimap module. We will now implement our own minimap module. Please look at Horizon to create comparable features.Ensure I can configure it from the Configuration UI and the interface designer. Ensure that our implementation is performant and adheres to the newest Midnight changes.
 

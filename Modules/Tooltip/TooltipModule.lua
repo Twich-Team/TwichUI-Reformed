@@ -1487,6 +1487,60 @@ function TooltipModule:RestoreDefaultBackdrop(frame)
     end
 end
 
+function TooltipModule:SuppressExternalSkinFrames(frame)
+    if not frame then
+        return
+    end
+
+    local targets = {
+        frame.backdrop,
+        frame.Backdrop,
+        frame.shadow,
+        frame.Shadow,
+    }
+
+    for _, target in ipairs(targets) do
+        if target and target ~= frame.TwichUITooltipChrome then
+            target.__tuiTooltipOriginalShown = target.__tuiTooltipOriginalShown == nil
+                and target.IsShown and target:IsShown()
+                or target.__tuiTooltipOriginalShown
+            target.__tuiTooltipOriginalAlpha = target.__tuiTooltipOriginalAlpha == nil
+                and target.GetAlpha and target:GetAlpha()
+                or target.__tuiTooltipOriginalAlpha
+            if target.SetAlpha then
+                target:SetAlpha(0)
+            end
+            if target.Hide then
+                target:Hide()
+            end
+        end
+    end
+end
+
+function TooltipModule:RestoreExternalSkinFrames(frame)
+    if not frame then
+        return
+    end
+
+    local targets = {
+        frame.backdrop,
+        frame.Backdrop,
+        frame.shadow,
+        frame.Shadow,
+    }
+
+    for _, target in ipairs(targets) do
+        if target and target ~= frame.TwichUITooltipChrome then
+            if target.SetAlpha and target.__tuiTooltipOriginalAlpha ~= nil then
+                target:SetAlpha(target.__tuiTooltipOriginalAlpha)
+            end
+            if target.Show and target.__tuiTooltipOriginalShown == true then
+                target:Show()
+            end
+        end
+    end
+end
+
 function TooltipModule:ApplyFonts(frame)
     local options = GetOptions()
     if not options or not frame or type(frame.GetName) ~= "function" then
@@ -1783,6 +1837,7 @@ function TooltipModule:StyleFrame(frame)
     end
 
     self:SuppressDefaultBackdrop(frame)
+    self:SuppressExternalSkinFrames(frame)
     self:ApplyChrome(frame)
     self:ApplyScale(frame)
     self:ApplyFonts(frame)
@@ -1802,6 +1857,7 @@ function TooltipModule:RestoreFrame(frame)
     end
 
     self:RestoreDefaultBackdrop(frame)
+    self:RestoreExternalSkinFrames(frame)
     self:RestoreFonts(frame)
     if frame.TwichUITooltipChrome then
         frame.TwichUITooltipChrome:Hide()
