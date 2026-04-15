@@ -253,6 +253,14 @@ local function ColorizeText(text, red, green, blue)
         NormalizeColorByte(blue), text)
 end
 
+local function SetTextureGradientAlpha(texture, orientation, ...)
+    if texture and texture.SetGradientAlpha then
+        texture:SetGradientAlpha(orientation, ...)
+    elseif texture and texture.SetColorTexture then
+        texture:SetColorTexture(...)
+    end
+end
+
 local function CountTextureMarkup(text)
     if type(text) ~= "string" or text == "" then
         return 0
@@ -377,6 +385,32 @@ function TooltipModule:CreateAnchor()
     anchor.Glow:SetPoint("TOPLEFT", anchor, "TOPLEFT", 1, -1)
     anchor.Glow:SetPoint("BOTTOMRIGHT", anchor, "BOTTOMRIGHT", -1, 1)
 
+    anchor.Frost = anchor:CreateTexture(nil, "ARTWORK")
+    anchor.Frost:SetAllPoints()
+    anchor.Frost:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    anchor.TopSheen = anchor:CreateTexture(nil, "ARTWORK")
+    anchor.TopSheen:SetPoint("TOPLEFT", anchor, "TOPLEFT", 1, -1)
+    anchor.TopSheen:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", -1, -1)
+    anchor.TopSheen:SetHeight(16)
+    anchor.TopSheen:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    anchor.InnerLine = anchor:CreateTexture(nil, "BORDER")
+    anchor.InnerLine:SetPoint("TOPLEFT", anchor, "TOPLEFT", 2, -2)
+    anchor.InnerLine:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", -2, -2)
+    anchor.InnerLine:SetHeight(1)
+    anchor.InnerLine:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    anchor.CornerLeft = anchor:CreateTexture(nil, "OVERLAY")
+    anchor.CornerLeft:SetPoint("TOPLEFT", anchor, "TOPLEFT", 8, -6)
+    anchor.CornerLeft:SetSize(24, 2)
+    anchor.CornerLeft:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    anchor.CornerRight = anchor:CreateTexture(nil, "OVERLAY")
+    anchor.CornerRight:SetPoint("TOPRIGHT", anchor, "TOPRIGHT", -8, -6)
+    anchor.CornerRight:SetSize(24, 2)
+    anchor.CornerRight:SetTexture("Interface\\Buttons\\WHITE8X8")
+
     anchor.Label = anchor:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     anchor.Label:SetPoint("LEFT", anchor, "LEFT", 12, 0)
     anchor.Label:SetPoint("RIGHT", anchor, "RIGHT", -12, 0)
@@ -402,10 +436,17 @@ function TooltipModule:ApplyAnchorTheme()
     local backgroundAlpha = tonumber(GetThemeValue("backgroundAlpha", 0.94)) or 0.94
     local borderAlpha = tonumber(GetThemeValue("borderAlpha", 0.85)) or 0.85
 
-    self.anchor:SetBackdropColor(backgroundR, backgroundG, backgroundB, math_max(0.60, backgroundAlpha))
-    self.anchor:SetBackdropBorderColor(borderR, borderG, borderB, math_max(0.80, borderAlpha))
-    self.anchor.Accent:SetColorTexture(accentR, accentG, accentB, 0.95)
-    self.anchor.Glow:SetColorTexture(accentR, accentG, accentB, 0.10)
+    self.anchor:SetBackdropColor(backgroundR * 0.55, backgroundG * 0.58, backgroundB * 0.66, math_max(0.34, backgroundAlpha * 0.62))
+    self.anchor:SetBackdropBorderColor(borderR, borderG, borderB, math_max(0.45, borderAlpha * 0.75))
+    self.anchor.Accent:SetColorTexture(accentR, accentG, accentB, 0.92)
+    SetTextureGradientAlpha(self.anchor.Glow, "VERTICAL", accentR, accentG, accentB, 0.18, accentR, accentG, accentB, 0.05)
+    SetTextureGradientAlpha(self.anchor.Frost, "VERTICAL",
+        math_min(1, backgroundR + 0.18), math_min(1, backgroundG + 0.20), math_min(1, backgroundB + 0.24), 0.12,
+        math_min(1, backgroundR + 0.04), math_min(1, backgroundG + 0.05), math_min(1, backgroundB + 0.08), 0.03)
+    SetTextureGradientAlpha(self.anchor.TopSheen, "VERTICAL", 1, 1, 1, 0.18, 1, 1, 1, 0)
+    self.anchor.InnerLine:SetColorTexture(1, 1, 1, 0.18)
+    self.anchor.CornerLeft:SetColorTexture(accentR, accentG, accentB, 0.75)
+    self.anchor.CornerRight:SetColorTexture(accentR, accentG, accentB, 0.75)
     self.anchor.Label:SetTextColor(textR, textG, textB, 0.96)
     self.anchor.Label:SetFont(ResolveFontPath(), 11, "")
 end
@@ -1007,10 +1048,8 @@ function TooltipModule:ApplyItemBorder(frame)
 
     local chrome = self:EnsureFrameChrome(frame)
     self:SetChromeBorderColor(chrome, qualityColor.r or 1, qualityColor.g or 1, qualityColor.b or 1, 0.72)
-    chrome.Accent:SetColorTexture(qualityColor.r or 1, qualityColor.g or 1, qualityColor.b or 1,
-        options:GetShowAccent() and 0.95 or 0)
-    chrome.Glow:SetColorTexture(qualityColor.r or 1, qualityColor.g or 1, qualityColor.b or 1,
-        options:GetShowAccent() and 0.10 or 0)
+    self:SetChromeAccentColor(chrome, qualityColor.r or 1, qualityColor.g or 1, qualityColor.b or 1,
+        options:GetShowAccent() and 1 or 0.25)
 end
 
 function TooltipModule:AppendItemAppearance(frame)
@@ -1305,8 +1344,7 @@ function TooltipModule:ApplyUnitIdentity(frame)
 
     local chrome = self:EnsureFrameChrome(frame)
     self:SetChromeBorderColor(chrome, red, green, blue, 0.72)
-    chrome.Accent:SetColorTexture(red, green, blue, options:GetShowAccent() and 0.95 or 0)
-    chrome.Glow:SetColorTexture(red, green, blue, options:GetShowAccent() and 0.10 or 0)
+    self:SetChromeAccentColor(chrome, red, green, blue, options:GetShowAccent() and 1 or 0.25)
 end
 
 function TooltipModule:EnsureFrameChrome(frame)
@@ -1321,6 +1359,23 @@ function TooltipModule:EnsureFrameChrome(frame)
     chrome.Background = chrome:CreateTexture(nil, "BACKGROUND")
     chrome.Background:SetAllPoints()
     chrome.Background:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    chrome.BackgroundDepth = chrome:CreateTexture(nil, "BACKGROUND")
+    chrome.BackgroundDepth:SetAllPoints()
+    chrome.BackgroundDepth:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    chrome.Halo = chrome:CreateTexture(nil, "BACKGROUND")
+    chrome.Halo:SetPoint("TOPLEFT", chrome, "TOPLEFT", -8, 8)
+    chrome.Halo:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", 8, -8)
+    chrome.Halo:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    chrome.Frost = chrome:CreateTexture(nil, "ARTWORK")
+    chrome.Frost:SetAllPoints()
+    chrome.Frost:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    chrome.BottomShade = chrome:CreateTexture(nil, "ARTWORK")
+    chrome.BottomShade:SetAllPoints()
+    chrome.BottomShade:SetTexture("Interface\\Buttons\\WHITE8X8")
 
     chrome.BorderTop = chrome:CreateTexture(nil, "BORDER")
     chrome.BorderTop:SetTexture("Interface\\Buttons\\WHITE8X8")
@@ -1355,11 +1410,39 @@ function TooltipModule:EnsureFrameChrome(frame)
     chrome.Glow:SetPoint("TOPLEFT", chrome, "TOPLEFT", 1, -1)
     chrome.Glow:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -1, 1)
 
+    chrome.InnerLineTop = chrome:CreateTexture(nil, "BORDER")
+    chrome.InnerLineTop:SetPoint("TOPLEFT", chrome, "TOPLEFT", 2, -2)
+    chrome.InnerLineTop:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -2, -2)
+    chrome.InnerLineTop:SetHeight(1)
+    chrome.InnerLineTop:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    chrome.InnerLineBottom = chrome:CreateTexture(nil, "BORDER")
+    chrome.InnerLineBottom:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", 2, 2)
+    chrome.InnerLineBottom:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -2, 2)
+    chrome.InnerLineBottom:SetHeight(1)
+    chrome.InnerLineBottom:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    chrome.LeftRail = chrome:CreateTexture(nil, "BORDER")
+    chrome.LeftRail:SetPoint("TOPLEFT", chrome, "TOPLEFT", 2, -8)
+    chrome.LeftRail:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", 2, 8)
+    chrome.LeftRail:SetWidth(2)
+    chrome.LeftRail:SetTexture("Interface\\Buttons\\WHITE8X8")
+
     chrome.Shine = chrome:CreateTexture(nil, "ARTWORK")
     chrome.Shine:SetPoint("TOPLEFT", chrome, "TOPLEFT", 1, -1)
     chrome.Shine:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -1, -1)
     chrome.Shine:SetHeight(20)
     chrome.Shine:SetColorTexture(1, 1, 1, 0)
+
+    chrome.CornerTL = chrome:CreateTexture(nil, "OVERLAY")
+    chrome.CornerTL:SetPoint("TOPLEFT", chrome, "TOPLEFT", 8, -8)
+    chrome.CornerTL:SetSize(26, 2)
+    chrome.CornerTL:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    chrome.CornerTR = chrome:CreateTexture(nil, "OVERLAY")
+    chrome.CornerTR:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -8, -8)
+    chrome.CornerTR:SetSize(26, 2)
+    chrome.CornerTR:SetTexture("Interface\\Buttons\\WHITE8X8")
 
     frame.TwichUITooltipChrome = chrome
     frame:HookScript("OnSizeChanged", function(owner)
@@ -1380,6 +1463,11 @@ function TooltipModule:SetChromeBackgroundColor(chrome, red, green, blue, alpha)
     end
 
     chrome.Background:SetColorTexture(red or 0, green or 0, blue or 0, alpha or 1)
+    if chrome.BackgroundDepth then
+        SetTextureGradientAlpha(chrome.BackgroundDepth, "VERTICAL",
+            math_max(0, (red or 0) * 0.55), math_max(0, (green or 0) * 0.56), math_max(0, (blue or 0) * 0.68), (alpha or 1) * 0.92,
+            math_min(1, (red or 0) + 0.03), math_min(1, (green or 0) + 0.03), math_min(1, (blue or 0) + 0.05), (alpha or 1) * 0.38)
+    end
 end
 
 function TooltipModule:SetChromeBorderColor(chrome, red, green, blue, alpha)
@@ -1401,6 +1489,44 @@ function TooltipModule:SetChromeBorderColor(chrome, red, green, blue, alpha)
     end
 end
 
+function TooltipModule:SetChromeAccentColor(chrome, red, green, blue, intensity)
+    if not chrome then
+        return
+    end
+
+    local glowStrength = tonumber(intensity) or 1
+    if glowStrength < 0 then
+        glowStrength = 0
+    elseif glowStrength > 1 then
+        glowStrength = 1
+    end
+
+    if chrome.Accent then
+        chrome.Accent:SetColorTexture(red or 0, green or 0, blue or 0, 0.92 * glowStrength)
+    end
+    if chrome.Glow then
+        SetTextureGradientAlpha(chrome.Glow, "VERTICAL",
+            red or 0, green or 0, blue or 0, 0.11 * glowStrength,
+            red or 0, green or 0, blue or 0, 0)
+    end
+    if chrome.Halo then
+        SetTextureGradientAlpha(chrome.Halo, "VERTICAL",
+            red or 0, green or 0, blue or 0, 0.16 * glowStrength,
+            red or 0, green or 0, blue or 0, 0)
+    end
+    if chrome.LeftRail then
+        SetTextureGradientAlpha(chrome.LeftRail, "VERTICAL",
+            red or 0, green or 0, blue or 0, 0.88 * glowStrength,
+            red or 0, green or 0, blue or 0, 0.22 * glowStrength)
+    end
+    if chrome.CornerTL then
+        chrome.CornerTL:SetColorTexture(red or 0, green or 0, blue or 0, 0.78 * glowStrength)
+    end
+    if chrome.CornerTR then
+        chrome.CornerTR:SetColorTexture(red or 0, green or 0, blue or 0, 0.78 * glowStrength)
+    end
+end
+
 function TooltipModule:ApplyChrome(frame)
     if not frame then
         return
@@ -1413,15 +1539,29 @@ function TooltipModule:ApplyChrome(frame)
     local backgroundAlpha = tonumber(GetThemeValue("backgroundAlpha", 0.94)) or 0.94
     local borderAlpha = tonumber(GetThemeValue("borderAlpha", 0.85)) or 0.85
     local options = GetOptions()
+    local showAccent = options and options:GetShowAccent()
 
     chrome:ClearAllPoints()
     chrome:SetPoint("TOPLEFT", frame, "TOPLEFT", -4, 4)
     chrome:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 4, -4)
-    self:SetChromeBackgroundColor(chrome, backgroundR, backgroundG, backgroundB, math_max(0.72, backgroundAlpha))
-    self:SetChromeBorderColor(chrome, borderR, borderG, borderB, math_max(0.78, borderAlpha))
-    chrome.Accent:SetColorTexture(accentR, accentG, accentB, options and options:GetShowAccent() and 0.95 or 0)
-    chrome.Glow:SetColorTexture(accentR, accentG, accentB, options and options:GetShowAccent() and 0.09 or 0)
-    chrome.Shine:SetAlpha(0)
+    self:SetChromeBackgroundColor(chrome,
+        math_min(1, backgroundR + 0.02),
+        math_min(1, backgroundG + 0.03),
+        math_min(1, backgroundB + 0.05),
+        math_max(0.44, backgroundAlpha * 0.58))
+    self:SetChromeBorderColor(chrome,
+        math_min(1, borderR + 0.06),
+        math_min(1, borderG + 0.06),
+        math_min(1, borderB + 0.08),
+        math_max(0.42, borderAlpha * 0.72))
+    SetTextureGradientAlpha(chrome.Frost, "VERTICAL",
+        math_min(1, backgroundR + 0.22), math_min(1, backgroundG + 0.24), math_min(1, backgroundB + 0.28), 0.12,
+        math_min(1, backgroundR + 0.06), math_min(1, backgroundG + 0.08), math_min(1, backgroundB + 0.10), 0.03)
+    SetTextureGradientAlpha(chrome.BottomShade, "VERTICAL", 0, 0, 0, 0, 0, 0, 0, 0.18)
+    self:SetChromeAccentColor(chrome, accentR, accentG, accentB, showAccent and 1 or 0.25)
+    chrome.InnerLineTop:SetColorTexture(1, 1, 1, 0.20)
+    chrome.InnerLineBottom:SetColorTexture(1, 1, 1, 0.07)
+    SetTextureGradientAlpha(chrome.Shine, "VERTICAL", 1, 1, 1, 0.22, 1, 1, 1, 0)
     chrome:SetShown(frame:IsShown())
 end
 

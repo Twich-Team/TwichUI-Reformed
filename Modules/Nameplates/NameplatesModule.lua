@@ -2534,6 +2534,54 @@ function Nameplates:RefreshAllPlates()
     end
 end
 
+function Nameplates:SweepStalePlates()
+    if not self._plates then return end
+
+    local staleUnits = nil
+    local reboundUnits = nil
+
+    for unitID, frame in pairs(self._plates) do
+        local unitExists = unitID and UnitExists(unitID)
+        local livePlate = unitExists and C_NamePlate and C_NamePlate.GetNamePlateForUnit and
+        C_NamePlate.GetNamePlateForUnit(unitID) or nil
+        local plateMismatch = unitExists and livePlate and frame and frame._plate and livePlate ~= frame._plate
+        local missingLivePlate = unitExists and not livePlate
+
+        if (not unitExists) or missingLivePlate or plateMismatch then
+            staleUnits = staleUnits or {}
+            staleUnits[#staleUnits + 1] = unitID
+
+            if plateMismatch then
+                reboundUnits = reboundUnits or {}
+                reboundUnits[#reboundUnits + 1] = unitID
+            end
+        end
+    end
+
+    if not staleUnits then
+        return
+    end
+
+    for _, unitID in ipairs(staleUnits) do
+        local frame = self._plates[unitID]
+        if frame then
+            self._plates[unitID] = nil
+            _auraThrottle[unitID] = nil
+            self:ReleasePlateFrame(frame)
+            NpLog(string.format("SweepStalePlates released unit=%s", tostring(unitID)))
+        end
+    end
+
+    if reboundUnits then
+        for _, unitID in ipairs(reboundUnits) do
+            if UnitExists(unitID) then
+                self:OnNamePlateAdded(unitID)
+                NpLog(string.format("SweepStalePlates rebound unit=%s", tostring(unitID)))
+            end
+        end
+    end
+end
+
 function Nameplates:QueuePlateRefresh(delay)
     if not C_Timer or not C_Timer.After then return end
     self._queuedPlateRefreshId = (self._queuedPlateRefreshId or 0) + 1
@@ -3192,11 +3240,21 @@ function Nameplates:OnEnable()
     C_Timer.After(0.1, function()
         if self:IsEnabled() then self:RegisterMovers() end
     end)
+
+    if self._stalePlateSweepHandle then
+        self:CancelTimer(self._stalePlateSweepHandle)
+    end
+    self._stalePlateSweepHandle = self:ScheduleRepeatingTimer("SweepStalePlates", 0.5)
 end
 
 function Nameplates:OnDisable()
     self:UnregisterAllEvents()
     self:UnregisterAllMessages()
+
+    if self._stalePlateSweepHandle then
+        self:CancelTimer(self._stalePlateSweepHandle)
+        self._stalePlateSweepHandle = nil
+    end
 
     if self._testMode then self:ExitTestMode() end
     if self._castTestMode then self:ExitCastBarTestMode() end
