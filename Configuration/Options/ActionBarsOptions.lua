@@ -40,6 +40,7 @@ local ROOT_DEFAULTS = {
     procGlowStyle = "pixel",
     procGlowUseThemeColor = true,
     procGlowColor = { 0.96, 0.76, 0.24 },
+    assistedGlowStyle = "match",
     assistedGlowUseSeparateColor = false,
     assistedGlowColor = { 0.30, 0.78, 0.98 },
 }
@@ -1053,6 +1054,28 @@ function Options:BuildConfiguration()
                     RequestGlowRefresh(false)
                 end,
             },
+            assistedGlowStyle = {
+                type = "select",
+                name = "Assisted Glow Style",
+                desc = "Choose how Blizzard assisted-combat recommendation glows are rendered on action buttons.",
+                order = 3.1,
+                width = 1.3,
+                values = {
+                    match = "Match Proc Style",
+                    pixel = "Pixel Border",
+                    proc = "Soft Proc",
+                    button = "Action Button",
+                    blizzard = "Blizzard",
+                    none = "None",
+                },
+                get = function()
+                    return db.assistedGlowStyle or "match"
+                end,
+                set = function(_, value)
+                    db.assistedGlowStyle = value or "match"
+                    RequestGlowRefresh(false)
+                end,
+            },
             glowUseThemeColor = {
                 type = "toggle",
                 name = "Use Theme Accent",
@@ -1101,7 +1124,10 @@ function Options:BuildConfiguration()
                 order = 6,
                 width = "half",
                 disabled = function()
-                    local style = db.procGlowStyle or "pixel"
+                    local style = db.assistedGlowStyle or "match"
+                    if style == "match" then
+                        style = db.procGlowStyle or "pixel"
+                    end
                     return style == "none" or style == "blizzard"
                 end,
                 get = function()
@@ -1120,7 +1146,10 @@ function Options:BuildConfiguration()
                 order = 7,
                 width = "half",
                 disabled = function()
-                    local style = db.procGlowStyle or "pixel"
+                    local style = db.assistedGlowStyle or "match"
+                    if style == "match" then
+                        style = db.procGlowStyle or "pixel"
+                    end
                     return style == "none" or style == "blizzard" or db.assistedGlowUseSeparateColor ~= true
                 end,
                 get = function()

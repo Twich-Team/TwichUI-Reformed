@@ -1934,8 +1934,9 @@ function ActionBars:BuildDebugReport()
         tostring(self.pendingRefresh == true),
         tostring(self.pendingDisable == true))
     lines[#lines + 1] = string.format(
-        "glowStyle=%s currentAssistedSpellID=%s hasActiveSpellAlerts=%s hasAssistedHighlights=%s",
-        SafeDebugString(self:GetGlowStyle()),
+        "glowStyle=%s assistedGlowStyle=%s currentAssistedSpellID=%s hasActiveSpellAlerts=%s hasAssistedHighlights=%s",
+        SafeDebugString(self:GetDefaultGlowStyle()),
+        SafeDebugString(self:GetAssistedGlowStyle()),
         SafeDebugString(self.currentAssistedSpellID),
         tostring(next(self.activeAlertSpells or {}) ~= nil),
         tostring(self:HasActiveAssistedHighlights()))
@@ -3628,13 +3629,12 @@ function ActionBars:UpdateButtonsForSpellID(spellID)
         return false
     end
 
-    local style = self:GetGlowStyle()
     local spellStateCache = {
         [spellID] = self.activeAlertSpells[spellID] == true,
     }
 
     for _, button in ipairs(buttons) do
-        self:UpdateButtonGlow(button, style, spellStateCache)
+        self:UpdateButtonGlow(button, nil, spellStateCache)
     end
 
     return true
@@ -3746,7 +3746,7 @@ function ActionBars:HasActiveAssistedHighlights()
     return false
 end
 
-function ActionBars:GetGlowStyle()
+function ActionBars:GetDefaultGlowStyle()
     local db = self:GetDB()
     local style = db and db.procGlowStyle or "pixel"
     if style == "pixel" or style == "proc" or style == "button" or style == "blizzard" or style == "none" then
@@ -3754,6 +3754,32 @@ function ActionBars:GetGlowStyle()
     end
 
     return "pixel"
+end
+
+function ActionBars:GetAssistedGlowStyle()
+    local db = self:GetDB()
+    local style = db and db.assistedGlowStyle or "match"
+    if style == "match" then
+        return self:GetDefaultGlowStyle()
+    end
+
+    if style == "pixel" or style == "proc" or style == "button" or style == "blizzard" or style == "none" then
+        return style
+    end
+
+    return self:GetDefaultGlowStyle()
+end
+
+function ActionBars:GetGlowStyle(button)
+    if button and self:IsButtonAssistedGlowActive(button) then
+        return self:GetAssistedGlowStyle()
+    end
+
+    return self:GetDefaultGlowStyle()
+end
+
+function ActionBars:GetRenderedGlowStyle(style)
+    return style
 end
 
 function ActionBars:GetGlowColor(button)
@@ -4492,7 +4518,8 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
         return
     end
 
-    local style = cachedStyle or self:GetGlowStyle()
+    local configuredStyle = cachedStyle or self:GetGlowStyle(button)
+    local style = self:GetRenderedGlowStyle(configuredStyle)
     if style == "none" then
         if (button.__twichuiABGlowStyle or "none") ~= "none" then
             self:ClearButtonGlow(button)
@@ -4563,8 +4590,9 @@ function ActionBars:UpdateButtonGlow(button, cachedStyle, spellStateCache)
 end
 
 function ActionBars:UpdateAllButtonGlows()
-    local style = self:GetGlowStyle()
-    if style == "none" then
+    local procStyle = self:GetDefaultGlowStyle()
+    local assistedStyle = self:GetAssistedGlowStyle()
+    if procStyle == "none" and assistedStyle == "none" then
         for _, buttons in pairs(self.barButtons) do
             for _, button in ipairs(buttons) do
                 if (button.__twichuiABGlowStyle or "none") ~= "none" then
@@ -4584,7 +4612,12 @@ function ActionBars:UpdateAllButtonGlows()
     end
     self._lastFullGlowRefreshAt = now
 
-    if style ~= "blizzard" and next(self.activeAlertSpells or {}) == nil then
+    local hasActiveAlertSpells = next(self.activeAlertSpells or {}) ~= nil
+    local hasActiveAssistedHighlights = self:HasActiveAssistedHighlights()
+    local hasRenderableAlertGlows = hasActiveAlertSpells == true and procStyle ~= "none"
+    local hasRenderableAssistGlows = hasActiveAssistedHighlights == true and assistedStyle ~= "none"
+
+    if hasRenderableAlertGlows ~= true and hasRenderableAssistGlows ~= true then
         for _, buttons in pairs(self.barButtons) do
             for _, button in ipairs(buttons) do
                 if (button.__twichuiABGlowStyle or "none") ~= "none" then
@@ -4599,7 +4632,7 @@ function ActionBars:UpdateAllButtonGlows()
     local spellStateCache = {}
     for _, buttons in pairs(self.barButtons) do
         for _, button in ipairs(buttons) do
-            self:UpdateButtonGlow(button, style, spellStateCache)
+            self:UpdateButtonGlow(button, nil, spellStateCache)
         end
     end
 end
@@ -5757,7 +5790,8 @@ function ActionBars:RefreshButtonStates(event)
         or glowEvent == "PLAYER_SPECIALIZATION_CHANGED"
         or glowEvent == "ACTIONBAR_SLOT_CHANGED"
 
-    local glowStyle = shouldRefreshGlow and self:GetGlowStyle() or nil
+    local procGlowStyle = shouldRefreshGlow and self:GetDefaultGlowStyle() or nil
+    local assistedGlowStyle = shouldRefreshGlow and self:GetAssistedGlowStyle() or nil
     local showGrid = db.showGrid == true
     local shouldUpdateGrid = self._cachedShowGrid ~= showGrid
     if shouldUpdateGrid then
@@ -5781,8 +5815,9 @@ function ActionBars:RefreshButtonStates(event)
 
     local hasActiveAlertSpells = next(self.activeAlertSpells or {}) ~= nil
     local hasActiveAssistedHighlights = shouldRefreshGlow and self:HasActiveAssistedHighlights() or false
-    local skipGlowEvaluation = shouldRefreshGlow and glowStyle ~= "blizzard" and hasActiveAlertSpells ~= true and
-        hasActiveAssistedHighlights ~= true
+    local hasRenderableAlertGlows = hasActiveAlertSpells == true and procGlowStyle ~= "none"
+    local hasRenderableAssistGlows = hasActiveAssistedHighlights == true and assistedGlowStyle ~= "none"
+    local skipGlowEvaluation = shouldRefreshGlow and hasRenderableAlertGlows ~= true and hasRenderableAssistGlows ~= true
     local spellStateCache = (shouldRefreshGlow and not skipGlowEvaluation) and {} or nil
     for barKey, buttons in pairs(self.barButtons) do
         local settings = self:GetBarSettings(barKey)
@@ -5794,7 +5829,7 @@ function ActionBars:RefreshButtonStates(event)
                         button.__twichuiABGlowStyle = "none"
                     end
                 else
-                    self:UpdateButtonGlow(button, glowStyle, spellStateCache)
+                    self:UpdateButtonGlow(button, nil, spellStateCache)
                 end
             end
             if shouldUpdateGrid and button.__twichuiShowGrid ~= showGrid then
@@ -5812,7 +5847,8 @@ function ActionBars:RefreshButtonStates(event)
         end
     end
 
-    if shouldRefreshGlow and (glowStyle == "button" or glowStyle == "blizzard") then
+    if shouldRefreshGlow and
+        (procGlowStyle == "button" or procGlowStyle == "blizzard" or assistedGlowStyle == "button" or assistedGlowStyle == "blizzard") then
         self:ScheduleGlowSync(0.05)
     end
 end
@@ -6322,8 +6358,9 @@ function ActionBars:RefreshAll()
     self:RefreshButtonStates(true)
     self:ApplyOverrideBindings()
     self:QueueAssistedHighlightRefresh("refresh-all")
-    local glowStyle = self:GetGlowStyle()
-    if glowStyle == "button" or glowStyle == "blizzard" then
+    local glowStyle = self:GetDefaultGlowStyle()
+    local assistedGlowStyle = self:GetAssistedGlowStyle()
+    if glowStyle == "button" or glowStyle == "blizzard" or assistedGlowStyle == "button" or assistedGlowStyle == "blizzard" then
         self:ScheduleGlowSync(0.15)
     end
 end
