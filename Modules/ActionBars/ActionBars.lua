@@ -369,6 +369,14 @@ local BAR_DEFINITIONS = {
         fallbackButtonSize = 52,
     },
     {
+        key = "zoneAbility",
+        label = "Zone Ability",
+        frameName = "ZoneAbilityFrame",
+        maxButtons = 6,
+        fallbackButtonsPerRow = 1,
+        fallbackButtonSize = 52,
+    },
+    {
         key = "vehicleExit",
         label = "Vehicle Exit",
         buttonName = "MainMenuBarVehicleLeaveButton",
@@ -1492,7 +1500,7 @@ function ActionBars:OnInitialize()
     self.activeAlertSpells = {}
     self.lastActionAttempt = nil
     self.lastSpellAttempt = nil
-    self.originalButtons = {} -- Legacy: capture state for special bars (pet/stance/extra/vehicle)
+    self.originalButtons = {} -- Legacy: capture state for special bars (pet/stance/extra/zone/vehicle)
     self.originalFrames = {}
     self.originalRegions = {}
     self.hoverTokens = {}
@@ -1640,6 +1648,8 @@ function ActionBars:OnEnable()
     self:RegisterEvent("UPDATE_VEHICLE_ACTIONBAR", "RequestRefresh")
     self:RegisterEvent("UPDATE_OVERRIDE_ACTIONBAR", "RequestRefresh")
     self:RegisterEvent("UPDATE_POSSESS_BAR", "RequestRefresh")
+    self:RegisterEvent("ZONE_CHANGED", "RequestRefresh")
+    self:RegisterEvent("ZONE_CHANGED_NEW_AREA", "RequestRefresh")
     self:RegisterEvent("VEHICLE_UPDATE", "RequestRefresh")
     self:RegisterEvent("UNIT_ENTERED_VEHICLE", "RequestRefresh")
     self:RegisterEvent("UNIT_ENTERING_VEHICLE", "RequestRefresh")
@@ -3008,7 +3018,8 @@ function ActionBars:GetButtonIcon(button)
     if button.__twichuiIconCached and button.__twichuiIcon then
         return button.__twichuiIcon
     end
-    local icon = button.icon or button.Icon or (button.GetName and _G[button:GetName() .. "Icon"]) or nil
+    local buttonName = button.GetName and button:GetName() or nil
+    local icon = button.icon or button.Icon or (buttonName and _G[buttonName .. "Icon"]) or nil
     button.__twichuiIcon = icon
     button.__twichuiIconCached = true
     return icon
@@ -3017,22 +3028,239 @@ end
 function ActionBars:GetButtonCooldown(button)
     if not button then return nil end
     if button.__twichuiCooldownCached then return button.__twichuiCooldown end
-    local cd = button.cooldown or button.Cooldown or (button.GetName and _G[button:GetName() .. "Cooldown"]) or nil
+    local buttonName = button.GetName and button:GetName() or nil
+    local cd = button.cooldown or button.Cooldown or (buttonName and _G[buttonName .. "Cooldown"]) or nil
     button.__twichuiCooldown = cd
     button.__twichuiCooldownCached = true
     return cd
 end
 
 function ActionBars:GetButtonHotKey(button)
-    return button and (button.HotKey or _G[button:GetName() .. "HotKey"]) or nil
+    if not button then
+        return nil
+    end
+
+    local buttonName = button.GetName and button:GetName() or nil
+    return button.HotKey or (buttonName and _G[buttonName .. "HotKey"]) or nil
 end
 
 function ActionBars:GetButtonCount(button)
-    return button and (button.Count or _G[button:GetName() .. "Count"]) or nil
+    if not button then
+        return nil
+    end
+
+    local buttonName = button.GetName and button:GetName() or nil
+    return button.Count or (buttonName and _G[buttonName .. "Count"]) or nil
 end
 
 function ActionBars:GetButtonMacroName(button)
-    return button and (button.Name or _G[button:GetName() .. "Name"]) or nil
+    if not button then
+        return nil
+    end
+
+    local buttonName = button.GetName and button:GetName() or nil
+    return button.Name or (buttonName and _G[buttonName .. "Name"]) or nil
+end
+
+function ActionBars:EnsureZoneAbilityHooksInstalled()
+    local frame = _G.ZoneAbilityFrame
+    if not frame or frame.__twichuiZoneAbilityHooked == true or type(hooksecurefunc) ~= "function" then
+        return
+    end
+
+    local function RequestZoneRefresh()
+        local db = ActionBars:GetDB()
+        if not db or db.enabled == false or not (ActionBars.IsEnabled and ActionBars:IsEnabled()) then
+            return
+        end
+
+        ActionBars:RequestRefresh()
+    end
+
+    hooksecurefunc(frame, "UpdateDisplayedZoneAbilities", RequestZoneRefresh)
+    hooksecurefunc(frame, "SetParent", RequestZoneRefresh)
+
+    if frame.SpellButtonContainer then
+        hooksecurefunc(frame.SpellButtonContainer, "SetSize", RequestZoneRefresh)
+    end
+
+    frame.__twichuiZoneAbilityHooked = true
+end
+
+function ActionBars:GetZoneAbilityButtons()
+    local buttons = {}
+
+    self:EnsureZoneAbilityHooksInstalled()
+
+    local frame = _G.ZoneAbilityFrame
+    if not frame then
+        self.barButtons.zoneAbility = buttons
+        self:MarkSpellButtonIndexDirty()
+        return buttons
+    end
+
+    self:CaptureFrameState(frame)
+
+    local container = frame.SpellButtonContainer
+    if container then
+        self:CaptureFrameState(container)
+    end
+
+    if container and type(container.EnumerateActive) == "function" then
+        for button in container:EnumerateActive() do
+            if button then
+                self:CaptureButtonState(button)
+                buttons[#buttons + 1] = button
+            end
+        end
+    elseif container and container.GetChildren then
+        for _, child in ipairs({ container:GetChildren() }) do
+            local objectType = child and child.GetObjectType and child:GetObjectType() or nil
+            if objectType == "Button" or objectType == "CheckButton" then
+                self:CaptureButtonState(child)
+                buttons[#buttons + 1] = child
+            end
+        end
+    end
+
+    self.barButtons.zoneAbility = buttons
+    self:MarkSpellButtonIndexDirty()
+    return buttons
+end
+
+function ActionBars:PrepareZoneAbilityFrame(holder)
+    local frame = _G.ZoneAbilityFrame
+    if not frame or not holder then
+        return nil
+    end
+
+    self:EnsureZoneAbilityHooksInstalled()
+    self:CaptureFrameState(frame)
+
+    local container = frame.SpellButtonContainer
+    if container then
+        self:CaptureFrameState(container)
+    end
+
+    if _G.UIPARENT_MANAGED_FRAME_POSITIONS then
+        _G.UIPARENT_MANAGED_FRAME_POSITIONS.ZoneAbilityFrame = nil
+    end
+
+    frame.ignoreInLayout = true
+
+    if not InCombatLockdown() then
+        frame:SetParent(holder)
+        frame:ClearAllPoints()
+        frame:SetAllPoints(holder)
+    end
+
+    if frame.Style and frame.Style.SetAlpha then
+        frame.Style:SetAlpha(0)
+        if frame.Style.Hide then
+            frame.Style:Hide()
+        end
+    end
+
+    return frame
+end
+
+function ActionBars:ApplyZoneAbilityLayout(definition, holder, buttons, barSettings, actionBarDB)
+    if barSettings.enabled ~= true then
+        pcall(UnregisterStateDriver, holder, "visibility")
+        pcall(UnregisterStateDriver, holder, "page")
+        holder:SetAlpha(0)
+        holder:SetShown(false)
+        return true
+    end
+
+    local frame = self:PrepareZoneAbilityFrame(holder)
+    if not frame then
+        pcall(UnregisterStateDriver, holder, "visibility")
+        pcall(UnregisterStateDriver, holder, "page")
+        holder:SetAlpha(0)
+        holder:SetShown(false)
+        return true
+    end
+
+    local availableCount = self:GetButtonCountForDefinition(definition, buttons)
+    local clampedScale = ClampNumber(barSettings.scale, 0.5, 2, 1)
+    local clampedButtonSize = ClampNumber(barSettings.buttonSize, 22, 64, definition.fallbackButtonSize)
+    local clampedButtonsPerRow = ClampNumber(barSettings.buttonsPerRow, 1, max(1, definition.maxButtons or 1),
+        definition.fallbackButtonsPerRow)
+    local clampedSpacing = ClampNumber(actionBarDB.buttonSpacing, 0, 20, 4)
+    local layoutCount = max(1, min(max(availableCount, 1), max(1, clampedButtonsPerRow, definition.maxButtons or 1)))
+    local rows = ceil(layoutCount / clampedButtonsPerRow)
+    local width = (min(layoutCount, clampedButtonsPerRow) * clampedButtonSize) +
+        ((min(layoutCount, clampedButtonsPerRow) - 1) * clampedSpacing) + (DEFAULT_HOLDER_PADDING * 2)
+    local height = (rows * clampedButtonSize) + ((rows - 1) * clampedSpacing) + (DEFAULT_HOLDER_PADDING * 2)
+    local layoutSignature = table.concat({
+        tostring(barSettings.enabled == true),
+        tostring(barSettings.point or "BOTTOM"),
+        tostring(barSettings.relativePoint or barSettings.point or "BOTTOM"),
+        tostring(barSettings.x or 0),
+        tostring(barSettings.y or 0),
+        tostring(clampedScale),
+        tostring(ClampNumber(barSettings.alpha, 0.05, 1, 1)),
+        tostring(availableCount),
+        tostring(clampedButtonSize),
+        tostring(clampedButtonsPerRow),
+        tostring(clampedSpacing),
+        tostring(actionBarDB.showGrid == true),
+        tostring(actionBarDB.useMasque == true and Masque ~= nil),
+        tostring(barSettings.backdrop ~= false),
+        tostring(barSettings.showBorder ~= false),
+        tostring(barSettings.showAccent ~= false),
+        tostring(barSettings.visibility or "show"),
+        tostring(self._themeStyleToken or 0),
+    }, "|")
+
+    if holder.__twichuiABLayoutSig == layoutSignature then
+        holder:SetAlpha(self:GetTargetAlpha(barSettings, false))
+        return true
+    end
+    holder.__twichuiABLayoutSig = layoutSignature
+
+    holder:ClearAllPoints()
+    holder:SetPoint(barSettings.point or "BOTTOM", UIParent, barSettings.relativePoint or barSettings.point or "BOTTOM",
+        barSettings.x or 0, barSettings.y or 0)
+    holder:SetScale(clampedScale)
+    holder:SetFrameLevel(30)
+    holder:SetSize(width, height)
+
+    holder.__twichuiABHolderStyleSig = nil
+    self:ApplyHolderStyle(holder, barSettings)
+    if availableCount == 0 then
+        holder:SetBackdropColor(0, 0, 0, 0)
+        holder:SetBackdropBorderColor(0, 0, 0, 0)
+        if holder.innerGlow then
+            holder.innerGlow:SetAlpha(0)
+        end
+        if holder.leftAccent then
+            holder.leftAccent:SetAlpha(0)
+        end
+    end
+
+    for index, button in ipairs(buttons) do
+        button:ClearAllPoints()
+        button:SetSize(clampedButtonSize, clampedButtonSize)
+        button:SetFrameStrata("MEDIUM")
+        button:SetFrameLevel(holder:GetFrameLevel() + 4)
+
+        local row = floor((index - 1) / clampedButtonsPerRow)
+        local column = (index - 1) % clampedButtonsPerRow
+        button:SetPoint("TOPLEFT", holder, "TOPLEFT",
+            DEFAULT_HOLDER_PADDING + (column * (clampedButtonSize + clampedSpacing)),
+            -DEFAULT_HOLDER_PADDING - (row * (clampedButtonSize + clampedSpacing)))
+        self:ApplyButtonStyle(button, actionBarDB, definition.key, barSettings)
+        ApplyButtonGridState(button, actionBarDB.showGrid == true)
+        button:Show()
+    end
+
+    self:ApplyVisibility(holder, barSettings)
+    holder:SetAlpha(self:GetTargetAlpha(barSettings, false))
+    holder:Show()
+
+    return true
 end
 
 function ActionBars:GetButtonBindingTarget(button)
@@ -5100,6 +5328,10 @@ function ActionBars:GetButtonsForDefinition(definition)
         return buttons
     end
 
+    if definition.key == "zoneAbility" then
+        return self:GetZoneAbilityButtons()
+    end
+
     -- Legacy path for special bars (vehicleExit, pet, stance, extraAction).
     if definition.buttonName then
         local button = _G[definition.buttonName]
@@ -5441,7 +5673,8 @@ function ActionBars:ApplyButtonStyle(button, actionBarDB, barKey, barSettings)
         icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     end
 
-    local border = button.Border or _G[button:GetName() .. "Border"]
+    local buttonName = button.GetName and button:GetName() or nil
+    local border = button.Border or (buttonName and _G[buttonName .. "Border"]) or nil
     if border and border.SetAlpha then
         border:SetAlpha(useMasque and 1 or 0)
     end
@@ -6110,6 +6343,11 @@ function ActionBars:LayoutBar(definition, barSettings, actionBarDB)
     end
 
     local buttons = self:GetButtonsForDefinition(definition)
+    if definition.key == "zoneAbility" then
+        self:ApplyZoneAbilityLayout(definition, holder, buttons, barSettings, actionBarDB)
+        return
+    end
+
     local availableCount = self:GetButtonCountForDefinition(definition, buttons)
     local enabled = barSettings.enabled == true and availableCount > 0
 
@@ -6266,6 +6504,7 @@ function ActionBars:ApplyMasqueSettings(actionBarDB)
             self.masqueButtons[definition.key] = self.masqueButtons[definition.key] or {}
 
             for _, button in ipairs(buttons) do
+                local buttonName = button.GetName and button:GetName() or nil
                 if definition.key == "vehicleExit" then
                     if group.RemoveButton then
                         group:RemoveButton(button)
@@ -6288,8 +6527,8 @@ function ActionBars:ApplyMasqueSettings(actionBarDB)
                             HotKey = self:GetButtonHotKey(button),
                             Count = self:GetButtonCount(button),
                             Name = self:GetButtonMacroName(button),
-                            Border = button.Border or _G[button:GetName() .. "Border"],
-                            Normal = _G[button:GetName() .. "NormalTexture"],
+                            Border = button.Border or (buttonName and _G[buttonName .. "Border"]) or nil,
+                            Normal = (buttonName and _G[buttonName .. "NormalTexture"]) or nil,
                             Highlight = button:GetHighlightTexture(),
                         })
                         self.masqueButtons[definition.key][button] = true

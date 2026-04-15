@@ -390,6 +390,71 @@ local function GetEdgeAnchorPoint(position)
     return "BOTTOM", 0, 8
 end
 
+local function GetZoneMoverAnchorPoint(position)
+    if position == "bottom-left" then
+        return "BOTTOMLEFT", 8, 22
+    end
+    if position == "bottom-right" then
+        return "BOTTOMRIGHT", -8, 22
+    end
+    if position == "bottom-center" or position == "bottom" then
+        return "BOTTOM", 0, 22
+    end
+    if position == "top-right" then
+        return "TOPRIGHT", -8, -10
+    end
+    if position == "top-center" or position == "top" then
+        return "TOP", 0, -10
+    end
+
+    return "TOPLEFT", 8, -10
+end
+
+local function GetPointLocalOffset(point, width, height)
+    local frameWidth = tonumber(width) or 0
+    local frameHeight = tonumber(height) or 0
+
+    if point == "BOTTOM" then
+        return frameWidth * 0.5, 0
+    end
+    if point == "BOTTOMRIGHT" then
+        return frameWidth, 0
+    end
+    if point == "LEFT" then
+        return 0, frameHeight * 0.5
+    end
+    if point == "CENTER" then
+        return frameWidth * 0.5, frameHeight * 0.5
+    end
+    if point == "RIGHT" then
+        return frameWidth, frameHeight * 0.5
+    end
+    if point == "TOPLEFT" then
+        return 0, frameHeight
+    end
+    if point == "TOP" then
+        return frameWidth * 0.5, frameHeight
+    end
+    if point == "TOPRIGHT" then
+        return frameWidth, frameHeight
+    end
+
+    return 0, 0
+end
+
+local function GetFramePointScreenPosition(frame, point)
+    if not frame or type(frame.GetLeft) ~= "function" or type(frame.GetBottom) ~= "function" then
+        return 0, 0
+    end
+
+    local left = frame:GetLeft() or 0
+    local bottom = frame:GetBottom() or 0
+    local width = frame.GetWidth and frame:GetWidth() or 0
+    local height = frame.GetHeight and frame:GetHeight() or 0
+    local offsetX, offsetY = GetPointLocalOffset(point, width, height)
+    return left + offsetX, bottom + offsetY
+end
+
 local function SuppressShow(frame)
     if not frame or not hooksecurefunc or frame.__TwichUISuppressShowHooked then
         return
@@ -903,6 +968,12 @@ function MinimapModule:EnsureShell()
     overlay:SetFrameLevel(holder:GetFrameLevel() + 6)
     overlay:EnableMouse(false)
 
+    local zoneAnchor = CreateFrame("Frame", nil, overlay)
+    zoneAnchor:SetSize(180, 34)
+    zoneAnchor:SetFrameStrata(overlay:GetFrameStrata())
+    zoneAnchor:SetFrameLevel(overlay:GetFrameLevel())
+    zoneAnchor:EnableMouse(false)
+
     local clickHandler = CreateFrame("Button", nil, holder)
     clickHandler:SetAllPoints(mapBackdrop)
     clickHandler:SetFrameStrata(holder:GetFrameStrata())
@@ -910,11 +981,11 @@ function MinimapModule:EnsureShell()
     clickHandler:EnableMouse(false)
     clickHandler:EnableMouseWheel(false)
 
-    local title = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local title = zoneAnchor:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     title:SetJustifyH("CENTER")
     title:SetJustifyV("MIDDLE")
 
-    local detail = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local detail = zoneAnchor:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     detail:SetJustifyH("CENTER")
     detail:SetJustifyV("MIDDLE")
 
@@ -938,6 +1009,7 @@ function MinimapModule:EnsureShell()
     holder.shell = shell
     holder.mapBackdrop = mapBackdrop
     holder.overlay = overlay
+    holder.zoneAnchor = zoneAnchor
     holder.clickHandler = clickHandler
     holder.title = title
     holder.detail = detail
@@ -951,6 +1023,7 @@ function MinimapModule:EnsureShell()
     self.shellAccent = accent
     self.mapBackdrop = mapBackdrop
     self.overlayFrame = overlay
+    self.zoneAnchor = zoneAnchor
     self.clickHandler = clickHandler
     self.titleText = title
     self.detailText = detail
@@ -1664,19 +1737,27 @@ function MinimapModule:ApplyLayout()
             buttonBaseY + buttonOffsetY)
     end
 
+    self.zoneAnchor:ClearAllPoints()
     self.titleText:ClearAllPoints()
     self.detailText:ClearAllPoints()
     if zoneTop then
-        self.titleText:SetPoint("TOPLEFT", mapAnchor, "TOPLEFT", 8 + zoneOffsetX, -10 + zoneOffsetY)
-        self.titleText:SetPoint("TOPRIGHT", mapAnchor, "TOPRIGHT", -8 + zoneOffsetX, -10 + zoneOffsetY)
+        local zoneAnchorPoint, zoneBaseX, zoneBaseY = GetZoneMoverAnchorPoint(zonePosition)
+        self.zoneAnchor:SetPoint(zoneAnchorPoint, mapAnchor, zoneAnchorPoint, zoneBaseX + zoneOffsetX,
+            zoneBaseY + zoneOffsetY)
+        self.titleText:SetPoint("TOPLEFT", self.zoneAnchor, "TOPLEFT", 0, 0)
+        self.titleText:SetPoint("TOPRIGHT", self.zoneAnchor, "TOPRIGHT", 0, 0)
         self.detailText:SetPoint("TOPLEFT", self.titleText, "BOTTOMLEFT", 0, -2)
         self.detailText:SetPoint("TOPRIGHT", self.titleText, "BOTTOMRIGHT", 0, -2)
     elseif zoneBottom then
-        self.detailText:SetPoint("BOTTOMLEFT", mapAnchor, "BOTTOMLEFT", 8 + zoneOffsetX, 8 + zoneOffsetY)
-        self.detailText:SetPoint("BOTTOMRIGHT", mapAnchor, "BOTTOMRIGHT", -8 + zoneOffsetX, 8 + zoneOffsetY)
-        self.titleText:SetPoint("BOTTOMLEFT", mapAnchor, "BOTTOMLEFT", 8 + zoneOffsetX, 22 + zoneOffsetY)
-        self.titleText:SetPoint("BOTTOMRIGHT", mapAnchor, "BOTTOMRIGHT", -8 + zoneOffsetX, 22 + zoneOffsetY)
+        local zoneAnchorPoint, zoneBaseX, zoneBaseY = GetZoneMoverAnchorPoint(zonePosition)
+        self.zoneAnchor:SetPoint(zoneAnchorPoint, mapAnchor, zoneAnchorPoint, zoneBaseX + zoneOffsetX,
+            zoneBaseY + zoneOffsetY)
+        self.titleText:SetPoint("TOPLEFT", self.zoneAnchor, "TOPLEFT", 0, 0)
+        self.titleText:SetPoint("TOPRIGHT", self.zoneAnchor, "TOPRIGHT", 0, 0)
+        self.detailText:SetPoint("TOPLEFT", self.titleText, "BOTTOMLEFT", 0, -2)
+        self.detailText:SetPoint("TOPRIGHT", self.titleText, "BOTTOMRIGHT", 0, -2)
     end
+    self.zoneAnchor:SetShown(showZone)
     self.titleText:SetShown(showZone)
 
     self.leftInfoText:ClearAllPoints()
@@ -1839,6 +1920,35 @@ function MinimapModule:RefreshMoverHandle()
     end
     if moversModule._RefreshHandleVisibility then
         moversModule:_RefreshHandleVisibility("UI_minimap")
+        moversModule:_RefreshHandleVisibility("UI_minimap_zone")
+    end
+    if moversModule._PositionHandle then
+        moversModule:_PositionHandle("UI_minimap_zone")
+    end
+end
+
+function MinimapModule:SetZoneAnchorPositionFromBL(blX, blY)
+    local options = GetOptions()
+    if not options or not self.mapBackdrop or not self.zoneAnchor then
+        return
+    end
+
+    local zonePosition = options:GetZoneTextPosition()
+    local zoneAnchorPoint, zoneBaseX, zoneBaseY = GetZoneMoverAnchorPoint(zonePosition)
+    local zoneWidth = self.zoneAnchor.GetWidth and self.zoneAnchor:GetWidth() or 180
+    local zoneHeight = self.zoneAnchor.GetHeight and self.zoneAnchor:GetHeight() or 34
+    local localAnchorX, localAnchorY = GetPointLocalOffset(zoneAnchorPoint, zoneWidth, zoneHeight)
+    local desiredAnchorX = (tonumber(blX) or 0) + localAnchorX
+    local desiredAnchorY = (tonumber(blY) or 0) + localAnchorY
+    local mapAnchorX, mapAnchorY = GetFramePointScreenPosition(self.mapBackdrop, zoneAnchorPoint)
+    local offsetX = Round(desiredAnchorX - mapAnchorX - zoneBaseX)
+    local offsetY = Round(desiredAnchorY - mapAnchorY - zoneBaseY)
+
+    if options.SetZoneTextOffsetX then
+        options:SetZoneTextOffsetX(nil, offsetX)
+    end
+    if options.SetZoneTextOffsetY then
+        options:SetZoneTextOffsetY(nil, offsetY)
     end
 end
 
@@ -2031,6 +2141,39 @@ function MinimapModule:RegisterWithMoverModule()
             return options:GetEnabled()
         end,
         extras = self:BuildDesignerExtras(),
+    })
+
+    moversModule:RegisterMover("UI_minimap_zone", {
+        label = "Minimap Zone Text",
+        category = "Interface",
+        getFrame = function()
+            self:EnsureShell()
+            return self.zoneAnchor
+        end,
+        getX = function()
+            self:EnsureShell()
+            return self.zoneAnchor and self.zoneAnchor.GetLeft and self.zoneAnchor:GetLeft() or 0
+        end,
+        getY = function()
+            self:EnsureShell()
+            return self.zoneAnchor and self.zoneAnchor.GetBottom and self.zoneAnchor:GetBottom() or 0
+        end,
+        getW = function()
+            self:EnsureShell()
+            local frame = self.zoneAnchor
+            return frame and frame:GetWidth() or 180
+        end,
+        getH = function()
+            self:EnsureShell()
+            local frame = self.zoneAnchor
+            return frame and frame:GetHeight() or 34
+        end,
+        setPos = function(x, y)
+            self:SetZoneAnchorPositionFromBL(x, y)
+        end,
+        isEnabled = function()
+            return options:GetEnabled() and options:GetShowZoneText()
+        end,
     })
 end
 
@@ -2294,5 +2437,6 @@ function MinimapModule:OnDisable()
     end
     if _G.TwichMoverModule and type(_G.TwichMoverModule.UnregisterMover) == "function" then
         _G.TwichMoverModule:UnregisterMover("UI_minimap")
+        _G.TwichMoverModule:UnregisterMover("UI_minimap_zone")
     end
 end
