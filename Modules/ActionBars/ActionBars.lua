@@ -1985,6 +1985,9 @@ function ActionBars:BuildDebugReport()
             local buttons = self.barButtons[definition.key] or {}
             for index, button in ipairs(buttons) do
                 local spellID = (button.GetSpellId and button:GetSpellId()) or self:GetButtonSpellID(button)
+                local actionSlots = self:GetButtonActionSlots(button)
+                local directSpellID = button and
+                (button.spellID or button.spellId or (button.GetSpellId and button:GetSpellId())) or nil
                 local assistFrame = GetButtonAssistedCombatFrame(button)
                 local spellHighlight = GetButtonSpellHighlightTexture(button)
                 local overlay = button and (button.__LBGoverlay or button.overlay or button.SpellActivationAlert or nil) or
@@ -1997,11 +2000,13 @@ function ActionBars:BuildDebugReport()
                 if isTracked then
                     foundAssistedButtonState = true
                     lines[#lines + 1] = string.format(
-                        "%s[%d] action=%s spellID=%s rotationSpell=%s glowActive=%s assistFrame=%s spellHighlight=%s overlay=%s checked=%s masque=%s",
+                        "%s[%d] action=%s slots=%s spellID=%s directSpellID=%s rotationSpell=%s glowActive=%s assistFrame=%s spellHighlight=%s overlay=%s checked=%s masque=%s",
                         definition.key,
                         index,
                         SafeDebugString(button.action or (button.GetAttribute and button:GetAttribute("action")) or nil),
+                        SafeDebugString(table.concat(actionSlots, ":")),
                         SafeDebugString(spellID),
+                        SafeDebugString(directSpellID),
                         tostring(self:IsAssistedRotationSpell(spellID) == true),
                         tostring(self:IsButtonGlowActive(button, {})),
                         tostring(assistFrame and assistFrame.IsShown and assistFrame:IsShown() or false),
@@ -3506,31 +3511,42 @@ function ActionBars:GetButtonSpellID(button)
     end
 
     local directSpellID = button.spellID or button.spellId or (button.GetSpellId and button:GetSpellId()) or nil
-    if directSpellID then
-        button.__twichuiABSpellID = directSpellID
-        return directSpellID
-    end
-
-    if not GetActionInfo then
-        return nil
-    end
-
     local actionSlots = self:GetButtonActionSlots(button)
-    if #actionSlots == 0 then
-        return nil
-    end
-
-    local actionSignature = table.concat(actionSlots, ":")
+    local actionSignature = table.concat(actionSlots, ":") .. "|" .. tostring(directSpellID or "")
     if button.__twichuiABSpellIDAction == actionSignature and button.__twichuiABSpellIDResolved == true then
         return button.__twichuiABSpellID
     end
 
     local resolvedSpellID = nil
-    for _, actionSlot in ipairs(actionSlots) do
-        local actionType, actionID = GetActionInfo(actionSlot)
-        if actionType == "spell" and actionID then
-            resolvedSpellID = actionID
-            break
+    local preferredSpellID = tonumber(self.currentAssistedSpellID) or nil
+    local firstSpellID = nil
+    local firstActiveAlertSpellID = nil
+
+    if GetActionInfo and #actionSlots > 0 then
+        for _, actionSlot in ipairs(actionSlots) do
+            local actionType, actionID = GetActionInfo(actionSlot)
+            if actionType == "spell" and actionID then
+                if not firstSpellID then
+                    firstSpellID = actionID
+                end
+
+                if preferredSpellID and actionID == preferredSpellID then
+                    resolvedSpellID = actionID
+                    break
+                end
+
+                if not firstActiveAlertSpellID and self.activeAlertSpells and self.activeAlertSpells[actionID] == true then
+                    firstActiveAlertSpellID = actionID
+                end
+            end
+        end
+    end
+
+    if not resolvedSpellID then
+        if preferredSpellID and directSpellID and directSpellID == preferredSpellID then
+            resolvedSpellID = directSpellID
+        else
+            resolvedSpellID = firstActiveAlertSpellID or firstSpellID or directSpellID
         end
     end
 
