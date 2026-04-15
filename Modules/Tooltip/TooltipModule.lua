@@ -28,6 +28,10 @@ local InCombatLockdown = _G.InCombatLockdown
 local GetInventoryItemAverageItemLevel = _G.GetInventoryItemAverageItemLevel
 local GetAverageItemLevel = _G.GetAverageItemLevel
 local GetInspectSpecialization = _G.GetInspectSpecialization
+local NotifyInspect = _G.NotifyInspect
+local ClearInspectPlayer = _G.ClearInspectPlayer
+local CanInspect = _G.CanInspect
+local UnitGUID = _G.UnitGUID
 local GetSpecializationInfoByID = _G.GetSpecializationInfoByID
 local BreakUpLargeNumbers = _G.BreakUpLargeNumbers
 local C_PlayerInfo = _G.C_PlayerInfo
@@ -100,8 +104,16 @@ local function SafeCall(func, ...)
     return result1, result2, result3, result4, result5
 end
 
+local function SafeBooleanValue(value)
+    return value and true or false
+end
+
+local function SafeBooleanCall(func, ...)
+    return SafeBooleanValue(SafeCall(func, ...))
+end
+
 local function SafeUnitIsPlayer(unit)
-    return SafeCall(UnitIsPlayer, unit) == true
+    return SafeBooleanCall(UnitIsPlayer, unit)
 end
 
 local function SafeUnitClass(unit)
@@ -113,15 +125,15 @@ local function SafeUnitFactionGroup(unit)
 end
 
 local function SafeUnitIsUnit(unit, otherUnit)
-    return SafeCall(UnitIsUnit, unit, otherUnit) == true
+    return SafeBooleanCall(UnitIsUnit, unit, otherUnit)
 end
 
 local function SafeUnitCanAttack(attacker, unit)
-    return SafeCall(UnitCanAttack, attacker, unit) == true
+    return SafeBooleanCall(UnitCanAttack, attacker, unit)
 end
 
 local function SafeUnitIsFriend(unit, otherUnit)
-    return SafeCall(UnitIsFriend, unit, otherUnit) == true
+    return SafeBooleanCall(UnitIsFriend, unit, otherUnit)
 end
 
 local function SafeTooltipUnit(frame)
@@ -606,13 +618,13 @@ function TooltipModule:BuildPlayerDetailState(unit)
     state.classIconMarkup = self:GetClassIconMarkup(state.classToken, 14)
     state.hasClassIconMarkup = type(state.classIconMarkup) == "string" and state.classIconMarkup ~= ""
 
-    if SafeCall(UnitIsAFK, unit) == true then
+    if SafeBooleanCall(UnitIsAFK, unit) then
         table_insert(state.statusBadges, ColorizeText("[AFK]", 1.00, 0.48, 0.48))
     end
-    if SafeCall(UnitIsDND, unit) == true then
+    if SafeBooleanCall(UnitIsDND, unit) then
         table_insert(state.statusBadges, ColorizeText("[DND]", 1.00, 0.75, 0.28))
     end
-    if SafeCall(UnitIsPVP, unit) == true then
+    if SafeBooleanCall(UnitIsPVP, unit) then
         table_insert(state.statusBadges, ColorizeText("[PVP]", 0.88, 0.34, 0.42))
     end
 
@@ -625,7 +637,7 @@ function TooltipModule:GetCachedPlayerDetailState(frame)
     end
 
     local state = frame.__tuiTooltipPlayerState
-    if type(state) ~= "table" or state.isPlayer ~= true then
+    if type(state) ~= "table" or not state.isPlayer then
         return nil
     end
 
@@ -637,7 +649,7 @@ function TooltipModule:SetCachedPlayerDetailState(frame, state)
         return
     end
 
-    if type(state) == "table" and state.isPlayer == true then
+    if type(state) == "table" and state.isPlayer then
         frame.__tuiTooltipPlayerState = state
     else
         frame.__tuiTooltipPlayerState = nil
@@ -706,14 +718,84 @@ function TooltipModule:GetPlayerEquippedItemLevel(unit)
         end
     end
 
+    local guid = unit and UnitGUID and UnitGUID(unit) or nil
+    local cachedInspect = guid and self.inspectItemLevelCache and self.inspectItemLevelCache[guid] or nil
+    if type(cachedInspect) == "number" and cachedInspect > 0 then
+        return cachedInspect
+    end
+
     if C_PaperDollInfo and type(C_PaperDollInfo.GetInspectItemLevel) == "function" and unit then
         local equipped = SafeCall(C_PaperDollInfo.GetInspectItemLevel, unit)
         if type(equipped) == "number" and equipped > 0 then
+            if guid then
+                self.inspectItemLevelCache = self.inspectItemLevelCache or {}
+                self.inspectItemLevelCache[guid] = equipped
+            end
             return equipped
         end
     end
 
     return nil
+end
+
+function TooltipModule:RequestInspectData(unit)
+    if not unit or SafeUnitIsUnit(unit, "player") then
+        return
+    end
+
+    if type(CanInspect) ~= "function" or type(NotifyInspect) ~= "function" or type(UnitGUID) ~= "function" then
+        return
+    end
+
+    local guid = UnitGUID(unit)
+    if not guid or (self.inspectItemLevelCache and self.inspectItemLevelCache[guid]) then
+        return
+    end
+
+    if self.pendingInspectGUID == guid then
+        return
+    end
+
+    local canInspect = SafeCall(CanInspect, unit, false)
+    if not canInspect then
+        return
+    end
+
+    self.pendingInspectGUID = guid
+    self.pendingInspectUnit = unit
+    SafeCall(NotifyInspect, unit)
+end
+
+function TooltipModule:INSPECT_READY(_, guid)
+    if not guid then
+        return
+    end
+
+    if self.pendingInspectGUID ~= guid then
+        return
+    end
+
+    local unit = self.pendingInspectUnit
+    local itemLevel = unit and C_PaperDollInfo and type(C_PaperDollInfo.GetInspectItemLevel) == "function" and
+        SafeCall(C_PaperDollInfo.GetInspectItemLevel, unit) or nil
+
+    if type(itemLevel) == "number" and itemLevel > 0 then
+        self.inspectItemLevelCache = self.inspectItemLevelCache or {}
+        self.inspectItemLevelCache[guid] = itemLevel
+    end
+
+    self.pendingInspectGUID = nil
+    self.pendingInspectUnit = nil
+    if type(ClearInspectPlayer) == "function" then
+        SafeCall(ClearInspectPlayer)
+    end
+
+    if GameTooltip and GameTooltip:IsShown() then
+        local unitOnTooltip = SafeTooltipUnit(GameTooltip)
+        if unitOnTooltip and UnitGUID and UnitGUID(unitOnTooltip) == guid then
+            self:ScheduleStyleFrame(GameTooltip, "inspect-ready")
+        end
+    end
 end
 
 function TooltipModule:PlayFadeIn(frame)
@@ -773,7 +855,7 @@ function TooltipModule:ApplyItemBorder(frame)
     end
 
     local chrome = self:EnsureFrameChrome(frame)
-    chrome:SetBackdropBorderColor(qualityColor.r or 1, qualityColor.g or 1, qualityColor.b or 1, 0.72)
+    self:SetChromeBorderColor(chrome, qualityColor.r or 1, qualityColor.g or 1, qualityColor.b or 1, 0.72)
     chrome.Accent:SetColorTexture(qualityColor.r or 1, qualityColor.g or 1, qualityColor.b or 1,
         options:GetShowAccent() and 0.95 or 0)
     chrome.Glow:SetColorTexture(qualityColor.r or 1, qualityColor.g or 1, qualityColor.b or 1,
@@ -814,7 +896,7 @@ function TooltipModule:AppendItemAppearance(frame)
     end
 
     frame:AddLine(" ")
-    if collected == true then
+    if SafeBooleanValue(collected) then
         frame:AddLine("Appearance: Collected", 0.42, 0.89, 0.63)
     else
         frame:AddLine("Appearance: Not Collected", 0.96, 0.74, 0.22)
@@ -823,7 +905,7 @@ end
 
 function TooltipModule:AppendPlayerDetailState(frame, state)
     local options = GetOptions()
-    if not options or not options:GetShowPlayerDetails() or not frame or type(state) ~= "table" or state.isPlayer ~= true then
+    if not options or not options:GetShowPlayerDetails() or not frame or type(state) ~= "table" or not state.isPlayer then
         return
     end
 
@@ -893,12 +975,12 @@ function TooltipModule:AppendPlayerDetailState(frame, state)
         return type(text) == "string" and text:find("Level ", 1, true) ~= nil
     end)
 
-    local statParts = {}
-    if options:GetShowMythicScore() and type(state.mythicScore) == "number" and state.mythicScore > 0 then
-        local red, green, blue = self:GetMythicScoreColor(state.mythicScore)
-        table_insert(statParts, ColorizeText("M+ " .. self:FormatNumber(state.mythicScore), red, green, blue))
-    end
+    local mythicIndex = self:FindTooltipLineIndex(frame, function(text)
+        local stripped = StripTooltipMarkup(text)
+        return type(stripped) == "string" and stripped:find("M+ ", 1, true) == 1
+    end)
 
+    local statParts = {}
     if options:GetShowItemLevel() and type(state.itemLevel) == "number" and state.itemLevel > 0 then
         table_insert(statParts, ColorizeText(string_format("iLvl %.1f", state.itemLevel), 0.96, 0.76, 0.24))
     end
@@ -914,6 +996,22 @@ function TooltipModule:AppendPlayerDetailState(frame, state)
         baseLevelText = baseLevelText:gsub("%s+|cff556070•|r%s+.-$", "")
         local statSuffix = table_concat(statParts, "  |cff556070•|r  ")
         self:SetTooltipLeftText(frame, levelIndex, baseLevelText .. "  |cff556070•|r  " .. statSuffix, 0.82, 0.84, 0.90)
+    elseif levelIndex and levelLine then
+        local baseLevelText = levelLine:GetText() or ""
+        baseLevelText = baseLevelText:gsub("%s+|cff556070•|r%s+.-$", "")
+        self:SetTooltipLeftText(frame, levelIndex, baseLevelText, 0.82, 0.84, 0.90)
+    end
+
+    if options:GetShowMythicScore() and type(state.mythicScore) == "number" and state.mythicScore > 0 then
+        local red, green, blue = self:GetMythicScoreColor(state.mythicScore)
+        local mythicText = "M+ " .. self:FormatNumber(state.mythicScore)
+        if mythicIndex then
+            self:SetTooltipLeftText(frame, mythicIndex, mythicText, red, green, blue)
+        else
+            frame:AddLine(mythicText, red, green, blue)
+        end
+    elseif mythicIndex then
+        self:ClearTooltipLine(frame, mythicIndex)
     end
 end
 
@@ -964,7 +1062,7 @@ function TooltipModule:ApplyUnitIdentity(frame)
     end
 
     local chrome = self:EnsureFrameChrome(frame)
-    chrome:SetBackdropBorderColor(red, green, blue, 0.72)
+    self:SetChromeBorderColor(chrome, red, green, blue, 0.72)
     chrome.Accent:SetColorTexture(red, green, blue, options:GetShowAccent() and 0.95 or 0)
     chrome.Glow:SetColorTexture(red, green, blue, options:GetShowAccent() and 0.10 or 0)
 end
@@ -974,15 +1072,37 @@ function TooltipModule:EnsureFrameChrome(frame)
         return frame.TwichUITooltipChrome
     end
 
-    local chrome = CreateFrame("Frame", nil, frame, "BackdropTemplate")
-    chrome:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-        insets = { left = 1, right = 1, top = 1, bottom = 1 },
-    })
+    local chrome = CreateFrame("Frame", nil, frame)
     chrome:SetFrameStrata(frame:GetFrameStrata())
     chrome:SetFrameLevel(math_max(0, frame:GetFrameLevel() - 1))
+
+    chrome.Background = chrome:CreateTexture(nil, "BACKGROUND")
+    chrome.Background:SetAllPoints()
+    chrome.Background:SetTexture("Interface\\Buttons\\WHITE8X8")
+
+    chrome.BorderTop = chrome:CreateTexture(nil, "BORDER")
+    chrome.BorderTop:SetTexture("Interface\\Buttons\\WHITE8X8")
+    chrome.BorderTop:SetPoint("TOPLEFT", chrome, "TOPLEFT", 0, 0)
+    chrome.BorderTop:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", 0, 0)
+    chrome.BorderTop:SetHeight(1)
+
+    chrome.BorderBottom = chrome:CreateTexture(nil, "BORDER")
+    chrome.BorderBottom:SetTexture("Interface\\Buttons\\WHITE8X8")
+    chrome.BorderBottom:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", 0, 0)
+    chrome.BorderBottom:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", 0, 0)
+    chrome.BorderBottom:SetHeight(1)
+
+    chrome.BorderLeft = chrome:CreateTexture(nil, "BORDER")
+    chrome.BorderLeft:SetTexture("Interface\\Buttons\\WHITE8X8")
+    chrome.BorderLeft:SetPoint("TOPLEFT", chrome, "TOPLEFT", 0, 0)
+    chrome.BorderLeft:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", 0, 0)
+    chrome.BorderLeft:SetWidth(1)
+
+    chrome.BorderRight = chrome:CreateTexture(nil, "BORDER")
+    chrome.BorderRight:SetTexture("Interface\\Buttons\\WHITE8X8")
+    chrome.BorderRight:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", 0, 0)
+    chrome.BorderRight:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", 0, 0)
+    chrome.BorderRight:SetWidth(1)
 
     chrome.Accent = chrome:CreateTexture(nil, "BORDER")
     chrome.Accent:SetPoint("TOPLEFT", chrome, "TOPLEFT", 1, -1)
@@ -1012,6 +1132,33 @@ function TooltipModule:EnsureFrameChrome(frame)
     return chrome
 end
 
+function TooltipModule:SetChromeBackgroundColor(chrome, red, green, blue, alpha)
+    if not chrome or not chrome.Background then
+        return
+    end
+
+    chrome.Background:SetColorTexture(red or 0, green or 0, blue or 0, alpha or 1)
+end
+
+function TooltipModule:SetChromeBorderColor(chrome, red, green, blue, alpha)
+    if not chrome then
+        return
+    end
+
+    local textures = {
+        chrome.BorderTop,
+        chrome.BorderBottom,
+        chrome.BorderLeft,
+        chrome.BorderRight,
+    }
+
+    for _, texture in ipairs(textures) do
+        if texture then
+            texture:SetColorTexture(red or 0, green or 0, blue or 0, alpha or 1)
+        end
+    end
+end
+
 function TooltipModule:ApplyChrome(frame)
     if not frame then
         return
@@ -1028,8 +1175,8 @@ function TooltipModule:ApplyChrome(frame)
     chrome:ClearAllPoints()
     chrome:SetPoint("TOPLEFT", frame, "TOPLEFT", -4, 4)
     chrome:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 4, -4)
-    chrome:SetBackdropColor(backgroundR, backgroundG, backgroundB, math_max(0.72, backgroundAlpha))
-    chrome:SetBackdropBorderColor(borderR, borderG, borderB, math_max(0.78, borderAlpha))
+    self:SetChromeBackgroundColor(chrome, backgroundR, backgroundG, backgroundB, math_max(0.72, backgroundAlpha))
+    self:SetChromeBorderColor(chrome, borderR, borderG, borderB, math_max(0.78, borderAlpha))
     chrome.Accent:SetColorTexture(accentR, accentG, accentB, options and options:GetShowAccent() and 0.95 or 0)
     chrome.Glow:SetColorTexture(accentR, accentG, accentB, options and options:GetShowAccent() and 0.09 or 0)
     chrome.Shine:SetAlpha(0)
@@ -1728,6 +1875,7 @@ function TooltipModule:OnTooltipSetUnit(frame)
         local _, unit = frame:GetUnit()
         local state = unit and self:BuildPlayerDetailState(unit) or nil
         if state and state.isPlayer then
+            self:RequestInspectData(unit)
             self.lastPlayerDetailState = state
             self:SetCachedPlayerDetailState(frame, state)
             self:LogDebugf(false,
@@ -2062,6 +2210,7 @@ end
 
 function TooltipModule:OnEnable()
     self.registeredFrames = self.registeredFrames or {}
+    self.inspectItemLevelCache = self.inspectItemLevelCache or {}
     self:CreateAnchor()
     self:RegisterTooltipDataCallbacks()
     for _, frame in ipairs(self:GetManagedFrames()) do
@@ -2071,6 +2220,7 @@ function TooltipModule:OnEnable()
     self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
     self:RegisterEvent("PLAYER_REGEN_DISABLED", "OnCombatStarted")
     self:RegisterEvent("PLAYER_REGEN_ENABLED", "OnCombatEnded")
+    self:RegisterEvent("INSPECT_READY")
 
     local debugConsole = GetDebugConsole()
     if debugConsole and debugConsole.RegisterSource then
@@ -2159,6 +2309,12 @@ function TooltipModule:OnDisable()
     self:UnregisterMessage("TWICH_THEME_CHANGED")
     self:UnregisterEvent("PLAYER_REGEN_DISABLED")
     self:UnregisterEvent("PLAYER_REGEN_ENABLED")
+    self:UnregisterEvent("INSPECT_READY")
+    self.pendingInspectGUID = nil
+    self.pendingInspectUnit = nil
+    if type(ClearInspectPlayer) == "function" then
+        SafeCall(ClearInspectPlayer)
+    end
     self:UnhookAll()
     if _G.TwichMoverModule and type(_G.TwichMoverModule.UnregisterMover) == "function" then
         _G.TwichMoverModule:UnregisterMover("UI_tooltip_anchor")

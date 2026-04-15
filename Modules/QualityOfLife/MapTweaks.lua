@@ -307,24 +307,14 @@ local function InstallHooks()
     end
     hooksInstalled = true
 
-    C_Timer.After(0.1, function()
-        if not WorldMapFrame then
-            return
-        end
-
-        WorldMapFrame:SetAttribute("UIPanelLayout-area", nil)
-        WorldMapFrame:SetAttribute("UIPanelLayout-enabled", false)
-        WorldMapFrame:SetAttribute("UIPanelLayout-allowOtherPanels", true)
-    end)
-
     WorldMapFrame:RegisterForDrag("LeftButton")
-    WorldMapFrame:SetScript("OnDragStart", function(frame)
+    WorldMapFrame:HookScript("OnDragStart", function(frame)
         if IsFeatureEnabled({ "unlock", "enabled" }) and GetOptions():GetValue({ "unlock", "movement" }, true) then
             frame:StartMoving()
         end
     end)
 
-    WorldMapFrame:SetScript("OnDragStop", function(frame)
+    WorldMapFrame:HookScript("OnDragStop", function(frame)
         frame:StopMovingOrSizing()
         SaveMapPosition()
         MT:ApplyMapPosition(true)
