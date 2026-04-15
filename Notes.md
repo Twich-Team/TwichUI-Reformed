@@ -4,10 +4,6 @@
 
 ## NOTES
 
-- i dont think we have a mover for the zone button. its currently in the center of my screen and i cannot move or configure it
-
-- Our nameplates have a nice system to emphasize when npcs are casting. I have noticed that if my target casts, the nameplate doesnt assume the casting emphasis. so for example i have it configured to scale up the size and addd blue arrows when casting. it works fine for enemies im not actively targeting. but my active target starts to cast, those emphasis items do not appear.
-
 - Can we add a reloadui button to the popup error frame? Also, add a button silence for the current session. this no longer shows the popup/chat announcements, and mutes any sounds until reload, log off, etc.
 
 - our objective tracker is still showing all world quests in the current zone. It should not do this. it should only show a world quest if it is active meaning im in the direct quest spot in the zone. Additionally, world quests should be split into their own category in the objective tracker

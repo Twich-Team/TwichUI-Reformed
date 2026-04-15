@@ -3078,11 +3078,6 @@ function ActionBars:EnsureZoneAbilityHooksInstalled()
     end
 
     hooksecurefunc(frame, "UpdateDisplayedZoneAbilities", RequestZoneRefresh)
-    hooksecurefunc(frame, "SetParent", RequestZoneRefresh)
-
-    if frame.SpellButtonContainer then
-        hooksecurefunc(frame.SpellButtonContainer, "SetSize", RequestZoneRefresh)
-    end
 
     frame.__twichuiZoneAbilityHooked = true
 end
@@ -3142,10 +3137,6 @@ function ActionBars:PrepareZoneAbilityFrame(holder)
         self:CaptureFrameState(container)
     end
 
-    if _G.UIPARENT_MANAGED_FRAME_POSITIONS then
-        _G.UIPARENT_MANAGED_FRAME_POSITIONS.ZoneAbilityFrame = nil
-    end
-
     frame.ignoreInLayout = true
 
     if not InCombatLockdown() then
@@ -3185,14 +3176,20 @@ function ActionBars:ApplyZoneAbilityLayout(definition, holder, buttons, barSetti
     local availableCount = self:GetButtonCountForDefinition(definition, buttons)
     local clampedScale = ClampNumber(barSettings.scale, 0.5, 2, 1)
     local clampedButtonSize = ClampNumber(barSettings.buttonSize, 22, 64, definition.fallbackButtonSize)
-    local clampedButtonsPerRow = ClampNumber(barSettings.buttonsPerRow, 1, max(1, definition.maxButtons or 1),
-        definition.fallbackButtonsPerRow)
     local clampedSpacing = ClampNumber(actionBarDB.buttonSpacing, 0, 20, 4)
-    local layoutCount = max(1, min(max(availableCount, 1), max(1, clampedButtonsPerRow, definition.maxButtons or 1)))
-    local rows = ceil(layoutCount / clampedButtonsPerRow)
-    local width = (min(layoutCount, clampedButtonsPerRow) * clampedButtonSize) +
-        ((min(layoutCount, clampedButtonsPerRow) - 1) * clampedSpacing) + (DEFAULT_HOLDER_PADDING * 2)
-    local height = (rows * clampedButtonSize) + ((rows - 1) * clampedSpacing) + (DEFAULT_HOLDER_PADDING * 2)
+    local container = frame.SpellButtonContainer
+    local containerWidth = container and container.GetWidth and container:GetWidth() or 0
+    local containerHeight = container and container.GetHeight and container:GetHeight() or 0
+    local referenceButton = buttons[1]
+    local referenceWidth = referenceButton and referenceButton.GetWidth and referenceButton:GetWidth() or
+        definition.fallbackButtonSize
+    local buttonScale = ClampNumber(clampedButtonSize / max(referenceWidth or definition.fallbackButtonSize, 1), 0.5, 2,
+        1)
+    local visualScale = ClampNumber(clampedScale * buttonScale, 0.5, 2, clampedScale)
+    local width = max((containerWidth * visualScale) + (DEFAULT_HOLDER_PADDING * 2),
+        clampedButtonSize + (DEFAULT_HOLDER_PADDING * 2))
+    local height = max((containerHeight * visualScale) + (DEFAULT_HOLDER_PADDING * 2),
+        clampedButtonSize + (DEFAULT_HOLDER_PADDING * 2))
     local layoutSignature = table.concat({
         tostring(barSettings.enabled == true),
         tostring(barSettings.point or "BOTTOM"),
@@ -3203,8 +3200,10 @@ function ActionBars:ApplyZoneAbilityLayout(definition, holder, buttons, barSetti
         tostring(ClampNumber(barSettings.alpha, 0.05, 1, 1)),
         tostring(availableCount),
         tostring(clampedButtonSize),
-        tostring(clampedButtonsPerRow),
         tostring(clampedSpacing),
+        tostring(containerWidth),
+        tostring(containerHeight),
+        tostring(visualScale),
         tostring(actionBarDB.showGrid == true),
         tostring(actionBarDB.useMasque == true and Masque ~= nil),
         tostring(barSettings.backdrop ~= false),
@@ -3223,7 +3222,7 @@ function ActionBars:ApplyZoneAbilityLayout(definition, holder, buttons, barSetti
     holder:ClearAllPoints()
     holder:SetPoint(barSettings.point or "BOTTOM", UIParent, barSettings.relativePoint or barSettings.point or "BOTTOM",
         barSettings.x or 0, barSettings.y or 0)
-    holder:SetScale(clampedScale)
+    holder:SetScale(1)
     holder:SetFrameLevel(30)
     holder:SetSize(width, height)
 
@@ -3240,17 +3239,17 @@ function ActionBars:ApplyZoneAbilityLayout(definition, holder, buttons, barSetti
         end
     end
 
-    for index, button in ipairs(buttons) do
-        button:ClearAllPoints()
-        button:SetSize(clampedButtonSize, clampedButtonSize)
-        button:SetFrameStrata("MEDIUM")
-        button:SetFrameLevel(holder:GetFrameLevel() + 4)
+    if container then
+        container:ClearAllPoints()
+        container:SetPoint("CENTER", holder, "CENTER", 0, 0)
+        container:SetScale(visualScale)
+    end
 
-        local row = floor((index - 1) / clampedButtonsPerRow)
-        local column = (index - 1) % clampedButtonsPerRow
-        button:SetPoint("TOPLEFT", holder, "TOPLEFT",
-            DEFAULT_HOLDER_PADDING + (column * (clampedButtonSize + clampedSpacing)),
-            -DEFAULT_HOLDER_PADDING - (row * (clampedButtonSize + clampedSpacing)))
+    if frame.Style then
+        frame.Style:SetScale(visualScale)
+    end
+
+    for index, button in ipairs(buttons) do
         self:ApplyButtonStyle(button, actionBarDB, definition.key, barSettings)
         ApplyButtonGridState(button, actionBarDB.showGrid == true)
         button:Show()

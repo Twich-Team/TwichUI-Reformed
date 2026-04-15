@@ -1475,6 +1475,11 @@ function MinimapModule:ApplyPosition()
         return
     end
 
+    if InCombatLockdown and InCombatLockdown() then
+        self.pendingApplyReason = self.pendingApplyReason or "combat-position"
+        return
+    end
+
     local point = options.GetAnchorPoint and options:GetAnchorPoint() or "BOTTOMLEFT"
     local relativePoint = options.GetRelativePoint and options:GetRelativePoint() or point
     self.holder:ClearAllPoints()
@@ -1484,6 +1489,11 @@ end
 function MinimapModule:ApplyMinimapState()
     local options = GetOptions()
     if not options or not self.holder or not Minimap or not MinimapCluster then
+        return
+    end
+
+    if InCombatLockdown and InCombatLockdown() then
+        self.pendingApplyReason = self.pendingApplyReason or "combat-minimap-state"
         return
     end
 
@@ -1700,6 +1710,11 @@ end
 function MinimapModule:ApplyLayout()
     local options = GetOptions()
     if not options or not self.holder then
+        return
+    end
+
+    if InCombatLockdown and InCombatLockdown() then
+        self.pendingApplyReason = self.pendingApplyReason or "combat-layout"
         return
     end
 
