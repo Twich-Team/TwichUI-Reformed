@@ -26,7 +26,7 @@ local C_SummonInfo = _G.C_SummonInfo
 local C_Timer = _G.C_Timer
 local Enum = _G.Enum
 local GetInstanceInfo = _G.GetInstanceInfo
-local GetItemInfo = C_Item.GetItemInfo
+local GetItemInfo = C_Item.GetItemInfo or _G.GetItemInfo
 local GetNetStats = _G.GetNetStats
 local CommunitiesUtil = _G["CommunitiesUtil"]
 local EventToastManagerFrame = _G["EventToastManagerFrame"]
@@ -35,6 +35,7 @@ local IsCosmeticItem = C_Item.IsCosmeticItem
 local IsEquippableItem = C_Item.IsEquippableItem
 local IsUsableItem = C_Item.IsUsableItem
 local ItemLocation = _G.ItemLocation
+local RequestLoadItemDataByID = C_Item and C_Item.RequestLoadItemDataByID
 local StaticPopupDialogs = _G["StaticPopupDialogs"]
 local UIErrorsFrame = _G["UIErrorsFrame"]
 local DEFAULT_CHAT_FRAME = _G.DEFAULT_CHAT_FRAME
@@ -257,6 +258,8 @@ local PVP_AUTO_RELEASE_WORLD_MAPS = {
 local AUTOSELL_BAG_MAX = _G.NUM_TOTAL_EQUIPPED_BAG_SLOTS or _G.NUM_BAG_SLOTS or 4
 local AUTOSELL_SAFE_MODE_LIMIT = 12
 local AUTOSELL_START_DELAY_SECONDS = 0.1
+local AUTOSELL_ITEMDATA_RETRY_DELAY_SECONDS = 0.2
+local AUTOSELL_ITEMDATA_MAX_RETRIES = 6
 local AUTOSELL_EQUIPMENT_INVTYPE_EXCEPTIONS = {
     INVTYPE_FINGER = true,
     INVTYPE_NECK = true,
@@ -469,7 +472,8 @@ local function BuildIDLookup(value)
 end
 
 local function GetQualityKey(quality)
-    if quality == Enum.ItemQuality.Poor then
+    local poorQuality = Enum.ItemQuality.Poor or 0
+    if quality == poorQuality then
         return "poor"
     end
 
@@ -500,7 +504,14 @@ local function QualityValue(path, quality, defaultValue)
         return false
     end
 
-    return Value({ path[1], path[2], path[3], qualityKey }, defaultValue) == true
+    local n = #path
+    local qualPath = {}
+    for i = 1, n do
+        qualPath[i] = path[i]
+    end
+    qualPath[n + 1] = qualityKey
+
+    return Value(qualPath, defaultValue) == true
 end
 
 local function IsLocationBound(location)
@@ -551,7 +562,7 @@ local function IsSellableEquipment(item)
 
     if item.classID == Enum.ItemClass.Weapon then
         return item.subclassID ~= Enum.ItemWeaponSubclass.Generic and
-        item.subclassID ~= Enum.ItemWeaponSubclass.Fishingpole
+            item.subclassID ~= Enum.ItemWeaponSubclass.Fishingpole
     end
 
     return false
@@ -610,29 +621,74 @@ end
 
 local function IsArtifactRelic(item)
     return item.classID == Enum.ItemClass.Gem and Enum.ItemGemSubclass and
-    item.subclassID == Enum.ItemGemSubclass.Artifactrelic
+        item.subclassID == Enum.ItemGemSubclass.Artifactrelic
+end
+
+local function GetContainerItemLevel(location, link)
+    if not (C_Item and C_Item.GetDetailedItemLevelInfo) then
+        return 0
+    end
+
+    if location then
+        local ok, itemLevel = pcall(C_Item.GetDetailedItemLevelInfo, location)
+        if ok and type(itemLevel) == "number" and itemLevel > 0 then
+            return itemLevel
+        end
+    end
+
+    local ok, itemLevel = pcall(C_Item.GetDetailedItemLevelInfo, link)
+    if ok and type(itemLevel) == "number" and itemLevel > 0 then
+        return itemLevel
+    end
+
+    return 0
 end
 
 local function GetContainerSellItem(bagID, slotID, equipmentSetLookup)
     local containerInfo = C_Container.GetContainerItemInfo(bagID, slotID)
     if type(containerInfo) ~= "table" then
-        return nil
+        return nil, false
+    end
+
+    -- Items explicitly flagged as unsellable by the game - skip immediately
+    if containerInfo.hasNoValue then
+        return nil, false
+    end
+
+    local itemID = containerInfo.itemID
+    if not itemID then
+        return nil, false
     end
 
     local link = containerInfo.hyperlink or C_Container.GetContainerItemLink(bagID, slotID)
     if not link then
-        return nil
+        return nil, false
     end
 
+    -- GetItemInfo is async; link-based lookup may return nil for uncached items.
+    -- Fall back to numeric itemID which the game loads synchronously on bag open.
     local itemName, _, quality, _, _, _, _, _, invType, _, vendorPrice, classID, subclassID = GetItemInfo(link)
-    local itemID = containerInfo.itemID or (_G.GetItemInfoFromHyperlink and _G.GetItemInfoFromHyperlink(link))
-    if not itemID or not vendorPrice or vendorPrice <= 0 or containerInfo.hasNoValue then
-        return nil
+    if not itemName then
+        itemName, _, quality, _, _, _, _, _, invType, _, vendorPrice, classID, subclassID = GetItemInfo(itemID)
+    end
+
+    -- containerInfo.quality is always available synchronously; use as authoritative fallback
+    quality = quality or containerInfo.quality
+
+    if vendorPrice == nil then
+        if RequestLoadItemDataByID then
+            RequestLoadItemDataByID(itemID)
+        end
+        return nil, true
+    end
+
+    if vendorPrice <= 0 then
+        return nil, false
     end
 
     local location = ItemLocation and ItemLocation:CreateFromBagAndSlot(bagID, slotID)
     if not location then
-        return nil
+        return nil, false
     end
 
     local item = {
@@ -642,7 +698,7 @@ local function GetContainerSellItem(bagID, slotID, equipmentSetLookup)
         link = link,
         name = itemName or link,
         quality = quality or containerInfo.quality,
-        itemLevel = (C_Item and C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(link)) or 0,
+        itemLevel = GetContainerItemLevel(location, link),
         vendorPrice = vendorPrice,
         stackCount = containerInfo.stackCount or 1,
         totalPrice = vendorPrice * (containerInfo.stackCount or 1),
@@ -676,6 +732,19 @@ local function GetContainerSellItem(bagID, slotID, equipmentSetLookup)
     return item
 end
 
+-- Fire GetItemInfo for every occupied bag slot to warm the async item info cache.
+-- This ensures vendorPrice is populated by the time we build the sell queue.
+local function WarmItemInfoCache()
+    for bagID = 0, AUTOSELL_BAG_MAX do
+        for slotID = 1, C_Container.GetContainerNumSlots(bagID) do
+            local itemID = C_Container.GetContainerItemID(bagID, slotID)
+            if itemID then
+                GetItemInfo(itemID)
+            end
+        end
+    end
+end
+
 local function GetAutoSellSettings()
     return {
         includeLookup = BuildIDLookup(Value({ "automation", "autoSellIncludeList" }, "")),
@@ -691,6 +760,32 @@ local function GetAutoSellSettings()
         includeArtifactRelics = Value({ "automation", "autoSellIncludeArtifactRelics" }, false) == true,
         legacyKeepUnboundGrey = Value({ "automation", "autoSellExcludeGreyGear" }, false) == true,
     }
+end
+
+local function HasActiveAutoSellRule()
+    if not GetOptions():GetEnabled() then
+        return false
+    end
+
+    if Value({ "automation", "autoSellJunk" }, false) == true then
+        return true
+    end
+
+    if Value({ "automation", "autoSellIncludeBelowItemLevel", "enabled" }, false) == true and
+        (Value({ "automation", "autoSellIncludeBelowItemLevel", "value" }, 0) or 0) > 0 then
+        return true
+    end
+
+    if Value({ "automation", "autoSellIncludeUnsuitableEquipment" }, false) == true then
+        return true
+    end
+
+    if Value({ "automation", "autoSellIncludeArtifactRelics" }, false) == true then
+        return true
+    end
+
+    local includeList = Value({ "automation", "autoSellIncludeList" }, "")
+    return type(includeList) == "string" and strmatch(includeList, "%S") ~= nil
 end
 
 local function IsAutoSellItem(item, settings)
@@ -751,12 +846,15 @@ local function BuildAutoSellQueue()
     local settings = GetAutoSellSettings()
     local equipmentSetLookup = BuildEquipmentSetLookup()
     local items = {}
+    local hasPendingItemData = false
 
     for bagID = 0, AUTOSELL_BAG_MAX do
         for slotID = 1, C_Container.GetContainerNumSlots(bagID) do
-            local item = GetContainerSellItem(bagID, slotID, equipmentSetLookup)
+            local item, pendingItemData = GetContainerSellItem(bagID, slotID, equipmentSetLookup)
             if item and IsAutoSellItem(item, settings) then
                 items[#items + 1] = item
+            elseif pendingItemData then
+                hasPendingItemData = true
             end
         end
     end
@@ -785,7 +883,7 @@ local function BuildAutoSellQueue()
         truncated = true
     end
 
-    return items, settings, truncated
+    return items, settings, truncated, hasPendingItemData
 end
 
 local function GetAutoSellIntervalSeconds()
@@ -1431,7 +1529,7 @@ function GT:RefreshSettings()
         RemoveErrorFilter()
     end
 
-    local shouldMerchant = Feature({ "automation", "autoSellJunk" }) or Feature({ "automation", "autoRepairGear" })
+    local shouldMerchant = HasActiveAutoSellRule() or Feature({ "automation", "autoRepairGear" })
     if shouldMerchant then
         self:RegisterEvent("MERCHANT_SHOW")
         self:RegisterEvent("MERCHANT_CLOSED")
@@ -1441,6 +1539,12 @@ function GT:RefreshSettings()
         self:UnregisterEvent("MERCHANT_CLOSED")
         self:UnregisterEvent("UI_ERROR_MESSAGE")
         self:AbortAutoSellSession()
+    end
+
+    if HasActiveAutoSellRule() then
+        self:RegisterEvent("BAG_UPDATE_DELAYED")
+    else
+        self:UnregisterEvent("BAG_UPDATE_DELAYED")
     end
 
     local events = {
@@ -1491,7 +1595,7 @@ function GT:RefreshSettings()
         "CONFIRM_SUMMON", "RESURRECT_REQUEST", "GOSSIP_SHOW", "UNIT_AURA",
         "PLAYER_UPDATE_RESTING", "ZONE_CHANGED_NEW_AREA", "ZONE_CHANGED", "ZONE_CHANGED_INDOORS",
         "VOICE_CHAT_OUTPUT_DEVICES_UPDATED", "CONFIRM_LOOT_ROLL", "CONFIRM_DISENCHANT_ROLL", "PLAYER_REGEN_ENABLED",
-        "UNIT_SPELLCAST_CHANNEL_STOP",
+        "UNIT_SPELLCAST_CHANNEL_STOP", "BAG_UPDATE_DELAYED",
         "PLAYER_ENTERING_WORLD"
     }
     for index = 1, #known do
@@ -1717,6 +1821,8 @@ function GT:AbortAutoSellSession()
     self.autoSellSoldCount = 0
     self.autoSellSafeModeTruncated = false
     self.autoSellSettings = nil
+    self.autoSellPendingItemData = false
+    self.autoSellRetryCount = 0
 end
 
 function GT:FinishAutoSellSession()
@@ -1727,14 +1833,43 @@ function GT:FinishAutoSellSession()
 
     self:AbortAutoSellSession()
 
-    if totalPrice > 0 and settings and settings.showSummary then
-        local summary = string.format("|cff69b86f[TwichUI]|r Sold %d junk %s for %s.", soldCount,
-            soldCount == 1 and "slot" or "slots", FormatMoney(totalPrice))
-        if truncated then
-            summary = summary .. " Safe mode capped this visit at 12 slots."
+    if settings and settings.showSummary then
+        if totalPrice > 0 then
+            local summary = string.format("|cff69b86f[TwichUI]|r Sold %d junk %s for %s.", soldCount,
+                soldCount == 1 and "slot" or "slots", FormatMoney(totalPrice))
+            if truncated then
+                summary = summary .. " Safe mode capped this visit at 12 slots."
+            end
+            DEFAULT_CHAT_FRAME:AddMessage(summary)
+        elseif soldCount == 0 then
+            DEFAULT_CHAT_FRAME:AddMessage("|cff69b86f[TwichUI]|r No junk found to sell.")
         end
-        DEFAULT_CHAT_FRAME:AddMessage(summary)
     end
+end
+
+function GT:ScheduleAutoSellContinuation()
+    if self.autoSellTicker then
+        self.autoSellTicker:Cancel()
+        self.autoSellTicker = nil
+    end
+
+    local token = self.autoSellToken
+    C_Timer.After(AUTOSELL_ITEMDATA_RETRY_DELAY_SECONDS, function()
+        if self.autoSellToken ~= token or not self:IsEnabled() or not IsMerchantVisible() then
+            return
+        end
+
+        self:ResumeAutoSellSession()
+    end)
+end
+
+function GT:ContinueOrFinishAutoSellSession()
+    if self.autoSellPendingItemData and (self.autoSellRetryCount or 0) < AUTOSELL_ITEMDATA_MAX_RETRIES then
+        self:ScheduleAutoSellContinuation()
+        return
+    end
+
+    self:FinishAutoSellSession()
 end
 
 function GT:ProcessAutoSellQueue()
@@ -1744,7 +1879,7 @@ function GT:ProcessAutoSellQueue()
     end
 
     if not self.autoSellQueue or #self.autoSellQueue == 0 then
-        self:FinishAutoSellSession()
+        self:ContinueOrFinishAutoSellSession()
         return
     end
 
@@ -1757,7 +1892,7 @@ function GT:ProcessAutoSellQueue()
     local containerInfo = C_Container.GetContainerItemInfo(item.bagID, item.slotID)
     if type(containerInfo) ~= "table" or containerInfo.itemID ~= item.itemID then
         if not self.autoSellQueue or #self.autoSellQueue == 0 then
-            self:FinishAutoSellSession()
+            self:ContinueOrFinishAutoSellSession()
         end
         return
     end
@@ -1769,7 +1904,7 @@ function GT:ProcessAutoSellQueue()
         end
 
         if #self.autoSellQueue == 0 then
-            self:FinishAutoSellSession()
+            self:ContinueOrFinishAutoSellSession()
         end
         return
     end
@@ -1779,7 +1914,7 @@ function GT:ProcessAutoSellQueue()
     C_Container.UseContainerItem(item.bagID, item.slotID)
 
     if #self.autoSellQueue == 0 then
-        self:FinishAutoSellSession()
+        self:ContinueOrFinishAutoSellSession()
     end
 end
 
@@ -1788,17 +1923,25 @@ function GT:StartAutoSellSession()
         return
     end
 
-    local queue, settings, truncated = BuildAutoSellQueue()
-    if #queue == 0 then
-        self:AbortAutoSellSession()
-        return
-    end
+    local queue, settings, truncated, pendingItemData = BuildAutoSellQueue()
 
     self.autoSellQueue = queue
     self.autoSellTotalPrice = 0
     self.autoSellSoldCount = 0
     self.autoSellSafeModeTruncated = truncated
     self.autoSellSettings = settings
+    self.autoSellPendingItemData = pendingItemData
+    self.autoSellRetryCount = 0
+
+    if #queue == 0 then
+        if pendingItemData then
+            self:ScheduleAutoSellContinuation()
+            return
+        end
+
+        self:FinishAutoSellSession()
+        return
+    end
 
     self:ProcessAutoSellQueue()
     if self.autoSellQueue and #self.autoSellQueue > 0 then
@@ -1808,8 +1951,44 @@ function GT:StartAutoSellSession()
     end
 end
 
+function GT:ResumeAutoSellSession()
+    if not IsMerchantVisible() then
+        self:AbortAutoSellSession()
+        return
+    end
+
+    local queue, _, truncated, pendingItemData = BuildAutoSellQueue()
+
+    self.autoSellQueue = queue
+    self.autoSellSafeModeTruncated = self.autoSellSafeModeTruncated == true or truncated == true
+    self.autoSellPendingItemData = pendingItemData
+    self.autoSellRetryCount = (self.autoSellRetryCount or 0) + 1
+
+    if #queue == 0 then
+        self:ContinueOrFinishAutoSellSession()
+        return
+    end
+
+    self:ProcessAutoSellQueue()
+    if self.autoSellQueue and #self.autoSellQueue > 0 then
+        self.autoSellTicker = C_Timer.NewTicker(GetAutoSellIntervalSeconds(), function()
+            self:ProcessAutoSellQueue()
+        end)
+    end
+end
+
+function GT:BAG_UPDATE_DELAYED()
+    if HasActiveAutoSellRule() then
+        WarmItemInfoCache()
+    end
+end
+
 function GT:ScheduleAutoSellSession()
     self:AbortAutoSellSession()
+
+    -- Pre-warm the GetItemInfo cache so vendorPrice is populated when we scan.
+    -- BAG_UPDATE_DELAYED handles ongoing warm-up; this covers the vendor open case.
+    WarmItemInfoCache()
 
     local token = self.autoSellToken
     C_Timer.After(AUTOSELL_START_DELAY_SECONDS, function()
@@ -1826,9 +2005,11 @@ function GT:MERCHANT_SHOW()
         return
     end
 
-    if Feature({ "automation", "autoSellJunk" }) then
+    if HasActiveAutoSellRule() then
+        GTLog("MERCHANT_SHOW: scheduling auto-sell session")
         self:ScheduleAutoSellSession()
     else
+        GTLog("MERCHANT_SHOW: auto-sell inactive, aborting session")
         self:AbortAutoSellSession()
     end
 

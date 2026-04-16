@@ -200,6 +200,96 @@ local function GetElvUIDatatextModule()
     return E and E:GetModule("DataTexts")
 end
 
+local function GetTooltipPalette()
+    local theme = T:GetModule("Theme", true)
+    local primary = theme and theme.GetColor and theme:GetColor("primaryColor") or { 0.10, 0.72, 0.74 }
+    local accent = theme and theme.GetColor and theme:GetColor("accentColor") or { 0.96, 0.76, 0.24 }
+    local background = theme and theme.GetColor and theme:GetColor("backgroundColor") or { 0.05, 0.06, 0.08 }
+    local border = theme and theme.GetColor and theme:GetColor("borderColor") or { 0.24, 0.26, 0.32 }
+    local backgroundAlpha = theme and theme.Get and theme:Get("backgroundAlpha") or 0.94
+    local borderAlpha = theme and theme.Get and theme:Get("borderAlpha") or 0.85
+    return primary, accent, background, border, backgroundAlpha, borderAlpha
+end
+
+local function HideTooltipTexture(texture)
+    if not texture then
+        return
+    end
+
+    if texture.SetTexture then
+        texture:SetTexture(nil)
+    end
+    if texture.SetAtlas then
+        texture:SetAtlas(nil)
+    end
+    if texture.SetAlpha then
+        texture:SetAlpha(0)
+    end
+    if texture.Hide then
+        texture:Hide()
+    end
+end
+
+local function HideTooltipTextures(tooltip)
+    if not (tooltip and tooltip.GetRegions) then
+        return
+    end
+
+    for _, region in ipairs({ tooltip:GetRegions() }) do
+        if region and region.GetObjectType and region:GetObjectType() == "Texture" then
+            HideTooltipTexture(region)
+        end
+    end
+
+    if tooltip.GetChildren then
+        for _, child in ipairs({ tooltip:GetChildren() }) do
+            if child and child.GetObjectType then
+                if child == tooltip.__twichuiChrome then
+                    -- Keep our custom tooltip chrome intact across repeated restyles.
+                elseif child:GetObjectType() == "Texture" then
+                    HideTooltipTexture(child)
+                elseif child.GetRegions then
+                    for _, region in ipairs({ child:GetRegions() }) do
+                        if region and region.GetObjectType and region:GetObjectType() == "Texture" then
+                            HideTooltipTexture(region)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function SuppressTooltipBackdrop(tooltip)
+    if not tooltip then
+        return
+    end
+
+    if tooltip.SetBackdropColor then
+        tooltip:SetBackdropColor(0, 0, 0, 0)
+    end
+    if tooltip.SetBackdropBorderColor then
+        tooltip:SetBackdropBorderColor(0, 0, 0, 0)
+    end
+    if tooltip.NineSlice and tooltip.NineSlice.SetAlpha then
+        tooltip.NineSlice:SetAlpha(0)
+    end
+
+    HideTooltipTexture(tooltip.Bg)
+    HideTooltipTexture(tooltip.Background)
+    HideTooltipTexture(tooltip.Border)
+    HideTooltipTexture(tooltip.BorderTop)
+    HideTooltipTexture(tooltip.BorderTopLeft)
+    HideTooltipTexture(tooltip.BorderTopRight)
+    HideTooltipTexture(tooltip.BorderBottom)
+    HideTooltipTexture(tooltip.BorderBottomLeft)
+    HideTooltipTexture(tooltip.BorderBottomRight)
+    HideTooltipTexture(tooltip.LeftEdge)
+    HideTooltipTexture(tooltip.RightEdge)
+    HideTooltipTexture(tooltip.TopEdge)
+    HideTooltipTexture(tooltip.BottomEdge)
+end
+
 local function GetSmartTooltipAnchor(owner, tooltip)
     if not owner or not owner.GetLeft or not owner.GetRight or not owner.GetTop or not owner.GetBottom then
         return "TOPLEFT", "BOTTOMLEFT", 0, -TOOLTIP_OFFSET
@@ -831,6 +921,7 @@ function DataTextModule:GetStandaloneTooltip()
         if tooltip.EnableMouse then
             tooltip:EnableMouse(false)
         end
+        self:ApplyTooltipChrome(tooltip)
     end
 
     return tooltip
@@ -865,8 +956,73 @@ function DataTextModule:GetElvUITooltip()
     if self.tooltipOwner then
         ApplySmartTooltipAnchor(tooltip, self.tooltipOwner, true)
     end
+    self:ApplyTooltipChrome(tooltip)
     self:ApplyTooltipFontStyle(tooltip)
     return tooltip
+end
+
+function DataTextModule:ApplyTooltipChrome(tooltip)
+    if not tooltip then
+        return
+    end
+
+    local primary, accent, background, border, backgroundAlpha, borderAlpha = GetTooltipPalette()
+    SuppressTooltipBackdrop(tooltip)
+    HideTooltipTextures(tooltip)
+
+    if not tooltip.__twichuiChrome then
+        local chrome = CreateFrame("Frame", nil, tooltip, "BackdropTemplate")
+        chrome:SetFrameStrata(tooltip:GetFrameStrata() or "TOOLTIP")
+        chrome:EnableMouse(false)
+        chrome:SetPoint("TOPLEFT", tooltip, "TOPLEFT", -3, 3)
+        chrome:SetPoint("BOTTOMRIGHT", tooltip, "BOTTOMRIGHT", 3, -3)
+
+        chrome:SetBackdrop({
+            bgFile = "Interface\\Buttons\\WHITE8X8",
+            edgeFile = "Interface\\Buttons\\WHITE8X8",
+            edgeSize = 1,
+            insets = { left = 1, right = 1, top = 1, bottom = 1 },
+        })
+
+        local accentBar = chrome:CreateTexture(nil, "BORDER")
+        accentBar:SetPoint("TOPLEFT", chrome, "TOPLEFT", 1, -1)
+        accentBar:SetPoint("TOPRIGHT", chrome, "TOPRIGHT", -1, -1)
+        accentBar:SetHeight(2)
+
+        local innerGlow = chrome:CreateTexture(nil, "ARTWORK")
+        innerGlow:SetPoint("TOPLEFT", chrome, "TOPLEFT", 1, -1)
+        innerGlow:SetPoint("BOTTOMRIGHT", chrome, "BOTTOMRIGHT", -1, 1)
+
+        tooltip.__twichuiChrome = chrome
+        tooltip.__twichuiAccentBar = accentBar
+        tooltip.__twichuiInnerGlow = innerGlow
+    end
+
+    local chrome = tooltip.__twichuiChrome
+    if chrome.SetFrameLevel and tooltip.GetFrameLevel then
+        chrome:SetFrameLevel(math.max(0, tooltip:GetFrameLevel() - 1))
+    end
+    if chrome.SetFrameStrata and tooltip.GetFrameStrata then
+        chrome:SetFrameStrata(tooltip:GetFrameStrata())
+    end
+    if chrome.Show then
+        chrome:Show()
+    end
+
+    chrome:SetBackdropColor(background[1] or 0.05, background[2] or 0.06, background[3] or 0.08, backgroundAlpha)
+    chrome:SetBackdropBorderColor(border[1] or 0.24, border[2] or 0.26, border[3] or 0.32, borderAlpha)
+    tooltip.__twichuiAccentBar:SetColorTexture(accent[1] or 1, accent[2] or 1, accent[3] or 1, 0.92)
+    tooltip.__twichuiInnerGlow:SetColorTexture(primary[1] or 1, primary[2] or 1, primary[3] or 1, 0.04)
+    if tooltip.__twichuiAccentBar and tooltip.__twichuiAccentBar.Show then
+        tooltip.__twichuiAccentBar:Show()
+    end
+    if tooltip.__twichuiInnerGlow and tooltip.__twichuiInnerGlow.Show then
+        tooltip.__twichuiInnerGlow:Show()
+    end
+
+    if tooltip.SetBackdrop then
+        tooltip:SetBackdrop(nil)
+    end
 end
 
 function DataTextModule:ApplyTooltipFontStyle(tooltip)
@@ -918,6 +1074,8 @@ function DataTextModule:ShowDatatextTooltip(tooltip)
         owner and (owner.GetName and owner:GetName() or tostring(owner)) or "nil",
         tooltip and tooltip.NumLines and tooltip:NumLines() or 0)
 
+    self:ApplyTooltipChrome(tooltip)
+    self:ApplyTooltipFontStyle(tooltip)
     ShowTooltipWithFade(tooltip)
     if owner then
         ApplySmartTooltipAnchor(tooltip, owner, false)
@@ -1014,6 +1172,17 @@ end
 function DataTextModule:OnThemeChanged(event, changedKey)
     if self.RefreshStandalonePanels then
         self:RefreshStandalonePanels()
+    end
+
+    if self.standaloneTooltip then
+        self:ApplyTooltipChrome(self.standaloneTooltip)
+        self:ApplyTooltipFontStyle(self.standaloneTooltip)
+    end
+
+    local activeTooltip = self:GetActiveDatatextTooltip()
+    if activeTooltip then
+        self:ApplyTooltipChrome(activeTooltip)
+        self:ApplyTooltipFontStyle(activeTooltip)
     end
 end
 

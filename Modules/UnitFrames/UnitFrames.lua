@@ -14250,11 +14250,16 @@ do
     end
 
     function UnitFrames:RefreshPreviewVisibility()
-        self:BuildPreviewGroups()
-        self:BuildOrRefreshSinglePreviews()
-
         local db = self:GetDB()
         local standalonePreviewMode = db.testMode == true
+        -- Only rebuild/update preview frame data when at least one preview is active.
+        -- Skipping the build when nothing is shown avoids ~37 ApplySingleFrameSettings
+        -- calls on every RefreshAllFrames, which is the primary cause of "script ran too long".
+        local anyPreviewActive = standalonePreviewMode or self:HasAnyDesignerPreviewEnabled()
+        if anyPreviewActive then
+            self:BuildPreviewGroups()
+            self:BuildOrRefreshSinglePreviews()
+        end
 
         for key, container in pairs(self.previewFrames) do
             if container then
@@ -14534,7 +14539,20 @@ function UnitFrames:RefreshAllFrames(event)
     self:ApplyBossLayout()
     self:RefreshCastbarLayout()
     self:RefreshCastbarStyle()
-    self:RefreshPreviewVisibility()
+    -- Defer preview refresh to the next tick so the real-frame update path cannot
+    -- trigger a "script ran too long" timeout. Preview frames are only visible in
+    -- config/test mode and tolerate one-frame latency.
+    if not self._previewRefreshQueued and C_Timer and type(C_Timer.After) == "function" then
+        self._previewRefreshQueued = true
+        C_Timer.After(0, function()
+            UnitFrames._previewRefreshQueued = false
+            if UnitFrames:IsEnabled() then
+                UnitFrames:RefreshPreviewVisibility()
+            end
+        end)
+    elseif not self._previewRefreshQueued then
+        self:RefreshPreviewVisibility()
+    end
     self:ApplyTestModeToSingles()
     self:UpdateMovers()
     self:ApplyMasqueSettings()
@@ -17544,7 +17562,6 @@ function UnitFrames:SetTestMode(enabled)
         db.testPreviewCastbar = false
         db.testPreviewBoss = false
     end
-    self:RefreshPreviewVisibility()
     self:RefreshAllFrames()
 end
 
@@ -17589,7 +17606,6 @@ function UnitFrames:ClearDesignerPreviewModes()
     db.testPreviewCastbar = false
     db.testPreviewBoss = false
     db.testPreviewEbonMight = false
-    self:RefreshPreviewVisibility()
     self:RefreshAllFrames()
 end
 
@@ -17611,7 +17627,6 @@ function UnitFrames:SetTestPreviewGroupEnabled(groupKey, enabled)
         return
     end
 
-    self:RefreshPreviewVisibility()
     self:RefreshAllFrames()
 end
 

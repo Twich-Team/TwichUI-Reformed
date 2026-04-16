@@ -194,6 +194,50 @@ local function MergeDefaults(target, defaults)
     end
 end
 
+local function HasAnyActiveFeature(db)
+    if type(db) ~= "table" then
+        return false
+    end
+
+    local automation = db.automation or {}
+    local hasActiveAutoSellRule = automation.autoSellJunk == true
+        or (type(automation.autoSellIncludeBelowItemLevel) == "table"
+            and automation.autoSellIncludeBelowItemLevel.enabled == true
+            and (automation.autoSellIncludeBelowItemLevel.value or 0) > 0)
+        or automation.autoSellIncludeUnsuitableEquipment == true
+        or automation.autoSellIncludeArtifactRelics == true
+        or (type(automation.autoSellIncludeList) == "string" and automation.autoSellIncludeList:match("%S") ~= nil)
+
+    if automation.autoAcceptSummon or automation.autoAcceptRes or automation.autoReleasePvP or hasActiveAutoSellRule or automation.autoRepairGear then
+        return true
+    end
+
+    local social = db.social or {}
+    if social.noDuelRequests or social.noPetDuels or social.noPartyInvites or social.noRequestedInvites or
+        social.noFriendRequests or social.noSharedQuests or social.acceptPartyFriends or social.syncFromFriends or
+        social.autoConfirmRole or social.inviteFromWhisper or social.friendlyGuild or social.friendlyCommunities then
+        return true
+    end
+
+    local frames = db.frames or {}
+    if frames.noAlerts or frames.hideBodyguard or frames.hideTalkingFrame or frames.hideCleanupBtns or
+        frames.hideBossBanner or frames.hideEventToasts or frames.noClassBar or frames.noRestedSleep then
+        return true
+    end
+
+    local system = db.system or {}
+    if system.noScreenGlow or system.noScreenEffects or system.setWeatherDensity or system.maxCameraZoom or
+        system.noRestedEmotes or system.keepAudioSynced or system.mutePingSounds or system.muteGameSounds or
+        system.muteToySounds or system.muteMountSounds or system.muteCustomSounds or system.noConfirmLoot or
+        system.fasterMovieSkip or system.easyItemDestroy or system.noTransforms or system.addOptNoCombatBox or
+        system.addOptNoMountBox then
+        return true
+    end
+
+    local text = db.text or {}
+    return text.hideErrorMessages == true
+end
+
 local function GetDB()
     local profile = ConfigurationModule:GetProfileDB()
     profile.gameTweaks = profile.gameTweaks or {}
@@ -211,6 +255,10 @@ local function GetDB()
         end
 
         automation.autoSellLegacyMigrated = true
+    end
+
+    if profile.gameTweaks.enabled ~= true and HasAnyActiveFeature(profile.gameTweaks) then
+        profile.gameTweaks.enabled = true
     end
 
     return profile.gameTweaks

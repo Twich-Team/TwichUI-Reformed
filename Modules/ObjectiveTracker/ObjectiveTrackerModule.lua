@@ -801,7 +801,7 @@ local function AppendQuestLogIDs(target, seen, currentMapID)
         and SafeCall(C_SuperTrack.GetSuperTrackedQuestID)
         or nil
 
-    local totalEntries = tonumber(SafeCall(C_QuestLog.GetNumQuestLogEntries)) or 0
+    local totalEntries = tonumber((SafeCall(C_QuestLog.GetNumQuestLogEntries))) or 0
     for index = 1, totalEntries do
         local info = SafeCall(C_QuestLog.GetInfo, index)
         if type(info) == "table" then

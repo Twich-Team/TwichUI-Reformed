@@ -141,6 +141,48 @@ local function SafeUnitClass(unit)
     return SafeCall(UnitClass, unit)
 end
 
+local function IsFrameDescendantOf(frame, ancestor)
+    if not (frame and ancestor) then
+        return false
+    end
+
+    local current = frame
+    while current do
+        if current == ancestor then
+            return true
+        end
+
+        current = current.GetParent and current:GetParent() or nil
+    end
+
+    return false
+end
+
+local function IsAuctionHouseTooltip(frame)
+    if not frame then
+        return false
+    end
+
+    local owner = frame.GetOwner and frame:GetOwner() or nil
+    local auctionHouseFrame = _G.AuctionHouseFrame
+    if not (owner and auctionHouseFrame) then
+        return false
+    end
+
+    if not IsFrameDescendantOf(owner, auctionHouseFrame) then
+        return false
+    end
+
+    if type(frame.GetItem) == "function" then
+        local _, itemLink = frame:GetItem()
+        if itemLink then
+            return true
+        end
+    end
+
+    return frame == _G.ShoppingTooltip1 or frame == _G.ShoppingTooltip2
+end
+
 local function SafeUnitFactionGroup(unit)
     return SafeCall(UnitFactionGroup, unit)
 end
@@ -968,6 +1010,15 @@ end
 function TooltipModule:PlayFadeIn(frame)
     local options = GetOptions()
     if not frame or not options or not options:GetEnableFadeIn() then
+        return
+    end
+
+    if IsAuctionHouseTooltip(frame) then
+        frame.__tuiTooltipFadePlayed = true
+        frame:SetAlpha(1)
+        if frame.TwichUITooltipFadeIn then
+            frame.TwichUITooltipFadeIn:Stop()
+        end
         return
     end
 

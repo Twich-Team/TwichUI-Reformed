@@ -29,39 +29,40 @@ LF:SetEnabledState(false)
 -- ---------------------------------------------------------------------------
 -- Localized globals
 -- ---------------------------------------------------------------------------
-local LSM                = (T.Libs and T.Libs.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
-local C_Timer            = _G.C_Timer
-local C_Item             = _G.C_Item
-local CreateFrame        = _G.CreateFrame
-local UIParent           = _G.UIParent
-local GetItemInfo        = _G.GetItemInfo
-local GetItemInfoInstant = _G.GetItemInfoInstant or (C_Item and C_Item.GetItemInfoInstant)
-local GetPlayerGuid      = _G.C_PlayerInfo and _G.C_PlayerInfo.GetGUIDForUnit or
+local LSM                   = (T.Libs and T.Libs.LSM) or (LibStub and LibStub("LibSharedMedia-3.0", true))
+local C_Timer               = _G.C_Timer
+local C_Item                = _G.C_Item
+local CreateFrame           = _G.CreateFrame
+local UIParent              = _G.UIParent
+local GetItemInfo           = _G.GetItemInfo
+local GetItemInfoInstant    = _G.GetItemInfoInstant or (C_Item and C_Item.GetItemInfoInstant)
+local GetPlayerGuid         = _G.C_PlayerInfo and _G.C_PlayerInfo.GetGUIDForUnit or
     function(u) return _G.UnitGUID(u) end
-local math               = math
-local string             = string
-local table              = table
-local ipairs             = ipairs
-local pairs              = pairs
-local tonumber           = tonumber
-local tostring           = tostring
-local unpack             = table.unpack or _G.unpack
+local issecretvalue         = _G.issecretvalue or function() return false end
+local math                  = math
+local string                = string
+local table                 = table
+local ipairs                = ipairs
+local pairs                 = pairs
+local tonumber              = tonumber
+local tostring              = tostring
+local unpack                = table.unpack or _G.unpack
 
 -- ---------------------------------------------------------------------------
 -- Constants
 -- ---------------------------------------------------------------------------
-local ADDON_NAME         = "TwichUI_Reformed"
-local MAX_POOL           = 20   -- hard cap on live rows
-local PADDING            = 3    -- vertical gap between rows (px)
-local ENTER_DURATION     = 0.24 -- slide+fade in
-local SHIFT_DURATION     = 0.18 -- row shift translate
-local EXIT_DURATION      = 0.35 -- fade out
-local ENTER_OFFSET_X     = -14  -- softer lateral travel for new rows
-local SHIFT_FADE_FROM    = 0.82 -- subtle fade while rows reposition
-local ROW_FADE_START     = 0.61 -- keep more solid area than the original fade, but less than the previous pass
+local ADDON_NAME            = "TwichUI_Reformed"
+local MAX_POOL              = 20 -- hard cap on live rows
+local PADDING               = 3 -- vertical gap between rows (px)
+local ENTER_DURATION        = 0.24 -- slide+fade in
+local SHIFT_DURATION        = 0.18 -- row shift translate
+local EXIT_DURATION         = 0.35 -- fade out
+local ENTER_OFFSET_X        = -14 -- softer lateral travel for new rows
+local SHIFT_FADE_FROM       = 0.82 -- subtle fade while rows reposition
+local ROW_FADE_START        = 0.61 -- keep more solid area than the original fade, but less than the previous pass
 
 -- Item quality names / display ordering (mirrors Enum.ItemQuality)
-local QUALITY_NAMES      = {
+local QUALITY_NAMES         = {
     [0] = "Poor",
     [1] = "Common",
     [2] = "Uncommon",
@@ -74,7 +75,7 @@ local QUALITY_NAMES      = {
 }
 
 -- Quality → config key (used for per-quality toggle lookup)
-local QUALITY_DB_KEYS    = {
+local QUALITY_DB_KEYS       = {
     [0] = "showPoor",
     [1] = "showCommon",
     [2] = "showUncommon",
@@ -83,7 +84,48 @@ local QUALITY_DB_KEYS    = {
     [5] = "showLegendary",
 }
 
-local FALLBACK_ITEM_ICON = 134400
+local FALLBACK_ITEM_ICON    = 134400
+
+local SELF_LOOT_GLOBAL_KEYS = {
+    "LOOT_ITEM_SELF",
+    "LOOT_ITEM_SELF_MULTIPLE",
+    "LOOT_ITEM_CREATED_SELF",
+    "LOOT_ITEM_CREATED_SELF_MULTIPLE",
+    "YOU_RECEIVED",
+    "YOU_RECEIVED_LABEL",
+}
+
+local function GetChatMessagePrefix(globalKey)
+    local value = _G[globalKey]
+    if type(value) ~= "string" or value == "" then
+        return nil
+    end
+
+    local prefix = string.match(value, "^(.-)%%") or value
+    if type(prefix) ~= "string" or prefix == "" then
+        return nil
+    end
+
+    return prefix
+end
+
+local function IsSelfLootMessage(text)
+    if type(text) ~= "string" or text == "" then
+        return false
+    end
+
+    for _, globalKey in ipairs(SELF_LOOT_GLOBAL_KEYS) do
+        local prefix = GetChatMessagePrefix(globalKey)
+        if prefix then
+            local ok, found = pcall(string.find, text, prefix, 1, true)
+            if ok and found == 1 then
+                return true
+            end
+        end
+    end
+
+    return false
+end
 
 local function SafeChatText(value)
     if type(value) ~= "string" then
@@ -1579,17 +1621,21 @@ function LF:CHAT_MSG_LOOT(_, msg, _, _, _, senderName2, _, _, _, _, _, _, guid)
     -- Raid loot history messages contain HlootHistory: — ignore them
     if SafeStringFind(parsedMsg, "HlootHistory:", 1, true) then return end
 
-    -- In retail, guid matches ours; fallback check via sender name
-    local parsedGuid = SafeChatText(guid)
-    if parsedGuid and parsedGuid ~= "" then
+    -- Midnight can mark chat GUIDs as secret strings; never compare those directly.
+    -- Use the GUID only when both sides are safe, otherwise fall back to sender/self-text.
+    local guidIsSecret = issecretvalue and issecretvalue(guid)
+    local myGuidIsSecret = issecretvalue and issecretvalue(myGuid)
+    local parsedGuid = (not guidIsSecret) and SafeChatText(guid) or nil
+    if parsedGuid and parsedGuid ~= "" and not myGuidIsSecret then
         if parsedGuid ~= myGuid then return end
     else
-        local playerName = _G.UnitName("player")
+        local playerName = SafeChatText(_G.UnitName("player"))
         local parsedSenderName = SafeChatText(senderName2)
-        if not parsedSenderName or parsedSenderName == "" then
-            return
-        end
-        if parsedSenderName ~= playerName then
+        if parsedSenderName and parsedSenderName ~= "" then
+            if parsedSenderName ~= playerName then
+                return
+            end
+        elseif not IsSelfLootMessage(parsedMsg) then
             return
         end
     end
