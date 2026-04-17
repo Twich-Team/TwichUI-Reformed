@@ -44,6 +44,13 @@ local DEFAULT_THEME = {
     statusBarTexture = "TwichUI-Smooth", -- Global status bar / timer bar texture
     classIconStyle   = "default",        -- "default" | "fabled" | "pixel"
     globalFont       = "__default",      -- "__default" = WoW system font; otherwise LSM font name
+    blizzardSkins    = {
+        characterFrame = true,
+        gameMenu = true,
+        settingsPanel = true,
+        dropDowns = true,
+        contextMenus = true,
+    },
 
     -- TwichUI sound effects
     soundVolume      = 100, -- 0 = muted, 1-100 = enabled (WoW has no per-addon gain)

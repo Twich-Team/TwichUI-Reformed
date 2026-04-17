@@ -29,6 +29,14 @@ local function GetDB()
     return theme:GetDB()
 end
 
+local DEFAULT_BLIZZARD_SKINS = {
+    characterFrame = true,
+    gameMenu = true,
+    settingsPanel = true,
+    dropDowns = true,
+    contextMenus = true,
+}
+
 local function DefaultColor(key)
     local theme = GetThemeModule()
     if not theme then return { 1, 1, 1 } end
@@ -292,6 +300,75 @@ local function BuildPresetLabel(preset)
     local b = ResolvePresetPreviewColor(preset, "backgroundColor")
     local swatches = string.format("%s %s %s", BuildColorChip(p), BuildColorChip(a), BuildColorChip(b))
     return string.format("%s  %s", swatches, preset.name)
+end
+
+local function GetBlizzardSkinDB()
+    local db = GetDB()
+    if type(db.blizzardSkins) ~= "table" then
+        db.blizzardSkins = {}
+    end
+    return db.blizzardSkins
+end
+
+local function GetBlizzardSkinToggle(key)
+    local db = GetBlizzardSkinDB()
+    local value = db[key]
+    if value == nil then
+        return DEFAULT_BLIZZARD_SKINS[key] ~= false
+    end
+    return value ~= false
+end
+
+local function SetBlizzardSkinToggle(key, value)
+    local db = GetBlizzardSkinDB()
+    db[key] = value == true
+    MarkPresetCustom()
+    BroadcastChange("blizzardSkins")
+
+    local configUI = ConfigurationModule.StandaloneUI
+    if configUI and configUI.RequestRenderCurrentPage then
+        configUI:RequestRenderCurrentPage()
+    end
+end
+
+function Options:GetCharacterFrameSkinEnabled()
+    return GetBlizzardSkinToggle("characterFrame")
+end
+
+function Options:SetCharacterFrameSkinEnabled(_, value)
+    SetBlizzardSkinToggle("characterFrame", value)
+end
+
+function Options:GetGameMenuSkinEnabled()
+    return GetBlizzardSkinToggle("gameMenu")
+end
+
+function Options:SetGameMenuSkinEnabled(_, value)
+    SetBlizzardSkinToggle("gameMenu", value)
+end
+
+function Options:GetSettingsPanelSkinEnabled()
+    return GetBlizzardSkinToggle("settingsPanel")
+end
+
+function Options:SetSettingsPanelSkinEnabled(_, value)
+    SetBlizzardSkinToggle("settingsPanel", value)
+end
+
+function Options:GetDropDownSkinEnabled()
+    return GetBlizzardSkinToggle("dropDowns")
+end
+
+function Options:SetDropDownSkinEnabled(_, value)
+    SetBlizzardSkinToggle("dropDowns", value)
+end
+
+function Options:GetContextMenuSkinEnabled()
+    return GetBlizzardSkinToggle("contextMenus")
+end
+
+function Options:SetContextMenuSkinEnabled(_, value)
+    SetBlizzardSkinToggle("contextMenus", value)
 end
 
 function Options:GetThemePresetValues(info)
@@ -565,6 +642,62 @@ function Options:BuildConfiguration()
                 handler = Options,
                 get = "GetGlobalFont",
                 set = "SetGlobalFont",
+            },
+        }),
+
+        blizzardSkins   = W.IGroup(35, "Blizzard Skins", {
+            description = {
+                type = "description",
+                name =
+                "Toggle the Blizzard windows TwichUI reskins. Turning a skin off stops future re-skins immediately. Already-open Blizzard windows may need to be closed and reopened, or the UI reloaded, to fully remove existing chrome.",
+                order = 0,
+                fontSize = "medium",
+            },
+            characterFrame = {
+                type = "toggle",
+                name = "Character Frame",
+                desc =
+                "Skin the Character window, equipment slots, reputation, currency, and related equipment manager surfaces.",
+                order = 1,
+                handler = Options,
+                get = "GetCharacterFrameSkinEnabled",
+                set = "SetCharacterFrameSkinEnabled",
+            },
+            gameMenu = {
+                type = "toggle",
+                name = "Game Menu",
+                desc = "Skin the Escape menu.",
+                order = 2,
+                handler = Options,
+                get = "GetGameMenuSkinEnabled",
+                set = "SetGameMenuSkinEnabled",
+            },
+            settingsPanel = {
+                type = "toggle",
+                name = "Settings Panel",
+                desc = "Skin the Blizzard Settings window and its control rows.",
+                order = 3,
+                handler = Options,
+                get = "GetSettingsPanelSkinEnabled",
+                set = "SetSettingsPanelSkinEnabled",
+            },
+            dropDowns = {
+                type = "toggle",
+                name = "Dropdown Menus",
+                desc = "Skin legacy Blizzard dropdown popups and selection lists.",
+                order = 4,
+                handler = Options,
+                get = "GetDropDownSkinEnabled",
+                set = "SetDropDownSkinEnabled",
+            },
+            contextMenus = {
+                type = "toggle",
+                name = "Context Menus",
+                desc = "Skin modern Blizzard right-click and managed context menus.",
+                order = 5,
+                handler = Options,
+                get = "GetContextMenuSkinEnabled",
+                set = "SetContextMenuSkinEnabled",
             },
         }),
 

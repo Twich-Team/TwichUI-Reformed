@@ -81,6 +81,25 @@ local function HideTextureRegions(frame)
     end
 end
 
+local function HideButtonStateTextures(button)
+    if not button then
+        return
+    end
+
+    if button.GetNormalTexture then
+        HideTexture(button:GetNormalTexture())
+    end
+    if button.GetPushedTexture then
+        HideTexture(button:GetPushedTexture())
+    end
+    if button.GetDisabledTexture then
+        HideTexture(button:GetDisabledTexture())
+    end
+    if button.GetHighlightTexture then
+        HideTexture(button:GetHighlightTexture())
+    end
+end
+
 local function EnsureLayer(parent, key, frameLevelOffset)
     if not parent then
         return nil
@@ -172,10 +191,7 @@ local function SkinIconButton(button, accent, background, border, backgroundAlph
         return
     end
 
-    if button.SetNormalTexture then button:SetNormalTexture("") end
-    if button.SetPushedTexture then button:SetPushedTexture("") end
-    if button.SetDisabledTexture then button:SetDisabledTexture("") end
-    if button.SetHighlightTexture then button:SetHighlightTexture("") end
+    HideButtonStateTextures(button)
     HideTextureRegions(button)
 
     local chrome = EnsureLayer(button, "__twichIconChrome", -1)
@@ -249,6 +265,41 @@ local function SetFontColor(fontString, color, alpha)
     if fontString and fontString.SetTextColor then
         fontString:SetTextColor(color[1] or 1, color[2] or 1, color[3] or 1, alpha or 1)
     end
+end
+
+local DEFAULT_SKIN_TOGGLES = {
+    characterFrame = true,
+    gameMenu = true,
+    settingsPanel = true,
+    dropDowns = true,
+    contextMenus = true,
+}
+
+function BlizzardSkins:GetSkinSettings()
+    local themeDB = Theme and Theme.GetDB and Theme:GetDB() or nil
+    if type(themeDB) ~= "table" then
+        return DEFAULT_SKIN_TOGGLES
+    end
+
+    if type(themeDB.blizzardSkins) ~= "table" then
+        themeDB.blizzardSkins = {}
+    end
+
+    return themeDB.blizzardSkins
+end
+
+function BlizzardSkins:IsSkinEnabled(key)
+    local settings = self:GetSkinSettings()
+    if type(key) ~= "string" or key == "" then
+        return true
+    end
+
+    local value = settings[key]
+    if value == nil then
+        return DEFAULT_SKIN_TOGGLES[key] ~= false
+    end
+
+    return value ~= false
 end
 
 local function StyleOuterBorder(frame, key, accent, background, border, backgroundAlpha, borderAlpha, offsets)
@@ -557,7 +608,7 @@ function BlizzardSkins:StyleStatCategory(frame, noAccent)
 
     if frame.Value and frame.Value.SetTextColor then
         local valueColor = noAccent and { text[1] or 1, text[2] or 1, text[3] or 1 } or
-        { accent[1] or 1, accent[2] or 1, accent[3] or 1 }
+            { accent[1] or 1, accent[2] or 1, accent[3] or 1 }
         frame.Value:SetTextColor(unpackValues(valueColor))
     end
 
@@ -617,6 +668,10 @@ end
 -- Apply our chrome to the global Blizzard DropDownList popup backdrops.
 -- Hooked once globally; affects all legacy dropdown popups which is consistent.
 local function HookDropDownListBackdrop()
+    if not BlizzardSkins:IsSkinEnabled("dropDowns") then
+        return
+    end
+
     local maxLevels = max(2, _G.UIDROPDOWNMENU_MAXLEVELS or 2)
     for i = 1, maxLevels do
         local backdrop = _G["DropDownList" .. i .. "Backdrop"]
@@ -656,6 +711,10 @@ local function HookDropDownListBackdrop()
 end
 
 local function StyleDropDownListButton(level, index)
+    if not BlizzardSkins:IsSkinEnabled("dropDowns") then
+        return
+    end
+
     local listName = "DropDownList" .. level
     local button = _G[listName .. "Button" .. index]
     if not button then
@@ -766,6 +825,10 @@ local function StyleDropDownListButton(level, index)
 end
 
 local function StyleDropDownListLevel(level)
+    if not BlizzardSkins:IsSkinEnabled("dropDowns") then
+        return
+    end
+
     if not level then
         return
     end
@@ -790,6 +853,9 @@ local function HookDropDownListMenus()
 
     if hooksecurefunc then
         hooksecurefunc("ToggleDropDownMenu", function(level)
+            if not BlizzardSkins:IsSkinEnabled("dropDowns") then
+                return
+            end
             local targetLevel = tonumber(level) or 1
             C_Timer.After(0, function()
                 StyleDropDownListLevel(targetLevel)
@@ -799,6 +865,9 @@ local function HookDropDownListMenus()
 
         if _G.UIDropDownMenu_CreateFrames then
             hooksecurefunc("UIDropDownMenu_CreateFrames", function(level)
+                if not BlizzardSkins:IsSkinEnabled("dropDowns") then
+                    return
+                end
                 StyleDropDownListLevel(tonumber(level) or 1)
             end)
         end
@@ -808,6 +877,10 @@ local function HookDropDownListMenus()
 end
 
 local function StyleModernMenuFrame(frame)
+    if not BlizzardSkins:IsSkinEnabled("contextMenus") then
+        return
+    end
+
     if not frame then
         return
     end
@@ -853,6 +926,10 @@ local function HookModernContextMenus()
     end
 
     local function SkinManagedMenu(self, ownerRegion, menuDescription, anchor)
+        if not BlizzardSkins:IsSkinEnabled("contextMenus") then
+            return
+        end
+
         local menu = self.GetOpenMenu and self:GetOpenMenu() or nil
         if menu then
             StyleModernMenuFrame(menu)
@@ -880,6 +957,10 @@ local function HookModernContextMenus()
 end
 
 function BlizzardSkins:StyleCharacterFilters()
+    if not self:IsSkinEnabled("characterFrame") then
+        return
+    end
+
     local primary = Theme:GetColor("primaryColor")
 
     if _G.ReputationFrame and _G.ReputationFrame.filterDropdown then
@@ -1532,6 +1613,10 @@ function BlizzardSkins:StyleCurrencyChild(child)
 end
 
 function BlizzardSkins:StyleGearManagerPopup()
+    if not self:IsSkinEnabled("characterFrame") then
+        return
+    end
+
     local frame = _G.GearManagerPopupFrame
     if not frame or not frame:IsShown() then
         return
@@ -1564,6 +1649,10 @@ function BlizzardSkins:StyleGearManagerPopup()
 end
 
 function BlizzardSkins:StyleCharacterFrame()
+    if not self:IsSkinEnabled("characterFrame") then
+        return
+    end
+
     local frame = _G.CharacterFrame
     if not frame then
         return
@@ -1840,6 +1929,10 @@ function BlizzardSkins:StyleCharacterFrame()
 end
 
 function BlizzardSkins:StyleGameMenuFrame()
+    if not self:IsSkinEnabled("gameMenu") then
+        return
+    end
+
     local frame = _G.GameMenuFrame
     if not frame then
         return
@@ -1903,6 +1996,10 @@ function BlizzardSkins:StyleGameMenuFrame()
 end
 
 function BlizzardSkins:StyleSettingsCategoryChild(child)
+    if not self:IsSkinEnabled("settingsPanel") then
+        return
+    end
+
     if not child then
         return
     end
@@ -1932,6 +2029,10 @@ function BlizzardSkins:StyleSettingsCategoryChild(child)
 end
 
 function BlizzardSkins:StyleSettingsControlGroup(group)
+    if not self:IsSkinEnabled("settingsPanel") then
+        return
+    end
+
     if not group then
         return
     end
@@ -1953,6 +2054,10 @@ function BlizzardSkins:StyleSettingsControlGroup(group)
 end
 
 function BlizzardSkins:StyleSettingsListChild(child)
+    if not self:IsSkinEnabled("settingsPanel") then
+        return
+    end
+
     if not child then
         return
     end
@@ -2059,6 +2164,10 @@ function BlizzardSkins:StyleSettingsListChild(child)
 end
 
 function BlizzardSkins:StyleCompactUnitFrameProfiles()
+    if not self:IsSkinEnabled("settingsPanel") then
+        return
+    end
+
     for _, frame in next, { _G.CompactUnitFrameProfiles, _G.CompactUnitFrameProfilesGeneralOptionsFrame } do
         if frame then
             for _, child in next, { frame:GetChildren() } do
@@ -2102,6 +2211,10 @@ function BlizzardSkins:StyleCompactUnitFrameProfiles()
 end
 
 function BlizzardSkins:StyleSettingsPanel()
+    if not self:IsSkinEnabled("settingsPanel") then
+        return
+    end
+
     local panel = _G.SettingsPanel
     if not panel then
         return
@@ -2243,39 +2356,57 @@ end
 
 function BlizzardSkins:ApplySystemMenuSkinsLater()
     C_Timer.After(0, function()
-        HookDropDownListBackdrop()
-        HookDropDownListMenus()
-        HookModernContextMenus()
-        BlizzardSkins:StyleGameMenuFrame()
-        BlizzardSkins:StyleSettingsPanel()
+        if BlizzardSkins:IsSkinEnabled("dropDowns") then
+            HookDropDownListBackdrop()
+            HookDropDownListMenus()
+        end
+        if BlizzardSkins:IsSkinEnabled("contextMenus") then
+            HookModernContextMenus()
+        end
+        if BlizzardSkins:IsSkinEnabled("gameMenu") then
+            BlizzardSkins:StyleGameMenuFrame()
+        end
+        if BlizzardSkins:IsSkinEnabled("settingsPanel") then
+            BlizzardSkins:StyleSettingsPanel()
+        end
     end)
 end
 
 function BlizzardSkins:ApplyCharacterSkinLater()
     C_Timer.After(0, function()
-        BlizzardSkins:StyleCharacterFrame()
+        if BlizzardSkins:IsSkinEnabled("characterFrame") then
+            BlizzardSkins:StyleCharacterFrame()
+        end
     end)
 end
 
 function BlizzardSkins:OnEnable()
-    HookDropDownListBackdrop()
-    HookDropDownListMenus()
-    HookModernContextMenus()
+    if self:IsSkinEnabled("dropDowns") then
+        HookDropDownListBackdrop()
+        HookDropDownListMenus()
+    end
+    if self:IsSkinEnabled("contextMenus") then
+        HookModernContextMenus()
+    end
 
     self:RegisterEvent("ADDON_LOADED", function(_, addonName)
-        if addonName == "Blizzard_UIPanels_Game" then
+        if addonName == "Blizzard_UIPanels_Game" and self:IsSkinEnabled("characterFrame") then
             self:ApplyCharacterSkinLater()
         elseif addonName and strmatch(addonName, "^Blizzard_Settings") then
             self:ApplySystemMenuSkinsLater()
-        elseif addonName == "Blizzard_Menu" then
+        elseif addonName == "Blizzard_Menu" and self:IsSkinEnabled("contextMenus") then
             HookModernContextMenus()
         end
     end)
-    self:RegisterMessage("TWICH_THEME_CHANGED", function()
-        if _G.CharacterFrame and _G.CharacterFrame.__twichCharacterSkinned then
+    self:RegisterMessage("TWICH_THEME_CHANGED", function(_, key)
+        if self:IsSkinEnabled("characterFrame") and _G.CharacterFrame and _G.CharacterFrame.__twichCharacterSkinned then
             self:ApplyCharacterSkinLater()
         end
-        self:ApplySystemMenuSkinsLater()
+        if key == nil or key == "blizzardSkins" or key == "primaryColor" or key == "accentColor" or key == "backgroundColor" or
+            key == "backgroundAlpha" or key == "borderColor" or key == "borderAlpha" or key == "textColor" or
+            key == "dangerColor" or key == "globalFont" then
+            self:ApplySystemMenuSkinsLater()
+        end
     end)
 
     -- Refresh overlays when gear changes (Blizzard already calls PaperDollItemSlotButton_Update
@@ -2298,7 +2429,9 @@ function BlizzardSkins:OnEnable()
         end)
     end)
 
-    if (_G.CharacterFrame and _G.CharacterFrame:IsObjectType("Frame")) or (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Blizzard_UIPanels_Game")) then
+    if self:IsSkinEnabled("characterFrame") and
+        ((_G.CharacterFrame and _G.CharacterFrame:IsObjectType("Frame")) or
+            (C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("Blizzard_UIPanels_Game"))) then
         self:ApplyCharacterSkinLater()
     end
 
