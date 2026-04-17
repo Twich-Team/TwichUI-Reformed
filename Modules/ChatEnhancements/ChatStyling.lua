@@ -403,7 +403,30 @@ local function GetSafeDisplayText(text)
     if type(hasanysecretvalues) == "function" then
         local ok, hasSecret = pcall(hasanysecretvalues, text)
         if ok and hasSecret then
-            return ""
+            local sanitized = {}
+            local sawSafeLine = false
+
+            text = text:gsub("\r\n", "\n"):gsub("\r", "\n")
+            for line in (text .. "\n"):gmatch("(.-)\n") do
+                local lineOk, lineHasSecret = pcall(hasanysecretvalues, line)
+                if not (lineOk and lineHasSecret) then
+                    sanitized[#sanitized + 1] = line
+                    if line ~= "" then
+                        sawSafeLine = true
+                    end
+                else
+                    sanitized[#sanitized + 1] = "[Secret value omitted]"
+                end
+            end
+
+            if #sanitized > 0 then
+                local result = table.concat(sanitized, "\n")
+                if sawSafeLine or result ~= "" then
+                    return result
+                end
+            end
+
+            return "[Copy text contained protected values]"
         end
     end
 
@@ -2305,6 +2328,28 @@ function ChatStylingModule:GetCopyText(frame)
     return ""
 end
 
+function ChatStylingModule:ResolveCopySourceFrame(frame)
+    local targetFrame = frame
+
+    if targetFrame and targetFrame.chatFrameTarget then
+        targetFrame = targetFrame.chatFrameTarget
+    end
+
+    if not targetFrame then
+        targetFrame = _G.SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME
+    end
+
+    local hasRenderer = targetFrame and targetFrame.TwichUICustomRenderer and targetFrame.TwichUICustomRenderer.entries
+    local hasNativeMessages = targetFrame and type(targetFrame.GetNumMessages) == "function" and
+        type(targetFrame.GetMessageInfo) == "function"
+
+    if not hasRenderer and not hasNativeMessages then
+        targetFrame = _G.SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME
+    end
+
+    return targetFrame
+end
+
 function ChatStylingModule:RefreshCopyFrame()
     local frame = self.CopyFrame
     if not frame then return end
@@ -2336,7 +2381,8 @@ end
 function ChatStylingModule:OpenCopyFrame(frame)
     local copyFrame = self:EnsureCopyFrame()
     self:RefreshCopyFrame()
-    local text = GetSafeDisplayText(self:GetCopyText(frame or _G.SELECTED_CHAT_FRAME or DEFAULT_CHAT_FRAME))
+    local targetFrame = self:ResolveCopySourceFrame(frame)
+    local text = GetSafeDisplayText(self:GetCopyText(targetFrame))
     copyFrame.EditBox:SetText(text)
     copyFrame.EditBox:HighlightText()
     copyFrame:Show()

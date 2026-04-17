@@ -241,6 +241,7 @@ end
 local function GetDB()
     local profile = ConfigurationModule:GetProfileDB()
     profile.gameTweaks = profile.gameTweaks or {}
+    local hadExplicitEnabled = profile.gameTweaks.enabled ~= nil
     MergeDefaults(profile.gameTweaks, DEFAULT_DB)
 
     local automation = profile.gameTweaks.automation
@@ -257,7 +258,7 @@ local function GetDB()
         automation.autoSellLegacyMigrated = true
     end
 
-    if profile.gameTweaks.enabled ~= true and HasAnyActiveFeature(profile.gameTweaks) then
+    if not hadExplicitEnabled and profile.gameTweaks.enabled ~= true and HasAnyActiveFeature(profile.gameTweaks) then
         profile.gameTweaks.enabled = true
     end
 
@@ -266,6 +267,30 @@ end
 
 local function GetModule()
     return T:GetModule("QualityOfLife"):GetModule("GameTweaks")
+end
+
+local function SyncModuleEnabledState(shouldEnable)
+    local qol = T:GetModule("QualityOfLife", true)
+    if qol and qol.SetSubmoduleEnabled then
+        return qol:SetSubmoduleEnabled("GameTweaks", shouldEnable == true)
+    end
+
+    local module = GetModule()
+    if not module then
+        return nil
+    end
+
+    if shouldEnable == true then
+        if not module:IsEnabled() then
+            module:Enable()
+        elseif module.RefreshSettings then
+            module:RefreshSettings()
+        end
+    elseif module:IsEnabled() then
+        module:Disable()
+    end
+
+    return module
 end
 
 local function ResolvePath(path, create)
@@ -290,12 +315,7 @@ end
 function Options:SetEnabled(info, value)
     local db = GetDB()
     db.enabled = value == true
-    local module = GetModule()
-    if db.enabled then
-        module:Enable()
-    else
-        module:Disable()
-    end
+    SyncModuleEnabledState(db.enabled)
 end
 
 function Options:GetValue(path, defaultValue)
@@ -313,8 +333,17 @@ end
 function Options:SetValue(path, value)
     local node, key = ResolvePath(path, true)
     node[key] = value
+    local db = GetDB()
     local module = GetModule()
-    if module and module.RefreshSettings then
+    if not module then
+        return
+    end
+
+    if db.enabled == true and not module:IsEnabled() then
+        SyncModuleEnabledState(true)
+    elseif db.enabled ~= true and module:IsEnabled() then
+        SyncModuleEnabledState(false)
+    elseif module.RefreshSettings then
         module:RefreshSettings()
     end
 end

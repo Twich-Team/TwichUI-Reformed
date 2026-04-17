@@ -1060,6 +1060,42 @@ local function SuppressFrameTree(frame, visited)
     end
 end
 
+local function CaptureMouseState(store, frame)
+    if not store or not frame or store[frame] then
+        return
+    end
+
+    store[frame] = {
+        mouseEnabled = frame.IsMouseEnabled and frame:IsMouseEnabled() or nil,
+        mouseWheelEnabled = frame.IsMouseWheelEnabled and frame:IsMouseWheelEnabled() or nil,
+    }
+end
+
+local function SetFrameMouseTreeEnabled(frame, enabled, store, visited)
+    if not frame then
+        return
+    end
+
+    visited = visited or {}
+    if visited[frame] then
+        return
+    end
+    visited[frame] = true
+
+    CaptureMouseState(store, frame)
+
+    if frame.EnableMouse then
+        pcall(frame.EnableMouse, frame, enabled)
+    end
+    if frame.EnableMouseWheel then
+        pcall(frame.EnableMouseWheel, frame, enabled)
+    end
+
+    for _, child in ipairs({ frame:GetChildren() }) do
+        SetFrameMouseTreeEnabled(child, enabled, store, visited)
+    end
+end
+
 local function GetButtonArtTextures(button)
     if not button then
         return {}
@@ -1503,6 +1539,7 @@ function ActionBars:OnInitialize()
     self.originalButtons = {} -- Legacy: capture state for special bars (pet/stance/extra/zone/vehicle)
     self.originalFrames = {}
     self.originalRegions = {}
+    self.originalMouseStates = {}
     self.hoverTokens = {}
     self.masqueGroups = {}
     self.masqueButtons = {}
@@ -5043,6 +5080,17 @@ function ActionBars:RestoreOriginalLayout()
         end
     end
 
+    for frame, state in pairs(self.originalMouseStates or {}) do
+        if frame and state then
+            if state.mouseEnabled ~= nil and frame.EnableMouse then
+                pcall(frame.EnableMouse, frame, state.mouseEnabled == true)
+            end
+            if state.mouseWheelEnabled ~= nil and frame.EnableMouseWheel then
+                pcall(frame.EnableMouseWheel, frame, state.mouseWheelEnabled == true)
+            end
+        end
+    end
+
     for region, state in pairs(self.originalRegions) do
         if region and state then RestoreRegionState(region, state) end
     end
@@ -6189,6 +6237,7 @@ function ActionBars:HideDefaultArt()
                         for _, region in ipairs({ selfFrame:GetRegions() }) do
                             SuppressRegion(region)
                         end
+                        SetFrameMouseTreeEnabled(selfFrame, false, ActionBars.originalMouseStates)
                     else
                         SuppressFrameTree(selfFrame)
                         if ActionBars.blizzardHiddenRoot and selfFrame.GetParent and selfFrame:GetParent() ~= ActionBars.blizzardHiddenRoot then

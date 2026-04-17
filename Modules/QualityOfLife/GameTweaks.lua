@@ -5,6 +5,7 @@ local T = unpack(TwichRx)
 
 ---@type QualityOfLife
 local QOL = T:GetModule("QualityOfLife")
+local ThemeModule = T:GetModule("Theme")
 
 ---@class GameTweaksModule : AceModule, AceEvent-3.0
 local GT = QOL:NewModule("GameTweaks", "AceEvent-3.0")
@@ -53,11 +54,17 @@ local strmatch = string.match
 local strsplit = strsplit
 local gsub = string.gsub
 
+local ItemArmorSubclass = Enum and Enum.ItemArmorSubclass or {}
+local ItemWeaponSubclass = Enum and Enum.ItemWeaponSubclass or {}
+
 local hooksInstalled = false
 local originalErrorHandler = nil
 local errorFilterInstalled = false
 local hiddenParent = CreateFrame("Frame")
 hiddenParent:Hide()
+
+local IsMerchantVisible
+local FormatMoney
 
 local originalState = {
     ffxGlow = nil,
@@ -236,16 +243,6 @@ local function Feature(path)
     return GetOptions():GetEnabled() and Value(path, false) == true
 end
 
-local _gtDebugConsole = nil
-local function GTLog(message)
-    if not _gtDebugConsole then
-        _gtDebugConsole = T.Tools and T.Tools.UI and T.Tools.UI.DebugConsole
-    end
-    if _gtDebugConsole and type(_gtDebugConsole.Log) == "function" then
-        _gtDebugConsole:Log("gametweaks", message, false)
-    end
-end
-
 local PVP_AUTO_RELEASE_WORLD_MAPS = {
     [123] = true,  -- Wintergrasp
     [244] = true,  -- Tol Barad
@@ -260,6 +257,8 @@ local AUTOSELL_SAFE_MODE_LIMIT = 12
 local AUTOSELL_START_DELAY_SECONDS = 0.1
 local AUTOSELL_ITEMDATA_RETRY_DELAY_SECONDS = 0.2
 local AUTOSELL_ITEMDATA_MAX_RETRIES = 6
+local AUTOSELL_BUTTON_WIDTH = 188
+local AUTOSELL_BUTTON_HEIGHT = 48
 local AUTOSELL_EQUIPMENT_INVTYPE_EXCEPTIONS = {
     INVTYPE_FINGER = true,
     INVTYPE_NECK = true,
@@ -268,143 +267,157 @@ local AUTOSELL_EQUIPMENT_INVTYPE_EXCEPTIONS = {
     INVTYPE_CLOAK = true,
 }
 local AUTOSELL_PRIMARY_ARMOR = {
-    WARRIOR = Enum.ItemArmorSubclass.Plate,
-    PALADIN = Enum.ItemArmorSubclass.Plate,
-    DEATHKNIGHT = Enum.ItemArmorSubclass.Plate,
-    HUNTER = Enum.ItemArmorSubclass.Mail,
-    SHAMAN = Enum.ItemArmorSubclass.Mail,
-    EVOKER = Enum.ItemArmorSubclass.Mail,
-    ROGUE = Enum.ItemArmorSubclass.Leather,
-    DRUID = Enum.ItemArmorSubclass.Leather,
-    MONK = Enum.ItemArmorSubclass.Leather,
-    DEMONHUNTER = Enum.ItemArmorSubclass.Leather,
-    MAGE = Enum.ItemArmorSubclass.Cloth,
-    PRIEST = Enum.ItemArmorSubclass.Cloth,
-    WARLOCK = Enum.ItemArmorSubclass.Cloth,
+    WARRIOR = ItemArmorSubclass.Plate,
+    PALADIN = ItemArmorSubclass.Plate,
+    DEATHKNIGHT = ItemArmorSubclass.Plate,
+    HUNTER = ItemArmorSubclass.Mail,
+    SHAMAN = ItemArmorSubclass.Mail,
+    EVOKER = ItemArmorSubclass.Mail,
+    ROGUE = ItemArmorSubclass.Leather,
+    DRUID = ItemArmorSubclass.Leather,
+    MONK = ItemArmorSubclass.Leather,
+    DEMONHUNTER = ItemArmorSubclass.Leather,
+    MAGE = ItemArmorSubclass.Cloth,
+    PRIEST = ItemArmorSubclass.Cloth,
+    WARLOCK = ItemArmorSubclass.Cloth,
 }
 local AUTOSELL_SHIELD_CLASSES = {
     PALADIN = true,
     SHAMAN = true,
     WARRIOR = true,
 }
+
+local function BuildWeaponSubclassSet(...)
+    local set = {}
+
+    for index = 1, select("#", ...) do
+        local subclassID = select(index, ...)
+        if subclassID ~= nil then
+            set[subclassID] = true
+        end
+    end
+
+    return set
+end
+
 local AUTOSELL_WEAPON_PROFICIENCIES = {
-    DEATHKNIGHT = {
-        [Enum.ItemWeaponSubclass.Axe1H] = true,
-        [Enum.ItemWeaponSubclass.Axe2H] = true,
-        [Enum.ItemWeaponSubclass.Mace1H] = true,
-        [Enum.ItemWeaponSubclass.Mace2H] = true,
-        [Enum.ItemWeaponSubclass.Polearm] = true,
-        [Enum.ItemWeaponSubclass.Sword1H] = true,
-        [Enum.ItemWeaponSubclass.Sword2H] = true,
-    },
-    DEMONHUNTER = {
-        [Enum.ItemWeaponSubclass.Axe1H] = true,
-        [Enum.ItemWeaponSubclass.Dagger] = true,
-        [Enum.ItemWeaponSubclass.Fist] = true,
-        [Enum.ItemWeaponSubclass.Mace1H] = true,
-        [Enum.ItemWeaponSubclass.Sword1H] = true,
-        [Enum.ItemWeaponSubclass.Warglaive] = true,
-    },
-    DRUID = {
-        [Enum.ItemWeaponSubclass.Dagger] = true,
-        [Enum.ItemWeaponSubclass.Fist] = true,
-        [Enum.ItemWeaponSubclass.Mace1H] = true,
-        [Enum.ItemWeaponSubclass.Mace2H] = true,
-        [Enum.ItemWeaponSubclass.Polearm] = true,
-        [Enum.ItemWeaponSubclass.Staff] = true,
-    },
-    EVOKER = {
-        [Enum.ItemWeaponSubclass.Axe1H] = true,
-        [Enum.ItemWeaponSubclass.Dagger] = true,
-        [Enum.ItemWeaponSubclass.Fist] = true,
-        [Enum.ItemWeaponSubclass.Mace1H] = true,
-        [Enum.ItemWeaponSubclass.Sword1H] = true,
-        [Enum.ItemWeaponSubclass.Staff] = true,
-    },
-    HUNTER = {
-        [Enum.ItemWeaponSubclass.Axe1H] = true,
-        [Enum.ItemWeaponSubclass.Axe2H] = true,
-        [Enum.ItemWeaponSubclass.Bows] = true,
-        [Enum.ItemWeaponSubclass.Crossbow] = true,
-        [Enum.ItemWeaponSubclass.Dagger] = true,
-        [Enum.ItemWeaponSubclass.Fist] = true,
-        [Enum.ItemWeaponSubclass.Guns] = true,
-        [Enum.ItemWeaponSubclass.Polearm] = true,
-        [Enum.ItemWeaponSubclass.Staff] = true,
-        [Enum.ItemWeaponSubclass.Sword1H] = true,
-        [Enum.ItemWeaponSubclass.Sword2H] = true,
-    },
-    MAGE = {
-        [Enum.ItemWeaponSubclass.Dagger] = true,
-        [Enum.ItemWeaponSubclass.Staff] = true,
-        [Enum.ItemWeaponSubclass.Sword1H] = true,
-        [Enum.ItemWeaponSubclass.Wand] = true,
-    },
-    MONK = {
-        [Enum.ItemWeaponSubclass.Axe1H] = true,
-        [Enum.ItemWeaponSubclass.Fist] = true,
-        [Enum.ItemWeaponSubclass.Mace1H] = true,
-        [Enum.ItemWeaponSubclass.Polearm] = true,
-        [Enum.ItemWeaponSubclass.Staff] = true,
-        [Enum.ItemWeaponSubclass.Sword1H] = true,
-    },
-    PALADIN = {
-        [Enum.ItemWeaponSubclass.Axe1H] = true,
-        [Enum.ItemWeaponSubclass.Axe2H] = true,
-        [Enum.ItemWeaponSubclass.Mace1H] = true,
-        [Enum.ItemWeaponSubclass.Mace2H] = true,
-        [Enum.ItemWeaponSubclass.Polearm] = true,
-        [Enum.ItemWeaponSubclass.Sword1H] = true,
-        [Enum.ItemWeaponSubclass.Sword2H] = true,
-    },
-    PRIEST = {
-        [Enum.ItemWeaponSubclass.Dagger] = true,
-        [Enum.ItemWeaponSubclass.Mace1H] = true,
-        [Enum.ItemWeaponSubclass.Staff] = true,
-        [Enum.ItemWeaponSubclass.Wand] = true,
-    },
-    ROGUE = {
-        [Enum.ItemWeaponSubclass.Axe1H] = true,
-        [Enum.ItemWeaponSubclass.Bows] = true,
-        [Enum.ItemWeaponSubclass.Crossbow] = true,
-        [Enum.ItemWeaponSubclass.Dagger] = true,
-        [Enum.ItemWeaponSubclass.Fist] = true,
-        [Enum.ItemWeaponSubclass.Guns] = true,
-        [Enum.ItemWeaponSubclass.Mace1H] = true,
-        [Enum.ItemWeaponSubclass.Sword1H] = true,
-        [Enum.ItemWeaponSubclass.Thrown] = true,
-    },
-    SHAMAN = {
-        [Enum.ItemWeaponSubclass.Axe1H] = true,
-        [Enum.ItemWeaponSubclass.Axe2H] = true,
-        [Enum.ItemWeaponSubclass.Dagger] = true,
-        [Enum.ItemWeaponSubclass.Fist] = true,
-        [Enum.ItemWeaponSubclass.Mace1H] = true,
-        [Enum.ItemWeaponSubclass.Mace2H] = true,
-        [Enum.ItemWeaponSubclass.Staff] = true,
-    },
-    WARLOCK = {
-        [Enum.ItemWeaponSubclass.Dagger] = true,
-        [Enum.ItemWeaponSubclass.Sword1H] = true,
-        [Enum.ItemWeaponSubclass.Staff] = true,
-        [Enum.ItemWeaponSubclass.Wand] = true,
-    },
-    WARRIOR = {
-        [Enum.ItemWeaponSubclass.Axe1H] = true,
-        [Enum.ItemWeaponSubclass.Axe2H] = true,
-        [Enum.ItemWeaponSubclass.Bows] = true,
-        [Enum.ItemWeaponSubclass.Crossbow] = true,
-        [Enum.ItemWeaponSubclass.Dagger] = true,
-        [Enum.ItemWeaponSubclass.Fist] = true,
-        [Enum.ItemWeaponSubclass.Guns] = true,
-        [Enum.ItemWeaponSubclass.Mace1H] = true,
-        [Enum.ItemWeaponSubclass.Mace2H] = true,
-        [Enum.ItemWeaponSubclass.Polearm] = true,
-        [Enum.ItemWeaponSubclass.Staff] = true,
-        [Enum.ItemWeaponSubclass.Sword1H] = true,
-        [Enum.ItemWeaponSubclass.Sword2H] = true,
-        [Enum.ItemWeaponSubclass.Thrown] = true,
-    },
+    DEATHKNIGHT = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Axe1H,
+        ItemWeaponSubclass.Axe2H,
+        ItemWeaponSubclass.Mace1H,
+        ItemWeaponSubclass.Mace2H,
+        ItemWeaponSubclass.Polearm,
+        ItemWeaponSubclass.Sword1H,
+        ItemWeaponSubclass.Sword2H
+    ),
+    DEMONHUNTER = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Axe1H,
+        ItemWeaponSubclass.Dagger,
+        ItemWeaponSubclass.Fist,
+        ItemWeaponSubclass.Mace1H,
+        ItemWeaponSubclass.Sword1H,
+        ItemWeaponSubclass.Warglaive
+    ),
+    DRUID = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Dagger,
+        ItemWeaponSubclass.Fist,
+        ItemWeaponSubclass.Mace1H,
+        ItemWeaponSubclass.Mace2H,
+        ItemWeaponSubclass.Polearm,
+        ItemWeaponSubclass.Staff
+    ),
+    EVOKER = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Axe1H,
+        ItemWeaponSubclass.Dagger,
+        ItemWeaponSubclass.Fist,
+        ItemWeaponSubclass.Mace1H,
+        ItemWeaponSubclass.Sword1H,
+        ItemWeaponSubclass.Staff
+    ),
+    HUNTER = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Axe1H,
+        ItemWeaponSubclass.Axe2H,
+        ItemWeaponSubclass.Bows,
+        ItemWeaponSubclass.Crossbow,
+        ItemWeaponSubclass.Dagger,
+        ItemWeaponSubclass.Fist,
+        ItemWeaponSubclass.Guns,
+        ItemWeaponSubclass.Polearm,
+        ItemWeaponSubclass.Staff,
+        ItemWeaponSubclass.Sword1H,
+        ItemWeaponSubclass.Sword2H
+    ),
+    MAGE = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Dagger,
+        ItemWeaponSubclass.Staff,
+        ItemWeaponSubclass.Sword1H,
+        ItemWeaponSubclass.Wand
+    ),
+    MONK = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Axe1H,
+        ItemWeaponSubclass.Fist,
+        ItemWeaponSubclass.Mace1H,
+        ItemWeaponSubclass.Polearm,
+        ItemWeaponSubclass.Staff,
+        ItemWeaponSubclass.Sword1H
+    ),
+    PALADIN = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Axe1H,
+        ItemWeaponSubclass.Axe2H,
+        ItemWeaponSubclass.Mace1H,
+        ItemWeaponSubclass.Mace2H,
+        ItemWeaponSubclass.Polearm,
+        ItemWeaponSubclass.Sword1H,
+        ItemWeaponSubclass.Sword2H
+    ),
+    PRIEST = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Dagger,
+        ItemWeaponSubclass.Mace1H,
+        ItemWeaponSubclass.Staff,
+        ItemWeaponSubclass.Wand
+    ),
+    ROGUE = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Axe1H,
+        ItemWeaponSubclass.Bows,
+        ItemWeaponSubclass.Crossbow,
+        ItemWeaponSubclass.Dagger,
+        ItemWeaponSubclass.Fist,
+        ItemWeaponSubclass.Guns,
+        ItemWeaponSubclass.Mace1H,
+        ItemWeaponSubclass.Sword1H,
+        ItemWeaponSubclass.Thrown
+    ),
+    SHAMAN = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Axe1H,
+        ItemWeaponSubclass.Axe2H,
+        ItemWeaponSubclass.Dagger,
+        ItemWeaponSubclass.Fist,
+        ItemWeaponSubclass.Mace1H,
+        ItemWeaponSubclass.Mace2H,
+        ItemWeaponSubclass.Staff
+    ),
+    WARLOCK = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Dagger,
+        ItemWeaponSubclass.Sword1H,
+        ItemWeaponSubclass.Staff,
+        ItemWeaponSubclass.Wand
+    ),
+    WARRIOR = BuildWeaponSubclassSet(
+        ItemWeaponSubclass.Axe1H,
+        ItemWeaponSubclass.Axe2H,
+        ItemWeaponSubclass.Bows,
+        ItemWeaponSubclass.Crossbow,
+        ItemWeaponSubclass.Dagger,
+        ItemWeaponSubclass.Fist,
+        ItemWeaponSubclass.Guns,
+        ItemWeaponSubclass.Mace1H,
+        ItemWeaponSubclass.Mace2H,
+        ItemWeaponSubclass.Polearm,
+        ItemWeaponSubclass.Staff,
+        ItemWeaponSubclass.Sword1H,
+        ItemWeaponSubclass.Sword2H,
+        ItemWeaponSubclass.Thrown
+    ),
 }
 
 local function GetAutoReleaseContext()
@@ -530,7 +543,7 @@ end
 
 local function BuildEquipmentSetLookup()
     local lookup = {}
-    local bagsModule = T:GetModule("Bags")
+    local bagsModule = T:GetModule("Bags", true)
     if not bagsModule or type(bagsModule.ScanEquipmentSets) ~= "function" or type(bagsModule.equipmentSetByGUID) ~= "table" then
         return lookup
     end
@@ -624,21 +637,31 @@ local function IsArtifactRelic(item)
         item.subclassID == Enum.ItemGemSubclass.Artifactrelic
 end
 
-local function GetContainerItemLevel(location, link)
-    if not (C_Item and C_Item.GetDetailedItemLevelInfo) then
-        return 0
-    end
+local function GetContainerItemLevel(location, link, itemID)
+    if C_Item and C_Item.GetDetailedItemLevelInfo then
+        if location then
+            local ok, itemLevel = pcall(C_Item.GetDetailedItemLevelInfo, location)
+            if ok and type(itemLevel) == "number" and itemLevel > 0 then
+                return itemLevel
+            end
+        end
 
-    if location then
-        local ok, itemLevel = pcall(C_Item.GetDetailedItemLevelInfo, location)
+        local ok, itemLevel = pcall(C_Item.GetDetailedItemLevelInfo, link)
         if ok and type(itemLevel) == "number" and itemLevel > 0 then
             return itemLevel
         end
     end
 
-    local ok, itemLevel = pcall(C_Item.GetDetailedItemLevelInfo, link)
-    if ok and type(itemLevel) == "number" and itemLevel > 0 then
+    local _, _, _, itemLevel = GetItemInfo(link)
+    if type(itemLevel) == "number" and itemLevel > 0 then
         return itemLevel
+    end
+
+    if itemID then
+        _, _, _, itemLevel = GetItemInfo(itemID)
+        if type(itemLevel) == "number" and itemLevel > 0 then
+            return itemLevel
+        end
     end
 
     return 0
@@ -698,7 +721,7 @@ local function GetContainerSellItem(bagID, slotID, equipmentSetLookup)
         link = link,
         name = itemName or link,
         quality = quality or containerInfo.quality,
-        itemLevel = GetContainerItemLevel(location, link),
+        itemLevel = GetContainerItemLevel(location, link, itemID),
         vendorPrice = vendorPrice,
         stackCount = containerInfo.stackCount or 1,
         totalPrice = vendorPrice * (containerInfo.stackCount or 1),
@@ -749,6 +772,7 @@ local function GetAutoSellSettings()
     return {
         includeLookup = BuildIDLookup(Value({ "automation", "autoSellIncludeList" }, "")),
         excludeLookup = BuildIDLookup(Value({ "automation", "autoSellExcludeList" }, "")),
+        includeByQuality = Value({ "automation", "autoSellJunk" }, false) == true,
         showSummary = Value({ "automation", "autoSellShowSummary" }, true) == true,
         safeMode = Value({ "automation", "autoSellSafeMode" }, false) == true,
         excludeEquipmentSets = Value({ "automation", "autoSellExcludeEquipmentSets" }, true) == true,
@@ -820,7 +844,7 @@ local function IsAutoSellItem(item, settings)
         return false
     end
 
-    if QualityValue({ "automation", "autoSellIncludeByQuality" }, item.quality, false) then
+    if settings.includeByQuality and QualityValue({ "automation", "autoSellIncludeByQuality" }, item.quality, false) then
         return true
     end
 
@@ -847,9 +871,11 @@ local function BuildAutoSellQueue()
     local equipmentSetLookup = BuildEquipmentSetLookup()
     local items = {}
     local hasPendingItemData = false
+    local scannedCount = 0
 
     for bagID = 0, AUTOSELL_BAG_MAX do
         for slotID = 1, C_Container.GetContainerNumSlots(bagID) do
+            scannedCount = scannedCount + 1
             local item, pendingItemData = GetContainerSellItem(bagID, slotID, equipmentSetLookup)
             if item and IsAutoSellItem(item, settings) then
                 items[#items + 1] = item
@@ -886,17 +912,184 @@ local function BuildAutoSellQueue()
     return items, settings, truncated, hasPendingItemData
 end
 
+local function GetAutoSellButtonPalette()
+    local primary = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("primaryColor") or { 0.38, 0.72, 1.0 }
+    local accent = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("accentColor") or primary
+    local background = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("backgroundColor") or { 0.05, 0.06, 0.08 }
+    local border = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("borderColor") or { 0.24, 0.26, 0.32 }
+    local text = ThemeModule and ThemeModule.GetColor and ThemeModule:GetColor("textColor") or { 0.92, 0.94, 0.98 }
+    local backgroundAlpha = ThemeModule and ThemeModule.Get and tonumber(ThemeModule:Get("backgroundAlpha")) or 0.94
+    local borderAlpha = ThemeModule and ThemeModule.Get and tonumber(ThemeModule:Get("borderAlpha")) or 0.85
+    return primary, accent, background, border, text, backgroundAlpha or 0.94, borderAlpha or 0.85
+end
+
+function GT:ApplyAutoSellMerchantButtonTheme()
+    local button = self.autoSellMerchantButton
+    if not button then
+        return
+    end
+
+    local primary, accent, background, border, text, backgroundAlpha, borderAlpha = GetAutoSellButtonPalette()
+
+    button:SetBackdropColor(background[1] or 0.05, background[2] or 0.06, background[3] or 0.08,
+        max(0.72, backgroundAlpha))
+    button:SetBackdropBorderColor(border[1] or 0.24, border[2] or 0.26, border[3] or 0.32, max(0.78, borderAlpha))
+    button.Header:SetTextColor(text[1] or 0.92, text[2] or 0.94, text[3] or 0.98, 1)
+    button.Detail:SetTextColor(accent[1] or primary[1] or 0.38, accent[2] or primary[2] or 0.72,
+        accent[3] or primary[3] or 1.0, 0.95)
+    button.Glow:SetColorTexture(primary[1] or 0.38, primary[2] or 0.72, primary[3] or 1.0, 0.16)
+    button.Edge:SetColorTexture(accent[1] or primary[1] or 0.38, accent[2] or primary[2] or 0.72,
+        accent[3] or primary[3] or 1.0, 0.95)
+    button.Icon:SetVertexColor(primary[1] or 0.38, primary[2] or 0.72, primary[3] or 1.0, button:IsEnabled() and 0.95 or 0.45)
+end
+
+function GT:EnsureAutoSellMerchantButton()
+    if self.autoSellMerchantButton then
+        return self.autoSellMerchantButton
+    end
+
+    local merchantFrame = _G.MerchantFrame
+    if not merchantFrame then
+        return nil
+    end
+
+    local button = CreateFrame("Button", "TwichUIAutoSellMerchantButton", merchantFrame, "BackdropTemplate")
+    button:SetSize(AUTOSELL_BUTTON_WIDTH, AUTOSELL_BUTTON_HEIGHT)
+    button:SetPoint("TOPLEFT", merchantFrame, "TOPRIGHT", 12, -28)
+    button:SetFrameStrata("HIGH")
+    button:RegisterForClicks("LeftButtonUp")
+    button:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+        insets = { left = 1, right = 1, top = 1, bottom = 1 },
+    })
+
+    button.Glow = button:CreateTexture(nil, "BACKGROUND")
+    button.Glow:SetPoint("TOPLEFT", 1, -1)
+    button.Glow:SetPoint("BOTTOMRIGHT", -1, 1)
+
+    button.Edge = button:CreateTexture(nil, "ARTWORK")
+    button.Edge:SetPoint("TOPLEFT", 8, -1)
+    button.Edge:SetPoint("TOPRIGHT", -8, -1)
+    button.Edge:SetHeight(2)
+
+    button.Icon = button:CreateTexture(nil, "ARTWORK")
+    button.Icon:SetPoint("TOPLEFT", 12, -10)
+    button.Icon:SetSize(14, 14)
+    button.Icon:SetTexture("Interface\\MINIMAP\\TRACKING\\Repair")
+
+    button.Header = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    button.Header:SetPoint("TOPLEFT", button.Icon, "TOPRIGHT", 8, -1)
+    button.Header:SetPoint("TOPRIGHT", -10, -9)
+    button.Header:SetJustifyH("LEFT")
+    button.Header:SetWordWrap(false)
+
+    button.Detail = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    button.Detail:SetPoint("TOPLEFT", button.Header, "BOTTOMLEFT", 0, -2)
+    button.Detail:SetPoint("BOTTOMRIGHT", -10, 8)
+    button.Detail:SetJustifyH("LEFT")
+    button.Detail:SetJustifyV("TOP")
+    button.Detail:SetWordWrap(true)
+
+    button:SetScript("OnClick", function()
+        if not self:IsEnabled() or not HasActiveAutoSellRule() then
+            return
+        end
+
+        self:ScheduleAutoSellSession()
+        self:UpdateAutoSellMerchantButton()
+    end)
+
+    button:SetScript("OnEnter", function(frame)
+        _G.GameTooltip:SetOwner(frame, "ANCHOR_LEFT")
+        _G.GameTooltip:AddLine("TwichUI Auto Sell", 1, 1, 1)
+        _G.GameTooltip:AddLine("Scans your bags for junk and configured vendor items.", 0.8, 0.82, 0.9, true)
+        _G.GameTooltip:AddLine("Click to run a fresh vendor scan.", 0.5, 0.85, 1.0)
+        _G.GameTooltip:Show()
+    end)
+
+    button:SetScript("OnLeave", function()
+        _G.GameTooltip:Hide()
+    end)
+
+    self.autoSellMerchantButton = button
+    self:ApplyAutoSellMerchantButtonTheme()
+
+    return button
+end
+
+function GT:UpdateAutoSellMerchantButton()
+    local button = self:EnsureAutoSellMerchantButton()
+    if not button then
+        return
+    end
+
+    if not self:IsEnabled() or not IsMerchantVisible() or not HasActiveAutoSellRule() then
+        button:Hide()
+        return
+    end
+
+    local queueCount = 0
+    local queueValue = 0
+    local pendingItemData = self.autoSellPendingItemData == true
+    local isSelling = self.autoSellTicker ~= nil or (self.autoSellQueue and #self.autoSellQueue > 0)
+
+    if self.autoSellQueue then
+        queueCount = #self.autoSellQueue
+        for index = 1, queueCount do
+            queueValue = queueValue + (self.autoSellQueue[index].totalPrice or 0)
+        end
+    elseif not isSelling then
+        local queue, _, _, pending = BuildAutoSellQueue()
+        queueCount = #queue
+        pendingItemData = pending == true
+        for index = 1, queueCount do
+            queueValue = queueValue + (queue[index].totalPrice or 0)
+        end
+    end
+
+    if isSelling then
+        local soldCount = self.autoSellSoldCount or 0
+        button.Header:SetText("Selling...")
+        button.Detail:SetText(string.format("%d left, %d sold", queueCount, soldCount))
+    elseif pendingItemData then
+        button.Header:SetText("Scanning...")
+        button.Detail:SetText("Waiting for item data")
+    elseif queueCount > 0 then
+        button.Header:SetText("Sell Junk")
+        button.Detail:SetText(string.format("%d item%s, %s", queueCount, queueCount == 1 and "" or "s", FormatMoney(queueValue)))
+    else
+        button.Header:SetText("Sell Junk")
+        button.Detail:SetText("Nothing currently queued")
+    end
+
+    button:SetEnabled(not isSelling)
+    self:ApplyAutoSellMerchantButtonTheme()
+    button:Show()
+end
+
+function GT:OnThemeChanged(_, changedKey)
+    if changedKey ~= nil and changedKey ~= "primaryColor" and changedKey ~= "accentColor" and
+        changedKey ~= "backgroundColor" and changedKey ~= "borderColor" and changedKey ~= "textColor" and
+        changedKey ~= "backgroundAlpha" and changedKey ~= "borderAlpha" then
+        return
+    end
+
+    self:ApplyAutoSellMerchantButtonTheme()
+end
+
 local function GetAutoSellIntervalSeconds()
     local _, _, homeLatency, worldLatency = GetNetStats()
     local configuredMs = Value({ "automation", "autoSellThrottleMs" }, 150) or 150
     return max(0.08, (configuredMs / 1000), max(homeLatency or 0, worldLatency or 0) / 1000)
 end
 
-local function IsMerchantVisible()
+IsMerchantVisible = function()
     return _G.MerchantFrame and _G.MerchantFrame:IsShown()
 end
 
-local function FormatMoney(copper)
+FormatMoney = function(copper)
     return T.Tools and T.Tools.Text and T.Tools.Text.FormatCopper(copper)
         or C_CurrencyInfo.GetCoinText(copper)
 end
@@ -1420,17 +1613,12 @@ local function InstallHooks()
 
         local ctx = GetAutoReleaseContext()
         local allowed, reason = ShouldAutoReleaseInContext(ctx)
-        GTLog(string.format(
-            "autoReleasePvP DEATH popup: allowed=%s reason=%s instanceType=%s instanceName=%s mapID=%s instanceMapID=%s lfgDungeonID=%s",
-            tostring(allowed), tostring(reason), tostring(ctx.instanceType), tostring(ctx.instanceName),
-            tostring(ctx.mapID), tostring(ctx.instanceMapID), tostring(ctx.lfgDungeonID)))
 
         if not allowed then
             return
         end
 
         if C_DeathInfo.GetSelfResurrectOptions() and #C_DeathInfo.GetSelfResurrectOptions() > 0 then
-            GTLog("autoReleasePvP skipped: self-resurrect option available")
             return
         end
 
@@ -1452,22 +1640,14 @@ local function InstallHooks()
 
         local mapID = C_Map.GetBestMapForUnit("player") or 0
         if shouldSkip(mapID) then
-            GTLog(string.format("autoReleasePvP skipped: excluded mapID=%s", tostring(mapID)))
             return
         end
 
         local delay = (Value({ "automation", "releaseDelayMs" }, 0) or 0) / 1000
-        GTLog(string.format("autoReleasePvP scheduled: delay=%.3f mapID=%s instanceType=%s", delay, tostring(mapID),
-            tostring(ctx.instanceType)))
         C_Timer.After(delay, function()
             local dialog = _G.StaticPopup_Visible("DEATH")
             if dialog and not IsShiftKeyDown() then
-                GTLog("autoReleasePvP executing: clicking DEATH popup")
                 _G.StaticPopup_OnClick(_G[dialog], 1)
-            elseif not dialog then
-                GTLog("autoReleasePvP canceled: DEATH popup no longer visible")
-            else
-                GTLog("autoReleasePvP canceled: Shift held down")
             end
         end)
     end)
@@ -1603,6 +1783,8 @@ function GT:RefreshSettings()
             self:UnregisterEvent(known[index])
         end
     end
+
+    self:UpdateAutoSellMerchantButton()
 end
 
 function GT:PLAYER_ENTERING_WORLD()
@@ -1823,6 +2005,7 @@ function GT:AbortAutoSellSession()
     self.autoSellSettings = nil
     self.autoSellPendingItemData = false
     self.autoSellRetryCount = 0
+    self:UpdateAutoSellMerchantButton()
 end
 
 function GT:FinishAutoSellSession()
@@ -1912,6 +2095,7 @@ function GT:ProcessAutoSellQueue()
     self.autoSellTotalPrice = (self.autoSellTotalPrice or 0) + item.totalPrice
     self.autoSellSoldCount = (self.autoSellSoldCount or 0) + 1
     C_Container.UseContainerItem(item.bagID, item.slotID)
+    self:UpdateAutoSellMerchantButton()
 
     if #self.autoSellQueue == 0 then
         self:ContinueOrFinishAutoSellSession()
@@ -1932,6 +2116,7 @@ function GT:StartAutoSellSession()
     self.autoSellSettings = settings
     self.autoSellPendingItemData = pendingItemData
     self.autoSellRetryCount = 0
+    self:UpdateAutoSellMerchantButton()
 
     if #queue == 0 then
         if pendingItemData then
@@ -1963,6 +2148,7 @@ function GT:ResumeAutoSellSession()
     self.autoSellSafeModeTruncated = self.autoSellSafeModeTruncated == true or truncated == true
     self.autoSellPendingItemData = pendingItemData
     self.autoSellRetryCount = (self.autoSellRetryCount or 0) + 1
+    self:UpdateAutoSellMerchantButton()
 
     if #queue == 0 then
         self:ContinueOrFinishAutoSellSession()
@@ -1981,6 +2167,8 @@ function GT:BAG_UPDATE_DELAYED()
     if HasActiveAutoSellRule() then
         WarmItemInfoCache()
     end
+
+    self:UpdateAutoSellMerchantButton()
 end
 
 function GT:ScheduleAutoSellSession()
@@ -2006,10 +2194,8 @@ function GT:MERCHANT_SHOW()
     end
 
     if HasActiveAutoSellRule() then
-        GTLog("MERCHANT_SHOW: scheduling auto-sell session")
         self:ScheduleAutoSellSession()
     else
-        GTLog("MERCHANT_SHOW: auto-sell inactive, aborting session")
         self:AbortAutoSellSession()
     end
 
@@ -2026,10 +2212,13 @@ function GT:MERCHANT_SHOW()
             end
         end
     end
+
+    self:UpdateAutoSellMerchantButton()
 end
 
 function GT:MERCHANT_CLOSED()
     self:AbortAutoSellSession()
+    self:UpdateAutoSellMerchantButton()
 end
 
 function GT:UI_ERROR_MESSAGE(_, _, message)
@@ -2040,6 +2229,7 @@ end
 
 function GT:OnEnable()
     InstallHooks()
+    self:RegisterMessage("TWICH_THEME_CHANGED", "OnThemeChanged")
 
     if Feature({ "system", "easyItemDestroy" }) and StaticPopupDialogs.DELETE_ITEM and StaticPopupDialogs.DELETE_GOOD_ITEM then
         local deleteLine = gsub(_G.DELETE_GOOD_ITEM, "[\r\n]", "@")
@@ -2060,8 +2250,13 @@ end
 
 function GT:OnDisable()
     self:UnregisterAllEvents()
+    self:UnregisterMessage("TWICH_THEME_CHANGED")
     self:AbortAutoSellSession()
     RemoveErrorFilter()
+
+    if self.autoSellMerchantButton then
+        self.autoSellMerchantButton:Hide()
+    end
 
     if originalState.ffxGlow ~= nil then _G.SetCVar("ffxGlow", tostring(originalState.ffxGlow)) end
     if originalState.ffxDeath ~= nil then _G.SetCVar("ffxDeath", tostring(originalState.ffxDeath)) end
