@@ -1,0 +1,1 @@
+--- Performance helpers for memory profiling and rendering optimization
