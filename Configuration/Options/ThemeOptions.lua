@@ -43,8 +43,8 @@ local function DefaultColor(key)
     return theme.DEFAULT_THEME[key] or { 1, 1, 1 }
 end
 
-local function GetSetupWizardModule()
-    return T:GetModule("SetupWizard", true)
+local function GetThemeModule()
+    return T:GetModule("Theme", true)
 end
 
 local function MarkPresetCustom()
