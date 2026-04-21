@@ -868,6 +868,9 @@ end
 --- Returns whether ElvUI is installed and currently loaded.
 ---@return boolean
 function SetupWizardModule:IsElvUIActive()
+    -- ElvUI support has been removed. This always returns false.
+    return false
+end
     local isLoaded = type(C_AddOns) == "table" and type(C_AddOns.IsAddOnLoaded) == "function" and
         C_AddOns.IsAddOnLoaded("ElvUI")
     local E = _G.ElvUI and _G.ElvUI[1]
@@ -877,6 +880,15 @@ end
 --- Detects ElvUI module states that are likely to conflict with TwichUI systems.
 ---@return table
 function SetupWizardModule:DetectElvUIConflicts()
+    -- ElvUI support has been removed. This always returns an empty conflict table.
+    return {
+        available = false,
+        chatEnabled = false,
+        datatextEnabled = false,
+        unitFramesEnabled = false,
+        actionBarsEnabled = false,
+    }
+end
     local result = {
         available = false,
         chatEnabled = false,

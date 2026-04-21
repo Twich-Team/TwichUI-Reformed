@@ -32,8 +32,8 @@ _G.TwichRx = Engine
 
 
 --[[
-    Registering libraries to the engine. Based on how ElvUI does this, great developers
-    deserve credit where credit is due.
+    Registering libraries to the engine. TwichUI uses a modular library system
+    for AceAddon, AceDB, LibSharedMedia, and other core libraries.
 ]]
 do
     T.Libs = {}
