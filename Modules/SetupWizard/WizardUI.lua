@@ -64,7 +64,7 @@ local STEP_DEFS          = {
     { id = "layout",  title = "Layout" },
     { id = "theme",   title = "Theme" },
     { id = "fonts",   title = "Font Sizes" },
-    { id = "elvui",   title = "ElvUI" },
+    -- Step removed: ElvUI integration no longer supported
     { id = "finish",  title = "Finish" },
 }
 
@@ -87,7 +87,7 @@ UI.uiScaleRefs           = {}
 UI.chatFontSize          = 11
 UI.chatHeaderFontSize    = 11
 UI.datatextFontSize      = 11
-UI.elvuiConflictInfo     = { available = false, chatEnabled = false, datatextEnabled = false, actionBarsEnabled = false }
+    UI.fallbackConflictInfo     = { available = false, chatEnabled = false, datatextEnabled = false, actionBarsEnabled = false }
 UI.useTwichChat          = true
 UI.useTwichDatatext      = true
 UI.useTwichUnitFrames    = true
