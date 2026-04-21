@@ -940,7 +940,7 @@ function DataTextModule:GetActiveDatatextTooltip()
     return (DT and DT.tooltip) or _G.DataTextTooltip
 end
 
-function DataTextModule:GetElvUITooltip()
+function DataTextModule:GetStandaloneTooltip()
     local useStandaloneTooltip = self.tooltipOwner and self.tooltipOwner.__twichuiStandalonePanel
     local tooltip
 
