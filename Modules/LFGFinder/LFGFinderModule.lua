@@ -1,7 +1,7 @@
 --[[
     LFG Finder Module
     Native reimplementation of OakLFGSorter with TwichUI styling and theme integration.
-    
+
     Features:
     - Dual-mode operation: Browser (searching) & Applicant (reviewing applications)
     - Advanced filtering: By dungeon, difficulty, key range, rating, utilities, party composition
@@ -24,7 +24,7 @@ local C_AddOns = _G.C_AddOns
 
 -- Module state
 LFG.searchResults = {}
-LFG.displayMode = "browser"   -- "browser" or "applicant"
+LFG.displayMode = "browser" -- "browser" or "applicant"
 LFG.selectedActivity = nil
 LFG.selectedDifficulty = "ANY"
 LFG.selectedKeyMin = 2

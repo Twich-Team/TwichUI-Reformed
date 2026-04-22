@@ -530,7 +530,7 @@ function LFG:BuildBrowserTooltip(result, owner)
             local nameStr = player.name or "Unknown"
             local specStr = player.specName and player.specName ~= "" and (" " .. player.specName) or ""
             local classStr = player.class and player.class ~= "" and
-            (" " .. player.class:sub(1, 1):upper() .. player.class:sub(2):lower()) or ""
+                (" " .. player.class:sub(1, 1):upper() .. player.class:sub(2):lower()) or ""
 
             -- Attempt per-player mythic score lookup
             local score = player.name and GetPlayerMythicScore(player.name) or nil
@@ -868,7 +868,8 @@ function LFG:RefreshFrameAppearanceImpl()
     end
 
     if self.loadingContainer and self.loadingBar and self.loadingText then
-        ApplyFrameBackdrop(self.loadingContainer, 0.08, 0.09, 0.11, 0.72, primaryR * 0.35, primaryG * 0.35, primaryB * 0.35, 0.65, 1)
+        ApplyFrameBackdrop(self.loadingContainer, 0.08, 0.09, 0.11, 0.72, primaryR * 0.35, primaryG * 0.35,
+            primaryB * 0.35, 0.65, 1)
         self.loadingBar:SetStatusBarColor(primaryR, primaryG, primaryB, 0.95)
         ApplyThemeFontString(self, self.loadingText, 9, 0.90, 0.92, 0.95)
     end
