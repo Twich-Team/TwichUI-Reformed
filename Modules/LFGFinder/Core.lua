@@ -227,7 +227,7 @@ local function GetSearchResultPlayers(searchResultID, numMembers)
     -- Do not iterate using numMembers because Blizzard can mark it as secret while tainted.
     local MAX_MEMBER_PROBE = 40
     for memberIndex = 1, MAX_MEMBER_PROBE do
-            if IsRoleToken(info1) then
+        local info1, info2, info3, info4, info5 = C_LFGList.GetSearchResultPlayerInfo(searchResultID, memberIndex)
         if info1 == nil and info2 == nil and info3 == nil and info4 == nil and info5 == nil then
             break
         end

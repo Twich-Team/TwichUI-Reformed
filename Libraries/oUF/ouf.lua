@@ -98,6 +98,7 @@ for k, v in next, {
 		if(not element or self:IsElementEnabled(name)) then return end
 
 		if(element.enable(self, unit or self.unit)) then
+			activeElements[self] = activeElements[self] or {}
 			activeElements[self][name] = true
 
 			if(element.update) then
@@ -128,7 +129,9 @@ for k, v in next, {
 			end
 		end
 
-		activeElements[self][name] = nil
+		if(activeElements[self]) then
+			activeElements[self][name] = nil
+		end
 
 		return elements[name].disable(self)
 	end,
@@ -259,6 +262,7 @@ local function initObject(unit, style, styleFunc, header, ...)
 		object.__elements = {}
 		object.style = style
 		object = setmetatable(object, frame_metatable)
+		activeElements[object] = activeElements[object] or {}
 
 		-- Expose the frame through oUF.objects.
 		table.insert(objects, object)

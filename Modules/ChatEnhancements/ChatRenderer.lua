@@ -1842,19 +1842,6 @@ function ChatRendererModule:PushMessage(frame, message, r, g, b, accessID)
 
     local cap = (self.settings and self.settings.historyLimit) or ROW_CAP
 
-    if InCombatLockdown and InCombatLockdown() then
-        if #renderer.entries > cap then
-            table.remove(renderer.entries, 1)
-            if renderer.entries[1] then
-                renderer.entries[1].groupedWithPrevious = false
-            end
-            renderer._combatDeferredTrimmed = true
-        end
-
-        self:MarkCombatDeferredRelayout(frame, renderer, stickToBottom)
-        return
-    end
-
     local didUpdateScrollState = false
     if #renderer.entries > cap then
         local layoutKey = self:GetRendererLayoutKey(renderer)
