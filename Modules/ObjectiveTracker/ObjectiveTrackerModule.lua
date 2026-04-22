@@ -75,7 +75,7 @@ local WORLD_QUEST_OBJECTIVE_RADIUS = 0.08
 local STATUSBAR_TEXTURE_FALLBACK = "Interface\\TargetingFrame\\UI-StatusBar"
 local WIDGET_TYPE_STATUSBAR = (Enum and Enum.UIWidgetVisualizationType and Enum.UIWidgetVisualizationType.StatusBar) or 2
 local WIDGET_TYPE_ICONANDTEXT = (Enum and Enum.UIWidgetVisualizationType and Enum.UIWidgetVisualizationType.IconAndText) or
-0
+    0
 
 local SECTION_ORDER = {
     "instance",
@@ -266,7 +266,18 @@ end
 local function ResolveStatusBarTexturePath()
     local LSM = T.Libs and T.Libs.LSM
     if LSM and type(LSM.Fetch) == "function" then
-        local path = SafeCall(LSM.Fetch, LSM, "statusbar", "Blizzard", true)
+        local theme = GetThemeModule()
+        local textureKey = theme and theme.Get and SafeCall(theme.Get, theme, "statusBarTexture") or nil
+        local path = nil
+
+        if type(textureKey) == "string" and textureKey ~= "" then
+            path = SafeCall(LSM.Fetch, LSM, "statusbar", textureKey)
+        end
+
+        if type(path) ~= "string" or path == "" then
+            path = SafeCall(LSM.Fetch, LSM, "statusbar", "Blizzard", true)
+        end
+
         if type(path) == "string" and path ~= "" then
             return path
         end

@@ -18,6 +18,7 @@
     <Include file='QualityOfLife.lua' />
     <Include file='LeatrixQoL.lua' />
     <Include file='MythicPlusTools.lua' />
+    <Include file='LFGFinder.lua' />
     <Include file='BestInSlot.lua' />
     <Include file='NotificationPanel.lua' />
     <Include file='ErrorLog.lua' />

@@ -52,12 +52,12 @@ local unpack                = table.unpack or _G.unpack
 -- Constants
 -- ---------------------------------------------------------------------------
 local ADDON_NAME            = "TwichUI_Reformed"
-local MAX_POOL              = 20 -- hard cap on live rows
-local PADDING               = 3 -- vertical gap between rows (px)
+local MAX_POOL              = 20   -- hard cap on live rows
+local PADDING               = 3    -- vertical gap between rows (px)
 local ENTER_DURATION        = 0.24 -- slide+fade in
 local SHIFT_DURATION        = 0.18 -- row shift translate
 local EXIT_DURATION         = 0.35 -- fade out
-local ENTER_OFFSET_X        = -14 -- softer lateral travel for new rows
+local ENTER_OFFSET_X        = -14  -- softer lateral travel for new rows
 local SHIFT_FADE_FROM       = 0.82 -- subtle fade while rows reposition
 local ROW_FADE_START        = 0.61 -- keep more solid area than the original fade, but less than the previous pass
 
@@ -129,6 +129,10 @@ end
 
 local function SafeChatText(value)
     if type(value) ~= "string" then
+        return nil
+    end
+
+    if issecretvalue and issecretvalue(value) then
         return nil
     end
 
@@ -312,6 +316,22 @@ local function FormatMoney(copper)
     return neg and ("(-%s)"):format(str) or str
 end
 
+local function NormalizeFontOutlineFlag(value)
+    if type(value) ~= "string" then
+        return "OUTLINE"
+    end
+
+    if value == "" or value == "NONE" then
+        return ""
+    end
+
+    if value == "OUTLINE" or value == "THICKOUTLINE" or value == "MONOCHROME" then
+        return value
+    end
+
+    return "OUTLINE"
+end
+
 -- ---------------------------------------------------------------------------
 -- Row pool
 -- ---------------------------------------------------------------------------
@@ -332,7 +352,7 @@ local function CreateRowFrame(settings)
     local fw   = GetEffectiveFeedWidth(settings)
     local isz  = settings.iconSize or 22
     local fs   = settings.fontSize or 12
-    local fout = settings.fontOutline or "OUTLINE"
+    local fout = NormalizeFontOutlineFlag(settings.fontOutline)
 
     local function ShowTooltip(owner)
         if not owner.link then return end
@@ -701,7 +721,7 @@ ApplyRowFont = function(row, settings)
         fontPath = (T.Tools and T.Tools.Media and T.Tools.Media:GetFont()) or nil
     end
     if fontPath then
-        row.txt:SetFont(fontPath, settings.fontSize or 12, settings.fontOutline or "OUTLINE")
+        row.txt:SetFont(fontPath, settings.fontSize or 12, NormalizeFontOutlineFlag(settings.fontOutline))
     else
         row.txt:SetFontObject("GameFontNormal")
     end
@@ -1631,8 +1651,10 @@ function LF:CHAT_MSG_LOOT(_, msg, _, _, _, senderName2, _, _, _, _, _, _, guid)
     else
         local playerName = SafeChatText(_G.UnitName("player"))
         local parsedSenderName = SafeChatText(senderName2)
-        if parsedSenderName and parsedSenderName ~= "" then
-            if parsedSenderName ~= playerName then
+        local playerShortName = playerName and SafeStringMatch(playerName, "^[^-]+") or playerName
+        local senderShortName = parsedSenderName and SafeStringMatch(parsedSenderName, "^[^-]+") or parsedSenderName
+        if senderShortName and senderShortName ~= "" then
+            if senderShortName ~= playerShortName then
                 return
             end
         elseif not IsSelfLootMessage(parsedMsg) then

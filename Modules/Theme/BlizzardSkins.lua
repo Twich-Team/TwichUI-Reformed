@@ -14,6 +14,7 @@ local C_AddOns = _G.C_AddOns
 local C_Timer = _G.C_Timer
 local CreateFrame = _G.CreateFrame
 local GetInventoryItemLink = _G.GetInventoryItemLink
+local GetInventoryItemQuality = _G.GetInventoryItemQuality
 local GetInventoryItemTexture = _G.GetInventoryItemTexture
 local GetItemInfo = _G.C_Item and _G.C_Item.GetItemInfo
 local GetDetailedItemLevelInfo = _G.C_Item and _G.C_Item.GetDetailedItemLevelInfo
@@ -1072,8 +1073,18 @@ function BlizzardSkins:UpdateSlotOverlays(slot, slotID, link)
         -- item level via C_Item API (no tooltip needed)
         local iLvl = GetDetailedItemLevelInfo and GetDetailedItemLevelInfo(link)
         if iLvl and iLvl > 0 then
+            local quality = GetInventoryItemQuality and GetInventoryItemQuality("player", slotID) or nil
+            if quality == nil then
+                quality = select(3, GetItemInfo and GetItemInfo(link) or nil)
+            end
+            local qualityColor = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
             slot.__twichILvlText:SetText(iLvl)
-            slot.__twichILvlText:SetTextColor(0.88, 0.88, 0.88)
+            if qualityColor then
+                slot.__twichILvlText:SetTextColor(qualityColor.r or 0.88, qualityColor.g or 0.88,
+                    qualityColor.b or 0.88)
+            else
+                slot.__twichILvlText:SetTextColor(0.88, 0.88, 0.88)
+            end
         else
             slot.__twichILvlText:SetText("")
         end

@@ -19,6 +19,7 @@
     <Include file='QuestLogCleanerOptions.lua' />
     <Include file='DungeonTrackingOptions.lua' />
     <Include file='MythicPlusToolsOptions.lua' />
+    <Include file='LFGFinderOptions.lua' />
     <Include file='PreyTweaksOptions.lua' />
     <Include file='TeleportsOptions.lua' />
     <Include file='WorldQuestsOptions.lua' />

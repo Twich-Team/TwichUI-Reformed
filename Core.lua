@@ -106,6 +106,7 @@ function T:OnInitialize()
         { module = self:GetModule("Tooltip"),                                    enabled = Options.Tooltip:GetEnabled() },
         { module = self:GetModule("ObjectiveTracker"),                           enabled = Options.ObjectiveTracker:GetEnabled() },
         { module = self:GetModule("BestInSlot"),                                 enabled = Options.BestInSlot:IsBestInSlotModuleEnabled() },
+        { module = self:GetModule("LFGFinder"),                                  enabled = Options.LFGFinder:GetEnabled() },
         { module = self:GetModule("QualityOfLife"):GetModule("Gathering"),       enabled = Options.Gathering:GetEnabled() },
     }
 

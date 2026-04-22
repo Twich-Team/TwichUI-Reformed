@@ -182,6 +182,12 @@ local function ApplyPlateFrameLevels(frame, frameLevel, glowLevel)
     if not frame then return end
 
     frame:SetFrameLevel(frameLevel)
+    if frame.healthBar then
+        frame.healthBar:SetFrameLevel(frameLevel + 1)
+    end
+    if frame.absorbBar then
+        frame.absorbBar:SetFrameLevel(frameLevel + 2)
+    end
     if frame.targetGlow then
         frame.targetGlow:SetFrameLevel(glowLevel)
     end
@@ -197,6 +203,59 @@ local function ApplyPlateFrameLevels(frame, frameLevel, glowLevel)
     if frame.raidMarkerOverlay then
         frame.raidMarkerOverlay:SetFrameLevel(frameLevel + 10)
     end
+end
+
+local function GetUnitRelationState(unit)
+    local isFriendly = nil
+    local isEnemy = nil
+    local reaction = nil
+
+    if UnitIsFriend then
+        pcall(function()
+            local result = UnitIsFriend(unit, "player")
+            if result == true then
+                isFriendly = true
+            elseif result == false then
+                isFriendly = false
+            end
+        end)
+    end
+
+    if UnitCanAttack then
+        pcall(function()
+            local result = UnitCanAttack("player", unit)
+            if result == true then
+                isEnemy = true
+            elseif result == false then
+                isEnemy = false
+            end
+        end)
+    end
+
+    if UnitReaction then
+        pcall(function()
+            reaction = tonumber(UnitReaction(unit, "player"))
+        end)
+    end
+
+    if reaction then
+        if reaction <= 3 then
+            isEnemy = true
+        elseif reaction >= 5 then
+            isFriendly = true
+            isEnemy = false
+        elseif reaction == 4 and isEnemy == nil then
+            isEnemy = false
+        end
+    end
+
+    if isEnemy == nil and isFriendly ~= nil then
+        isEnemy = not isFriendly
+    elseif isFriendly == nil and isEnemy ~= nil then
+        isFriendly = not isEnemy
+    end
+
+    return isFriendly == true, isEnemy == true, reaction
 end
 
 local LEGACY_NAME_ANCHORS = {
@@ -525,8 +584,13 @@ local function _clearCastState(frame, fireCallback)
     frame._onCastEnd = nil
     frame._casting = false
     frame._channeling = false
+    frame._castUsesSpellTime = false
     frame._castObservedAt = 0
     frame._castDurationSec = 1
+
+    if frame.castBar and frame.castBar.SetReverseFill then
+        frame.castBar:SetReverseFill(false)
+    end
 
     _activeCastPlates[frame] = nil
 
@@ -547,24 +611,46 @@ local function _clearCastState(frame, fireCallback)
     end
 end
 
+local function _unitHasActiveCast(frame)
+    local unit = frame and frame._unit
+    if not unit or not UnitExists or not UnitExists(unit) then
+        return false
+    end
+
+    if frame._channeling then
+        return UnitChannelInfo and UnitChannelInfo(unit) ~= nil
+    end
+
+    return UnitCastingInfo and UnitCastingInfo(unit) ~= nil
+end
+
 local function _castTickerFn()
     local now     = GetTime()
+    local nowMs   = now * 1000
     local anyLeft = false
     for frame in pairs(_activeCastPlates) do
         if not frame._casting then
             _clearCastState(frame, true)
         else
-            anyLeft       = true
-            local dur     = frame._castDurationSec or 1
-            local elapsed = now - (frame._castObservedAt or now)
-            local clamped = math_min(elapsed, dur)
-            if frame._channeling then
-                frame.castBar:SetValue(math_max(0, dur - clamped))
+            anyLeft = true
+            if frame._castUsesSpellTime then
+                if not _unitHasActiveCast(frame) then
+                    _clearCastState(frame, true)
+                else
+                    frame.castBar:SetValue(nowMs)
+                end
             else
-                frame.castBar:SetValue(clamped)
-            end
-            if elapsed >= dur then
-                _clearCastState(frame, true)
+                local dur     = frame._castDurationSec or 1
+                local elapsed = now - (frame._castObservedAt or now)
+                local clamped = math_min(elapsed, dur)
+                if frame._channeling then
+                    frame.castBar:SetValue(math_max(0, dur - clamped))
+                else
+                    frame.castBar:SetValue(clamped)
+                end
+                if elapsed >= dur then
+                    _clearCastState(frame, true)
+                end
             end
         end
     end
@@ -697,12 +783,28 @@ local function GetThemeFont(size)
     return _G.STANDARD_TEXT_FONT, size or 10, "OUTLINE"
 end
 
+local function NormalizeFontFlags(value)
+    if type(value) ~= "string" then
+        return "OUTLINE"
+    end
+
+    if value == "" or value == "NONE" then
+        return ""
+    end
+
+    if value == "OUTLINE" or value == "THICKOUTLINE" or value == "MONOCHROME" then
+        return value
+    end
+
+    return "OUTLINE"
+end
+
 -- Per-element font resolver: DB key overrides theme fallback.
 -- key is e.g. "name", "health", "cast" — reads db[key.."Font"] etc.
 -- NOTE: outline is ALWAYS read from DB so changing it takes effect without
 -- a frame rebuild, even when the theme default font path is used.
 local function GetPlateFont(key, size, db)
-    local outline = (db and db[key .. "FontOutline"]) or "OUTLINE"
+    local outline = NormalizeFontFlags((db and db[key .. "FontOutline"]) or "OUTLINE")
     local LSM = T.Libs and T.Libs.LSM
     if LSM and db then
         local fontName = db[key .. "Font"]
@@ -888,8 +990,7 @@ function Nameplates:ResolveHealthColor(unit, db)
     -- threat 3 = highest threat / tanking, 2 = nearing aggro loss, 1 = risky.
     -- We only tint the bar when the player is at threat level 3 (actually has aggro).
     if unit and db.showAggroColor ~= false then
-        local reaction = UnitReaction and UnitReaction(unit, "player")
-        local isEnemy  = reaction and reaction <= 3
+        local _, isEnemy = GetUnitRelationState(unit)
         if isEnemy then
             local threat = UnitThreatSituation and UnitThreatSituation("player", unit) or 0
             if threat == 3 then
@@ -924,6 +1025,8 @@ function Nameplates:ResolveHealthColor(unit, db)
     -- Reaction-based (default).  Within reaction mode we also honour
     -- per-classification overrides (boss, miniboss, rare, npc caster).
     if unit then
+        local isFriendly, isEnemy, reaction = GetUnitRelationState(unit)
+
         if UnitIsTapDenied and UnitIsTapDenied(unit) then
             return DBColor(db, "colorTapped", COLOR_TAPPED)
         end
@@ -932,8 +1035,7 @@ function Nameplates:ResolveHealthColor(unit, db)
         --   1. Boss/worldboss
         --   2. Caster NPCs (when enabled)
         --   3. Remaining classification colours (rare/miniboss/etc.)
-        local reaction = UnitReaction and UnitReaction(unit, "player")
-        if reaction and reaction <= 3 then
+        if isEnemy then
             local cl = UnitClassification and UnitClassification(unit) or ""
             if cl == "worldboss" or cl == "boss" then
                 return DBColor(db, "colorBoss", COLOR_BOSS)
@@ -968,9 +1070,15 @@ function Nameplates:ResolveHealthColor(unit, db)
             if reaction >= 5 then return DBColor(db, "colorFriendly", COLOR_FRIENDLY) end
             if reaction == 4 then return DBColor(db, "colorNeutral", COLOR_NEUTRAL) end
         end
+
+        if isFriendly then
+            return DBColor(db, "colorFriendly", COLOR_FRIENDLY)
+        end
+
+        return DBColor(db, "colorNeutral", COLOR_NEUTRAL)
     end
 
-    return GetThemeColor("accentColor", COLOR_HOSTILE)
+    return DBColor(db, "colorNeutral", COLOR_NEUTRAL)
 end
 
 -- ── Backdrop helper ───────────────────────────────────────────────────────────
@@ -1061,6 +1169,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     frame:SetSize(w, h)
     frame:SetPoint("TOPLEFT", plate, "CENTER", -w / 2, h / 2)
     frame:SetPoint("BOTTOMRIGHT", plate, "CENTER", w / 2, -h / 2)
+    frame:SetFrameStrata("HIGH")
     frame:SetFrameLevel(NP_BASE_FRAME_LEVEL)
     ApplyBackdrop(frame, bgC[1], bgC[2], bgC[3], bgC[4], bdC[1], bdC[2], bdC[3], bdC[4])
 
@@ -1069,6 +1178,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     local targetGlow = CreateFrame("Frame", nil, UIParent, "BackdropTemplate")
     targetGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", -glowOutset, glowOutset)
     targetGlow:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", glowOutset, -glowOutset)
+    targetGlow:SetFrameStrata("HIGH")
     targetGlow:SetFrameLevel(NP_BASE_GLOW_LEVEL)
     if targetGlow.SetBackdrop then
         targetGlow:SetBackdrop(GLOW_BD)
@@ -1162,6 +1272,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     local hTextOY      = db.healthTextOffsetY or 0
     local healthText   = healthBar:CreateFontString(nil, "OVERLAY")
     healthText:SetFont(hf, hs, hfl)
+    healthText:SetDrawLayer("OVERLAY", 7)
     if db.healthFontShadow then healthText:SetShadowOffset(1, -1) else healthText:SetShadowOffset(0, 0) end
     -- Span the full healthBar width so the FontString has size; justify controls L/C/R position.
     healthText:SetPoint("LEFT", healthBar, "LEFT", 4 + hTextOX, hTextOY)
@@ -1173,6 +1284,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     -- ── Level text ────────────────────────────────────────────────────────────
     local levelText = healthBar:CreateFontString(nil, "OVERLAY")
     levelText:SetFont(hf, hs, hfl)
+    levelText:SetDrawLayer("OVERLAY", 7)
     levelText:SetPoint("LEFT", healthBar, "LEFT", 3, 0)
     levelText:SetJustifyH("LEFT")
     levelText:SetTextColor(0.8, 0.8, 0.8, 1)
@@ -1273,6 +1385,7 @@ function Nameplates:BuildPlateFrame(parentPlate)
     local cf, cs, cfl = GetPlateFont("cast", Clamp(db.castFontSize or 9, 6, 16), db)
     local castText = castBar:CreateFontString(nil, "OVERLAY")
     castText:SetFont(cf, cs, cfl)
+    castText:SetDrawLayer("OVERLAY", 7)
     if db.castFontShadow then castText:SetShadowOffset(1, -1) else castText:SetShadowOffset(0, 0) end
     castText:SetPoint("LEFT", castBar, "LEFT", 4, 0)
     castText:SetPoint("RIGHT", castBar, "RIGHT", -4, 0)
@@ -1331,21 +1444,22 @@ function Nameplates:BuildPlateFrame(parentPlate)
     ApplyAuraFrameLayout(frame, db)
 
     -- Cast state tracking
-    frame._casting         = false
-    frame._channeling      = false
-    frame._castStart       = 0
-    frame._castEnd         = 0
-    frame._castMax         = 1
-    frame._castObservedAt  = 0
-    frame._castDurationSec = 1
-    frame._onCastEnd       = nil
-    frame._unit            = nil
-    frame._isTestPreview   = false
-    frame._currentWidth    = w
-    frame._currentHeight   = h
-    frame._currentAlpha    = 1
+    frame._casting           = false
+    frame._channeling        = false
+    frame._castUsesSpellTime = false
+    frame._castStart         = 0
+    frame._castEnd           = 0
+    frame._castMax           = 1
+    frame._castObservedAt    = 0
+    frame._castDurationSec   = 1
+    frame._onCastEnd         = nil
+    frame._unit              = nil
+    frame._isTestPreview     = false
+    frame._currentWidth      = w
+    frame._currentHeight     = h
+    frame._currentAlpha      = 1
 
-    local sizeAnimDriver   = CreateFrame("Frame", nil, frame)
+    local sizeAnimDriver     = CreateFrame("Frame", nil, frame)
     sizeAnimDriver:Hide()
     sizeAnimDriver:SetScript("OnUpdate", function(_, elapsed)
         if not frame._sizeAnimDuration then
@@ -1434,13 +1548,14 @@ function Nameplates:ReleasePlateFrame(frame)
     _stopCastTicker(frame)
     self:StopPlateSizeAnimation(frame)
     self:StopPlateAlphaAnimation(frame)
-    frame._unit            = nil
-    frame._plate           = nil
-    frame._casting         = false
-    frame._channeling      = false
-    frame._castObservedAt  = 0
-    frame._castDurationSec = 1
-    frame._onCastEnd       = nil
+    frame._unit              = nil
+    frame._plate             = nil
+    frame._casting           = false
+    frame._channeling        = false
+    frame._castUsesSpellTime = false
+    frame._castObservedAt    = 0
+    frame._castDurationSec   = 1
+    frame._onCastEnd         = nil
     -- Hide all sub-elements so recycled frames start invisible.
     frame:Hide()
     if frame.stackBoundsFrame then frame.stackBoundsFrame:Hide() end
@@ -2172,23 +2287,38 @@ function Nameplates:UpdateCastBar(frame, unit)
         return
     end
 
-    -- Update cast state
-    -- MIDNIGHT SECRET NOTE: startTime/endTime from UnitCastingInfo/UnitChannelInfo
-    -- are secret numbers on nameplate units — cannot do / 1000 arithmetic on them.
-    -- We derive duration entirely via C_Spell.GetSpellInfo(spellId).castTime (non-secret),
-    -- then drive the bar solely with GetTime() arithmetic. No secret arithmetic needed.
-    frame._casting         = true
-    frame._channeling      = channeling
-    frame._castObservedAt  = GetTime()
+    -- Update cast state.
+    -- Midnight can return secret start/end timestamps for nameplate units. We avoid
+    -- Lua arithmetic on those values and feed them directly to the status bar instead.
+    -- If the client rejects that path, we fall back to the old observed-duration ticker.
+    frame._casting           = true
+    frame._channeling        = channeling
+    frame._castUsesSpellTime = false
+    frame._castObservedAt    = GetTime()
 
-    -- MIDNIGHT SECRET: C_Spell.GetSpellInfo returns castTime as a tainted/secret number
-    -- in combat.  Any comparison (> 0) on it will crash.  We therefore always use the
-    -- 2-second fallback duration.  The bar terminates early via UNIT_SPELLCAST_STOP, so
-    -- this only matters for the worst-case tail display.
-    local dur              = 2.0
-    frame._castDurationSec = dur
-    frame.castBar:SetMinMaxValues(0, dur)
-    frame.castBar:SetValue(channeling and dur or 0)
+    if frame.castBar and frame.castBar.SetReverseFill then
+        frame.castBar:SetReverseFill(channeling and true or false)
+    end
+
+    local usingSpellClock = false
+    if startTime and endTime then
+        local ok = pcall(function()
+            frame.castBar:SetMinMaxValues(startTime, endTime)
+            frame.castBar:SetValue(GetTime() * 1000)
+        end)
+        usingSpellClock = ok == true
+    end
+
+    if usingSpellClock then
+        frame._castUsesSpellTime = true
+        frame._castDurationSec = 0
+    else
+        -- Fallback only when the client refuses raw cast timestamps for this unit.
+        local dur              = 2.0
+        frame._castDurationSec = dur
+        frame.castBar:SetMinMaxValues(0, dur)
+        frame.castBar:SetValue(channeling and dur or 0)
+    end
 
     frame.castText:SetText(name)
 
@@ -2575,7 +2705,7 @@ function Nameplates:SweepStalePlates()
     if reboundUnits then
         for _, unitID in ipairs(reboundUnits) do
             if UnitExists(unitID) then
-                self:OnNamePlateAdded(unitID)
+                self:OnNamePlateAdded(nil, unitID)
                 NpLog(string.format("SweepStalePlates rebound unit=%s", tostring(unitID)))
             end
         end
@@ -2673,9 +2803,40 @@ end
 
 -- ── Plate lifecycle ───────────────────────────────────────────────────────────
 function Nameplates:OnNamePlateAdded(_, unitID)
+    if type(unitID) ~= "string" or unitID == "" then return end
     if not C_NamePlate then return end
     local plate = C_NamePlate.GetNamePlateForUnit(unitID)
-    if not plate then return end
+    if not plate then
+        if C_Timer and C_Timer.After then
+            self._plateAddRetryCount = self._plateAddRetryCount or {}
+            local retries = (self._plateAddRetryCount[unitID] or 0) + 1
+            self._plateAddRetryCount[unitID] = retries
+            if retries <= 5 then
+                C_Timer.After(0.05, function()
+                    if Nameplates and Nameplates:IsEnabled() and UnitExists and UnitExists(unitID) and
+                        not (Nameplates._plates and Nameplates._plates[unitID])
+                    then
+                        Nameplates:OnNamePlateAdded(nil, unitID)
+                    end
+                end)
+            end
+        end
+        return
+    end
+    if self._plateAddRetryCount then
+        self._plateAddRetryCount[unitID] = nil
+    end
+
+    -- Nameplate tokens (nameplate1..N) are reused aggressively. If REMOVED was
+    -- skipped or delayed, a stale frame can still be tracked under this token.
+    -- Release it before binding the token to the newly added live plate.
+    local previousFrame = self._plates[unitID]
+    if previousFrame and previousFrame._plate ~= plate then
+        self._plates[unitID] = nil
+        _auraThrottle[unitID] = nil
+        self:ReleasePlateFrame(previousFrame)
+        NpLog(string.format("OnNamePlateAdded replaced stale frame for unit=%s", tostring(unitID)))
+    end
 
     -- ── Suppress Blizzard's built-in unit frame ───────────────────────────────
     -- Plater's Midnight approach (Plater.lua ~4515-4550):
@@ -2782,12 +2943,13 @@ end
 function Nameplates:OnNamePlateRemoved(_, unitID)
     local frame = self._plates[unitID]
     if not frame then return end
+    if self._plateAddRetryCount then
+        self._plateAddRetryCount[unitID] = nil
+    end
     self._plates[unitID] = nil
     _auraThrottle[unitID] = nil
     self:StopPlateSizeAnimation(frame)
-    self:AnimatePlateFrameAlpha(frame, 0, RANGE_FADE_ANIM_SEC, function(f)
-        self:ReleasePlateFrame(f)
-    end)
+    self:ReleasePlateFrame(frame)
 end
 
 -- ── Test mode ─────────────────────────────────────────────────────────────────
@@ -3097,15 +3259,20 @@ function Nameplates:StartFakeCast(frame)
     local db = self:GetDB()
     if db.showCastBar == false then return end
 
-    local idx         = math.random(#CAST_TEST_SPELLS)
-    local spell       = CAST_TEST_SPELLS[idx]
-    local now         = GetTime()
+    local idx                = math.random(#CAST_TEST_SPELLS)
+    local spell              = CAST_TEST_SPELLS[idx]
+    local now                = GetTime()
 
-    frame._casting    = true
-    frame._channeling = spell.channeling
-    frame._castStart  = now
-    frame._castEnd    = now + spell.duration
-    frame._castMax    = spell.duration
+    frame._casting           = true
+    frame._channeling        = spell.channeling
+    frame._castUsesSpellTime = false
+    frame._castStart         = now
+    frame._castEnd           = now + spell.duration
+    frame._castMax           = spell.duration
+
+    if frame.castBar and frame.castBar.SetReverseFill then
+        frame.castBar:SetReverseFill(spell.channeling and true or false)
+    end
 
     frame.castText:SetText(spell.name)
 
@@ -3230,7 +3397,7 @@ function Nameplates:OnEnable()
             if plates then
                 for _, plate in ipairs(plates) do
                     local unit = plate and plate.namePlateUnitToken
-                    if unit then self:OnNamePlateAdded(unit) end
+                    if unit then self:OnNamePlateAdded(nil, unit) end
                 end
             end
         end

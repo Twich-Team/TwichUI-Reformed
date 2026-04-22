@@ -1,12 +1,18 @@
-**Changes in 13.3.2:**
+**Changes in 13.4.2:**
 
-- _Adrian L Lange (5):_
-    1. privateauras: Defer during combat ([#837](https://github.com/oUF-wow/oUF/issues/837))
-    2. privateauras: Remove unit check ([#836](https://github.com/oUF-wow/oUF/issues/836))
-    3. totem: Use new duration object API to set cooldown
-    4. totem: Use alpha to show/hide totems safely
-    5. tags: Rewrite docs ([#827](https://github.com/oUF-wow/oUF/issues/827))
-- _github-actions[bot] (1):_
-    1. Update Interface version ([#832](https://github.com/oUF-wow/oUF/issues/832))
-- 5 files changed, 117 insertions(+), 99 deletions(-)
+- _Adrian L Lange (13):_
+    1. tags: Check if we can compare units
+    2. stagger: Check if we can compare units
+    3. runes: Check if we can compare units
+    4. restingindicator: Check if we can compare units
+    5. powerprediction: Check if we can compare units
+    6. power: Check if we can compare units
+    7. portrait: Check if we can compare units
+    8. classpower: Check if we can compare units
+    9. alternativepower: Check if we can compare units
+    10. additionalpower: Check if we can compare units
+    11. alternativepower: Supply powerType argument in correct position
+    12. additionalpower: Supply powerType argument in correct position
+    13. power: Supply powerType argument in correct position
+- 11 files changed, 48 insertions(+), 16 deletions(-)
 

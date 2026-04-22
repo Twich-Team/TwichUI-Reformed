@@ -4,6 +4,7 @@
 ---@type TwichUI
 local TwichRx = _G.TwichRx
 local T = unpack(TwichRx)
+local GetBuildInfo = _G.GetBuildInfo
 
 local function GetUnitFramesModule()
     return T:GetModule("UnitFrames", true)
@@ -53,6 +54,13 @@ local function OpenConfigurationPanel(input)
         end
 
         console:Show(remainder ~= "" and remainder or nil)
+        return
+    end
+
+    if primaryCommand == "interface" or primaryCommand == "toc" then
+        local version, build, date, interfaceNumber = GetBuildInfo()
+        T:Print(string.format("[TwichUI] Interface: %s | Version: %s | Build: %s | Date: %s",
+            tostring(interfaceNumber), tostring(version), tostring(build), tostring(date)))
         return
     end
 

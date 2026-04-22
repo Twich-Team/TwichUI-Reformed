@@ -521,6 +521,7 @@ local function BuildConfiguration()
                 },
             },
         },
+        lfgfinder = ConfigurationModule:GetLFGFinderConfigSection(),
         sharedAppearance = {
             type = "group",
             name = "Shared Defaults",

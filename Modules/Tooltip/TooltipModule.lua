@@ -41,6 +41,7 @@ local C_Timer = _G.C_Timer
 local C_TransmogCollection = _G.C_TransmogCollection
 local Enum = _G.Enum
 local TooltipDataProcessor = _G.TooltipDataProcessor
+local canaccessvalue = _G.canaccessvalue
 local LE_ITEM_CLASS_WEAPON = _G.LE_ITEM_CLASS_WEAPON or 2
 local LE_ITEM_CLASS_ARMOR = _G.LE_ITEM_CLASS_ARMOR or 4
 local math_max = math.max
@@ -205,6 +206,14 @@ local function SafeTooltipUnit(frame)
     end
 
     local _, unit = SafeCall(frame.GetUnit, frame)
+    if type(unit) ~= "string" or unit == "" then
+        return nil
+    end
+
+    if type(_G.canaccessvalue) == "function" and _G.canaccessvalue(unit) ~= true then
+        return nil
+    end
+
     return unit
 end
 
@@ -392,6 +401,36 @@ local function EstimateTooltipTextWidth(text)
     end
 
     return (glyphCount * 6) + (wideCount * 2)
+end
+
+local function IsSafeNumericValue(value)
+    if type(value) ~= "number" then
+        return false
+    end
+
+    if type(canaccessvalue) == "function" and canaccessvalue(value) ~= true then
+        return false
+    end
+
+    return true
+end
+
+local function ResolveSafeLineWidth(fontString, fallbackText)
+    local width = nil
+
+    if fontString and type(fontString.GetUnboundedStringWidth) == "function" then
+        width = SafeCall(fontString.GetUnboundedStringWidth, fontString)
+    end
+
+    if not IsSafeNumericValue(width) and fontString and type(fontString.GetStringWidth) == "function" then
+        width = SafeCall(fontString.GetStringWidth, fontString)
+    end
+
+    if IsSafeNumericValue(width) then
+        return width
+    end
+
+    return EstimateTooltipTextWidth(fallbackText)
 end
 
 function TooltipModule:GetManagedFrames()
@@ -1642,8 +1681,9 @@ function TooltipModule:GetDesiredTooltipWidth(frame)
         local right = _G[name .. "TextRight" .. index]
         local leftText = left and left.GetText and left:GetText() or nil
         local rightText = right and right.GetText and right:GetText() or nil
-        local leftWidth = EstimateTooltipTextWidth(leftText)
-        local rightWidth = EstimateTooltipTextWidth(rightText)
+        local leftWidth = ResolveSafeLineWidth(left, leftText)
+        local rightWidth = ResolveSafeLineWidth(right, rightText)
+
         leftWidth = leftWidth + (CountTextureMarkup(leftText) * 16)
         rightWidth = rightWidth + (CountTextureMarkup(rightText) * 16)
         local totalWidth = leftWidth + rightWidth
@@ -1699,6 +1739,12 @@ function TooltipModule:RefreshTooltipWidth(frame)
 
     if type(frame.SetWidth) == "function" then
         frame:SetWidth(desiredWidth)
+    end
+
+    -- Force an immediate layout pass after width changes so rapid hovers do not
+    -- reuse stale wrapped-line geometry from the previous tooltip target.
+    if type(frame.Show) == "function" then
+        frame:Show()
     end
 end
 
@@ -1924,9 +1970,7 @@ function TooltipModule:RegisterManagedFrame(frame)
     end
 
     self.registeredFrames[frame] = true
-    if frame ~= GameTooltip then
-        self:SecureHook(frame, "SetOwner", "OnTooltipSetOwner")
-    end
+    self:SecureHook(frame, "SetOwner", "OnTooltipSetOwner")
     if self:HasScript(frame, "OnShow") then
         self:SecureHookScript(frame, "OnShow", "OnTooltipShow")
     end
@@ -2019,7 +2063,7 @@ function TooltipModule:BuildFrameDebugReport(frame)
     table_insert(lines, string_format("Owner: %s", SafeDebugString(ownerName)))
 
     if frame.GetUnit then
-        local _, unit = frame:GetUnit()
+        local unit = SafeTooltipUnit(frame)
         table_insert(lines, string_format("Unit: %s", SafeDebugString(unit)))
     end
 
@@ -2185,6 +2229,15 @@ function TooltipModule:ShowPreview()
 end
 
 function TooltipModule:OnTooltipSetOwner(frame, owner)
+    if frame == GameTooltip then
+        self:OnDefaultTooltipAnchor(frame, owner)
+        if frame.IsShown and frame:IsShown() then
+            self:StyleFrame(frame)
+            self:ScheduleStyleFrame(frame, "set-owner")
+        end
+        return
+    end
+
     self:ApplyAnchorMode(frame, owner)
 end
 
@@ -2194,6 +2247,8 @@ function TooltipModule:OnTooltipShow(frame)
     end
 
     if frame == GameTooltip then
+        self:StyleFrame(frame)
+        self:OnDefaultTooltipAnchor(frame, frame:GetOwner())
         self:ScheduleStyleFrame(frame, "show")
     else
         self:StyleFrame(frame)
@@ -2201,11 +2256,7 @@ function TooltipModule:OnTooltipShow(frame)
     end
 
     local frameName = frame and frame.GetName and frame:GetName() or "<unnamed>"
-    local unit = nil
-    if frame and frame.GetUnit then
-        local _, foundUnit = frame:GetUnit()
-        unit = foundUnit
-    end
+    local unit = SafeTooltipUnit(frame)
     local itemName = frame and frame.GetItem and frame:GetItem() or nil
     self:LogDebugf(false, "tooltip show frame=%s unit=%s item=%s lines=%s width=%.0f height=%.0f",
         SafeDebugString(frameName), SafeDebugString(unit), SafeDebugString(itemName),
@@ -2238,7 +2289,7 @@ end
 
 function TooltipModule:OnTooltipSetUnit(frame)
     if frame == GameTooltip then
-        local _, unit = frame:GetUnit()
+        local unit = SafeTooltipUnit(frame)
         local state = unit and self:BuildPlayerDetailState(unit) or nil
         if state and state.isPlayer then
             self:RequestInspectData(unit)
