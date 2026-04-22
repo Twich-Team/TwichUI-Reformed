@@ -3,8 +3,11 @@
 - our tooltips flash when im looking at items in the auction house
 
 - the status bars we show on the objective tracker should use the status texture chosen in the global appearances section
+- the sizing of our tooltips is odd. it doesnt always fit contents properly, especially when quickly hovering over different players. It will add too much horizontal or vertical space, or too little.
 
 ## NOTES
+
+- I currently want to focus on decoupling from ElvUI. Please review our addon to ensure there are no longer any links to ElvUI code. If so, please implement our own version of it.
 
 # Tweaks
 

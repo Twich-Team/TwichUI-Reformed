@@ -2801,6 +2801,105 @@ function Nameplates:ApplyCVars()
     ))
 end
 
+local function SuppressBlizzardPlateFrameVisuals(target)
+    if not target or target._isTwichFrame then
+        return
+    end
+
+    if target.SetAlpha then
+        pcall(target.SetAlpha, target, 0)
+    end
+
+    if not target._twichSuppressed then
+        target._twichSuppressed = true
+    end
+
+    if not target._twichSuppressionHooks then
+        target._twichSuppressionHooks = true
+
+        if type(target.Show) == "function" then
+            hooksecurefunc(target, "Show", function(frame)
+                if frame and not frame._isTwichFrame and frame.SetAlpha then
+                    pcall(frame.SetAlpha, frame, 0)
+                end
+            end)
+        end
+
+        if type(target.SetAlpha) == "function" then
+            local key = tostring(target)
+            hooksecurefunc(target, "SetAlpha", function(frame, value)
+                if _alphaLocks[key] then return end
+                if value ~= 0 and frame and not frame._isTwichFrame and frame.SetAlpha then
+                    _alphaLocks[key] = true
+                    pcall(frame.SetAlpha, frame, 0)
+                    _alphaLocks[key] = nil
+                end
+            end)
+        end
+    end
+
+    if target.GetRegions then
+        for _, region in ipairs({ target:GetRegions() }) do
+            if region and region.SetAlpha then
+                pcall(region.SetAlpha, region, 0)
+            end
+        end
+    end
+
+    if target.GetChildren then
+        for _, child in ipairs({ target:GetChildren() }) do
+            if child and child ~= target and not child._isTwichFrame then
+                SuppressBlizzardPlateFrameVisuals(child)
+            end
+        end
+    end
+end
+
+local function SuppressBlizzardPlateVisuals(plate)
+    if not plate then
+        return nil
+    end
+
+    local blizzUF = plate.UnitFrame
+    if blizzUF then
+        SuppressBlizzardPlateFrameVisuals(blizzUF)
+
+        if not blizzUF._twichEventsSuppressed then
+            blizzUF._twichEventsSuppressed = true
+            pcall(function() blizzUF:UnregisterAllEvents() end)
+            pcall(function()
+                if blizzUF.HealthBarsContainer and blizzUF.HealthBarsContainer.healthBar then
+                    blizzUF.HealthBarsContainer.healthBar:UnregisterAllEvents()
+                end
+                if blizzUF.castBar then
+                    blizzUF.castBar:UnregisterAllEvents()
+                end
+            end)
+        end
+
+        pcall(function()
+            if blizzUF.AurasFrame then
+                local af = blizzUF.AurasFrame
+                if af.DebuffListFrame then af.DebuffListFrame:SetParent(_hiddenPlateParent) end
+                if af.BuffListFrame then af.BuffListFrame:SetParent(_hiddenPlateParent) end
+                if af.CrowdControlListFrame then af.CrowdControlListFrame:SetParent(_hiddenPlateParent) end
+                if af.LossOfControlFrame then af.LossOfControlFrame:SetParent(_hiddenPlateParent) end
+            end
+        end)
+    end
+
+    pcall(function()
+        local children = { plate:GetChildren() }
+        for _, child in ipairs(children) do
+            if child and child ~= blizzUF and not child._isTwichFrame then
+                SuppressBlizzardPlateFrameVisuals(child)
+            end
+        end
+    end)
+
+    return blizzUF
+end
+
 -- ── Plate lifecycle ───────────────────────────────────────────────────────────
 function Nameplates:OnNamePlateAdded(_, unitID)
     if type(unitID) ~= "string" or unitID == "" then return end
@@ -2838,71 +2937,7 @@ function Nameplates:OnNamePlateAdded(_, unitID)
         NpLog(string.format("OnNamePlateAdded replaced stale frame for unit=%s", tostring(unitID)))
     end
 
-    -- ── Suppress Blizzard's built-in unit frame ───────────────────────────────
-    -- Plater's Midnight approach (Plater.lua ~4515-4550):
-    --   1. hooksecurefunc(blizzUF, "Show")  — works on protected frames in combat
-    --   2. hooksecurefunc(blizzUF, "SetAlpha") — catches Blizzard resetting alpha
-    --   3. blizzUF:UnregisterAllEvents()    — prevents event-driven re-draws
-    --   4. Reparent AurasFrame children to a hidden parent
-    -- We MUST use hooksecurefunc, not HookScript — HookScript on protected frames
-    -- is forbidden during combat lockdown.
-    local blizzUF = plate.UnitFrame ---@type any
-    if blizzUF and not blizzUF._twichSuppressed then
-        blizzUF._twichSuppressed = true
-        blizzUF:SetAlpha(0)
-
-        -- Hook Show: whenever Blizzard tries to show it, zero alpha immediately.
-        hooksecurefunc(blizzUF, "Show", function(f)
-            if not f._isTwichFrame then f:SetAlpha(0) end
-        end)
-
-        -- Hook SetAlpha: prevent Blizzard from restoring the alpha (threat flashes etc.).
-        local key = tostring(blizzUF)
-        hooksecurefunc(blizzUF, "SetAlpha", function(f, v)
-            if _alphaLocks[key] then return end
-            if v ~= 0 then
-                _alphaLocks[key] = true
-                f:SetAlpha(0)
-                _alphaLocks[key] = nil
-            end
-        end)
-
-        -- Stop Blizzard receiving events that re-trigger element updates/shows.
-        pcall(function() blizzUF:UnregisterAllEvents() end)
-        pcall(function()
-            if blizzUF.HealthBarsContainer and blizzUF.HealthBarsContainer.healthBar then
-                blizzUF.HealthBarsContainer.healthBar:UnregisterAllEvents()
-            end
-            if blizzUF.castBar then blizzUF.castBar:UnregisterAllEvents() end
-        end)
-
-        -- Reparent Blizzard's aura/CC sub-frames to the hidden parent so they
-        -- take no screen space and receive no further event-driven updates.
-        pcall(function()
-            if blizzUF.AurasFrame then
-                local af = blizzUF.AurasFrame
-                if af.DebuffListFrame then af.DebuffListFrame:SetParent(_hiddenPlateParent) end
-                if af.BuffListFrame then af.BuffListFrame:SetParent(_hiddenPlateParent) end
-                if af.CrowdControlListFrame then af.CrowdControlListFrame:SetParent(_hiddenPlateParent) end
-                if af.LossOfControlFrame then af.LossOfControlFrame:SetParent(_hiddenPlateParent) end
-            end
-        end)
-    elseif blizzUF then
-        blizzUF:SetAlpha(0) -- already hooked; just re-zero
-    end
-
-    -- Suppress other non-TwichUI art children on the plate.
-    pcall(function()
-        local children = { plate:GetChildren() }
-        for _, child in ipairs(children) do
-            local anyChild = child ---@type any
-            if anyChild ~= blizzUF and not anyChild._isTwichFrame and not anyChild._twichSuppressed then
-                anyChild._twichSuppressed = true
-                anyChild:SetAlpha(0)
-                hooksecurefunc(anyChild, "Show", function(f) f:SetAlpha(0) end)
-            end
-        end
-    end)
+    SuppressBlizzardPlateVisuals(plate)
 
     local frame          = self:AcquirePlateFrame(plate)
     frame._unit          = unitID
@@ -3572,10 +3607,9 @@ function Nameplates:OnCombatStateChange()
     if not C_NamePlate or not C_NamePlate.GetNamePlates then return end
     local plates = C_NamePlate.GetNamePlates()
     if not plates then return end
-    -- Re-zero blizzUF alpha (hooks handle OnShow; this catches any direct SetAlpha calls).
+    -- Re-assert suppression in case Blizzard rebuilt or re-shown native plate visuals.
     for _, plate in ipairs(plates) do
-        local blizzUF = plate.UnitFrame
-        if blizzUF then blizzUF:SetAlpha(0) end
+        SuppressBlizzardPlateVisuals(plate)
     end
     -- Re-assert our own frame alphas in case anything disturbed them.
     for unitID, frame in pairs(self._plates) do
@@ -3593,6 +3627,19 @@ function Nameplates:OnSpecChanged()
 end
 
 function Nameplates:SuppressAllBlizzardPlateChildren()
+    if not C_NamePlate or not C_NamePlate.GetNamePlates then
+        return
+    end
+
+    local plates = C_NamePlate.GetNamePlates()
+    if not plates then
+        return
+    end
+
+    for _, plate in ipairs(plates) do
+        SuppressBlizzardPlateVisuals(plate)
+    end
+
     self:OnCombatStateChange()
 end
 

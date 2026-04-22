@@ -56,6 +56,9 @@ end
 function LFG:OnDisable()
     self:UnregisterAllEvents()
     self:UnregisterAllMessages()
+    if self.CancelSearchBuild then
+        self:CancelSearchBuild()
+    end
     if self.mainFrame then
         self.mainFrame:Hide()
     end
@@ -85,7 +88,7 @@ function LFG:HookLFGPanel()
         local autoOpen = type(opts.GetAutoOpen) == "function" and opts:GetAutoOpen()
         if autoOpen ~= false then
             self:Show()
-            self:RefreshSearchResults()
+            self:RefreshSearchResults(true)
         end
     end)
 
@@ -101,7 +104,7 @@ end
 -- ──────────────────────────────────────────────────────────────────────────────
 
 function LFG:OnSearchResultsUpdated()
-    self:RefreshSearchResults()
+    self:RefreshSearchResults(false)
 end
 
 function LFG:OnApplicantUpdated()
@@ -112,7 +115,7 @@ end
 
 function LFG:OnApplicationStatusUpdated()
     -- Triggered when your application status changes (invited, declined, etc)
-    self:RefreshSearchResults()
+    self:RefreshSearchResults(false)
 end
 
 function LFG:OnThemeChanged()
@@ -130,10 +133,10 @@ function LFG:GetOptions()
     return self.Options or {}
 end
 
-function LFG:RefreshSearchResults()
+function LFG:RefreshSearchResults(showLoading)
     -- Fetch and rebuild search results; implemented in Core.lua
     if self.RefreshSearchResultsImpl then
-        self:RefreshSearchResultsImpl()
+        self:RefreshSearchResultsImpl(showLoading == true)
     end
 end
 
@@ -174,5 +177,5 @@ end
 
 function LFG:SwitchMode(mode)
     self.displayMode = mode
-    self:RefreshSearchResults()
+    self:RefreshSearchResults(false)
 end

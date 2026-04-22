@@ -65,7 +65,7 @@ function Options:GetEnabled()
     return GetValue("enabled", true)
 end
 
-function Options:SetEnabled(value)
+function Options:SetEnabled(_, value)
     SetValue("enabled", value == true)
     local LFG = T:GetModule("LFGFinder", true)
     if LFG then
@@ -81,7 +81,7 @@ function Options:GetAutoOpen()
     return GetValue("autoOpen", true)
 end
 
-function Options:SetAutoOpen(value)
+function Options:SetAutoOpen(_, value)
     SetValue("autoOpen", value == true)
 end
 
@@ -89,7 +89,7 @@ function Options:GetMuteApplicantPing()
     return GetValue("muteApplicantPing", false)
 end
 
-function Options:SetMuteApplicantPing(value)
+function Options:SetMuteApplicantPing(_, value)
     SetValue("muteApplicantPing", value == true)
 end
 
@@ -101,7 +101,7 @@ function Options:GetSelectedDifficulty()
     return GetValue("selectedDifficulty", "ANY")
 end
 
-function Options:SetSelectedDifficulty(value)
+function Options:SetSelectedDifficulty(_, value)
     SetValue("selectedDifficulty", value)
 end
 
@@ -113,7 +113,7 @@ function Options:GetSelectedActivities()
     return db.selectedActivities
 end
 
-function Options:SetSelectedActivities(activities)
+function Options:SetSelectedActivities(_, activities)
     local db = GetLFGFinderDB()
     db.selectedActivities = activities or {}
 end
@@ -122,7 +122,7 @@ function Options:GetMinKeystone()
     return GetValue("minKeystone", 2)
 end
 
-function Options:SetMinKeystone(value)
+function Options:SetMinKeystone(_, value)
     SetValue("minKeystone", tonumber(value) or 2)
 end
 
@@ -130,7 +130,7 @@ function Options:GetMaxKeystone()
     return GetValue("maxKeystone", 99)
 end
 
-function Options:SetMaxKeystone(value)
+function Options:SetMaxKeystone(_, value)
     SetValue("maxKeystone", tonumber(value) or 99)
 end
 
@@ -138,7 +138,7 @@ function Options:GetMinimumRating()
     return GetValue("minimumRating", 0)
 end
 
-function Options:SetMinimumRating(value)
+function Options:SetMinimumRating(_, value)
     SetValue("minimumRating", tonumber(value) or 0)
 end
 
@@ -146,7 +146,7 @@ function Options:GetNeedsTank()
     return GetValue("needsTank", false)
 end
 
-function Options:SetNeedsTank(value)
+function Options:SetNeedsTank(_, value)
     SetValue("needsTank", value == true)
 end
 
@@ -154,7 +154,7 @@ function Options:GetNeedsHealer()
     return GetValue("needsHealer", false)
 end
 
-function Options:SetNeedsHealer(value)
+function Options:SetNeedsHealer(_, value)
     SetValue("needsHealer", value == true)
 end
 
@@ -162,7 +162,7 @@ function Options:GetNeedsDPS()
     return GetValue("needsDPS", false)
 end
 
-function Options:SetNeedsDPS(value)
+function Options:SetNeedsDPS(_, value)
     SetValue("needsDPS", value == true)
 end
 
@@ -170,7 +170,7 @@ function Options:GetHideDeclined()
     return GetValue("hideDeclined", true)
 end
 
-function Options:SetHideDeclined(value)
+function Options:SetHideDeclined(_, value)
     SetValue("hideDeclined", value == true)
 end
 
@@ -182,7 +182,7 @@ function Options:GetFrameTransparency()
     return GetValue("frameTransparency", 0.95)
 end
 
-function Options:SetFrameTransparency(value)
+function Options:SetFrameTransparency(_, value)
     SetValue("frameTransparency", tonumber(value) or 0.95)
     local LFG = T:GetModule("LFGFinder", true)
     if LFG and LFG.mainFrame then
@@ -194,7 +194,7 @@ function Options:GetFontSize()
     return GetValue("fontSize", 11)
 end
 
-function Options:SetFontSize(value)
+function Options:SetFontSize(_, value)
     SetValue("fontSize", tonumber(value) or 11)
     local LFG = T:GetModule("LFGFinder", true)
     if LFG then
@@ -206,7 +206,7 @@ function Options:GetRowHeight()
     return GetValue("rowHeight", 24)
 end
 
-function Options:SetRowHeight(value)
+function Options:SetRowHeight(_, value)
     SetValue("rowHeight", tonumber(value) or 24)
     local LFG = T:GetModule("LFGFinder", true)
     if LFG then
@@ -222,7 +222,7 @@ function Options:GetSortColumn()
     return GetValue("sortColumn", "age")
 end
 
-function Options:SetSortColumn(value)
+function Options:SetSortColumn(_, value)
     SetValue("sortColumn", value)
 end
 
@@ -230,6 +230,6 @@ function Options:GetSortAscending()
     return GetValue("sortAscending", false)
 end
 
-function Options:SetSortAscending(value)
+function Options:SetSortAscending(_, value)
     SetValue("sortAscending", value == true)
 end

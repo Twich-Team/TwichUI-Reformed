@@ -18,6 +18,9 @@ local next = _G.next
 local math = _G.math
 local format = _G.format
 local strlower = _G.strlower
+local strsplit = _G.strsplit
+local securecallfunction = _G.securecallfunction
+local C_Timer = _G.C_Timer
 
 local LISTING_CATEGORY_ID = {
     QUESTING = 1,
@@ -39,7 +42,8 @@ local function GetListingMode(activityInfo)
     local shortName = strlower(activityInfo.shortName or "")
     local activityText = fullName .. " " .. shortName
     local maxPlayers = tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or 0
-    local categoryID = tonumber(activityInfo.categoryID or activityInfo.groupFinderCategoryID or activityInfo.category) or 0
+    local categoryID = tonumber(activityInfo.categoryID or activityInfo.groupFinderCategoryID or activityInfo.category) or
+    0
 
     if activityInfo.isMythicPlusActivity then
         return "mythic_plus"
@@ -70,75 +74,443 @@ local function GetListingMode(activityInfo)
     return "generic"
 end
 
+local function GetSearchResultActivityID(resultInfo, searchResultID)
+    if not resultInfo then
+        return nil
+    end
+
+    local activityID = tonumber(resultInfo.activityID)
+    if not activityID and searchResultID and _G.securecallfunction and C_LFGList.GetSearchResultInfo then
+        activityID = securecallfunction(function(resultID)
+            local secureResultInfo = C_LFGList.GetSearchResultInfo(resultID)
+            if not secureResultInfo then return nil end
+            return tonumber(secureResultInfo.activityID)
+        end, searchResultID)
+    end
+
+    if activityID == 0 then
+        activityID = nil
+    end
+
+    return activityID
+end
+
+local function GetSafeStringField(source, key)
+    if not source then
+        return ""
+    end
+
+    if _G.securecallfunction then
+        local value = securecallfunction(function(obj, field)
+            return obj[field]
+        end, source, key)
+        if type(value) == "string" then
+            return value
+        end
+        if value == nil then
+            return ""
+        end
+        local converted = tonumber(value)
+        if converted then
+            return tostring(converted)
+        end
+        return ""
+    end
+
+    local value = source[key]
+    if type(value) == "string" then
+        return value
+    end
+    if value == nil then
+        return ""
+    end
+    local converted = tonumber(value)
+    if converted then
+        return tostring(converted)
+    end
+    return ""
+end
+
+local function ParseResultKeyLevel(resultInfo, activityInfo)
+    local combined = GetSafeStringField(activityInfo, "shortName") .. " "
+        .. GetSafeStringField(activityInfo, "fullName")
+    local lowerText = strlower(combined)
+
+    local plusLevel = lowerText:match("%+(%d%d?)")
+    if plusLevel then
+        return tonumber(plusLevel) or 0
+    end
+
+    local leadingLevel = lowerText:match("^%s*%+?(%d%d?)%s")
+    if leadingLevel then
+        return tonumber(leadingLevel) or 0
+    end
+
+    return 0
+end
+
+local function BuildResultDisplayName(resultInfo, activityInfo, keyLevel)
+    local rawName = ""
+    rawName = rawName:gsub("^%s+", ""):gsub("%s+$", "")
+
+    local activityLabel = GetSafeStringField(activityInfo, "fullName")
+    if activityLabel == "" then
+        activityLabel = GetSafeStringField(activityInfo, "shortName")
+    end
+
+    if rawName == "" then
+        if keyLevel > 0 and activityLabel ~= "" then
+            return string.format("+%d %s", keyLevel, activityLabel)
+        end
+
+        return activityLabel ~= "" and activityLabel or "--"
+    end
+
+    local digitsOnly = rawName:match("^%+?(%d%d?)$")
+    if digitsOnly then
+        if activityLabel ~= "" then
+            return string.format("+%s %s", digitsOnly, activityLabel)
+        end
+
+        return "+" .. digitsOnly
+    end
+
+    return rawName
+end
+
+local function CleanActivityLabel(label)
+    if type(label) ~= "string" then
+        label = ""
+    end
+    label = label:gsub("%s*%b()", "")
+    label = label:gsub("^%s+", ""):gsub("%s+$", "")
+    return label
+end
+
+local function NormalizeRoleToken(rawRole)
+    if _G.securecallfunction then
+        return securecallfunction(function(v)
+            if v == "TANK" then
+                return "TANK"
+            end
+            if v == "HEALER" then
+                return "HEALER"
+            end
+            return "DAMAGER"
+        end, rawRole)
+    end
+
+    if rawRole == "TANK" then
+        return "TANK"
+    end
+    if rawRole == "HEALER" then
+        return "HEALER"
+    end
+    return "DAMAGER"
+end
+
+local function IsRoleToken(value)
+    if _G.securecallfunction then
+        return securecallfunction(function(v)
+            return v == "TANK" or v == "HEALER" or v == "DAMAGER"
+        end, value) == true
+    end
+    return value == "TANK" or value == "HEALER" or value == "DAMAGER"
+end
+
+local function GetSearchResultPlayers(searchResultID, numMembers)
+    local players = {}
+    if not C_LFGList.GetSearchResultPlayerInfo then
+        return players
+    end
+
+    -- Do not iterate using numMembers because Blizzard can mark it as secret while tainted.
+    local MAX_MEMBER_PROBE = 40
+    for memberIndex = 1, MAX_MEMBER_PROBE do
+            if IsRoleToken(info1) then
+        if info1 == nil and info2 == nil and info3 == nil and info4 == nil and info5 == nil then
+            break
+        end
+
+        local role
+        local classFile
+        local playerName
+        local specID
+        local specName
+
+        local playerInfo = (type(info1) == "table") and info1 or nil
+        if type(playerInfo) == "table" then
+            playerName = playerInfo.name
+            classFile = playerInfo.classFilename
+            role = playerInfo.assignedRole
+            specID = tonumber(playerInfo.specID)
+            specName = playerInfo.specName
+        else
+            if IsRoleToken(info1) then
+                role = info1
+                playerName = info2
+                classFile = info3
+                specID = tonumber(info4)
+                specName = info5
+            else
+                playerName = info1
+                role = info2
+                classFile = info3
+                specID = tonumber(info4)
+                specName = info5
+            end
+        end
+
+        if classFile then
+            role = NormalizeRoleToken(role)
+
+            table.insert(players, {
+                name = playerName,
+                role = role,
+                class = classFile or "UNKNOWN",
+                specID = specID,
+                specName = specName,
+            })
+        end
+    end
+
+    return players
+end
+
+local function GetSearchResultMemberCounts(searchResultID)
+    if not C_LFGList.GetSearchResultMemberCounts then
+        return {}
+    end
+
+    local success, memberCounts = pcall(C_LFGList.GetSearchResultMemberCounts, searchResultID)
+    if success and type(memberCounts) == "table" then
+        return memberCounts
+    end
+
+    return {}
+end
+
+local function GetSearchResultRoleCounts(searchResultID)
+    local counts = { TANK = 0, HEALER = 0, DAMAGER = 0 }
+    local memberCounts = GetSearchResultMemberCounts(searchResultID)
+    counts.TANK = tonumber(memberCounts.TANK) or 0
+    counts.HEALER = tonumber(memberCounts.HEALER) or 0
+    counts.DAMAGER = tonumber(memberCounts.DAMAGER) or 0
+
+    if counts.TANK == 0 and counts.HEALER == 0 and counts.DAMAGER == 0 then
+        local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
+        local numMembers = tonumber(resultInfo and resultInfo.numMembers) or 0
+        local players = GetSearchResultPlayers(searchResultID, numMembers)
+        for _, player in ipairs(players) do
+            counts[player.role] = (counts[player.role] or 0) + 1
+        end
+    end
+
+    return counts
+end
+
 -- ──────────────────────────────────────────────────────────────────────────────
 -- Data Fetching
 -- ──────────────────────────────────────────────────────────────────────────────
 
+function LFG:BuildSearchResultEntry(searchResultID)
+    local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
+    if not resultInfo then
+        return nil
+    end
+
+    local rawListingTitle = resultInfo.name
+    local activityID = GetSearchResultActivityID(resultInfo, searchResultID)
+    local activityInfo = activityID and C_LFGList.GetActivityInfoTable(activityID) or nil
+    local listingMode = GetListingMode(activityInfo)
+    local isMythicPlus = (resultInfo.isMythicPlusActivity == true) or
+        (activityInfo and activityInfo.isMythicPlusActivity == true)
+    if listingMode == "generic" and isMythicPlus then
+        listingMode = "mythic_plus"
+    end
+
+    local keyLevel = ParseResultKeyLevel(resultInfo, activityInfo)
+    local displayName = BuildResultDisplayName(resultInfo, activityInfo, keyLevel)
+    local activityLabelSource = GetSafeStringField(activityInfo, "fullName")
+    if activityLabelSource == "" then
+        activityLabelSource = GetSafeStringField(activityInfo, "shortName")
+    end
+    local activityLabel = CleanActivityLabel(activityLabelSource)
+    if activityLabel == "" then
+        activityLabel = "Unknown Activity"
+    end
+
+    local players = GetSearchResultPlayers(searchResultID, tonumber(resultInfo.numMembers) or 0)
+    local roleCounts = GetSearchResultRoleCounts(searchResultID)
+    local leaderClass = players[1] and players[1].class or self:GetLeaderClass(searchResultID)
+    local leaderRole = players[1] and players[1].role or "DAMAGER"
+    local rating = tonumber(resultInfo.leaderOverallDungeonScore) or 0
+    local pvpRating = 0
+    local pvpBracket
+
+    if listingMode == "rated_pvp" or listingMode == "pvp" then
+        local pvpInfo = resultInfo.leaderPvpRatingInfo
+        if type(pvpInfo) == "table" then
+            local entry = pvpInfo[1] or pvpInfo
+            if type(entry) == "table" then
+                pvpRating = tonumber(entry.rating or entry.pvpRating or entry.currentRating or entry
+                    .seasonRating or entry.weeklyBest or entry.value) or 0
+                pvpBracket = entry.bracket or entry.activityName or entry.name
+            end
+        elseif type(pvpInfo) == "number" then
+            pvpRating = pvpInfo
+        end
+        rating = pvpRating
+    end
+
+    local result = {
+        id = searchResultID,
+        name = activityLabel,
+        listingTitle = rawListingTitle,
+        displayName = displayName,
+        comment = "",
+        note = "",
+        activityID = activityID,
+        activityInfo = activityInfo,
+        activityName = (function()
+            local full = GetSafeStringField(activityInfo, "fullName")
+            if full ~= "" then return full end
+            local short = GetSafeStringField(activityInfo, "shortName")
+            if short ~= "" then return short end
+            return activityLabel
+        end)(),
+        dungeonName = activityLabel,
+        mode = listingMode,
+        isMythicPlus = isMythicPlus,
+        leaderName = (players[1] and players[1].name) or "",
+        leaderClass = leaderClass,
+        leaderRole = leaderRole,
+        numMembers = tonumber(resultInfo.numMembers) or 0,
+        maxPlayers = self:GetActivityMaxPlayers(activityID),
+        age = tonumber(resultInfo.age) or 0,
+        rating = rating,
+        pvpRating = pvpRating,
+        pvpBracket = pvpBracket,
+        keyLevel = keyLevel,
+        voiceChat = resultInfo.voiceChat,
+        playStyle = resultInfo.playStyle,
+        isCrossFaction = resultInfo.isCrossFaction,
+
+        applicantStatus = self:GetApplicationStatus(searchResultID),
+        applicationStatus = self:GetApplicationStatus(searchResultID),
+        isApplied = false,
+        isDeclined = false,
+
+        roleCounts = roleCounts,
+        players = players,
+    }
+
+    local appStatus = result.applicantStatus
+    result.isApplied = appStatus and (appStatus == "applied" or appStatus == "invited")
+    result.isDeclined = appStatus == "declined"
+
+    return result
+end
+
+function LFG:CancelSearchBuild()
+    if self._searchBuildTicker and type(self._searchBuildTicker.Cancel) == "function" then
+        self._searchBuildTicker:Cancel()
+    end
+    self._searchBuildTicker = nil
+    self._searchBuildState = nil
+end
+
 --- Fetches and rebuilds the search results array
-function LFG:RefreshSearchResultsImpl()
+function LFG:RefreshSearchResultsImpl(showLoading)
+    self:CancelSearchBuild()
     self.searchResults = self.searchResults or {}
-    wipe(self.searchResults)
-    
+
     -- Get result IDs from Blizzard's LFG API
     local firstReturn, secondReturn = C_LFGList.GetSearchResults()
     local resultIDs = (type(firstReturn) == "table" and firstReturn) or secondReturn
-    
+
     if not resultIDs then
+        if self.SetLoadingProgressImpl then
+            self:SetLoadingProgressImpl(0, 0)
+        end
+        if self.displayMode == "browser" and self.RefreshBrowserUIImpl then
+            self:RefreshBrowserUIImpl()
+        end
         return
     end
-    
-    for _, searchResultID in ipairs(resultIDs) do
-        local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
-        if resultInfo then
-            local activityInfo = resultInfo.activityID and C_LFGList.GetActivityInfoTable(resultInfo.activityID) or nil
-            local listingMode = GetListingMode(activityInfo)
-            local isMythicPlus = (resultInfo.isMythicPlusActivity == true) or (activityInfo and activityInfo.isMythicPlusActivity == true)
-            if listingMode == "generic" and isMythicPlus then
-                listingMode = "mythic_plus"
+
+    local total = #resultIDs
+    if total <= 0 then
+        if self.SetLoadingProgressImpl then
+            self:SetLoadingProgressImpl(0, 0)
+        end
+        if self.displayMode == "browser" and self.RefreshBrowserUIImpl then
+            self:RefreshBrowserUIImpl()
+        end
+        return
+    end
+
+    local state = {
+        ids = resultIDs,
+        index = 1,
+        total = total,
+        results = {},
+    }
+    self._searchBuildState = state
+
+    if self.SetLoadingProgressImpl and showLoading then
+        self:SetLoadingProgressImpl(0, total)
+    elseif self.SetLoadingProgressImpl then
+        self:SetLoadingProgressImpl(0, 0)
+    end
+
+    local chunkSize = 20
+    local function processChunk()
+        local active = self._searchBuildState
+        if not active then
+            return
+        end
+
+        local startIndex = active.index
+        local endIndex = math.min(active.total, startIndex + chunkSize - 1)
+        for idx = startIndex, endIndex do
+            local built = self:BuildSearchResultEntry(active.ids[idx])
+            if built then
+                table.insert(active.results, built)
             end
-            
-            -- Build comprehensive result entry
-            local result = {
-                id = searchResultID,
-                name = resultInfo.name or "Unknown Group",
-                activityID = resultInfo.activityID,
-                activityName = activityInfo and activityInfo.fullName or "Unknown Activity",
-                mode = listingMode,
-                isMythicPlus = isMythicPlus,
-                leaderName = resultInfo.leaderName or "Unknown",
-                leaderClass = self:GetLeaderClass(searchResultID),
-                numMembers = tonumber(resultInfo.numMembers) or 0,
-                maxPlayers = self:GetActivityMaxPlayers(resultInfo.activityID),
-                age = tonumber(resultInfo.age) or 0,
-                rating = tonumber(resultInfo.leaderOverallDungeonScore) or 0,
-                voiceChat = resultInfo.voiceChat,
-                playStyle = resultInfo.playStyle,
-                isCrossFaction = resultInfo.isCrossFaction,
-                note = resultInfo.comment or "",
-                
-                -- Application status
-                applicantStatus = self:GetApplicationStatus(searchResultID),
-                isApplied = false,
-                
-                -- Party composition (will be fetched on demand)
-                roleCounts = self:GetSearchResultRoleCounts(searchResultID),
-                players = {},
-            }
-            
-            -- Check if already applied
-            local appStatus = result.applicantStatus
-            result.isApplied = appStatus and (appStatus == "applied" or appStatus == "invited")
-            
-            table.insert(self.searchResults, result)
+        end
+
+        active.index = endIndex + 1
+
+        if self.SetLoadingProgressImpl and showLoading then
+            self:SetLoadingProgressImpl(endIndex, active.total)
+        end
+
+        if active.index > active.total then
+            self.searchResults = active.results
+            self:SortResults()
+            if self.displayMode == "browser" and self.RefreshBrowserUIImpl then
+                self:RefreshBrowserUIImpl()
+            end
+            self:CancelSearchBuild()
+            if self.SetLoadingProgressImpl and showLoading then
+                self:SetLoadingProgressImpl(active.total, active.total)
+            elseif self.SetLoadingProgressImpl then
+                self:SetLoadingProgressImpl(0, 0)
+            end
         end
     end
-    
-    -- Sort results
-    self:SortResults()
-    
-    -- Render if browser mode is active
-    if self.displayMode == "browser" and self.RefreshBrowserUIImpl then
-        self:RefreshBrowserUIImpl()
+
+    processChunk()
+    if self._searchBuildState then
+        if C_Timer and C_Timer.NewTicker then
+            self._searchBuildTicker = C_Timer.NewTicker(0.02, processChunk)
+        else
+            -- Fallback: complete synchronously if ticker API is unavailable.
+            while self._searchBuildState do
+                processChunk()
+            end
+        end
     end
 end
 
@@ -150,25 +522,7 @@ end
 
 --- Gets the role counts for a search result
 function LFG:GetSearchResultRoleCounts(searchResultID)
-    local counts = {
-        TANK = 0,
-        HEALER = 0,
-        DAMAGER = 0,
-    }
-    
-    local resultInfo = C_LFGList.GetSearchResultInfo(searchResultID)
-    if not resultInfo then return counts end
-    
-    -- Count members by role from party members
-    local numMembers = tonumber(resultInfo.numMembers) or 0
-    for i = 1, math.min(numMembers, 5) do
-        local role = C_LFGList.GetSearchResultPlayerInfo(searchResultID, i)
-        if role == "TANK" or role == "HEALER" or role == "DAMAGER" then
-            counts[role] = counts[role] + 1
-        end
-    end
-    
-    return counts
+    return GetSearchResultRoleCounts(searchResultID)
 end
 
 --- Gets the max players for an activity
@@ -178,20 +532,32 @@ function LFG:GetActivityMaxPlayers(activityID)
     end
     local activityInfo = C_LFGList.GetActivityInfoTable(activityID)
     if activityInfo then
-        return tonumber(activityInfo.maxNumPlayers) or 5
+        return tonumber(activityInfo.maxNumPlayers or activityInfo.maxPlayers) or 5
     end
     return 5
 end
 
 --- Gets the application status for a result
 function LFG:GetApplicationStatus(searchResultID)
-    local appStatus = C_LFGList.GetApplicationInfo(searchResultID)
-    if appStatus == 0 then return "available"
-    elseif appStatus == 1 then return "applied"
-    elseif appStatus == 2 then return "invited"
-    elseif appStatus == 3 then return "declined"
-    elseif appStatus == 4 then return "cancelled"
+    if not C_LFGList.GetApplicationInfo then
+        return "available"
     end
+
+    local success, appA, appB = pcall(C_LFGList.GetApplicationInfo, searchResultID)
+    if success then
+        if type(appA) == "table" then
+            appA = appA.applicationStatus or appA.status or appA.pendingStatus
+        elseif type(appB) == "string" then
+            appA = appB
+        end
+
+        if appA == 0 or appA == "none" then return "available" end
+        if appA == 1 or appA == "applied" then return "applied" end
+        if appA == 2 or appA == "invited" then return "invited" end
+        if appA == 3 or appA == "declined" then return "declined" end
+        if appA == 4 or appA == "cancelled" then return "cancelled" end
+    end
+
     return "available"
 end
 
@@ -205,22 +571,26 @@ function LFG:ResultPassesFilters(result)
     if result.maxPlayers and result.maxPlayers > 0 and result.numMembers >= result.maxPlayers then
         return false
     end
-    
+
     local filters = self:GetActiveFilters()
-    
+
     -- Activity filter
     if filters.selectedActivities and next(filters.selectedActivities) then
-        if not filters.selectedActivities[result.activityName or ""] then
+        local activityKey = result.activityName or ""
+        -- If metadata is missing, do not hard-filter the row out.
+        if activityKey ~= "" and activityKey ~= "Unknown Activity" and not filters.selectedActivities[activityKey] then
             return false
         end
     end
-    
+
     -- Difficulty filter (M+ specific)
     if filters.difficulty and filters.difficulty ~= "ANY" then
         if filters.difficulty == "MYTHIC_PLUS" then
             local inferredKeystone = self:ExtractKeystoneLevel(result.name)
-            local isMPlusResult = (result.mode == "mythic_plus") or (result.isMythicPlus == true) or (inferredKeystone ~= nil)
-            if not isMPlusResult then
+            local isMPlusResult = (result.mode == "mythic_plus") or (result.isMythicPlus == true) or
+            (inferredKeystone ~= nil)
+            -- Unknown mode/metadata should remain visible rather than disappear entirely.
+            if not isMPlusResult and result.mode and result.mode ~= "generic" then
                 return false
             end
         end
@@ -228,7 +598,7 @@ function LFG:ResultPassesFilters(result)
             return false
         end
     end
-    
+
     -- M+ key range filter
     if result.mode == "mythic_plus" and filters.keyMin and filters.keyMax then
         local keystoneLevel = self:ExtractKeystoneLevel(result.name)
@@ -238,22 +608,22 @@ function LFG:ResultPassesFilters(result)
             end
         end
     end
-    
+
     -- Hide declined applications
     if filters.hideDeclined and result.applicantStatus == "declined" then
         return false
     end
-    
+
     -- Minimum rating filter
     if filters.minimumRating and result.rating < filters.minimumRating then
         return false
     end
-    
+
     -- Role needs filter
     if filters.needsTank and result.roleCounts.TANK >= 1 then return false end
     if filters.needsHealer and result.roleCounts.HEALER >= 1 then return false end
     if filters.needsDPS and result.roleCounts.DAMAGER >= 5 then return false end
-    
+
     return true
 end
 
@@ -261,10 +631,11 @@ end
 function LFG:GetActiveFilters()
     local options = self:GetOptions()
     if not options then return {} end
-    
+
     return {
         selectedActivities = type(options.GetSelectedActivities) == "function" and options:GetSelectedActivities() or {},
-        difficulty         = type(options.GetSelectedDifficulty) == "function" and options:GetSelectedDifficulty() or "ANY",
+        difficulty         = type(options.GetSelectedDifficulty) == "function" and options:GetSelectedDifficulty() or
+        "ANY",
         keyMin             = type(options.GetMinKeystone) == "function" and options:GetMinKeystone() or 2,
         keyMax             = type(options.GetMaxKeystone) == "function" and options:GetMaxKeystone() or 99,
         hideDeclined       = type(options.GetHideDeclined) == "function" and options:GetHideDeclined() or false,
@@ -289,7 +660,7 @@ end
 function LFG:SortResults()
     local sortBy = self:GetSortColumn() or "age"
     local isAscending = self:GetSortAscending() ~= false
-    
+
     table.sort(self.searchResults, function(a, b)
         return self:CompareResults(a, b, sortBy, isAscending)
     end)
@@ -314,16 +685,22 @@ end
 --- Comparator for sorting results
 function LFG:CompareResults(a, b, sortBy, isAscending)
     local valA, valB
-    
+
     if sortBy == "dungeon" then
         valA = a.activityName or ""
         valB = b.activityName or ""
+    elseif sortBy == "title" then
+        valA = a.displayName or a.name or ""
+        valB = b.displayName or b.name or ""
     elseif sortBy == "leader" then
         valA = a.leaderName or ""
         valB = b.leaderName or ""
     elseif sortBy == "class" then
         valA = a.leaderClass or ""
         valB = b.leaderClass or ""
+    elseif sortBy == "note" then
+        valA = a.note or a.comment or ""
+        valB = b.note or b.comment or ""
     elseif sortBy == "rating" then
         valA = tonumber(a.rating) or 0
         valB = tonumber(b.rating) or 0
@@ -337,7 +714,7 @@ function LFG:CompareResults(a, b, sortBy, isAscending)
         valA = tonumber(a.age) or 0
         valB = tonumber(b.age) or 0
     end
-    
+
     if valA ~= valB then
         if isAscending then
             return valA < valB
@@ -345,19 +722,19 @@ function LFG:CompareResults(a, b, sortBy, isAscending)
             return valA > valB
         end
     end
-    
+
     -- Tiebreaker: applied groups first
     local aPriority = a.isApplied and 2 or 1
     local bPriority = b.isApplied and 2 or 1
     if aPriority ~= bPriority then
         return aPriority > bPriority
     end
-    
+
     -- Secondary tiebreaker by rating
     if a.rating ~= b.rating then
         return a.rating > b.rating
     end
-    
+
     return a.id < b.id
 end
 
@@ -367,19 +744,19 @@ end
 
 function LFG:RefreshApplicantListImpl()
     wipe(self.searchResults)
-    
+
     -- Get all applicants to your current listing
     local numApplicants = C_LFGList.GetNumApplications()
-    
+
     for i = 1, numApplicants do
         local result = C_LFGList.GetApplicationInfo(i)
         if result then
             table.insert(self.searchResults, result)
         end
     end
-    
+
     self:SortResults()
-    
+
     if self.RefreshApplicantUIImpl then
         self:RefreshApplicantUIImpl()
     end

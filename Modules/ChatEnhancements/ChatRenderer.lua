@@ -16,6 +16,7 @@ local format = string.format
 local hooksecurefunc = _G.hooksecurefunc
 local hasanysecretvalues = _G.hasanysecretvalues
 local ipairs = _G.ipairs
+local mathAbs = math.abs
 local mathMax = math.max
 local mathMin = math.min
 local pairs = _G.pairs
@@ -49,6 +50,32 @@ local CLASS_ICON_LABEL_OFFSET = 18 -- horizontal space reserved for the class ic
 local BORDER = { 0.10, 0.72, 0.74 }
 local ACCENT = { 0.95, 0.76, 0.26 }
 local TEXT_MUTED = { 0.57, 0.66, 0.74 }
+
+local function NearlyEqualColor(a, b)
+    return mathAbs((a or 0) - (b or 0)) < 0.001
+end
+
+local function SetBackdropColorCached(frame, r, g, b, a)
+    local cached = frame._tuiBackdropColor
+    if cached and NearlyEqualColor(cached[1], r) and NearlyEqualColor(cached[2], g)
+        and NearlyEqualColor(cached[3], b) and NearlyEqualColor(cached[4], a) then
+        return
+    end
+
+    frame:SetBackdropColor(r, g, b, a)
+    frame._tuiBackdropColor = { r, g, b, a }
+end
+
+local function SetBackdropBorderColorCached(frame, r, g, b, a)
+    local cached = frame._tuiBackdropBorderColor
+    if cached and NearlyEqualColor(cached[1], r) and NearlyEqualColor(cached[2], g)
+        and NearlyEqualColor(cached[3], b) and NearlyEqualColor(cached[4], a) then
+        return
+    end
+
+    frame:SetBackdropBorderColor(r, g, b, a)
+    frame._tuiBackdropBorderColor = { r, g, b, a }
+end
 
 local function PlayMenuSound(soundKey)
     local uiTools = T.Tools and T.Tools.UI or nil
@@ -997,8 +1024,8 @@ function ChatRendererModule:EnsureRow(renderer, index)
     local row = CreateFrame("Button", nil, renderer.Content, "BackdropTemplate")
     renderer.rows[index] = row
     CreateBackdrop(row)
-    row:SetBackdropColor(0.03, 0.05, 0.07, 0.72)
-    row:SetBackdropBorderColor(0, 0, 0, 0)
+    SetBackdropColorCached(row, 0.03, 0.05, 0.07, 0.72)
+    SetBackdropBorderColorCached(row, 0, 0, 0, 0)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row.isKeywordMatch = false
     -- Required for the frame to fire OnHyperlinkEnter / OnHyperlinkLeave /
@@ -1103,9 +1130,9 @@ function ChatRendererModule:EnsureRow(renderer, index)
         if selfRow.isKeywordMatch then
             local hc = ChatRendererModule.settings and ChatRendererModule.settings.keywordHighlightColor or {}
             local hR, hG, hB = hc.r or 0.95, hc.g or 0.76, hc.b or 0.26
-            selfRow:SetBackdropBorderColor(hR, hG, hB, 0.90)
+            SetBackdropBorderColorCached(selfRow, hR, hG, hB, 0.90)
         else
-            selfRow:SetBackdropBorderColor(1, 1, 1, 0.10)
+            SetBackdropBorderColorCached(selfRow, 1, 1, 1, 0.10)
         end
         -- Animate faded rows back to full visibility on hover.
         if selfRow:GetAlpha() < 0.99 then
@@ -1120,9 +1147,9 @@ function ChatRendererModule:EnsureRow(renderer, index)
         if selfRow.isKeywordMatch then
             local hc = ChatRendererModule.settings and ChatRendererModule.settings.keywordHighlightColor or {}
             local hR, hG, hB = hc.r or 0.95, hc.g or 0.76, hc.b or 0.26
-            selfRow:SetBackdropBorderColor(hR, hG, hB, 0.60)
+            SetBackdropBorderColorCached(selfRow, hR, hG, hB, 0.60)
         else
-            selfRow:SetBackdropBorderColor(0, 0, 0, 0)
+            SetBackdropBorderColorCached(selfRow, 0, 0, 0, 0)
         end
         selfRow.HoverFadeIn:Stop()
         selfRow.HoverFadeOut:Stop()
@@ -1297,13 +1324,13 @@ function ChatRendererModule:RefreshRow(renderer, row, entry, bodyWidth)
     if kwMatch then
         local hc = self.settings.keywordHighlightColor or {}
         local hR, hG, hB = hc.r or 0.95, hc.g or 0.76, hc.b or 0.26
-        row:SetBackdropColor(hR * 0.14, hG * 0.06, hB * 0.02, grouped and 0.5 or 0.82)
-        row:SetBackdropBorderColor(hR, hG, hB, 0.60)
+        SetBackdropColorCached(row, hR * 0.14, hG * 0.06, hB * 0.02, grouped and 0.5 or 0.82)
+        SetBackdropBorderColorCached(row, hR, hG, hB, 0.60)
         row.Bar:SetColorTexture(hR, hG, hB, grouped and 0.6 or 1.0)
         row.Bar:Show()
     else
-        row:SetBackdropColor(mbR, mbG, mbB, mbA * (grouped and 0.55 or 0.92))
-        row:SetBackdropBorderColor(0, 0, 0, 0)
+        SetBackdropColorCached(row, mbR, mbG, mbB, mbA * (grouped and 0.55 or 0.92))
+        SetBackdropBorderColorCached(row, 0, 0, 0, 0)
         row.Bar:SetShown(self.settings.showAccentBar)
         row.Bar:SetColorTexture(accentR, accentG, accentB, grouped and 0.52 or 0.96)
     end

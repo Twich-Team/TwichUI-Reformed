@@ -5,7 +5,7 @@
 ## SavedVariables: TwichDB
 ## RequiredDeps: ElvUI
 ## OptionalDeps: Masque
-## Interface: 120001
+## Interface: 120005
 ## Group: Twich
 ## IconTexture: Interface\AddOns\TwichUI_Reformed\Media\Textures\logo.tga
 ## AddonCompartmentFunc: TwichUIRx_AddonCompartmentFunc
